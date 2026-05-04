@@ -238,6 +238,15 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
 3. **docs/**: Update when config options or API behavior changes
 4. **Swagger/GraphQL**: Keep annotations matching actual endpoints
 
+## ⚠️ CRITICAL: One Coherent Product ⚠️
+
+**Follow the Unix philosophy at the product level: build one coherent product and do it well.**
+
+- Broad scope is valid when all features serve the SAME core product purpose
+- A GitHub/GitLab-style forge can include repos, issues, PRs, actions, runners, gists, orgs, etc. because they all serve software collaboration/hosting
+- Do NOT add unrelated extras that do not belong to the product's core domain
+- Every feature that is included MUST feel complete, not checkbox-added
+
 **Example - Adding a New Feature:**
 
 ```
@@ -869,7 +878,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 |------|:--------:|---------|
 | `AI.md` | ✓ | Project specification (HOW - implementation patterns) |
 | `IDEA.md` | ✓ | Project idea (WHAT - business logic, features) |
-| `CLAUDE.md` | Optional | Claude Code AI configuration and settings |
+| `CLAUDE.md` | ✓ | Claude Code quick loader - critical rules + references into `AI.md` |
 | `PLAN.md` | Optional | Human implementation plan |
 | `TODO.AI.md` | Optional | AI task tracking (3+ tasks only) |
 | `PLAN.AI.md` | Optional | AI implementation plan (if exists, this is THE plan) |
@@ -1158,12 +1167,32 @@ Each AI tool directory MUST have a project memory file containing critical rules
 
 **Claude Code Note:** Claude prefers `CLAUDE.md` at project root (discovered recursively). `.claude/CLAUDE.md` is an alternate location. Personal preferences go in `CLAUDE.local.md` (auto-gitignored).
 
+**Role of `CLAUDE.md`:** `CLAUDE.md` is the **efficient loader**, not the full spec. It MUST stay short and point back to `AI.md`, which remains the source of truth.
+
+**If `CLAUDE.md` already exists:**
+- **READ it first** - NEVER overwrite blindly
+- If it already uses the standard loader marker/header, treat it as the canonical loader format
+- If it already matches the expected loader structure, leave it alone except for needed spec-reference refreshes
+- If it already contains valid project rules/spec references, **preserve and merge** that content into the new efficient-loader structure
+- Keep project-specific MUST/NEVER rules, terminology, and workflow notes
+- Move long-form/spec content into `AI.md` or `.claude/rules/*.md` as appropriate, then leave `CLAUDE.md` as the short loader
+- If existing `CLAUDE.md` conflicts with `AI.md`, then `AI.md` wins; update `CLAUDE.md` to reference the canonical rule instead of duplicating stale text
+- `CLAUDE.md` must end up short and efficient, but valid existing guidance must be migrated, not discarded
+
 **Required Content Structure (~50-100 lines max):**
 
 ```markdown
-# {PROJECT_NAME} - AI Quick Reference
+# Project SPEC
+
+Project: {PROJECT_NAME}
+Role: Efficient loader for AI.md
 
 ⚠️ **THIS FILE IS AUTO-LOADED EVERY CONVERSATION. FOLLOW IT EXACTLY.** ⚠️
+
+Purpose:
+- This file is a short loader for the most important rules
+- `AI.md` is the full source of truth
+- For complete details, read the referenced PARTs in `AI.md`
 
 ## FIRST TURN - MANDATORY
 
@@ -1267,6 +1296,7 @@ On EVERY new conversation or after "context compacted" message:
 - Keep it under 100 lines - it's a quick reference, not the full spec
 - Points to rules/ files and AI.md for details
 - "Current Project State" section updated by AI as work progresses
+- Existing valid `CLAUDE.md` content must be merged/migrated, not blindly replaced
 
 **AI Enforcement - Surviving Context Compaction:**
 
@@ -1325,7 +1355,7 @@ For complete details, see AI.md PART X, Y, Z
 | rules/*.md | Auto-loaded every turn | Detailed rules per topic |
 | AI.md | Must be read by AI | Full specification (source of truth) |
 
-**Key principle:** Put the most critical rules in CLAUDE.md and rules files (auto-loaded). These survive context compaction. AI.md is the full spec but must be explicitly read.
+**Key principle:** Put only the most critical rules and the right `AI.md` references in `CLAUDE.md`. Keep it efficient. `AI.md` is the full spec and source of truth.
 
 **4. Enforcement Language:**
 
@@ -2240,10 +2270,14 @@ Before I proceed, can you confirm [specific question]?
 
 ```
 1. Read AI.md PART 0 and PART 1 completely
-2. Check if .claude/rules/ directory exists
-3. If missing or outdated: CREATE/UPDATE all rule files (see table below)
-4. If TODO.AI.md exists: read and check for needed updates
-5. Commit all COMMIT, NEVER, and MUST rules to memory
+2. Read existing CLAUDE.md if it exists
+3. Check if .claude/rules/ directory exists
+4. If missing or outdated: CREATE/UPDATE all rule files (see table below)
+5. If CLAUDE.md is missing: create the efficient loader version
+6. If CLAUDE.md exists and starts with `# Project SPEC`: treat it as the standard loader format; update only if references/rules are stale
+7. If CLAUDE.md exists but is not in the standard loader format: merge/migrate valid project-specific guidance into the efficient loader structure - NEVER overwrite blindly
+8. If TODO.AI.md exists: read and check for needed updates
+9. Commit all COMMIT, NEVER, and MUST rules to memory
 ```
 
 **Rule Files to Create/Update:**
@@ -3072,6 +3106,7 @@ Implemented core server functionality and admin panel.
 | Business logic | IDEA.md | Features implemented match what IDEA.md defines |
 | CLI interface | PART 8 | Flags, commands, help output match spec |
 | Client/agent scope | PART 33 | `src/client/` exists for all projects; `src/agent/` only when project needs it |
+| Untrusted content handling | PART 11, PART 16 | User-controlled files/markdown/HTML render as escaped text or sanitized markdown; dangerous types are not served executable on the app origin |
 
 ### Step 2: File Sync Verification
 **Do all project files reflect the SAME reality?**
@@ -8068,13 +8103,17 @@ func (req *CreateUserRequest) Parse() (*User, error) {
 
 #### Service Installation (One-Time Escalation)
 
-**Escalation is only needed once** during service installation. The binary configures the service to always run as root/admin.
+**Escalation is only needed once** during service installation. By default, the binary configures the service to start with elevated privileges only long enough to perform privileged setup, then run the app as a dedicated service account.
+
+**Default rule:** server/service processes MUST run as a dedicated system user/group whenever the project supports privilege drop.
+
+**Project-specific exception:** a project may run permanently as root/Administrator only when its core function requires ongoing OS-level privileges and privilege drop would break the app. This exception MUST be explicitly justified in IDEA.md.
 
 ```bash
 # Unix-like (Linux, macOS, FreeBSD)
 sudo {project_name} --service install
-# Binary creates service file configured to run as root
-# All future service starts run as root automatically
+# Binary creates service file for privileged startup + runtime privilege drop
+# Runtime stays on dedicated service account unless the project explicitly requires permanent root
 
 # Windows (run as Administrator)
 {project_name}.exe --service install
@@ -8083,7 +8122,9 @@ sudo {project_name} --service install
 
 #### Unix-Like Platforms (Linux, macOS, FreeBSD)
 
-**Service runs as root, binary drops privileges after port binding.**
+**Default:** service starts with elevated privileges only when needed, then drops to dedicated service user after privileged setup/port binding.
+
+**Permanent-root exception:** allowed only for project-defined cases such as firewall control, packet capture, TUN/TAP/VPN, mount/filesystem management, package/service management, or other ongoing kernel/device operations.
 
 | Step | Running As | Actions |
 |------|-----------|---------|
@@ -8106,10 +8147,16 @@ Service start (automatic after install):
 
 **Container note (Docker/Incus/LXC):**
 ```dockerfile
-# CORRECT: No USER directive - binary handles privilege drop
+# CORRECT (default): No USER directive if the binary must start privileged then drop
 ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
-# WRONG: Don't do this - prevents privileged port binding
+# ALSO CORRECT when the project never needs privileged startup:
+# USER {project_name}
+
+# WRONG: Hardcode permanent root when the project could run unprivileged
+# and has no documented IDEA.md exception
+#
+# WRONG in projects that need privileged startup: prevents privileged port binding
 # USER {project_name}
 ```
 
@@ -14437,6 +14484,61 @@ When `DEBUG=true` is active and an error occurs, the canonical error body (PART 
 | 5. Strip dev-only fields | In production mode, drop fields tagged `dev_only:"true"` (e.g., `_debug`, `_internal_id`). Dev mode keeps them for troubleshooting. |
 | 6. Constant-time finalize | For auth-sensitive paths (login, password reset, token validation), pad response time to a fixed minimum (e.g., 100ms) so success/fail timing doesn't differ. |
 
+### Untrusted File / Rich Content Handling
+
+**User-controlled content (pastes, gists, repo files, markdown docs, uploaded text, uploaded HTML/SVG/XML) MUST be treated as data, NEVER as trusted browser content.**
+
+| Content class | HTML/UI rendering rule | Raw/download rule | Notes |
+|---------------|------------------------|-------------------|-------|
+| Plain text / source code / config files | Render as escaped text inside `<pre><code>` or equivalent. Syntax highlighting may add server-generated wrapper spans/classes only AFTER escaping the source. | `text/plain; charset=utf-8` is the safe default for raw views. | Never inject file bytes into templates as trusted HTML. |
+| Markdown | Store the original markdown. HTML preview MUST disable raw HTML passthrough, then sanitize the rendered output through an allow-list policy. | Raw markdown download remains plain text. | Keep fenced code blocks, tables, lists, and links working. External links get `rel="noopener noreferrer nofollow ugc"`. |
+| User-supplied HTML | Do NOT render inline by default. Show escaped source or a sanitized preview only for explicitly approved admin-controlled customization fields. | Force `Content-Disposition: attachment` unless the content was sanitized for a very narrow allow-list use case. | User HTML is executable content in a browser origin. Treat it as dangerous. |
+| SVG / XML / other browser-active text | Never inline untrusted SVG/XML in templates, `<img src="data:...">`, or same-origin previews. | Force attachment or convert to a safe raster/text representation before display. | SVG can execute scripts, external loads, and event handlers. |
+| Binary/file downloads | Serve with exact `Content-Type`, `X-Content-Type-Options: nosniff`, and explicit allow-listing. | For user-controlled active MIME types (`text/html`, `application/xhtml+xml`, `image/svg+xml`, `text/xml`, `application/xml`), force `Content-Disposition: attachment`. | Browsers must not be allowed to "helpfully" execute uploaded content. |
+
+**Non-negotiable rules:**
+1. **NEVER** cast user-controlled file content to `template.HTML`.
+2. Repository/paste/file viewers MUST render content as escaped text or sanitized markdown — never as live HTML from the stored blob.
+3. Markdown helpers such as `markdownToHTML` MUST disable raw HTML input and MUST sanitize the final HTML before returning `template.HTML`.
+4. If a feature needs previews of risky content, generate a separate safe preview representation; keep the original blob isolated for download only.
+
+### Archive Extraction Safety
+
+**Only define/apply this section when the app accepts archives or imports repo/source bundles.**
+
+| Rule | Requirement |
+|------|-------------|
+| Path confinement | Reject absolute paths, `..`, empty names, drive-letter paths, and any extracted path that escapes the target directory |
+| Symlinks / special files | Reject symlinks, hard links, device files, named pipes, sockets, and setuid/setgid bits |
+| Size limits | Enforce max archive size, max total uncompressed size, max file count, and max single-file size |
+| Compression bombs | Stop extraction when compression ratio or expanded size exceeds configured thresholds |
+| Permissions | Normalize extracted file modes to safe defaults; never preserve executable bits unless the feature explicitly needs them |
+| Overwrite policy | Do not overwrite existing files outside an explicit replace flow |
+
+**Default posture:** if the project does not explicitly need archive upload/import/extract, do NOT implement it.
+
+### Private File Delivery
+
+**Only define/apply this section when the app serves private or user-owned files/blobs.**
+
+| Concern | Rule |
+|---------|------|
+| Auth | Private files use normal authz checks on every request; never rely on obscurity-only URLs |
+| Cache | Private responses use `Cache-Control: private, no-store` |
+| Type safety | Always set exact `Content-Type` + `X-Content-Type-Options: nosniff` |
+| Active content | User-controlled active types (`text/html`, `application/xhtml+xml`, `image/svg+xml`, `text/xml`, `application/xml`) MUST be served as attachment |
+| Content-Disposition | Default inline only for safe renderable types; everything else defaults to attachment |
+| Range requests | Allowed for large safe downloads, but only after authz; disabled if the feature cannot enforce authz/rate limiting correctly |
+| URLs | Signed/expiring download URLs are OPTIONAL per app; if used, they complement auth, not replace content-type/disposition rules |
+
+### User Content Processing
+
+**User-supplied content MUST NEVER be executed on the server.**
+
+- Syntax highlighting, previews, diffing, indexing, and metadata extraction MUST use in-process libraries or isolated subprocesses with fixed inputs
+- NEVER shell out with raw user content, filenames, refs, or repo metadata
+- NEVER run hooks, build steps, package managers, interpreters, or git checkout logic on untrusted content unless the project explicitly defines a sandboxed execution feature
+
 ### Operator UX — Security Without a Degree
 
 **Security is hard for users and operators too. The application MUST be secure by default with zero configuration. Operators should never need to read OWASP top-10 to ship a safe deployment.**
@@ -20369,15 +20471,25 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 
 ## External API Compatibility
 
-**Focus on create/init endpoint compatibility and response format matching - NOT replicating entire APIs.**
+**Default: compatibility means feature compatibility first - NOT route-for-route cloning.**
 
-When the user requests compatibility with external services (e.g., "compatible with pastebin.com", "support microbin clients", "work with opengist"), you MUST focus on **creation endpoints and response formats** - not hundreds of redundant routes.
+When the user requests compatibility with external services (e.g., "compatible with pastebin.com", "support microbin clients", "work with opengist"), the default is to match the target service's **features/behavior** using our own API/routes unless the user explicitly asks for route/API compatibility.
+
+### Compatibility Scope Rules
+
+| User Request | Meaning | Default Implementation |
+|--------------|---------|------------------------|
+| **"Compatible with X"** | Feature/behavior compatibility | Implement the target feature set using our standard routes |
+| **"1:1 parity" / "1:1+ parity"** | Feature parity, not automatic route parity | Match features, flows, and outputs; keep our routes unless route compatibility is also requested |
+| **"API compatibility" / "route compatibility" / "client compatibility"** | Feature compatibility **plus** the external routes needed for that compatibility | Implement the requested external route surface and map it to our internals |
+
+**Default is features. Routes are only included when route/API compatibility is explicitly requested.**
 
 ### Why Limited Compatibility?
 
 **Problem:** Replicating entire external APIs creates hundreds of routes that do mostly the same thing, adding massive complexity for minimal benefit.
 
-**Solution:** Implement ONLY the create/init endpoints and match response formats. This allows existing clients to work while keeping our codebase clean.
+**Solution:** Default to feature compatibility. Only add external route compatibility when the user explicitly asks for it.
 
 ### Compatibility Implementation
 
@@ -20387,18 +20499,15 @@ When the user requests compatibility with external services (e.g., "compatible w
    - Document the **response format** (fields, structure, content-type: JSON/XML/text)
    - Note required request parameters and authentication (if any)
 
-**2. Implement create/init compatibility:**
-   - Match the exact URL path for creating resources
-   - Support same request method (POST, PUT, etc.)
-   - Accept same parameters (query params, form fields, JSON body)
-   - Return response in same format with matching field names
-   - Preserve response content-type (JSON, XML, plain text, etc.)
+**2. Choose the compatibility level from the user request:**
+   - **Default / feature compatibility:** implement the same capability with our standard routes and response patterns
+   - **Explicit route/API compatibility:** also match the external URL paths, methods, parameters, and response formats for the requested surface
 
-**3. Use our standard routes for everything else:**
+**3. Use our standard routes unless route compatibility was explicitly requested:**
    - View: Use our standard `/api/{api_version}/{resource}/{id}` pattern
    - List: Use our standard `/api/{api_version}/{resource}` pattern
    - Search: Use our standard `/api/{api_version}/{resource}/search` pattern
-   - DO NOT replicate their entire API surface
+   - DO NOT replicate their entire API surface unless the user explicitly asked for route/API parity
 
 **Example - Pastebin Compatibility:**
 
@@ -20411,37 +20520,41 @@ AI Research:
 - Response: Plain text paste ID or URL
 
 AI Implementation:
-✓ POST /api/api_post.php → Create paste (compatible)
-✓ Response format matches (plain text ID)
-✗ Skip their /api/list, /api/trends, /api/raw/{id} (use our routes instead)
+✓ Paste creation feature behaves compatibly
+✓ Response format matches where required
+✓ Our standard routes remain the default
+✗ Skip their /api/list, /api/trends, /api/raw/{id} unless route/API compatibility was explicitly requested
 
 Result:
-- pastebin.com clients can CREATE pastes using familiar endpoint
-- Viewing/listing uses OUR standard API routes
-- Clean codebase without route duplication
+- Feature compatibility achieved
+- Route duplication avoided unless explicitly required
+- Clean codebase without unnecessary external API cloning
 ```
 
 **Rules:**
 | Rule | Description |
 |------|-------------|
 | **Research first** | NEVER guess - look up actual API documentation |
-| **Create/init only** | Implement creation endpoints, skip view/list/search/delete duplicates |
+| **Default is features** | Compatibility means feature/behavior parity unless route/API compatibility was explicitly requested |
+| **1:1 parity = features** | "1:1 parity" / "1:1+ parity" means feature parity, not automatic route parity |
+| **Routes only when asked** | Add external routes only when the user explicitly requests route/API/client compatibility |
 | **Match response format** | Field names, structure, content-type must match target exactly |
 | **Standard routes for rest** | Use our `/api/{api_version}/*` patterns for all other operations |
 | **Avoid complexity** | Do NOT add hundreds of redundant routes |
 | **Document compatibility** | List what IS and ISN'T compatible in AI.md |
 
 **What to implement:**
-- ✓ Create/init endpoints
+- ✓ Feature/behavior compatibility
+- ✓ Create/init endpoints when needed for client compatibility
 - ✓ Response format matching
 - ✓ Required authentication if applicable
 
 **What NOT to implement:**
-- ✗ View/retrieve endpoints (use our routes)
-- ✗ List/search endpoints (use our routes)
-- ✗ Delete endpoints (use our routes)
+- ✗ View/retrieve endpoints unless route/API compatibility was explicitly requested
+- ✗ List/search endpoints unless route/API compatibility was explicitly requested
+- ✗ Delete endpoints unless route/API compatibility was explicitly requested
 - ✗ Pagination variants (use our standard pagination)
-- ✗ Any route that duplicates our functionality
+- ✗ Any route that duplicates our functionality without an explicit compatibility need
 
 ### RFC-Based Applications (CRITICAL - NON-NEGOTIABLE)
 
@@ -24876,6 +24989,14 @@ See **JavaScript Rules** section below for `app.js` structure.
 
 **ALL frontend HTML MUST use Go's `html/template` package.**
 
+**Untrusted-content rule:** pasted text, repo blobs, markdown files, and any user-submitted file content are data, not templates. Follow PART 11 "Untrusted File / Rich Content Handling" and NEVER pass user-controlled content through `template.HTML` unless it came from a sanitizer for an explicitly approved field.
+
+**`markdownToHTML` requirements:**
+- Disable raw HTML passthrough from the markdown source
+- Sanitize the rendered output with an allow-list policy before returning `template.HTML`
+- Escape code fences/source text before syntax-highlighting wrappers are added
+- Add safe link attributes for external URLs (`rel="noopener noreferrer nofollow ugc"`)
+
 | Location | Purpose |
 |----------|---------|
 | `src/server/template/` | All `.tmpl` template files |
@@ -26079,6 +26200,8 @@ server:
 
 ### Static Files
 
+**If the project serves user-controlled files/blobs, follow PART 11 "Private File Delivery" and PART 11 "Untrusted File / Rich Content Handling".**
+
 | File | Purpose | Generated |
 |------|---------|-----------|
 | `/sitemap.xml` | Site map for search engines | Yes - auto-generated |
@@ -26214,7 +26337,7 @@ func DefaultFetchRemoteImageConfig() FetchRemoteImageConfig {
     return FetchRemoteImageConfig{
         MaxSize:       10 * 1024 * 1024, // 10MB
         Timeout:       30 * time.Second,
-        AllowedTypes:  []string{"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml", "image/x-icon"},
+        AllowedTypes:  []string{"image/png", "image/jpeg", "image/gif", "image/webp", "image/x-icon"},
         AllowedSchemes: []string{"https"}, // NEVER allow http in production
     }
 }
@@ -26363,6 +26486,8 @@ if err != nil {
 | **Size limits** | Limit download size (default 10MB) |
 | **Type validation** | Only allow image MIME types |
 | **Redirect validation** | Validate each redirect URL |
+
+**Rule:** remote user-controlled images follow the same active-content rules as uploads. Do NOT allow remote SVG unless the project explicitly sanitizes and rasterizes it before storage/display.
 | **Timeout** | Set reasonable timeout (default 30s) |
 
 ### Defaults
@@ -35534,9 +35659,15 @@ useradd --system --uid {id} --gid {id} \
   {internal_name}
 ```
 
+**Default rule:** create and use a dedicated service user/group.
+
+**Exception:** skip dedicated user creation only when the project is explicitly approved to run permanently as root/Administrator in IDEA.md.
+
+**Exception:** skip dedicated user creation only when the project is explicitly approved to run permanently as root/Administrator in IDEA.md.
+
 ### macOS Service Account
 
-**macOS services start as root, binary drops to dedicated user after port binding.**
+**Default:** macOS services start as root only for privileged startup, then drop to dedicated user after port binding.
 
 | Phase | Running As | Actions |
 |-------|-----------|---------|
@@ -35814,10 +35945,12 @@ func installWindowsService() error {
 
 ## Service Templates
 
-**Unix: Service starts as root, binary drops to `{project_name}` user after port binding.**
+**Unix default:** service starts elevated only for privileged startup, then drops to `{project_name}` user after port binding.
 **Windows: Service runs as Virtual Service Account (`NT SERVICE\{internal_name}`).**
 
 This allows any port configuration without service file changes.
+
+**Exception:** if IDEA.md explicitly requires permanent root, the service file and documentation MUST say so and explain why privilege drop is not possible.
 
 ### systemd (Linux)
 
@@ -52860,12 +52993,14 @@ func GetUserProfile(requestingUserID, targetUserID int) (*User, error) {
 
 | Rule | Value |
 |------|-------|
-| **Allowed formats** | PNG, JPG, JPEG, GIF, BMP, WEBP, SVG, ICO |
+| **Allowed formats** | PNG, JPG, JPEG, GIF, BMP, WEBP, ICO |
 | **Max file size** | 2 MB (upload) |
 | **Min dimensions** | 64x64 pixels |
 | **Max dimensions** | 1024x1024 pixels (resized if larger) |
 | **Aspect ratio** | Square preferred (auto-cropped if not) |
 | **Storage sizes** | Original, 256x256, 128x128, 64x64, 32x32 |
+
+**Security rule:** project-owned static assets may use SVG, but user-uploaded avatars and external avatar URLs MUST NOT use SVG. User-controlled SVG is active browser content; keep avatars raster-only unless the project explicitly sanitizes and rasterizes SVG at ingest, then serves only raster derivatives.
 
 **Avatar Validation Code:**
 ```go
@@ -52875,7 +53010,6 @@ var AllowedImageTypes = map[string]bool{
     "image/gif":     true,
     "image/bmp":     true,
     "image/webp":    true,
-    "image/svg+xml": true,
     "image/x-icon":  true,
     "image/vnd.microsoft.icon": true,
 }
@@ -58220,6 +58354,11 @@ make docker # Build Docker image
 
 **PART 11: Security & Logging**
 - [ ] All security headers set (CSP, X-Frame-Options, etc.)
+- [ ] Untrusted file/HTML/markdown content isolated (escaped text or sanitized markdown only)
+- [ ] User-controlled active content (HTML/SVG/XML) not served executable on the app origin
+- [ ] Archive extraction blocked or safely constrained (when applicable)
+- [ ] Private file/blob delivery uses authz + `private, no-store` (when applicable)
+- [ ] User content processing never executes untrusted content
 - [ ] HSTS enabled when SSL active
 - [ ] Rate limiting enabled and configurable
 - [ ] Audit logging to audit.log (JSON format)
@@ -58559,10 +58698,12 @@ make docker # Build Docker image
 
 - [ ] All user input validated server-side
 - [ ] SQL injection prevented (parameterized queries)
-- [ ] XSS prevented (output encoding)
+- [ ] XSS prevented (output encoding + sanitized rich content)
 - [ ] Command injection prevented (no shell exec with user input)
 - [ ] Path traversal prevented (canonicalized paths)
 - [ ] File upload restrictions enforced
+- [ ] User file/blob viewers escape code/text and never trust stored HTML
+- [ ] Markdown rendering disables raw HTML and sanitizes output
 - [ ] Content-Type validation
 - [ ] Size limits on all inputs
 
