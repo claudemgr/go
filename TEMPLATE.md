@@ -179,6 +179,25 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
 - Never guess values: use commands (`basename "$PWD"`, `git config user.email`, `date`, etc.) and confirm with the user
 - If a placeholder appears in AI.md but has no entry in `## Project variables`, the setup flow MUST stop and ask, not invent a value
 
+**Rules for `## Business logic`:**
+
+- `## Business logic` MUST define the actual product scope, roles, flows, and constraints for THIS project - not generic web-app boilerplate
+- The following subsections are REQUIRED inside `## Business logic` for every project:
+  - `### Product scope & non-goals`
+  - `### Roles & permissions`
+  - `### Data model & sensitivity`
+  - `### Trust boundaries & external services`
+  - `### Threat model & abuse cases`
+  - `### Security decisions & exceptions`
+- `### Threat model & abuse cases` MUST name:
+  - the primary assets being protected
+  - which inputs and integrations are trusted vs untrusted
+  - the main attacker/abuser goals for this project
+  - project-specific abuse cases (spam, scraping, privilege escalation, malicious uploads, SSRF, credential stuffing, etc. as applicable)
+  - the required defenses or explicit non-goals for each meaningful threat
+- If the project depends on an external service, API, webhook, identity provider, payment processor, or network source, `## Business logic` MUST state the trust assumption and failure mode - AI MUST NOT invent one later in code
+- If a security-sensitive choice is intentionally allowed (for example permanent root/admin runtime, external route compatibility, remote fetches, public uploads, or third-party embeds), the reason MUST be documented in `### Security decisions & exceptions`
+
 ---
 
 # ⚠️ CRITICAL RULES - READ FIRST ⚠️
@@ -225,7 +244,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
 |---------------|------------|-------------|
 | **IDEA.md** | Actual project features/endpoints | Features added/removed |
 | **README.md** | Current functionality | Usage/installation changes |
-| **docs/** | Current API/config | Any user-facing changes |
+| **docs/** | Current user/admin/API/config/security/integration behavior | Any user-facing, admin-facing, operator-facing, or integration-facing changes |
 | **Swagger annotations** | Actual API endpoints | Routes changed |
 | **GraphQL schema** | Actual types/queries | Schema changed |
 
@@ -235,7 +254,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
    - AI.md PARTS 0-36 define implementation patterns; PART 37 is reference-only (do NOT modify)
    - IDEA.md defines YOUR project's features (update as needed)
 2. **README.md**: Keep feature list and usage examples current
-3. **docs/**: Update when config options or API behavior changes
+3. **docs/**: Update when routes, config options, admin UX, security behavior, auth/integration behavior, or public protocol surfaces change
 4. **Swagger/GraphQL**: Keep annotations matching actual endpoints
 
 ## ⚠️ CRITICAL: One Coherent Product ⚠️
@@ -253,7 +272,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
 1. Write the code (new handler, service, etc.)
 2. Update IDEA.md - add feature description
 3. Update README.md - add feature to list
-4. Update docs/api.md - document new endpoints
+4. Update the relevant docs/*.md pages - API, admin, configuration, security, integrations, or CLI docs as applicable
 5. Add Swagger annotations to new handlers
 6. Update GraphQL schema if applicable
 ```
@@ -557,6 +576,51 @@ if cacheSize > 1024*1024*1024 {
 | **LDFLAGS** | `-s -w -X 'main.Version=...' -X 'main.CommitID=...' -X 'main.BuildDate=...' -X 'main.OfficialSite=...'` |
 | **Docker builds on EVERY push** | Any branch push triggers Docker image build |
 | **Docker tags** | Any push → `devel`, `{commit}`; beta → adds `beta`; tag → `{version}`, `latest`, `YYMM`, `{commit}` |
+| **Workflow permissions** | Default to read-only / least privilege; grant write only to the specific release/publish job that needs it |
+| **Third-party action pinning** | External actions MUST be pinned to a full commit SHA - never float on `@main`, `@master`, or broad tags |
+| **Unsafe PR triggers forbidden by default** | Do NOT use `pull_request_target` for untrusted code execution, build, test, or artifact upload paths |
+| **Secrets never exposed to forks** | Fork PR workflows run without repo secrets, write tokens, publish steps, or deployment credentials |
+| **Dependency updates are automated** | Public repos include dependency update automation for every ecosystem in use |
+| **Secret scanning is mandatory** | Public repos run automated secret scanning on push/PR and treat findings as blockers |
+| **Release outputs are verifiable** | Releases publish checksums, SBOM, release notes, and provenance/attestation when the host platform supports it |
+
+### Public Repository Governance
+
+- The default branch MUST be protected
+- Protected branch rules MUST require:
+  - pull requests for normal changes
+  - passing build/test/security checks before merge
+  - CODEOWNERS review for owned paths
+  - force-push and branch-deletion protection
+- Direct pushes to the default branch are forbidden except explicit maintainer emergency action; emergency bypasses MUST be followed by an audit/fix pass
+
+### Public Repository Workflow Requirements
+
+- Public repos MUST provide at minimum:
+  - `.github/workflows/build.yml` - build, test, coverage, and repo validation
+  - `.github/workflows/release.yml` - tagged/manual release build and publish
+  - `.github/workflows/security.yml` - secret scanning, dependency/security checks, and workflow policy checks
+- If the project also supports Gitea/Forgejo or Jenkins, the equivalent workflows/pipelines MUST enforce the same gates - not a weaker subset
+- CI MUST fail when required tests, coverage gates, secret scans, dependency checks, or release validation fail
+
+### Dependency Update Policy
+
+- Public repos MUST define `.github/dependabot.yml`
+- Dependabot MUST cover, when used by the repo:
+  - Go modules
+  - GitHub Actions
+  - Docker / container base images
+- Security updates are high priority and MUST go through the same test/security gates as manual changes
+- AI MUST NOT silently change dependency strategy, ignore failing update PRs, or disable update automation to "get green"
+
+### Release Integrity
+
+- Tagged releases MUST publish a machine-readable checksum file for all release artifacts (SHA-256)
+- Tagged releases MUST publish release notes that describe the actual change set and call out breaking changes explicitly
+- Public releases MUST include a release-level SBOM (`CycloneDX` or `SPDX JSON`)
+- Where the platform supports it, releases MUST include build provenance / artifact attestation
+- AI MUST NOT fake signatures, fake attestations, or claim a release is signed/verified when the required keys/platform support do not exist
+- If signing or attestation is required by the project but the necessary keys/permissions are unavailable, AI MUST stop and ask instead of bypassing the control
 
 ## Database Rules
 
@@ -1063,7 +1127,7 @@ For complete details, see AI.md PART 0, 1
 | /server/help | IDEA.md → real endpoints, real curl examples, real FAQ |
 | /server/privacy | Config → `server.privacy.*` settings |
 | /server/terms | Config → customizable, default template |
-| /server/contact | Config → `server.contact` settings |
+| /server/contact | Config → `server.contact.general.*` + `server.pages.contact.*` settings |
 
 ## SERVER VS CLIENT
 | Task | Where | Why |
@@ -1634,7 +1698,7 @@ Instructions for how this agent should behave...
 | `docs/` | ✓ | MkDocs documentation only | No |
 | `scripts/` | ✓ | Production/install scripts | No |
 | `tests/` | ✓ | Repository-root executable integration test scripts (`run_tests.sh`, `docker.sh`, `incus.sh`, optional helpers). Go unit tests live alongside code as `*_test.go` | No |
-| `.github/` | If GitHub | GitHub Actions, templates | No |
+| `.github/` | If GitHub / public repo | GitHub Actions, community files, templates | No |
 | `.gitea/` | If Gitea | Gitea Actions, templates | No |
 | `.claude/` | Auto | Claude Code config (regenerated) | **Yes** |
 | `.cursor/` | Auto | Cursor AI config (regenerated) | **Yes** |
@@ -1677,10 +1741,90 @@ Instructions for how this agent should behave...
 | `CONTRIBUTING.md` | `.github/CONTRIBUTING.md` |
 | `CODE_OF_CONDUCT.md` | `.github/CODE_OF_CONDUCT.md` |
 | `SECURITY.md` | `.github/SECURITY.md` |
+| `CODEOWNERS` | `.github/CODEOWNERS` |
+| `dependabot.yml` | `.github/dependabot.yml` |
 | `FUNDING.yml` | `.github/FUNDING.yml` |
 | `ISSUE_TEMPLATE/` | `.github/ISSUE_TEMPLATE/` |
 | `PULL_REQUEST_TEMPLATE.md` | `.github/PULL_REQUEST_TEMPLATE.md` |
 | `workflows/*.yml` | `.github/workflows/` |
+
+**Public Repository Rule:**
+- Public/community-facing repositories MUST include the full community/support set in `.github/`
+- At minimum, define and keep updated:
+  - `.github/CONTRIBUTING.md`
+  - `.github/CODE_OF_CONDUCT.md`
+  - `.github/SECURITY.md`
+  - `.github/CODEOWNERS`
+  - `.github/dependabot.yml`
+  - `.github/ISSUE_TEMPLATE/bug_report.md`
+  - `.github/ISSUE_TEMPLATE/feature_request.md`
+  - `.github/ISSUE_TEMPLATE/config.yml`
+  - `.github/PULL_REQUEST_TEMPLATE.md`
+  - `.github/workflows/build.yml`
+  - `.github/workflows/release.yml`
+  - `.github/workflows/security.yml`
+- These files are templates/project policy files: define them once in the template, then update them to match the actual project
+- `FUNDING.yml` remains optional
+
+**Community File Content Rules:**
+- All `.github/` policy/template files MUST contain project-specific real values - never `@yourname`, `security@example.com`, `TBD`, `coming soon`, or placeholder support URLs
+- Maintainer handles, contact addresses, repo paths, workflow names, and support links MUST come from project variables, actual repo state, or explicit user input
+- If the project has `/.well-known/security.txt`, `/server/contact`, docs pages, issue labels, or release workflows, `.github/` files MUST reference those exact real paths/names
+
+**Required Contents by File:**
+- `.github/CONTRIBUTING.md` MUST define:
+  - local setup/build/test/docs commands that actually exist in the repo
+  - branch/PR workflow
+  - requirement to update tests/docs with code changes
+  - where to send vulnerabilities instead of opening a public issue
+- `.github/SECURITY.md` MUST define:
+  - supported versions or supported release policy
+  - the security reporting path
+  - that vulnerabilities are NOT filed as public bug reports
+  - expected disclosure/response flow
+  - links to `/.well-known/security.txt` and `/server/contact?security_id=...` when those project features exist
+- `.github/CODEOWNERS` MUST define:
+  - a catch-all owner for the repo
+  - explicit owners for security-sensitive areas such as workflows, Docker/release files, and auth/crypto/update code paths
+- `.github/dependabot.yml` MUST define:
+  - update schedules for every ecosystem actually used by the repo
+  - labels/assignees/reviewers if the project uses them
+  - sane open-PR limits and grouping rules
+- `.github/ISSUE_TEMPLATE/bug_report.md` MUST collect:
+  - version/commit
+  - environment/platform
+  - expected behavior
+  - actual behavior
+  - reproducible steps
+  - relevant logs/screenshots with redaction reminder
+  - whether the report may have security impact
+- `.github/ISSUE_TEMPLATE/feature_request.md` MUST collect:
+  - the problem to solve
+  - the desired behavior
+  - the use case / target user
+  - constraints or non-goals
+  - compatibility expectations (feature parity by default; route/API parity only when explicitly requested)
+- `.github/ISSUE_TEMPLATE/config.yml` MUST:
+  - disable blank issues
+  - route support requests to docs/discussions/contact
+  - route vulnerabilities to the security reporting flow instead of public issues
+- `.github/PULL_REQUEST_TEMPLATE.md` MUST require:
+  - summary of change
+  - why the change exists
+  - test evidence
+  - docs/config updates
+  - breaking-change note
+  - security/privacy impact note
+  - checklist confirming no placeholder/stub/TODO behavior was introduced
+- `.github/workflows/build.yml` MUST verify real build/test/lint/coverage rules from the repo
+- `.github/workflows/release.yml` MUST produce the real release artifacts, checksums, release notes, and any required publish steps
+- `.github/workflows/security.yml` MUST enforce secret scanning, dependency/security validation, and workflow hardening checks
+
+**Code of Conduct Rule:**
+- For **public/community-facing repositories**, `.github/CODE_OF_CONDUCT.md` MUST exist
+- For **private/internal-only repositories**, it is OPTIONAL
+- NEVER place `CODE_OF_CONDUCT.md` in project root
+- Use a short, standard community conduct policy; do not invent unusual project-specific behavior rules unless the project explicitly needs them
 
 ### Gitea-Specific Files (`.gitea/` directory)
 
@@ -1777,7 +1921,8 @@ This distinction exists for clarity. When referring to OS-level resources that b
 | **Cluster** | Multiple app instances sharing config and state via shared database/cache |
 | **Cluster Node** | An app instance participating in a cluster (synonym: cluster member) |
 | **Config Sync** | Automatic propagation of settings changes across all cluster nodes |
-| **Primary Node** | The elected node that handles cluster-wide tasks (leader election) |
+| **Primary Node** | The elected cluster node that handles cluster-wide tasks |
+| **Secondary Node** | Any non-primary cluster node in the cluster |
 | **Single Instance** | App running standalone without clustering (local SQLite, no shared state) |
 
 ## Extended Functionality Terms
@@ -1790,7 +1935,8 @@ This distinction exists for clarity. When referring to OS-level resources that b
 | **Agent Token** | Scoped API token for agents - includes owner prefix (`adm_agt_`, `usr_agt_`, `org_agt_`) |
 | **Rate Limiting** | Server protection against abuse/DDoS - NOT usage limits for monetization (we never do that) |
 | **Background Job** | Server-side scheduled or queued task (backup, sync, cleanup) - managed by internal scheduler, NOT cron |
-| **Leader Election** | Process where cluster nodes elect a Primary Node for cluster-wide tasks |
+| **Primary Election** | Process where cluster nodes elect a Primary Node for cluster-wide tasks |
+| **Canonical Terms Only** | New rules, docs, config, APIs, and UI MUST use the current canonical name only. Do NOT add legacy/compatibility aliases, duplicate terms, or migration wording unless the user explicitly asks for a migration feature. |
 
 ## Managed Nodes vs Cluster Nodes
 
@@ -1841,7 +1987,7 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 | Term | Definition |
 |------|------------|
-| **Server Web Setup** | Web-based setup flow at `/{admin_path}/server/setup` (HTML pages served by server, accessed in browser) - creates Primary Admin, customizes branding |
+| **Server Web Setup** | Web-based setup flow at `/server/{admin_path}/config/setup` (HTML pages served by server, accessed in browser) - creates Primary Admin, customizes branding |
 | **CLI Setup Wizard** | Built-in TUI/GUI wizard in CLI binary - prompts for server URL, tests connection, saves config (CLI is the ONLY binary with a built-in wizard) |
 | **Setup Token** | One-time 32-char hex token generated on server first-run, displayed in console, required to access server's web-based setup |
 
@@ -1861,7 +2007,7 @@ This distinction exists for clarity. When referring to OS-level resources that b
 | **TUI** | Terminal User Interface - interactive terminal app with menus/panels (client supports TUI mode) |
 | **Text Browsers** | INTERACTIVE browsers (lynx, w3m, links, elinks) that receive **no-JS HTML** and render it in text mode; NO JavaScript support - forms via POST, server-rendered only |
 | **HTTP Tools** | NON-INTERACTIVE tools (curl, wget, httpie) that receive pre-formatted text via HTML2TextConverter; they just dump output |
-| **Admin Panel** | WebUI at `/{admin_path}` for server administration (path is configurable, default: `admin`) |
+| **Admin Panel** | WebUI at `/server/{admin_path}` for server administration (path is configurable, default: `admin`) |
 | **WebUI** | Web User Interface - browser-based interface served by the server |
 | **SCM** | Windows Service Control Manager - manages Windows services (replaces PID files on Windows) |
 | **Hostname** | Short hostname (e.g., `web01`) - equivalent to `hostname -s` |
@@ -1876,22 +2022,38 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 | Purpose | Endpoints | Access | Format |
 |---------|-----------|--------|--------|
-| **Public server status/info** | `/healthz`, `/api/{api_version}/healthz` | **PUBLIC** | HTML/JSON/text |
+| **Public server status/info** | `/server/healthz`, optional `/healthz`, `/api/{api_version}/server/healthz` | **PUBLIC** | HTML/JSON/text |
 | **Prometheus metrics** | `/metrics` | **INTERNAL** | Prometheus text exposition (everything) |
 
 **Endpoints:**
 
 | Endpoint | Description |
 |----------|-------------|
-| `/healthz` | Frontend route - content negotiation (HTML for browsers, JSON for API clients, text for CLI) |
-| `/api/{api_version}/healthz` | API route - always JSON |
+| `/server/healthz` | Frontend route - content negotiation (HTML for browsers, JSON for API clients, text for CLI) |
+| `/healthz` | Optional root alias for `/server/healthz` when `server.healthz.root.enabled: true` |
+| `/api/{api_version}/server/healthz` | API route - JSON by default; text via standard API text rules |
 | `/metrics` | Prometheus - all metrics, internal only |
+
+**Optional root health alias:**
+
+```yaml
+server:
+  healthz:
+    root:
+      enabled: false   # When true, mount /healthz to the SAME handler as /server/healthz
+```
+
+- Default is `false`
+- This exists for integrations that require a root-level `/healthz`
+- When enabled, `/healthz` MUST be a direct handler mapping to `/server/healthz`
+- NEVER redirect `/healthz` → `/server/healthz`
+- `/server/healthz` remains the canonical documented route even when `/healthz` is enabled
 
 **Key differences:**
 
 | Aspect | Public Status (PART 13) | Prometheus Metrics (PART 21) |
 |--------|-------------------------|------------------------------|
-| **Endpoints** | `/healthz`, `/api/{api_version}/healthz` | `/metrics` |
+| **Endpoints** | `/server/healthz`, optional `/healthz`, `/api/{api_version}/server/healthz` | `/metrics` |
 | **Visibility** | Public internet | Internal network only |
 | **Authentication** | None | Optional bearer token |
 | **Data** | Public-safe status/info only | Everything (all telemetry) |
@@ -3104,6 +3266,10 @@ Implemented core server functionality and admin panel.
 | File/directory rules | Critical Rules | No forbidden files/dirs, naming correct |
 | Code patterns | Relevant PARTs | Config, server, API patterns match |
 | Business logic | IDEA.md | Features implemented match what IDEA.md defines |
+| Threat model / abuse model | IDEA.md → `## Business logic` | Trust boundaries, data sensitivity, abuse cases, and security exceptions are documented and code matches them |
+| Well-known namespace | PART 11 / web routes | `/.well-known/**` only serves documented allowlisted entries, unsupported entries 404, and optional entries exist only when the corresponding feature is defined |
+| External identity auth | PART 34 | OIDC and LDAP both exist, support multiple providers, expose the documented `/server/auth/*` and `/api/{api_version}/server/auth/*` routes, and are manageable from `/server/{admin_path}/config/security/auth/*` |
+| External username onboarding | PART 34 | New OIDC/LDAP-backed users/admins go through the documented first-login username confirmation flow, including prefill normalization and collision-safe numeric suggestions |
 | CLI interface | PART 8 | Flags, commands, help output match spec |
 | Client/agent scope | PART 33 | `src/client/` exists for all projects; `src/agent/` only when project needs it |
 | Untrusted content handling | PART 11, PART 16 | User-controlled files/markdown/HTML render as escaped text or sanitized markdown; dangerous types are not served executable on the app origin |
@@ -3119,6 +3285,7 @@ Implemented core server functionality and admin panel.
 | **Code ↔ GraphQL** | Schema | Types/queries match actual resolvers |
 | **Code ↔ docs/** | All documentation | ReadTheDocs matches implementation |
 | **Code ↔ CLI --help** | Commands/flags | Help output matches actual CLI |
+| **Code ↔ `.github/` policy files** | Support/report/review flow | CONTRIBUTING, SECURITY, issue templates, PR template, and CODEOWNERS match actual project behavior and paths |
 
 ### Step 3: Infrastructure File Accuracy
 **Do infrastructure files match the project?**
@@ -3129,12 +3296,24 @@ Implemented core server functionality and admin panel.
 | **docker/docker-compose.yml** | PART 27, actual config | Ports, volumes, env vars match |
 | **docker/docker-compose.dev.yml** | PART 27 | Dev workflow correct |
 | **docker/file_system/** | Actual entrypoint needs | Scripts match what app expects |
+| **.github/CODEOWNERS** | Actual repo layout | Catch-all owner exists and sensitive paths are covered |
+| **.github/dependabot.yml** | Actual ecosystems | Go modules, Actions, and Docker are covered when used |
+| **.github/SECURITY.md** | security.txt/contact/reporting flow | Reporting instructions and support window are accurate |
+| **.github/ISSUE_TEMPLATE/*** | Actual support/reporting model | Bug, feature, support, and vulnerability routing are correct |
 | **.github/workflows/*.yml** | PART 28, actual build | CI/CD builds what exists, tests what exists |
 | **.gitea/workflows/*.yml** | PART 28, actual build | Same as GitHub workflows |
 | **Jenkinsfile** | PART 28, actual build | Pipeline matches project |
 | **Makefile** | PART 26, actual targets | Targets work, paths correct |
 | **mkdocs.yml** | PART 30, docs/ structure | Nav matches actual doc files |
 | **.readthedocs.yaml** | PART 30 | Config correct for project |
+| **Release artifacts** | release workflow + updater/client behavior | Checksums, SBOM, release notes, and attestation/provenance rules are satisfied |
+
+**Workflow hardening checks for `.github/workflows/*.yml`:**
+- least-privilege permissions
+- no unsafe `pull_request_target` build/test/publish path
+- third-party actions pinned to full SHA
+- no secrets/write tokens exposed to fork PRs
+- security workflow exists and blocks on secret/dependency/workflow-policy failures
 
 ### Step 4: AI Tool Configuration (Rule Files)
 **Do AI rule files exist and follow the required format?**
@@ -3164,7 +3343,7 @@ Implemented core server functionality and admin panel.
 | **README.md** | Actual features, endpoints, usage | PART 3 | Features added/removed/changed |
 | **Swagger/OpenAPI** | Actual API routes in code | PART 14 | Routes changed, params changed |
 | **GraphQL schema** | Actual types/queries in code | PART 14 | Schema changed |
-| **docs/** (ReadTheDocs) | Actual config, API, features | PART 30 | Any user-facing changes |
+| **docs/** (ReadTheDocs) | Actual config, API, admin, security, integrations, and public protocol behavior | PART 30 | Any user-facing, admin-facing, operator-facing, or integration-facing changes |
 | **IDEA.md** | Actual business logic | — | Features/data models changed |
 | **CLI --help** | Actual flags/commands | PART 8 | CLI changed |
 
@@ -3523,7 +3702,7 @@ When the specification is unclear:
 | **CI/CD workflows** | GitHub/Gitea/Jenkins pipeline structure |
 | **Directory layout** | `src/`, `docker/`, `binaries/`, etc. |
 | **Config file format** | YAML structure, standard keys |
-| **Health endpoints** | `/healthz`, `/api/{api_version}/healthz` format |
+| **Health endpoints** | `/server/healthz`, `/api/{api_version}/server/healthz` format |
 | **API response format** | JSON structure, error format, pagination |
 
 ### What Projects CAN Customize
@@ -3639,7 +3818,7 @@ logging:
 |-------|------------|
 | **CLI flags** | `--help` output matches template spec |
 | **Config loading** | YAML config loads correctly |
-| **Health checks** | `/healthz` returns correct format |
+| **Health checks** | `/server/healthz` returns correct format |
 | **API format** | JSON responses match spec |
 | **Build** | `make build` succeeds |
 | **Docker** | `make docker` succeeds |
@@ -4046,7 +4225,7 @@ ls -la docker/
 
 | If NOT using... | These must NOT appear in code |
 |-----------------|------------------------------|
-| PART 34 (Multi-User) | `users` table, user registration, user preferences table, user API tokens, `/auth/register`, user profiles, `allow_user_preference` config options |
+| PART 34 (Multi-User) | `users` table, user registration, user preferences table, user API tokens, `/server/auth/register`, user profiles, `allow_user_preference` config options |
 | PART 35 (Organizations) | `organizations` table, org membership, org ownership, org API tokens, `/orgs/*` routes |
 | PART 36 (Custom Domains) | `custom_domains` table, domain verification, user/org domain settings, SSL for custom domains |
 
@@ -4206,6 +4385,10 @@ If blocked on current feature:
 □ Health endpoints return SPEC format
 □ API responses match SPEC format
 □ Error responses match SPEC format
+□ `/.well-known/**` only serves the documented allowlisted entries and unknown entries return `404`
+□ Canonical `/.well-known/security.txt` is served; `/security.txt` is not required unless explicitly defined in `IDEA.md`
+□ If external auth is enabled, both OIDC and LDAP support multiple providers and are manageable from `/server/{admin_path}/config/security/auth/*`
+□ New OIDC/LDAP-backed users/admins follow the first-login username confirmation flow with normalized prefill and visible collision-safe numeric suggestions
 ```
 
 ### Infrastructure
@@ -4215,6 +4398,24 @@ If blocked on current feature:
 □ entrypoint.sh matches SPEC exactly
 □ Makefile has all required targets
 □ CI/CD workflows in place
+```
+
+### Governance & Community
+```
+□ Public repo `.github/` files present and project-specific
+□ CODEOWNERS covers repo root and security-sensitive paths
+□ Dependabot configured for all ecosystems actually used
+□ Issue/PR/security templates route users correctly
+□ Default-branch protection requirements are defined
+```
+
+### Supply Chain & Release
+```
+□ Workflow permissions follow least privilege
+□ Third-party workflow actions are SHA-pinned
+□ Secret scanning is enabled and blocking
+□ Release outputs include checksums and release notes
+□ Public releases include SBOM and provenance/attestation when platform supports it
 ```
 
 ### Security & Operations
@@ -4232,6 +4433,8 @@ If blocked on current feature:
 □ client follows SPEC (required for all projects)
 □ agent follows SPEC (if implemented)
 □ Custom domains follow SPEC (if PART 36 included)
+□ IDEA.md business logic defines scope, trust boundaries, data sensitivity, abuse cases, and security exceptions
+□ Implementation matches the declared threat/abuse model
 ```
 
 ## What To Do When Stuck
@@ -4272,14 +4475,14 @@ Every feature MUST work via:
 | Web Route (HTML) | API Route (JSON) | Purpose |
 |------------------|------------------|---------|
 | `/` | `/api/{api_version}/` | Homepage / API root |
-| `/healthz` | `/api/{api_version}/healthz` | Health status (both exist independently) |
-| `/{admin_path}/dashboard` | `/api/{api_version}/{admin_path}/dashboard` | Admin dashboard |
-| `/{admin_path}/server/settings` | `/api/{api_version}/{admin_path}/server/settings` | Server settings |
-| `/{admin_path}/users` | `/api/{api_version}/{admin_path}/users` | User management |
+| `/server/healthz` | `/api/{api_version}/server/healthz` | Health status (both exist independently) |
+| `/server/{admin_path}` | `/api/{api_version}/server/{admin_path}` | Admin dashboard |
+| `/server/{admin_path}/config/settings` | `/api/{api_version}/server/{admin_path}/config/settings` | Server settings |
+| `/server/{admin_path}/config/users` | `/api/{api_version}/server/{admin_path}/config/users` | User management |
 | `/quotes` | `/api/{api_version}/quotes` | Project feature (example) |
 | `/quotes/random` | `/api/{api_version}/quotes/random` | Project feature (example) |
-| `/server/docs/swagger` | `/api/{api_version}/swagger` (also `/api/swagger` alias) | Swagger UI / OpenAPI JSON spec |
-| `/server/docs/graphql` | `/api/{api_version}/graphql` (also `/api/graphql` alias) | GraphiQL UI / GraphQL POST endpoint |
+| `/server/docs/swagger` | `/api/{api_version}/server/swagger` (also `/api/swagger` alias) | Swagger UI / OpenAPI JSON spec |
+| `/server/docs/graphql` | `/api/{api_version}/server/graphql` (also `/api/graphql` alias) | GraphiQL UI / GraphQL POST endpoint |
 
 **This pattern applies to ALL features:**
 - Every admin page has a corresponding admin API
@@ -4358,8 +4561,10 @@ go build -o binary/{project_name} ./src
 | **Least Privilege** | Minimal permissions required for each operation |
 | **Fail Secure** | On error, deny access rather than grant it |
 | **Secure by Default** | Safe defaults, user opts-in to less secure options |
+| **Internet-Facing Baseline** | Server apps are assumed exposed to hostile public networks unless the user explicitly defines a private/internal deployment |
 | **Suggest, Don't Block** | Recommend security features (MFA), never force them |
 | **Friction-Free Security** | Security should enhance, not impede, the user experience |
+| **Usability Through Safe Automation** | Reduce operator effort by automating secure behavior, not by weakening controls |
 
 **Security suggestions (not requirements):**
 
@@ -4375,6 +4580,29 @@ go build -o binary/{project_name} ./src
 - User settings: security section with MFA setup and recommendations
 - Clear benefits: "Secure your account with two-factor authentication"
 - Never block access or features for users without MFA
+
+### Secure-by-Design Rule for Internet-Facing Servers
+
+- These applications are servers first. Unless the user explicitly says otherwise, AI MUST treat them as internet-facing and hostile-traffic-exposed by default
+- Usability work MUST make the secure path easier; it MUST NOT make the secure path weaker
+- If a security feature feels painful, solve it with:
+  - automatic safe defaults
+  - setup/runtime detection
+  - clearer UI copy and recovery flows
+  - progressive disclosure in admin UX
+  - better docs/examples
+- AI MUST NOT reduce friction by disabling, loosening, or bypassing:
+  - authn / authz
+  - TLS / secure cookies
+  - CSRF / CSP / CORS protections
+  - rate limiting / lockouts / abuse controls
+  - input validation / output sanitization / untrusted-file protections
+  - least-privilege runtime rules
+- Any intentionally weaker compatibility/convenience mode MUST be:
+  - explicit, never default
+  - documented in IDEA.md
+  - clearly labeled in UI/docs as a security tradeoff
+- Refactors, UX improvements, and simplifications MUST preserve or strengthen the current security posture. "Easier" never means "less secure."
 
 ### Input Validation
 
@@ -4443,7 +4671,7 @@ db.Query("SELECT * FROM users WHERE email = '" + email + "'")
 | **Invalid email format** | "Please enter a valid email address" | Same | `validation_error: email format invalid, input=[redacted]` |
 | **Login failed (wrong password)** | "Invalid credentials" | "Login failed for user@example.com" | `auth_failure: user_id=123, ip=1.2.3.4, reason=invalid_password` |
 | **Login failed (no such user)** | "Invalid credentials" | "Login attempt for unknown user" | `auth_failure: email=[redacted], ip=1.2.3.4, reason=user_not_found` |
-| **Rate limited** | "Too many attempts. Try again in 5 minutes" | "Rate limit hit: login, IP 1.2.3.4" | `rate_limit: endpoint=/auth/login, ip=1.2.3.4, limit=5/15m` |
+| **Rate limited** | "Too many attempts. Try again in 5 minutes" | "Rate limit hit: login, IP 1.2.3.4" | `rate_limit: endpoint=/server/auth/login, ip=1.2.3.4, limit=5/15m` |
 | **Database error** | "An error occurred. Please try again" | "Database connection failed" | `db_error: connection refused, host=db.local:5432, err=[full error]` |
 | **Permission denied** | "Access denied" | "User lacks permission: admin.settings" | `authz_failure: user_id=123, resource=admin.settings, action=write` |
 | **Internal panic** | "An unexpected error occurred" | "Internal error - check logs" | `panic: [full stack trace], request_id=abc123` |
@@ -4501,6 +4729,8 @@ Content-Type: application/json
 | Rate limiting | Prevent abuse | Clear error message with retry time |
 | CAPTCHA | Prevent bots | Only after failed attempts, not first try |
 | 2FA | Account security | Remember device option (30 days) |
+
+**Rule:** solve usability problems by improving workflow, defaults, messaging, and automation - not by weakening protections that guard an internet-facing server.
 
 ---
 
@@ -4940,8 +5170,8 @@ By using this software, you acknowledge that you have read and understood this d
 
 | Context | URL Format | Example |
 |---------|------------|---------|
-| **Documentation** (README, docs/, examples) | `{official_site}/path` | `GET https://api.example.com/healthz` |
-| **Embedded code** (Go, JS, templates) | `{fqdn}/path` | `fmt.Sprintf("https://%s/healthz", cfg.FQDN)` |
+| **Documentation** (README, docs/, examples) | `{official_site}/path` | `GET https://api.example.com/server/healthz` |
+| **Embedded code** (Go, JS, templates) | `{fqdn}/path` | `fmt.Sprintf("https://%s/server/healthz", cfg.FQDN)` |
 
 **Why the distinction:**
 - **Documentation**: Users copy-paste. Full URLs work immediately.
@@ -4972,13 +5202,13 @@ If `{official_site}` is defined, ALL documentation examples MUST use the full UR
 
 ```markdown
 # ❌ WRONG - Relative paths when officialsite exists
-GET /healthz
+GET /server/healthz
 GET /api/v1/users
 GET /api/autoconfig
 curl http://localhost:8080/api/v1/data
 
 # ✅ CORRECT - Full URLs using officialsite
-GET https://api.example.com/healthz
+GET https://api.example.com/server/healthz
 GET https://api.example.com/api/v1/users
 GET https://api.example.com/api/autoconfig
 curl -q -LSsf https://api.example.com/api/v1/data
@@ -4998,7 +5228,7 @@ curl -q -LSsf https://api.example.com/api/v1/data
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET {official_site}/healthz` | Health check |
+| `GET {official_site}/server/healthz` | Health check |
 | `GET {official_site}/api/v1/users` | List users |
 | `POST {official_site}/api/v1/users` | Create user |
 | `GET {official_site}/api/autoconfig` | Auto-configuration |
@@ -5007,7 +5237,7 @@ curl -q -LSsf https://api.example.com/api/v1/data
 
 ```bash
 # Get server status
-curl -q -LSsf {official_site}/healthz
+curl -q -LSsf {official_site}/server/healthz
 
 # List all users (requires auth)
 curl -q -LSsf -H "Authorization: Bearer TOKEN" {official_site}/api/v1/users
@@ -5018,8 +5248,8 @@ curl -q -LSsf {official_site}/api/autoconfig
 ```
 
 **If {official_site} is not defined:**
-- Use relative paths: `GET /healthz`, `GET /api/v1/users`
-- Use placeholder in curl: `curl -q -LSsf http://YOUR_SERVER/healthz`
+- Use relative paths: `GET /server/healthz`, `GET /api/v1/users`
+- Use placeholder in curl: `curl -q -LSsf http://YOUR_SERVER/server/healthz`
 - Document that user must specify their server URL
 
 ---
@@ -5047,11 +5277,11 @@ For code that runs in the application, NEVER use bare `/path`. Always use `{fqdn
 
 ```go
 // ❌ WRONG - Bare path
-redirectURL := "/auth/callback"
+redirectURL := "/server/auth/callback"
 link := "/api/v1/users/" + userID
 
 // ✅ CORRECT - Using FQDN
-redirectURL := fmt.Sprintf("https://%s/auth/callback", cfg.FQDN)
+redirectURL := fmt.Sprintf("https://%s/server/auth/callback", cfg.FQDN)
 link := fmt.Sprintf("https://%s/api/v1/users/%s", cfg.FQDN, userID)
 
 // ✅ CORRECT - Helper function
@@ -5088,14 +5318,17 @@ fetch(`${config.apiBaseUrl}/api/v1/users`)
 ```go
 // OK to use bare paths for internal router registration
 router.GET("/api/v1/users", handleUsers)
-router.GET("/healthz", handleHealth)
+router.GET("/server/healthz", handleHealth)
+if cfg.Server.Healthz.Root.Enabled {
+    router.GET("/healthz", handleHealth) // same handler, no redirect
+}
 ```
 
 **Summary:**
 
 | Location | Format | Example |
 |----------|--------|---------|
-| README.md | `{official_site}/path` | `GET https://api.example.com/healthz` |
+| README.md | `{official_site}/path` | `GET https://api.example.com/server/healthz` |
 | docs/*.md | `{official_site}/path` | `curl -q -LSsf https://api.example.com/api/v1/users` |
 | Go code | `{fqdn}/path` | `fmt.Sprintf("https://%s/path", cfg.FQDN)` |
 | JS code | `origin/path` | `${window.location.origin}/path` |
@@ -5197,7 +5430,7 @@ sudo mv {project_name}-cli-linux-amd64 /usr/local/bin/{project_name}-cli
 
 ## Configuration
 
-Configuration is auto-generated on first run. Edit via admin panel at `{proto}://{fqdn}/{admin_path}` (admin_path defaults to "admin").
+Configuration is auto-generated on first run. Edit via admin panel at `{proto}://{fqdn}/server/{admin_path}` (admin_path defaults to "admin").
 
 Key settings:
 - `server.port` - Listen port (default: random 64xxx)
@@ -5209,14 +5442,14 @@ API documentation available at `{official_site}/api/{api_version}/` when running
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET {official_site}/healthz` | Health check |
+| `GET {official_site}/server/healthz` | Health check |
 | `GET {official_site}/api/{api_version}/...` | API endpoints |
 
 ### Examples
 
 ```bash
 # Health check
-curl -q -LSsf {official_site}/healthz
+curl -q -LSsf {official_site}/server/healthz
 
 # API request (requires auth)
 curl -q -LSsf -H "Authorization: Bearer TOKEN" {official_site}/api/{api_version}/resource
@@ -5227,7 +5460,7 @@ curl -q -LSsf -H "Authorization: Bearer TOKEN" {official_site}/api/{api_version}
 ### Troubleshooting
 
 - Check logs: `docker logs {project_name}`
-- Health check: `curl -q -LSsf {official_site}/healthz`
+- Health check: `curl -q -LSsf {official_site}/server/healthz`
 
 ## Development
 
@@ -5343,17 +5576,17 @@ curl -q -LSsf -X POST -d '{"key":"value"}' {url}
 
 ```bash
 # ✅ CORRECT
-curl -q -LSsf https://api.example.com/healthz
-curl -q -LSsfI https://api.example.com/healthz
+curl -q -LSsf https://api.example.com/server/healthz
+curl -q -LSsfI https://api.example.com/server/healthz
 curl -q -LSsf -H "Accept: application/json" https://api.example.com/users
 curl -q -LSsf -X POST -d '{"name":"test"}' https://api.example.com/users
 curl -q -LSsf -o app.tar.gz https://releases.example.com/app-1.0.tar.gz
 curl -q -LSsf -O https://releases.example.com/app-linux-amd64
 
 # ❌ WRONG - Missing standard flags
-curl https://api.example.com/healthz
-curl -s https://api.example.com/healthz
-curl -L https://api.example.com/healthz
+curl https://api.example.com/server/healthz
+curl -s https://api.example.com/server/healthz
+curl -L https://api.example.com/server/healthz
 ```
 
 **Where this applies:**
@@ -5468,7 +5701,7 @@ Not every project needs admin UI extensions - it depends on the project's nature
 **Where to NEVER expose:**
 | Location | Rule |
 |----------|------|
-| `/healthz` | Status only: "ok"/"error", no connection details |
+| `/server/healthz` | Status only: "ok"/"error", no connection details |
 | API responses | No internal paths, no config values |
 | Error messages | Generic errors, no stack traces in production |
 | Logs | Redact passwords, tokens, keys |
@@ -6045,6 +6278,8 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 │   ├── api.md              # API documentation
 │   ├── cli.md              # CLI reference (if applicable)
 │   ├── admin.md            # Admin panel guide
+│   ├── security.md         # Security, public endpoints, and reporting
+│   ├── integrations.md     # External identity and protocol integrations
 │   ├── development.md      # Development guide
 │   ├── stylesheets/        # MkDocs theme customization
 │   │   ├── dark.css        # Dark theme customization for ReadTheDocs
@@ -7082,7 +7317,7 @@ func normalizePath(input string) string {
     return cleaned
 }
 
-// validatePathSegment checks a single path segment (e.g., "admin" in "/admin/dashboard")
+// validatePathSegment checks a single path segment (e.g., "admin" in "/server/admin/dashboard")
 func validatePathSegment(segment string) error {
     if segment == "" {
         return ErrInvalidPath
@@ -7142,11 +7377,11 @@ func SafePath(input string) (string, error) {
 | `/my//admin` | `my/admin` | ✓ |
 | `///a//b///` | `a/b` | ✓ |
 | `/../admin` | ✗ rejected | Path traversal |
-| `/admin/../secret` | ✗ rejected | Path traversal |
-| `/admin/..` | ✗ rejected | Path traversal |
+| `/server/admin/../secret` | ✗ rejected | Path traversal |
+| `/server/admin/..` | ✗ rejected | Path traversal |
 | `....` | ✗ rejected | Invalid chars |
 | `/Admin` | ✗ rejected | Uppercase not allowed |
-| `/admin/<script>` | ✗ rejected | Invalid chars |
+| `/server/admin/<script>` | ✗ rejected | Invalid chars |
 
 ### Apply Everywhere
 
@@ -7245,12 +7480,12 @@ func PathSecurityMiddleware(next http.Handler) http.Handler {
 
 | Request | Result | Status |
 |---------|--------|--------|
-| `GET /admin//dashboard` | `/{admin_path}/dashboard` | 200 |
+| `GET /server/admin//config//settings` | `/server/{admin_path}/config/settings` | 200 |
 | `GET //api///v1//users` | `/api/{api_version}/users` | 200 |
 | `GET ///` | `/` | 200 |
-| `GET /static/../admin` | Blocked | 400 |
+| `GET /static/../server/admin` | Blocked | 400 |
 | `GET /api/{api_version}/files/..%2F..%2Fetc/passwd` | Blocked | 400 |
-| `GET /admin/....//secret` | Blocked | 400 |
+| `GET /server/admin/....//secret` | Blocked | 400 |
 
 ### File Path Security
 
@@ -7507,7 +7742,7 @@ Self-Healing Successful?                        │
 
 **The admin panel remains accessible and provides guidance for fixing issues.**
 
-#### Maintenance Dashboard (`/{admin_path}`)
+#### Maintenance Dashboard (`/server/{admin_path}`)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -7609,7 +7844,7 @@ X-Maintenance-Reason: database_connection
 
 **Why headers, not body fields:** `Retry-After` is a standard HTTP header (RFC 9110 §10.2.3) that retry-aware clients honor automatically. Putting it in the body duplicates the wire and risks divergence on retry. `X-Maintenance-*` are operator-facing diagnostics, not application data — same reasoning.
 
-### /healthz in Maintenance Mode
+### /server/healthz in Maintenance Mode
 
 ```json
 {
@@ -8767,7 +9002,7 @@ server:
 
 ### Admin Panel
 
-Port can be changed via `/{admin_path}/server/settings`, but **requires server restart** (with warning shown to user).
+Port can be changed via `/server/{admin_path}/config/settings`, but **requires server restart** (with warning shown to user).
 
 ### Example Structure
 
@@ -8789,6 +9024,11 @@ server:
   admin_path: admin
   # API version prefix (default: v1) - used in /api/{api_version}/ routes
   api_version: v1
+  healthz:
+    root:
+      # Optional root compatibility alias. Canonical route stays /server/healthz.
+      # When true, mount /healthz to the SAME handler as /server/healthz (never redirect).
+      enabled: false
 
   # Branding & SEO - see PART 16 for full details
   branding:
@@ -12013,7 +12253,7 @@ CREATE TABLE IF NOT EXISTS admins (
     failed_attempts INTEGER NOT NULL DEFAULT 0,
     locked_until INTEGER,                      -- Account lockout timestamp
     -- OIDC/LDAP sync fields (null for local accounts)
-    source      TEXT NOT NULL DEFAULT 'local', -- local, oidc:{provider}, ldap
+    source      TEXT NOT NULL DEFAULT 'local', -- local, oidc:{provider}, ldap:{provider}
     external_id TEXT,                          -- Provider's user ID
     groups      TEXT,                          -- JSON array of group memberships
     last_sync   INTEGER                        -- Last OIDC/LDAP sync timestamp
@@ -12079,6 +12319,11 @@ CREATE TABLE IF NOT EXISTS users (
     last_login  INTEGER,
     failed_attempts INTEGER NOT NULL DEFAULT 0,
     locked_until INTEGER,                      -- Account lockout timestamp
+    -- OIDC/LDAP sync fields (null for local accounts)
+    source      TEXT NOT NULL DEFAULT 'local', -- local, oidc:{provider}, ldap:{provider}
+    external_id TEXT,                          -- Provider's user ID
+    groups      TEXT,                          -- JSON array of cached group memberships
+    last_sync   INTEGER,                       -- Last successful OIDC/LDAP sync timestamp
     metadata    TEXT                           -- JSON for app-specific data
 );
 
@@ -12425,7 +12670,7 @@ func categorizeChanges(changes []string) (hotReload, needsRestart []string) {
 **Admin UI Restart Notification:**
 
 ```go
-// GET /{admin_path}/api/status returns pending restart info
+// GET /server/{admin_path}/api/status returns pending restart info
 func adminStatusHandler(w http.ResponseWriter, r *http.Request) {
     status := map[string]interface{}{
         "running":         true,
@@ -12449,13 +12694,14 @@ func adminStatusHandler(w http.ResponseWriter, r *http.Request) {
 └─────────────────────────────────────────────────────────┘
 ```
 
-**Health Check Endpoint (`/healthz`):**
+**Health Check Endpoint (`/server/healthz`):**
 
-**See PART 13 for full /healthz response format. Handler must return all dynamic data.**
+**See PART 13 for full /server/healthz response format. Handler must return all dynamic data.**
 
 ```go
-// GET /healthz - full health response (see PART 13 for JSON structure)
-// GET /api/{api_version}/healthz - same response, always JSON
+// GET /server/healthz - full health response (see PART 13 for JSON structure)
+// GET /healthz - same handler as /server/healthz when cfg.Server.Healthz.Root.Enabled
+// GET /api/{api_version}/server/healthz - same response, JSON by default
 func healthHandler(w http.ResponseWriter, r *http.Request) {
     // Content negotiation handled by middleware (PART 14)
     // This returns the data; middleware formats as HTML/JSON/text
@@ -12478,7 +12724,7 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
     respondWithFormat(w, r, response) // PART 14 content negotiation
 }
 
-// buildHealthResponse collects ALL dynamic data for /healthz
+// buildHealthResponse collects ALL dynamic data for /server/healthz
 // This is the COMPLETE global structure - extend with app-specific data
 // ALL fields MUST be public-safe (no secrets, no internal IPs, no paths)
 // Frontend displays everything returned here (see PART 13)
@@ -12590,7 +12836,7 @@ func (m *ConfigManager) ClearPendingRestart() {
 # Kubernetes - check pending_restart for rolling updates
 livenessProbe:
   httpGet:
-    path: /healthz
+    path: /server/healthz
     port: 8080
   # Don't fail on restart_required - service is still live
 
@@ -12843,9 +13089,9 @@ volumes:
 | WRONG | RIGHT |
 |-------|-------|
 | `GET /api/{api_version}/resource/random` | `https://api.example.com/api/{api_version}/resource/random` |
-| `POST /api/{api_version}/{admin_path}/server/settings` | `https://api.example.com/api/{api_version}/{admin_path}/server/settings` |
+| `POST /api/{api_version}/server/{admin_path}/config/settings` | `https://api.example.com/api/{api_version}/server/{admin_path}/config/settings` |
 | `http://localhost:8080/api` | `http://192.168.1.100:64580/api` |
-| `http://0.0.0.0:80/healthz` | `https://myserver.example.com/healthz` |
+| `http://0.0.0.0:80/server/healthz` | `https://myserver.example.com/server/healthz` |
 
 ### URL Variables
 
@@ -13065,10 +13311,10 @@ func GetWildcardDomain() string
 |-----------|-----------------|
 | HTML templates | `BuildURL(r, "/path")` |
 | Swagger/OpenAPI | `servers[0].url` = `BuildURL(r, "")` |
-| GraphQL | `BuildURL(r, "/api/{api_version}/graphql")` (or `/api/graphql` alias for the latest version) |
+| GraphQL | `BuildURL(r, "/api/{api_version}/server/graphql")` (or `/api/graphql` alias for the latest version) |
 | Email links | `BuildURL(r, "/verify")` |
 | CORS origins | Auto-include `GetWildcardDomain()` if detected |
-| OAuth callbacks | `BuildURL(r, "/auth/callback")` |
+| OAuth callbacks | `BuildURL(r, "/server/auth/callback")` |
 
 ### FQDN Validation Rules
 
@@ -13978,7 +14224,7 @@ If now - last_seen > 5 minutes:
          │
          ▼
 Admin manually removes dead nodes via:
-   /{admin_path}/server/cluster → Remove Node
+   /server/{admin_path}/config/cluster → Remove Node
 ```
 
 **Heartbeat Payload (every 30s, written to `nodes` table):**
@@ -14015,7 +14261,7 @@ Admin manually removes dead nodes via:
 
 ### Removed-Node Local Cleanup
 
-**When a node is manually removed via `/{admin_path}/server/cluster → Remove Node`, the database record is deleted, but the node's local on-disk state may still contain valid copies of `app_secrets` (it had them while it was in the cluster). The removal flow MUST handle both sides:**
+**When a node is manually removed via `/server/{admin_path}/config/cluster → Remove Node`, the database record is deleted, but the node's local on-disk state may still contain valid copies of `app_secrets` (it had them while it was in the cluster). The removal flow MUST handle both sides:**
 
 | Side | Action |
 |------|--------|
@@ -14388,21 +14634,21 @@ func isSerializationError(err error) bool {
 
 | Item | Where it appears | Why public-safe |
 |------|------------------|-----------------|
-| `app_name`, `project_name` | `/healthz`, banners, headers | Already in URL / branding |
-| `version` (semver) | `/healthz`, `Server:` header, `--version` | Required so security researchers can correlate reports against releases |
-| `commit_hash` | `/healthz`, `--version` | Public — embedded at build, anyone can extract from binary |
-| `build_date` | `/healthz`, `--version` | Same as above |
-| `go_version` | `/healthz` (under `runtime`) | Build metadata, not a vulnerability vector on its own |
-| `uptime` (seconds or human) | `/healthz` | Operational diagnostic |
-| `mode` (`production` / `development`) | `/healthz` | Operational diagnostic; debug is gated separately |
-| `db_type` (`sqlite` / `postgres` / `valkey` / etc.) | `/healthz` | Just the engine family — no host, no creds |
-| `db_locality` (`local` / `remote`) | `/healthz` | Fuzzy — no host name or IP |
-| `cluster_size`, `is_leader`, `is_follower` | `/healthz` | Cluster state, no addresses |
-| `request_count_24h`, `active_connections`, `total_connections` | `/healthz` (under `metrics`) | Operational, aggregate |
-| `unique_visitors_24h`, `peak_concurrent` | `/healthz` (aggregate only) | Bragging rights / monitoring; no per-IP detail |
+| `app_name`, `project_name` | `/server/healthz`, banners, headers | Already in URL / branding |
+| `version` (semver) | `/server/healthz`, `Server:` header, `--version` | Required so security researchers can correlate reports against releases |
+| `commit_hash` | `/server/healthz`, `--version` | Public — embedded at build, anyone can extract from binary |
+| `build_date` | `/server/healthz`, `--version` | Same as above |
+| `go_version` | `/server/healthz` (under `runtime`) | Build metadata, not a vulnerability vector on its own |
+| `uptime` (seconds or human) | `/server/healthz` | Operational diagnostic |
+| `mode` (`production` / `development`) | `/server/healthz` | Operational diagnostic; debug is gated separately |
+| `db_type` (`sqlite` / `postgres` / `valkey` / etc.) | `/server/healthz` | Just the engine family — no host, no creds |
+| `db_locality` (`local` / `remote`) | `/server/healthz` | Fuzzy — no host name or IP |
+| `cluster_size`, `is_primary`, `is_secondary` | `/server/healthz` | Cluster state, no addresses |
+| `request_count_24h`, `active_connections`, `total_connections` | `/server/healthz` (under `metrics`) | Operational, aggregate |
+| `unique_visitors_24h`, `peak_concurrent` | `/server/healthz` (aggregate only) | Bragging rights / monitoring; no per-IP detail |
 | Public domain(s) the app serves (`{fqdn}`, learned reverse-proxy hosts) | `/api/autodiscover`, banners | Already public — that's how visitors got here |
 | Tor `.onion` / I2P address (if Tor/I2P enabled and `expose: true`) | `/api/autodiscover` | Operator opt-in; advertised on purpose |
-| OpenAPI spec, GraphQL schema | `/api/{api_version}/swagger`, `/api/swagger`, `/server/docs/*` | API surface is intentionally public |
+| OpenAPI spec, GraphQL schema | `/api/{api_version}/server/swagger`, `/api/swagger`, `/server/docs/*` | API surface is intentionally public |
 | Public OG / social metadata | HTML `<meta>` | Required for sharing / SEO |
 
 **Rule:** if a researcher would need it to file a useful CVE report, it should be in Tier 2. The version, commit, and mode triple is the minimum set.
@@ -14555,9 +14801,11 @@ When `DEBUG=true` is active and an error occurs, the canonical error body (PART 
 | `--debug` / `DEBUG=true` requires explicit opt-in | Debug endpoints disabled in production by default (PART 6) |
 | Errors return canonical generic messages | Stack traces only in `debug.log`, never in HTTP response (PART 5) |
 | Secret-in-config detection on startup | Warning logged if config contains hardcoded `password=`, `token=`, `secret=` — operator nudged toward env vars / vault |
-| `/healthz` returns operational status + Tier-2 public-safe info | Includes `version`, `commit_hash`, `build_date`, `uptime`, `db_type`, aggregate metrics. Excludes Tier-1 secrets (DSN, internal IPs, credentials). Tier-3 detail (deps versions, internal hosts) requires `--debug`/`DEBUG=true`. See "What Safe for Anyone to See Means" above. |
+| `/server/healthz` returns operational status + Tier-2 public-safe info | Includes `version`, `commit_hash`, `build_date`, `uptime`, `db_type`, aggregate metrics. Excludes Tier-1 secrets (DSN, internal IPs, credentials). Tier-3 detail (deps versions, internal hosts) requires `--debug`/`DEBUG=true`. See "What Safe for Anyone to See Means" above. |
 
 **The contract:** an operator who runs the binary with the binary's defaults, sets a domain, and points DNS at it gets a deployment that passes a baseline security audit. No knobs to flip, no config to write. Tightening (nonces, stricter CORS, `csp.mode: enforce`, etc.) is opt-in for operators who want it.
+
+**Interpretation rule:** "easy to use" means the safe deployment is the default deployment. AI must reduce operator burden by making secure configuration automatic and understandable, not by removing protections.
 
 ## Cryptographic Keys
 
@@ -14573,7 +14821,7 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 | Generated | First start, before the setup token is shown. Stored in `server.db` row `app_secrets.installation_secret`, base64-encoded. |
 | Scope | Cluster-wide. The first node generates it; subsequent nodes joining the cluster receive it via the secure cluster join protocol (PART 34 → "Join Cluster Flow (Technical)" — the join token is HMAC-derived and the `installation_secret` is delivered as part of the same handshake payload). NEVER appears in a request, response, log, or admin UI. |
 | Used by | `{security_id}` HMAC (PART 11 → "Security Reports"); PGP private-key KDF (PART 11 → "GPG Keypair Management"); future derived material (cluster-internal request signing, cookie signing salts). |
-| Rotation | Manual via admin panel (`/{admin_path}/server/security/keypair` → "Rotate Installation Secret"). Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt admin password, log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and re-bases all live HMACs. The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
+| Rotation | Manual via admin panel (`/server/{admin_path}/config/security/keypair` → "Rotate Installation Secret"). Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt admin password, log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and re-bases all live HMACs. The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
 | Backup | Always — see PART 22 → "Backup Contents". Required for any restore: without it, the PGP private key in the backup is undecryptable. |
 | Loss = catastrophic | Lost = cannot decrypt PGP private key (and therefore cannot decrypt in-flight encrypted security reports); cannot validate `{security_id}` URLs on existing security.txt copies until the file regenerates. Recovery requires admin to: regenerate keypair, regenerate `installation_secret`, accept that all in-flight encrypted reports are unreadable. |
 
@@ -15028,7 +15276,7 @@ adm_ghi789...  "monitoring"   read       1 year
 
 | Prefix | Scope | Route | Description |
 |--------|-------|-------|-------------|
-| `adm_agt_` | Admin | `/api/{api_version}/{admin_path}/server/agents/*` | Server infrastructure agents |
+| `adm_agt_` | Admin | `/api/{api_version}/server/{admin_path}/config/agents/*` | Server infrastructure agents |
 | `usr_agt_` | User | `/api/{api_version}/users/agents/*` | User's personal agents (SaaS) |
 | `org_agt_` | Org | `/api/{api_version}/orgs/{slug}/agents/*` | Organization agents |
 
@@ -15150,11 +15398,11 @@ func validateAgentToken(token string, scope TokenScope) (*TokenInfo, error) {
 
 | Token Type | Allowed Routes | Description |
 |------------|----------------|-------------|
-| `adm_` | `/api/{api_version}/{admin_path}/*` | Server admin panel |
-| `adm_` | `/api/{api_version}/{admin_path}/server/*` | Server settings (within admin) |
+| `adm_` | `/api/{api_version}/server/{admin_path}/*` | Server admin panel |
+| `adm_` | `/api/{api_version}/server/{admin_path}/config/*` | Server settings (within admin) |
 | `usr_` | `/api/{api_version}/users/*`, `/api/{api_version}/orgs/{allowed}/*` | User + orgs they belong to |
 | `org_` | `/api/{api_version}/orgs/{specific}/*` | Single org only |
-| `adm_agt_` | `/api/{api_version}/{admin_path}/server/agents/*` | Admin infrastructure agent |
+| `adm_agt_` | `/api/{api_version}/server/{admin_path}/config/agents/*` | Admin infrastructure agent |
 | `usr_agt_` | `/api/{api_version}/users/agents/*` | User's personal agent |
 | `org_agt_` | `/api/{api_version}/orgs/{slug}/agents/*` | Organization agent |
 | (no token) | `/api/{api_version}/`, `/api/{api_version}/server/*`, `/api/{api_version}/{resource}/*` | Public routes (no auth) |
@@ -15168,12 +15416,12 @@ const (
     TargetUnknown       TargetType = iota // Unknown/invalid target
     TargetPublic                          // Public routes (/, /api/{api_version}/, project-specific like /jokes, /weather, /ip)
     TargetServerPages                     // Server pages - about, help, contact, privacy (/server/*, /api/{api_version}/server/*)
-    TargetAuth                            // Auth flows (/auth/*, /api/{api_version}/auth/*)
+    TargetAuth                            // Auth flows (/server/auth/*, /api/{api_version}/server/auth/*)
     TargetCurrentUser                     // Current user from token (/users/*, /api/{api_version}/users/*)
     TargetUser                            // Specific user (/users/{username}/*, /api/{api_version}/users/{username}/*)
     TargetOrg                             // Organization (/orgs/{slug}/*, /api/{api_version}/orgs/{slug}/*)
-    TargetAdmin                           // Server admin panel (/{admin_path}/*, /api/{api_version}/{admin_path}/*)
-    TargetAdminServer                     // Server settings within admin (/{admin_path}/server/*, /api/{api_version}/{admin_path}/server/*)
+    TargetAdmin                           // Server admin panel (/server/{admin_path}/*, /api/{api_version}/server/{admin_path}/*)
+    TargetAdminServer                     // Server settings within admin (/server/{admin_path}/config/*, /api/{api_version}/server/{admin_path}/config/*)
 )
 ```
 
@@ -15213,11 +15461,11 @@ func ContextMiddleware(next http.Handler) http.Handler {
 func extractContextFromPath(path string) (*Context, error) {
     // /api/{api_version}/ → Public (project root)
     // /api/{api_version}/server/* → Server Pages (about, help, contact, privacy)
-    // /api/{api_version}/auth/* → Auth flows
+    // /api/{api_version}/server/auth/* → Auth flows
     // /api/{api_version}/users/* → User context (current user or {username})
     // /api/{api_version}/orgs/{slug}/* → Org context
-    // /api/{api_version}/{admin_path}/* → Server Admin
-    // /api/{api_version}/{admin_path}/server/* → Server Settings (within admin)
+    // /api/{api_version}/server/{admin_path}/* → Server Admin
+    // /api/{api_version}/server/{admin_path}/config/* → Server Settings (within admin)
     // /api/{api_version}/{resource}/* → Public routes (project-specific: jokes, weather, ip, etc.)
 
     apiBase := APIBasePath() + "/" // e.g., "/api/{api_version}/"
@@ -15233,7 +15481,7 @@ func extractContextFromPath(path string) (*Context, error) {
         // /api/{api_version}/server/* - public server pages (about, help, contact, privacy)
         return &Context{Type: TargetServerPages}, nil
     case "auth":
-        // /api/{api_version}/auth/* - authentication flows (public)
+        // /api/{api_version}/server/auth/* - authentication flows (public)
         return &Context{Type: TargetAuth}, nil
     case "users":
         if len(parts) > 1 && parts[1] != "" {
@@ -15251,10 +15499,10 @@ func extractContextFromPath(path string) (*Context, error) {
     case cfg.AdminPath: // Configurable admin path
         // Check for server settings within admin
         if len(parts) > 1 && parts[1] == "server" {
-            // /api/{api_version}/{admin_path}/server/* - server settings
+            // /api/{api_version}/server/{admin_path}/config/* - server settings
             return &Context{Type: TargetAdminServer}, nil
         }
-        // /api/{api_version}/{admin_path}/* - admin panel
+        // /api/{api_version}/server/{admin_path}/* - admin panel
         return &Context{Type: TargetAdmin}, nil
     default:
         // Project-specific public routes (e.g., /api/{api_version}/jokes, /weather, /ip)
@@ -15294,19 +15542,26 @@ func extractContextFromPath(path string) (*Context, error) {
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/auth/login` | GET | Login form (handles both admin and user) |
-| `/auth/login` | POST | Process login, redirect based on account type |
-| `/auth/logout` | GET/POST | End session |
-| `/auth/password/reset` | GET/POST | Password reset (if SMTP) |
-| `/auth/invite/server/{code}` | GET | Admin invite acceptance |
+| `/server/auth/login` | GET | Login form (handles both admin and user) |
+| `/server/auth/login` | POST | Process login, redirect based on account type |
+| `/server/auth/logout` | GET/POST | End session |
+| `/server/auth/password/reset` | GET/POST | Password reset (if SMTP) |
+| `/server/auth/invite/server/{code}` | GET | Admin invite acceptance |
+| `/server/auth/oidc/{provider}` | GET | Start OIDC login for user/admin auth |
+| `/server/auth/oidc/{provider}/callback` | GET | Complete OIDC browser login and apply user/admin mapping rules |
+| `/server/auth/ldap` | GET | LDAP provider chooser when one or more LDAP providers are enabled |
+| `/server/auth/ldap/{provider}` | GET/POST | LDAP login flow for the selected LDAP provider |
+| `/server/auth/external/username` | GET/POST | First-login username confirmation/selection step after successful OIDC/LDAP auth for new user/admin accounts |
 
 **Additional routes if multi-user (PART 34):**
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/auth/register` | GET/POST | User registration |
-| `/auth/verify/{code}` | GET | Email verification |
-| `/auth/invite/user/{code}` | GET | User invite acceptance |
+| `/server/auth/register` | GET/POST | User registration |
+| `/server/auth/verify/{code}` | GET | Email verification |
+| `/server/auth/invite/user/{code}` | GET | User invite acceptance |
+
+**Routing rule:** external identity login for both regular users and Server Admins lives under `/server/auth/*` in the browser and `/api/{api_version}/server/auth/*` in the API. Do NOT add parallel auth routes outside those scopes.
 
 ### Scoped Login Redirect
 
@@ -15314,13 +15569,13 @@ func extractContextFromPath(path string) (*Context, error) {
 
 | Account Type | Stored In | After Login Redirect |
 |--------------|-----------|---------------------|
-| **Server Admin** | `admins` table | `/{admin_path}` (default: `/admin`) |
+| **Server Admin** | `admins` table | `/server/{admin_path}` (default: `/server/admin`) |
 | **Regular User** | `users` table | `/users` or `?redirect=` param |
 
 **Login Flow:**
 
 ```
-User submits /auth/login form
+User submits /server/auth/login form
          ↓
 Check credentials against `admins` table
          ↓
@@ -15333,7 +15588,7 @@ Set admin_session    Check `users` table (if multi-user)
     │                    │
     ↓               ┌─── Match found? ───┐
 Redirect to         │                    │
-/{admin_path}      YES                   NO
+/server/{admin_path}      YES                   NO
                     │                    │
                     ↓                    ↓
                Set user_session    Return error:
@@ -15375,14 +15630,55 @@ Redirect to         │                    │
 | Path | Purpose |
 |------|---------|
 | `/.well-known/acme-challenge/` | Let's Encrypt HTTP-01 challenge |
-| `/.well-known/change-password` | Password change URL (redirects to `/users/security/password` if logged in, `/auth/password/forgot` if not) |
+| `/.well-known/change-password` | Password change URL (redirects to `/users/security/password` if logged in, `/server/auth/password/forgot` if not) |
+
+### Well-Known Namespace Contract
+
+**`/.well-known/**` is a root-owned protocol/discovery namespace. It is NOT a general static-file bucket.**
+
+- `/.well-known/**` is reserved to the server and can NEVER be claimed by users, orgs, vanity routes, or admin path settings
+- Well-known endpoints live only at the root `/.well-known/...` namespace, never under `/server/*` or `/api/*`
+- Only documented, allowlisted well-known entries may be served; unsupported entries MUST return `404 Not Found`
+- `GET` and `HEAD` are the only valid methods for `/.well-known/**`; other methods MUST return `405 Method Not Allowed`
+- No auth, no CSRF token, and no session requirement may be needed to read any `/.well-known/**` resource
+- `/.well-known/` itself MUST NOT list a directory index, file browser, or generated listing
+- The namespace MUST NOT expose user-uploaded or user-controlled files directly
+- The namespace is for public-safe protocol metadata only; it MUST NOT expose secrets, internal config, admin-only state, or anything that is unsafe for anonymous users
+- Canonical well-known endpoints MUST serve the exact path required by the standard/consumer; do NOT move them under another route and redirect unless the specific standard explicitly requires a redirect behavior
+- `/.well-known/security.txt` is canonical; `/security.txt` is NOT required and SHOULD return `404` unless a project-specific requirement in `IDEA.md` explicitly says otherwise
+
+### Well-Known Support Matrix
+
+| Path | Default | Required When | Source | Content-Type | Behavior |
+|------|---------|---------------|--------|--------------|----------|
+| `/.well-known/security.txt` | Enabled | All projects | Generated from config (or operator override for the same path) | `text/plain; charset=utf-8` | RFC 9116 security contact file |
+| `/.well-known/pgp-key.asc` | Feature-gated | Project security-report PGP keypair exists | Generated from stored public key | `application/pgp-keys` or `text/plain; charset=utf-8` | Public key download for secure report submission |
+| `/.well-known/acme-challenge/{token}` | Feature-gated | Let's Encrypt `http-01` is active | Dynamic handler only | `text/plain; charset=utf-8` | ACME challenge response; no auth, no HTML |
+| `/.well-known/change-password` | Enabled | Auth routes exist | Dynamic handler | Redirect response with no-store headers | If logged in, send user to `/users/security/password`; otherwise send to `/server/auth/password/forgot` |
+| `/.well-known/webfinger` | Disabled | Project publishes `acct:`-style identities or federation in `IDEA.md` | Dynamic handler | `application/jrd+json` | Resolve account/resource discovery; otherwise 404 |
+| `/.well-known/openid-configuration` | Disabled | Project itself is an OIDC provider in `IDEA.md` | Dynamic handler | `application/json` | Provider metadata; MUST stay disabled for OIDC client-only apps |
+| `/.well-known/assetlinks.json` | Disabled | Android App Links / native credential association is enabled | Config or file-backed | `application/json` | Android digital asset links |
+| `/.well-known/apple-app-site-association` | Disabled | Apple Universal Links / WebCredentials / App Clips are enabled | Config or file-backed | `application/json` | Apple app/site association file; no `.json` suffix |
+| `/.well-known/mta-sts.txt` | Disabled | Deployment explicitly owns inbound mail policy for the served host | Config or file-backed | `text/plain; charset=utf-8` | MTA-STS policy; otherwise 404 |
+
+**Optional-entry rule:** optional well-known endpoints MUST be enabled only when the matching product feature, platform integration, or mail/domain ownership is explicitly defined in `IDEA.md` or project config. Do NOT invent or auto-enable them.
 
 ### Well-Known Directory Support
 
 Files can be served from:
-1. Files in `{data_dir}/web/.well-known/` (checked first)
-2. Embedded files in binary
-3. Dynamically generated (e.g., ACME challenges, config-based security.txt)
+1. Reserved dynamic handlers for protocol-owned entries (for example `acme-challenge`, `change-password`, or provider/discovery handlers when enabled)
+2. Files in `{data_dir}/web/.well-known/` for file-backed allowlisted entries only
+3. Embedded files in binary for file-backed allowlisted entries only
+4. Dynamically generated config-backed content (for example `security.txt`, `pgp-key.asc`, or generated JSON discovery files)
+
+**Serving-order rule:** a file in `{data_dir}/web/.well-known/` may override an embedded default for the SAME allowlisted entry, but it MUST NOT override protocol-owned dynamic handlers such as `/.well-known/acme-challenge/{token}` or `/.well-known/change-password`.
+
+### Adding New Well-Known Entries
+
+- Only add a new `/.well-known/...` entry when a real protocol, platform, or ecosystem integration requires that exact path
+- The exact path, source of truth, content type, auth model, and unsupported behavior MUST be documented in the template/`IDEA.md`
+- New entries MUST be added to the route tables, reserved-route checks, and the audit/final checklist
+- If a requested capability can live under `/server/*` or `/api/{api_version}/server/*` without breaking interoperability, do NOT put it under `/.well-known/`
 
 ### robots.txt
 
@@ -15392,7 +15688,7 @@ Files can be served from:
 User-agent: *
 Allow: /
 Allow: /api
-Disallow: /admin
+Disallow: /server/{admin_path}
 Sitemap: {app_url}/sitemap.xml
 ```
 
@@ -15404,7 +15700,7 @@ web:
       - /
       - /api
     deny:
-      - /admin
+      - /server/{admin_path}
 ```
 
 ### security.txt (RFC 9116)
@@ -15424,6 +15720,18 @@ web:
   security:
     contact: "security@{fqdn}"    # Security contact email
     expires: "{1year}"            # Auto-calculated 1 year from generation
+  well_known:
+    unsupported_behavior: 404     # Unknown entries never redirect
+    webfinger:
+      enabled: false              # Enable only if project publishes acct: identities/federation
+    openid_configuration:
+      enabled: false              # Enable only if project is an OIDC provider
+    assetlinks:
+      enabled: false              # Enable only for Android App Links/native association
+    apple_app_site_association:
+      enabled: false              # Enable only for Apple Universal Links/WebCredentials
+    mta_sts:
+      enabled: false              # Enable only if this host owns inbound mail policy
 ```
 
 **Fields:**
@@ -15432,14 +15740,14 @@ web:
 | `Contact` | YES | Email for reporting vulnerabilities (mailto: prefix added automatically) |
 | `Expires` | YES | Expiration date (auto-renewed yearly by default) |
 
-### Admin Panel (/{admin_path}/web)
+### Admin Panel (/server/{admin_path}/config/web)
 
 **robots.txt Settings:**
 
 | Element | Type | Description |
 |---------|------|-------------|
 | Allow paths | Tag input / List | Paths to allow crawling (e.g., `/`, `/api`) |
-| Deny paths | Tag input / List | Paths to deny crawling (e.g., `/admin`) |
+| Deny paths | Tag input / List | Paths to deny crawling (e.g., `/server/{admin_path}`) |
 | Preview | Read-only textarea | Shows generated robots.txt content |
 
 **security.txt Settings:**
@@ -15449,6 +15757,23 @@ web:
 | Security contact | Text input | Email for vulnerability reports |
 | Expires | Date picker | Expiration date (default: 1 year from now, auto-renews) |
 | Preview | Read-only textarea | Shows generated security.txt content |
+
+**Well-Known Settings:**
+
+| Element | Type | Description |
+|---------|------|-------------|
+| Supported entries | Read-only table | Shows each allowlisted `/.well-known/...` entry and whether it is required, enabled, or disabled |
+| Optional entry toggles | Toggle list | Enable/disable optional well-known entries such as `webfinger`, `assetlinks.json`, Apple association, or `mta-sts.txt` when the project actually uses them |
+| Entry source | Read-only / selector | Shows whether an entry is dynamic, config-backed, data-dir override, or embedded default |
+| Preview | Read-only viewer | Preview the exact rendered body/JSON for the selected entry |
+| Unsupported behavior note | Read-only help text | Unknown `/.well-known/*` entries return `404`; no directory listing |
+
+**Health Route Settings:**
+
+| Element | Type | Description |
+|---------|------|-------------|
+| Root `/healthz` alias | Toggle | Enables `server.healthz.root.enabled` |
+| Behavior note | Read-only help text | `/healthz` maps directly to `/server/healthz` using the same handler; never redirects |
 
 ## Security Reports — Coordinated Disclosure Pipeline
 
@@ -15510,25 +15835,25 @@ web:
 | `/server/security/thanks` | GET | None | Acknowledgments page. Lists researchers who opted in (real name, handle, or anonymized "Anonymous Researcher #n") with the year and short credit. |
 | `/server/security/report/{tracking_id}` | GET | One-shot token in URL | Researcher status page — shows triage state (Received / Triaged / Confirmed / Patching / Disclosed / Won't Fix), maintainer comments visible to researcher, expected disclosure date. Token is single-use-per-day; expires after the report is closed for 30 days. |
 
-### Admin Panel — `/{admin_path}/server/security/`
+### Admin Panel — `/server/{admin_path}/config/security/`
 
 **Note on the two `security` admin namespaces:**
 
 | Path | Concern | Cross-link |
 |------|---------|------------|
-| `/{admin_path}/server/security/{reports,policy,thanks,keypair}` | **Disclosure feature** — managing the coordinated-disclosure pipeline (reports, policy page, hall of fame, GPG keypair). | This section. |
-| `/{admin_path}/server/security/{blocked-ips,allowlist,locked-accounts}` | **Runtime defense** — IP blocks, allow-lists, account lockouts. | PART 11 → "IP Block Management" (already documented). |
-| `/{admin_path}/server/web/security` | **`security.txt` content** — the file's `Expires`, languages, keyservers list. Recipient email is in `server.contact.security` (PART 12). | Existing — PART 11 → "security.txt". |
+| `/server/{admin_path}/config/security/{reports,policy,thanks,keypair}` | **Disclosure feature** — managing the coordinated-disclosure pipeline (reports, policy page, hall of fame, GPG keypair). | This section. |
+| `/server/{admin_path}/config/security/{blocked-ips,allowlist,locked-accounts}` | **Runtime defense** — IP blocks, allow-lists, account lockouts. | PART 11 → "IP Block Management" (already documented). |
+| `/server/{admin_path}/config/web/security` | **`security.txt` content** — the file's `Expires`, languages, keyservers list. Recipient email is in `server.contact.security.email` (PART 12). | Existing — PART 11 → "security.txt". |
 
 All three coexist under the admin tree. The admin-panel UI groups them under a single "Security" sidebar entry with sub-tabs so operators see them in one place even though the route paths are slightly different.
 
 | Page | Purpose |
 |------|---------|
-| `/{admin_path}/server/security/reports` | List of all security reports with `tracking_id`, summary, severity, state. Sortable/filterable. Click → full report (decrypted on the server, viewed in-browser via authenticated session — never sent to log files). |
-| `/{admin_path}/server/security/reports/{tracking_id}` | Full report view: vulnerability details, researcher info, attached PGP-encrypted artifacts, triage notes, state machine controls, "send researcher update" composer (encrypts to researcher pubkey). |
-| `/{admin_path}/server/security/policy` | Edit `/server/security/policy` content (Markdown). Default safe-harbor text provided. |
-| `/{admin_path}/server/security/thanks` | Manage acknowledgment listings (toggle visibility per researcher, edit handle, sort order). Adding/removing entries follows researcher's stored credit preference. |
-| `/{admin_path}/server/security/keypair` | GPG keypair management — see "GPG Keypair Management" below. |
+| `/server/{admin_path}/config/security/reports` | List of all security reports with `tracking_id`, summary, severity, state. Sortable/filterable. Click → full report (decrypted on the server, viewed in-browser via authenticated session — never sent to log files). |
+| `/server/{admin_path}/config/security/reports/{tracking_id}` | Full report view: vulnerability details, researcher info, attached PGP-encrypted artifacts, triage notes, state machine controls, "send researcher update" composer (encrypts to researcher pubkey). |
+| `/server/{admin_path}/config/security/policy` | Edit `/server/security/policy` content (Markdown). Default safe-harbor text provided. |
+| `/server/{admin_path}/config/security/thanks` | Manage acknowledgment listings (toggle visibility per researcher, edit handle, sort order). Adding/removing entries follows researcher's stored credit preference. |
+| `/server/{admin_path}/config/security/keypair` | GPG keypair management — see "GPG Keypair Management" below. |
 
 ### GPG Keypair Management (Admin Panel)
 
@@ -15588,9 +15913,9 @@ All three coexist under the admin tree. The admin-panel UI groups them under a s
 **Access Log Formats:**
 | Format | Description | Example |
 |--------|-------------|---------|
-| `apache` | Apache Combined Log Format (default) | `127.0.0.1 - - [10/Oct/2024:13:55:36 -0700] "GET /api/{api_version}/healthz HTTP/1.1" 200 2326 "-" "curl/7.64.1"` |
-| `nginx` | Nginx Common Log Format | `127.0.0.1 - - [10/Oct/2024:13:55:36 -0700] "GET /api/{api_version}/healthz HTTP/1.1" 200 2326` |
-| `json` | Structured JSON | `{"ip":"127.0.0.1","time":"2024-10-10T13:55:36Z","method":"GET","path":"/api/{api_version}/healthz","status":200,"size":2326,"ua":"curl/7.64.1"}` |
+| `apache` | Apache Combined Log Format (default) | `127.0.0.1 - - [10/Oct/2024:13:55:36 -0700] "GET /api/{api_version}/server/healthz HTTP/1.1" 200 2326 "-" "curl/7.64.1"` |
+| `nginx` | Nginx Common Log Format | `127.0.0.1 - - [10/Oct/2024:13:55:36 -0700] "GET /api/{api_version}/server/healthz HTTP/1.1" 200 2326` |
+| `json` | Structured JSON | `{"ip":"127.0.0.1","time":"2024-10-10T13:55:36Z","method":"GET","path":"/api/{api_version}/server/healthz","status":200,"size":2326,"ua":"curl/7.64.1"}` |
 
 **Security Log Formats:**
 | Format | Description | Use Case |
@@ -15919,8 +16244,11 @@ server:
 | `config.tor_address_regenerated` | Onion address regenerated | Changed by |
 | `config.branding_updated` | Branding settings changed | Changed by |
 | `config.oidc_provider_added` | OIDC provider configured | Provider name, added by |
+| `config.oidc_provider_updated` | OIDC provider changed | Provider name, changed by |
 | `config.oidc_provider_removed` | OIDC provider removed | Provider name, removed by |
-| `config.ldap_updated` | LDAP settings changed | Changed by |
+| `config.ldap_provider_added` | LDAP provider configured | Provider name, added by |
+| `config.ldap_provider_updated` | LDAP provider changed | Provider name, changed by |
+| `config.ldap_provider_removed` | LDAP provider removed | Provider name, removed by |
 | `config.admin_groups_updated` | Admin group mapping changed | Old groups, new groups, changed by |
 
 ### Security Events
@@ -16107,7 +16435,7 @@ server:
 - Show only first 8 characters: `token_abc12345...`
 - Or use separate ID field that doesn't expose token value
 
-## Admin Panel (`/{admin_path}/server/logs/audit`)
+## Admin Panel (`/server/{admin_path}/config/logs/audit`)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -16420,9 +16748,9 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | `/users/consents` | PATCH | Update consent preferences |
 | `/server/privacy` | GET | Privacy policy |
 | `/server/dpo` | GET | Data Protection Officer contact (GDPR) |
-| `/{admin_path}/server/compliance` | GET | Compliance dashboard |
-| `/{admin_path}/server/compliance/report` | POST | Generate compliance report |
-| `/{admin_path}/server/compliance/breach` | POST | Report data breach |
+| `/server/{admin_path}/config/compliance` | GET | Compliance dashboard |
+| `/server/{admin_path}/config/compliance/report` | POST | Generate compliance report |
+| `/server/{admin_path}/config/compliance/breach` | POST | Report data breach |
 
 ### Compliance API Endpoints
 
@@ -16433,15 +16761,15 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | `/api/{api_version}/users/data/delete` | POST | Request deletion |
 | `/api/{api_version}/users/consents` | GET | Get consents |
 | `/api/{api_version}/users/consents` | PATCH | Update consents |
-| `/api/{api_version}/{admin_path}/server/compliance` | GET | Compliance status |
-| `/api/{api_version}/{admin_path}/server/compliance/standards` | GET | Enabled standards |
-| `/api/{api_version}/{admin_path}/server/compliance/report` | POST | Generate report |
-| `/api/{api_version}/{admin_path}/server/compliance/breach` | POST | Report breach |
-| `/api/{api_version}/{admin_path}/server/compliance/audit` | GET | Compliance audit log |
+| `/api/{api_version}/server/{admin_path}/config/compliance` | GET | Compliance status |
+| `/api/{api_version}/server/{admin_path}/config/compliance/standards` | GET | Enabled standards |
+| `/api/{api_version}/server/{admin_path}/config/compliance/report` | POST | Generate report |
+| `/api/{api_version}/server/{admin_path}/config/compliance/breach` | POST | Report breach |
+| `/api/{api_version}/server/{admin_path}/config/compliance/audit` | GET | Compliance audit log |
 
 ### Admin UI: Compliance Dashboard
 
-**Location:** `/{admin_path}/server/compliance`
+**Location:** `/server/{admin_path}/config/compliance`
 
 | Section | Description |
 |---------|-------------|
@@ -16711,33 +17039,45 @@ type IPBlock struct {
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/security/blocked-ips` | GET | List blocked IPs |
-| `/api/{api_version}/{admin_path}/server/security/blocked-ips` | POST | Manually block IP/CIDR |
-| `/api/{api_version}/{admin_path}/server/security/blocked-ips/{ip}` | GET | Get block details |
-| `/api/{api_version}/{admin_path}/server/security/blocked-ips/{ip}` | DELETE | Unblock IP |
-| `/api/{api_version}/{admin_path}/server/security/blocked-ips/expired` | DELETE | Purge expired blocks from log |
-| `/api/{api_version}/{admin_path}/server/security/allowlist` | GET | List allowlisted IPs/CIDRs (see Allowlist section) |
-| `/api/{api_version}/{admin_path}/server/security/allowlist` | POST | Add IP/CIDR to allowlist |
-| `/api/{api_version}/{admin_path}/server/security/allowlist/{id}` | DELETE | Remove from allowlist |
-| `/api/{api_version}/{admin_path}/server/security/allowlist/check/{ip}` | GET | Check if IP is allowlisted |
+| `/api/{api_version}/server/{admin_path}/config/security/blocked-ips` | GET | List blocked IPs |
+| `/api/{api_version}/server/{admin_path}/config/security/blocked-ips` | POST | Manually block IP/CIDR |
+| `/api/{api_version}/server/{admin_path}/config/security/blocked-ips/{ip}` | GET | Get block details |
+| `/api/{api_version}/server/{admin_path}/config/security/blocked-ips/{ip}` | DELETE | Unblock IP |
+| `/api/{api_version}/server/{admin_path}/config/security/blocked-ips/expired` | DELETE | Purge expired blocks from log |
+| `/api/{api_version}/server/{admin_path}/config/security/allowlist` | GET | List allowlisted IPs/CIDRs (see Allowlist section) |
+| `/api/{api_version}/server/{admin_path}/config/security/allowlist` | POST | Add IP/CIDR to allowlist |
+| `/api/{api_version}/server/{admin_path}/config/security/allowlist/{id}` | DELETE | Remove from allowlist |
+| `/api/{api_version}/server/{admin_path}/config/security/allowlist/check/{ip}` | GET | Check if IP is allowlisted |
 
 **Account Lockout API:**
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/security/locked-accounts` | GET | List locked accounts |
-| `/api/{api_version}/{admin_path}/server/security/locked-accounts/{id}` | DELETE | Unlock account |
+| `/api/{api_version}/server/{admin_path}/config/security/locked-accounts` | GET | List locked accounts |
+| `/api/{api_version}/server/{admin_path}/config/security/locked-accounts/{id}` | DELETE | Unlock account |
 
 **Security Settings API:**
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/security/settings` | GET | Get all security settings |
-| `/api/{api_version}/{admin_path}/server/security/settings` | PATCH | Update security settings |
-| `/api/{api_version}/{admin_path}/server/security/auth` | GET | Get auth settings (password policy, etc.) |
-| `/api/{api_version}/{admin_path}/server/security/auth` | PATCH | Update auth settings |
-| `/api/{api_version}/{admin_path}/server/security/ratelimit` | GET | Get rate limit settings |
-| `/api/{api_version}/{admin_path}/server/security/ratelimit` | PATCH | Update rate limit settings |
+| `/api/{api_version}/server/{admin_path}/config/security/settings` | GET | Get all security settings |
+| `/api/{api_version}/server/{admin_path}/config/security/settings` | PATCH | Update security settings |
+| `/api/{api_version}/server/{admin_path}/config/security/auth` | GET | Get auth settings (password policy, provider summaries, etc.) |
+| `/api/{api_version}/server/{admin_path}/config/security/auth` | PATCH | Update shared auth settings |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers` | GET | List configured OIDC providers |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers` | POST | Create OIDC provider |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers/{provider}` | GET | Get one OIDC provider |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers/{provider}` | PATCH | Update one OIDC provider |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers/{provider}` | DELETE | Remove one OIDC provider |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers/{provider}/test` | POST | Test one OIDC provider |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers` | GET | List configured LDAP providers |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers` | POST | Create LDAP provider |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers/{provider}` | GET | Get one LDAP provider |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers/{provider}` | PATCH | Update one LDAP provider |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers/{provider}` | DELETE | Remove one LDAP provider |
+| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers/{provider}/test` | POST | Test one LDAP provider |
+| `/api/{api_version}/server/{admin_path}/config/security/ratelimit` | GET | Get rate limit settings |
+| `/api/{api_version}/server/{admin_path}/config/security/ratelimit` | PATCH | Update rate limit settings |
 
 **Password Policy (Sane Defaults):**
 
@@ -16777,9 +17117,9 @@ When compliance standards are enabled, password policy automatically upgrades:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/security/tokens` | GET | List all API tokens (admin view) |
-| `/api/{api_version}/{admin_path}/server/security/tokens/{id}` | DELETE | Revoke token |
-| `/api/{api_version}/{admin_path}/server/security/tokens/{id}/rotate` | POST | Force token rotation |
+| `/api/{api_version}/server/{admin_path}/config/security/tokens` | GET | List all API tokens (admin view) |
+| `/api/{api_version}/server/{admin_path}/config/security/tokens/{id}` | DELETE | Revoke token |
+| `/api/{api_version}/server/{admin_path}/config/security/tokens/{id}/rotate` | POST | Force token rotation |
 
 **Token Expiry (Sane Defaults):**
 
@@ -16866,10 +17206,10 @@ type AllowlistEntry struct {
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/security/allowlist` | GET | List all allowlisted IPs/CIDRs |
-| `/api/{api_version}/{admin_path}/server/security/allowlist` | POST | Add IP/CIDR with optional description |
-| `/api/{api_version}/{admin_path}/server/security/allowlist/{id}` | DELETE | Remove from allowlist |
-| `/api/{api_version}/{admin_path}/server/security/allowlist/check/{ip}` | GET | Check if IP is allowlisted |
+| `/api/{api_version}/server/{admin_path}/config/security/allowlist` | GET | List all allowlisted IPs/CIDRs |
+| `/api/{api_version}/server/{admin_path}/config/security/allowlist` | POST | Add IP/CIDR with optional description |
+| `/api/{api_version}/server/{admin_path}/config/security/allowlist/{id}` | DELETE | Remove from allowlist |
+| `/api/{api_version}/server/{admin_path}/config/security/allowlist/check/{ip}` | GET | Check if IP is allowlisted |
 
 **Middleware:**
 
@@ -16897,7 +17237,7 @@ func IsAllowlisted(ctx context.Context) bool {
 }
 ```
 
-**Admin UI (`/{admin_path}/server/security/allowlist`):**
+**Admin UI (`/server/{admin_path}/config/security/allowlist`):**
 
 **Note:** Wireframe shows English for documentation. Actual UI renders ALL text via `t()` translation keys (see `admin.allowlist.*` in translation files). User sees their selected language.
 
@@ -16949,7 +17289,7 @@ func IsAllowlisted(ctx context.Context) bool {
 
 **Admin UI: IP Blocks**
 
-**Location:** `/{admin_path}/server/security/blocked-ips`
+**Location:** `/server/{admin_path}/config/security/blocked-ips`
 
 | Section | Description |
 |---------|-------------|
@@ -17016,17 +17356,17 @@ func IsAllowlisted(ctx context.Context) bool {
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/breaches` | GET | List all breaches |
-| `/api/{api_version}/{admin_path}/server/breaches` | POST | Report new breach |
-| `/api/{api_version}/{admin_path}/server/breaches/{id}` | GET | Get breach details |
-| `/api/{api_version}/{admin_path}/server/breaches/{id}` | PATCH | Update breach status |
-| `/api/{api_version}/{admin_path}/server/breaches/{id}/investigate` | POST | Start investigation |
-| `/api/{api_version}/{admin_path}/server/breaches/{id}/contain` | POST | Mark as contained |
-| `/api/{api_version}/{admin_path}/server/breaches/{id}/notify` | POST | Send notifications |
-| `/api/{api_version}/{admin_path}/server/breaches/{id}/resolve` | POST | Mark as resolved |
-| `/api/{api_version}/{admin_path}/server/breaches/{id}/affected` | GET | List affected users |
-| `/api/{api_version}/{admin_path}/server/breaches/{id}/timeline` | GET | Breach timeline/events |
-| `/api/{api_version}/{admin_path}/server/breaches/{id}/report` | GET | Generate breach report |
+| `/api/{api_version}/server/{admin_path}/config/breaches` | GET | List all breaches |
+| `/api/{api_version}/server/{admin_path}/config/breaches` | POST | Report new breach |
+| `/api/{api_version}/server/{admin_path}/config/breaches/{id}` | GET | Get breach details |
+| `/api/{api_version}/server/{admin_path}/config/breaches/{id}` | PATCH | Update breach status |
+| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/investigate` | POST | Start investigation |
+| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/contain` | POST | Mark as contained |
+| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/notify` | POST | Send notifications |
+| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/resolve` | POST | Mark as resolved |
+| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/affected` | GET | List affected users |
+| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/timeline` | GET | Breach timeline/events |
+| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/report` | GET | Generate breach report |
 
 **Breach Data Model:**
 
@@ -17071,7 +17411,7 @@ const (
 
 **Admin UI: Breach Management**
 
-**Location:** `/{admin_path}/server/compliance/breaches`
+**Location:** `/server/{admin_path}/config/compliance/breaches`
 
 | Section | Description |
 |---------|-------------|
@@ -17184,9 +17524,9 @@ labels:
 ```
 
 **Behavior:**
-- All routes prefixed with baseurl (e.g., `/myproject/healthz`, `/myproject/api/v1/...`)
+- All routes prefixed with baseurl (e.g., `/myproject/server/healthz`, `/myproject/api/v1/...`)
 - Static assets served from `{baseurl}/static/`
-- Admin panel at `{baseurl}/{admin_path}/`
+- Admin panel at `{baseurl}/server/{admin_path}/`
 - Generated URLs (redirects, links) use detected baseurl
 - Trailing slash normalized (both `/myproject` and `/myproject/` work)
 - Empty string treated as `/`
@@ -17342,7 +17682,8 @@ server:
     # Default is "security@{fqdn}" per RFC 2142 (the canonical role
     # mailbox for security issues, also referenced by RFC 9116).
     # Operator can override to a personal address; if explicitly
-    # set to "" it falls back to admin.email (and admin.webhooks).
+    # set to "" it falls back to server.contact.admin.email
+    # (and server.contact.admin.webhooks).
     security:
       email: "security@{fqdn}"   # RFC 2142 standard role mailbox
       webhooks:
@@ -17355,7 +17696,7 @@ server:
     # Recipient for /server/contact submissions (non-security). Public
     # surface — appears as the "Contact us" email if the contact page
     # exposes one.
-    # If empty: falls back to admin.email.
+    # If empty: falls back to server.contact.admin.email.
     general:
       email: ""             # default: server.contact.admin.email
       webhooks:
@@ -17422,7 +17763,7 @@ if !subtle.ConstantTimeCompare([]byte(got), []byte(want)) {
 
 | Role | When triggered | What is sent |
 |------|----------------|--------------|
-| `admin` | Server-internal events: error rate spike, panic, cluster failover, backup failure, cert renewal, security report received (summary only) | Subject + body + severity + a deep-link to `/{admin_path}/server/...`. NEVER includes user content. |
+| `admin` | Server-internal events: error rate spike, panic, cluster failover, backup failure, cert renewal, security report received (summary only) | Subject + body + severity + a deep-link to `/server/{admin_path}/config/...`. NEVER includes user content. |
 | `security` | Incoming security report (full content, encrypted), researcher status update, CVE assignment milestone | PGP-encrypted body if a researcher pubkey or admin pubkey is configured (PART 11 → "GPG Keypair Management"). |
 | `general` | `/server/contact` form submission (non-security) | Sender name, sender email, subject, message body. Spam-filtered before dispatch. |
 
@@ -17430,24 +17771,22 @@ if !subtle.ConstantTimeCompare([]byte(got), []byte(want)) {
 
 | Field | Public exposure | Notes |
 |-------|------------------|-------|
-| `admin.email` | NEVER public | Server-internal recipient only. |
-| `security.email` | Public (security.txt `Contact: mailto:` line) | Researchers need to reach you. Choose carefully. Suggest a role address (`security@{fqdn}`) over a personal one. |
-| `general.email` | Public (contact form, footer "Contact us") | Same — role address recommended. |
+| `server.contact.admin.email` | NEVER public | Server-internal recipient only. |
+| `server.contact.security.email` | Public (security.txt `Contact: mailto:` line) | Researchers need to reach you. Choose carefully. Suggest a role address (`security@{fqdn}`) over a personal one. |
+| `server.contact.general.email` | Public (contact form, footer "Contact us") | Same — role address recommended. |
 | Any `webhooks.*` | NEVER public | URLs contain bearer tokens / chat IDs / etc. |
 
-### Backward Compatibility
+### Canonical Contact Keys Only
 
-The previous flat keys are accepted and migrated on first read:
+Use only the canonical contact keys in all new config, examples, docs, UI, and code:
 
-| Legacy key | Migrated to |
-|------------|-------------|
-| `server.contact` (string email) | `server.contact.general.email` |
-| `web.security.contact` | `server.contact.security.email` |
-| `server.admin_email` / `admin.email` | `server.contact.admin.email` |
+- `server.contact.admin.email`
+- `server.contact.security.email`
+- `server.contact.general.email`
 
-Migration writes the new structure to `server.yml` on first save and logs `config.contact_migrated`. The legacy keys are then ignored.
+Do NOT introduce flat aliases, duplicate names, or migration shims for contact recipients unless the user explicitly requests a migration feature.
 
-### Admin Panel — `/{admin_path}/server/notify`
+### Admin Panel — `/server/{admin_path}/config/notify`
 
 Single page with three tabs (Admin / Security / General). Each tab shows email + webhooks for that role with "test" buttons that send a sample notification through every configured transport.
 
@@ -17700,7 +18039,7 @@ func TrackingScript() template.HTML {
 {{ trackingScript }}
 ```
 
-### Admin Panel (/{admin_path}/server/tracking)
+### Admin Panel (/server/{admin_path}/config/tracking)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -18182,7 +18521,7 @@ type ConsentState struct {
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Admin Panel (/{admin_path}/server/privacy)
+### Admin Panel (/server/{admin_path}/config/privacy)
 
 | Section | Elements |
 |---------|----------|
@@ -18366,7 +18705,7 @@ server:
 | Pub/Sub events | Yes | Real-time state sync |
 | Distributed locks | Yes | Prevent duplicate task execution |
 
-## Admin Panel (/{admin_path}/server/settings)
+## Admin Panel (/server/{admin_path}/config/settings)
 
 All settings above MUST be configurable via admin panel:
 
@@ -18389,12 +18728,13 @@ All settings above MUST be configurable via admin panel:
 ## Health Checks
 
 **Endpoints:**
-- `/healthz` - Frontend route (follows PART 14 content negotiation rules)
-- `/api/{api_version}/healthz` - API route (always JSON)
+- `/server/healthz` - Frontend route (follows PART 14 content negotiation rules)
+- Optional `/healthz` - root alias to `/server/healthz` only when `server.healthz.root.enabled: true`
+- `/api/{api_version}/server/healthz` - API route (JSON by default; text via PART 14 API rules)
 
-**Content negotiation:** Follows standard frontend rules (see PART 14). No special /healthz rules.
+**Content negotiation:** Follows standard frontend rules (see PART 14). No special `/server/healthz` rules. If `/healthz` is enabled, it follows the exact same negotiation because it mounts the same handler.
 
-**NO sub-routes** - just `/healthz`, not `/healthz/db` or `/healthz/**`
+**NO sub-routes** - just `/server/healthz`, not `/server/healthz/db` or `/server/healthz/**`
 
 ### Global vs App-Specific
 
@@ -18438,7 +18778,7 @@ All settings above MUST be configurable via admin panel:
 **Based on template PARTS: branding (PART 16), modes (PART 6), cluster (PART 10), features (PARTS 20, 32, 34, 35), scheduler (PART 19).**
 
 ```go
-// HealthResponse - canonical field order for /healthz
+// HealthResponse - canonical field order for /server/healthz
 // All fields required unless marked (omitempty)
 // See individual PARTS for field sources
 type HealthResponse struct {
@@ -18637,9 +18977,11 @@ type StatsInfo struct {
 - ❌ `"database": "postgresql://user:pass@host:5432/db"`
 - ❌ `"database": {"host": "10.0.0.5", "port": 5432}`
 
-### /healthz Response Formats
+### /server/healthz Response Formats
 
 **Follows standard content negotiation (PART 14). Browser gets HTML, CLI gets text, API gets JSON.**
+
+**Optional root alias:** if `server.healthz.root.enabled: true`, `/healthz` MUST serve these exact same responses by mounting the same handler as `/server/healthz`. No redirect, no forked logic, no separate formatter path.
 
 #### HTML (browsers)
 
@@ -18918,9 +19260,9 @@ type StatsInfo struct {
 }
 ```
 
-### /api/{api_version}/healthz Security Rules
+### /api/{api_version}/server/healthz Security Rules
 
-**NEVER expose in /healthz response:**
+**NEVER expose in /server/healthz response:**
 
 | Category | NEVER Include | Why |
 |----------|---------------|-----|
@@ -18946,7 +19288,11 @@ type StatsInfo struct {
 | **Stats** | Aggregate counts only | `requests_total: 12345` |
 | **Mode** | Production/development | `production` |
 
-**Rule: If in doubt, don't include it. Health checks need status, not details.**
+**Rule: Health can be expansive if the field is intentionally public-safe and acceptable for any unauthenticated internet viewer to see.**
+
+- OK to include more detail when it is already publicly observable, already exposed elsewhere publicly, or operationally useful without increasing attack surface
+- NOT OK to include internal-only, secret, private-network, filesystem, credential, or admin-only detail
+- If in doubt, leave it out
 
 #### Plain Text (Accept: text/plain)
 
@@ -19004,9 +19350,13 @@ stats.requests_24h: 45678
 stats.active_connections: 42
 ```
 
-### /api/{api_version}/healthz (JSON only)
+### /api/{api_version}/server/healthz (JSON default)
 
-Same JSON response as `/healthz` with `Accept: application/json`. Always returns JSON regardless of Accept header.
+Same underlying health response as `/server/healthz`, but formatted using the standard `/api/**` response rules from PART 14:
+- default: JSON
+- `.txt`: text
+- `Accept: text/plain`: text
+- non-interactive API clients: text
 
 ### Single Instance Response
 
@@ -19091,6 +19441,12 @@ When not in cluster mode:
 - `cluster.primary` - The primary server URL
 - `cluster.nodes` - All available nodes (agents/CLI use for automatic failover)
 
+**Who uses health endpoints:**
+- Browsers, curl, and uptime checks use `/server/healthz`
+- CLI and agents use `/api/{api_version}/server/healthz` for cluster discovery and failover updates
+- Unversioned `/api/healthz` exists for machine-friendly versionless probing
+- Cluster nodes do **NOT** use `/server/healthz` or `/api/{api_version}/server/healthz` as the authoritative failover signal; node liveness and primary election use shared DB state and heartbeats
+
 ## Versioning
 
 ### Semantic Versioning (SemVer) Rules
@@ -19155,6 +19511,21 @@ OS/Arch: {GOOS}/{GOARCH}
 - Update clients to use new endpoint
 - NO backwards compatibility shims, redirects, or deprecation periods
 
+### Route Migration Rule (Old Code to New Routes)
+
+**When route rules change, migrate the implementation - do NOT layer new routes on top of old code.**
+
+- Move handlers, templates, tests, links, and client calls to the canonical new route tree
+- Delete superseded routes after the new route is in place
+- Do NOT keep old and new route trees alive in parallel "for now"
+- Do NOT duplicate handlers just to satisfy both old and new paths
+- Unversioned API aliases (`/api/swagger`, `/api/graphql`, `/api/healthz`) MUST mount the SAME handler as their versioned canonical route - never redirect, never fork behavior
+- Migration is complete only when:
+  - old routes are removed
+  - docs/examples use only the canonical routes
+  - tests use only the canonical routes
+  - there is one handler tree per behavior, not duplicates
+
 ## API Versioning
 
 **Use versioned API: `/api/{api_version}`**
@@ -19181,10 +19552,10 @@ OS/Arch: {GOOS}/{GOARCH}
 | API Type | Frontend Required | Example |
 |----------|-------------------|---------|
 | **User-facing features** | Yes | `/api/{api_version}/users` → `/users` page |
-| **Admin features** | Yes | `/api/{api_version}/{admin_path}/*` → `/{admin_path}/*` pages |
-| **Health/status** | Yes | `/healthz` has HTML frontend (with emojis), `/api/{api_version}/healthz` is JSON |
+| **Admin features** | Yes | `/api/{api_version}/server/{admin_path}/*` → `/server/{admin_path}/*` pages |
+| **Health/status** | Yes | `/server/healthz` has HTML frontend (with emojis), `/api/{api_version}/server/healthz` is JSON, `/api/healthz` is direct alias JSON |
 | **Agent endpoints** | No | `/api/{api_version}/*/agents/*` - CLI/agent only |
-| **Cluster nodes** | No | `/api/{api_version}/{admin_path}/server/nodes/*` - node-to-node only |
+| **Cluster nodes** | No | `/api/{api_version}/server/{admin_path}/config/nodes/*` - node-to-node only |
 
 | Requirement | Description |
 |-------------|-------------|
@@ -19207,8 +19578,8 @@ OS/Arch: {GOOS}/{GOARCH}
 
 | API Endpoint | Why No Frontend |
 |--------------|-----------------|
-| `/api/{api_version}/{admin_path}/server/agents/*` | Agent binary uses directly |
-| `/api/{api_version}/{admin_path}/server/nodes/*` | Node-to-node cluster communication |
+| `/api/{api_version}/server/{admin_path}/config/agents/*` | Agent binary uses directly |
+| `/api/{api_version}/server/{admin_path}/config/nodes/*` | Node-to-node cluster communication |
 
 ### Frontend Functionality Requirements
 
@@ -19273,7 +19644,7 @@ Before adding ANY route, verify:
 - [ ] Is it versioned? (`/api/{api_version}/...`)
 - [ ] Is the resource name plural? (`users`, not `user`)
 - [ ] Is it lowercase with hyphens? (`api-keys`, not `API_Keys`)
-- [ ] Does the route follow scope rules? (`/auth/`, `/users/`, `/orgs/`, `/admin/`)
+- [ ] Does the route follow scope rules? (`/server/`, `/server/auth/`, `/server/{admin_path}/`, `/users/`, `/orgs/`)
 - [ ] If user-facing: does frontend route exist and work?
 - [ ] If system/agent: documented as API-only?
 
@@ -19293,11 +19664,13 @@ Before adding ANY route, verify:
 
 | Scope | Web Route | API Route | ID Required | Description |
 |-------|-----------|-----------|-------------|-------------|
-| **Server** | `/server/*` | `/api/{api_version}/server/*` | No | About, privacy, contact, help, terms |
-| **Auth** | `/auth/*` | `/api/{api_version}/auth/*` | No | Login, register, logout, OAuth |
+| **Server** | `/server/*` | `/api/{api_version}/server/*` | No | Server-owned public pages, docs, health |
+| **Auth** | `/server/auth/*` | `/api/{api_version}/server/auth/*` | No | Login, register, logout, 2FA, password, invite, verify |
 | **Users** | `/users/*` | `/api/{api_version}/users/*` | **No** | Current user's resources (from session) |
 | **Orgs** | `/orgs/*` | `/api/{api_version}/orgs/*` | **Yes** (`{slug}`) | User can own multiple orgs |
-| **Admin** | `/{admin_path}/*` | `/api/{api_version}/{admin_path}/*` | No | Server administration |
+| **Server Admin** | `/server/{admin_path}/*` | `/api/{api_version}/server/{admin_path}/*` | No | Admin dashboard root, admin self area, config subtree |
+| **Admin Self** | `/server/{admin_path}/{admin_username}/*` | `/api/{api_version}/server/{admin_path}/{admin_username}/*` | **Yes** (`{admin_username}`) | The authenticated admin's own account/profile/preferences/notifications |
+| **Admin Config** | `/server/{admin_path}/config/*` | `/api/{api_version}/server/{admin_path}/config/*` | No | ALL server-wide admin/configuration routes |
 | **Project** | `/*` | `/api/{api_version}/*` | Varies | Project-specific (jokes, pastes, etc.) |
 
 **Note:** Examples throughout this document use `/api/{api_version}/` as the default value. In code, always use `APIBasePath()` or `{api_version}` - never hardcode `v1`.
@@ -19314,13 +19687,13 @@ Before adding ANY route, verify:
 | `GET /api/{api_version}/users/security` | Current user's security settings |
 | `GET /api/{api_version}/users/settings` | Current user's preferences |
 
-**Admin routes for managing OTHER users use `/{admin_path}/users/{id}`:**
+**Admin routes for managing OTHER users use `/server/{admin_path}/config/users/{id}`:**
 
 | Route | Description |
 |-------|-------------|
-| `GET /api/{api_version}/{admin_path}/users` | List all users (admin) |
-| `GET /api/{api_version}/{admin_path}/users/{id}` | View specific user (admin) |
-| `PATCH /api/{api_version}/{admin_path}/users/{id}` | Edit specific user (admin) |
+| `GET /api/{api_version}/server/{admin_path}/config/users` | List all users (admin) |
+| `GET /api/{api_version}/server/{admin_path}/config/users/{id}` | View specific user (admin) |
+| `PATCH /api/{api_version}/server/{admin_path}/config/users/{id}` | Edit specific user (admin) |
 
 ### Org Routes - Slug Required
 
@@ -19357,7 +19730,7 @@ Before adding ANY route, verify:
 
 | Direction | Example | Reason |
 |-----------|---------|--------|
-| **API-only** | `/api/{api_version}/{admin_path}/server/agents/*`, `/api/{api_version}/{admin_path}/server/nodes/*` | Machine/system use only (see table above) |
+| **API-only** | `/api/{api_version}/server/{admin_path}/config/agents/*`, `/api/{api_version}/server/{admin_path}/config/nodes/*` | Machine/system use only (see table above) |
 | **Frontend-only** | `/server` → `/server/about` redirect | UX convenience redirects, no API equivalent needed |
 
 ### ID/Slug Consistency
@@ -19398,7 +19771,7 @@ GET /api/{api_version}/jokes?category=prog    ✗ Bad - should be path param
 GET /api/{api_version}/users/repos?page=2&limit=10    ✓ Pagination
 GET /api/{api_version}/jokes?sort=rating&order=desc   ✓ Sorting (project-scoped)
 GET /api/{api_version}/search/golang?safe=true        ✓ Filtering/options
-GET /api/{api_version}/{admin_path}/users?status=active&role=admin ✓ Admin filters
+GET /api/{api_version}/server/{admin_path}/config/users?status=active&role=admin ✓ Admin filters
 ```
 
 **Rules:**
@@ -19604,9 +19977,9 @@ tail -c 2 file.txt | od -An -tx1
 | Endpoint | Default | Browser | curl/CLI | API Client |
 |----------|---------|---------|----------|------------|
 | `/` (public pages) | HTML | HTML | Text | HTML |
-| `/{admin_path}/*` | HTML | HTML | HTML | HTML |
+| `/server/{admin_path}/*` | HTML | HTML | HTML | HTML |
 | `/api/{api_version}/*` | JSON | JSON | Text | JSON |
-| `/healthz` | HTML | HTML | Text | JSON (Accept: application/json) |
+| `/server/healthz` | HTML | HTML | Text | JSON (Accept: application/json) |
 | `*.txt` extension | Text | Text | Text | Text |
 
 ### Smart Content Negotiation
@@ -19669,16 +20042,16 @@ func getAPIResponseFormat(r *http.Request) string {
 
 **`.txt` extension support for API routes:**
 - ✓ ALL `/api/{api_version}/*` endpoints
-- ✓ Health API endpoints (`/api/{api_version}/healthz`)
+- ✓ Health API endpoints (`/api/{api_version}/server/healthz`)
 - ✓ Project-specific API endpoints
-- ✓ Admin API endpoints (`/api/{api_version}/{admin_path}/*`)
+- ✓ Admin API endpoints (`/api/{api_version}/server/{admin_path}/*`)
 
 **API Routes (JSON default, text via CLI/.txt/Accept header):**
 
 | Endpoint | Default | CLI Tool | With `.txt` | Accept: text/plain |
 |----------|---------|----------|-------------|-------------------|
 | `/api/{api_version}/jokes/random` | JSON | Text | Text | Text |
-| `/api/{api_version}/healthz` | JSON | Text | Text | Text |
+| `/api/{api_version}/server/healthz` | JSON | Text | Text | Text |
 | `/api/{api_version}/status` | JSON | Text | Text | Text |
 | `/api/{api_version}/users/{username}` | JSON | Text | Text | Text |
 
@@ -19688,14 +20061,14 @@ func getAPIResponseFormat(r *http.Request) string {
 |----------|---------|----------|-------------------|-------------------|
 | `/jokes/random` | HTML | Text | Text | HTML |
 | `/{username}` | HTML | Text | Text | HTML |
-| `/healthz` | HTML | Text | Text | HTML |
+| `/server/healthz` | HTML | Text | Text | HTML |
 | `/` | HTML | Text | Text | HTML |
 
 **Use cases:**
 
 **API with `.txt` extension:**
 - `curl -q -LSsf https://api.example.com/api/{api_version}/joke/random.txt` → Just the joke text
-- `curl -q -LSsf https://api.example.com/api/{api_version}/healthz.txt` → "OK" or "ERROR: ..."
+- `curl -q -LSsf https://api.example.com/api/{api_version}/server/healthz.txt` → "OK" or "ERROR: ..."
 - Scripts that need plain output without JSON parsing
 
 **Frontend with smart detection:**
@@ -20676,21 +21049,23 @@ Need additional compatible endpoints?"
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/` | GET | None | Web interface (HTML) |
-| `/healthz` | GET | None | Health check (HTML/JSON/text via content negotiation) |
+| `/server/healthz` | GET | None | Health check (HTML/JSON/text via content negotiation) |
+| `/healthz` | GET | None | Optional direct alias to `/server/healthz` when `server.healthz.root.enabled` is `true` |
 | `/server/docs/swagger` | GET | None | Swagger UI (interactive REST explorer; fetches spec from `/api/swagger`) |
 | `/server/docs/graphql` | GET | None | GraphiQL UI (interactive GraphQL explorer; POSTs to `/api/graphql`) |
 | `/metrics` | GET | Optional | Prometheus metrics |
-| `/{admin_path}` | GET | Session | Admin panel login |
-| `/{admin_path}/*` | ALL | Session | Admin panel pages |
+| `/server/{admin_path}` | GET | Session | Admin panel login |
+| `/server/{admin_path}/*` | ALL | Session | Admin panel pages |
 | `/api/autodiscover` | GET | None | Server settings, config schema, and options for CLI/agent (non-versioned) |
-| `/api/swagger` | GET | None | OpenAPI JSON spec — alias for current `{api_version}` |
-| `/api/graphql` | POST | None | GraphQL queries — alias for current `{api_version}` |
-| `/api/{api_version}/swagger` | GET | None | OpenAPI JSON spec (versioned) |
-| `/api/{api_version}/graphql` | POST | None | GraphQL queries (versioned; schema may differ across versions) |
-| `/api/{api_version}/healthz` | GET | None | Health check (JSON) |
-| `/api/{api_version}/{admin_path}/*` | ALL | Bearer | Admin API |
+| `/api/swagger` | GET | None | OpenAPI JSON spec — direct alias for current `{api_version}` |
+| `/api/graphql` | POST | None | GraphQL queries — direct alias for current `{api_version}` |
+| `/api/healthz` | GET | None | Health check JSON — direct alias for current `{api_version}` |
+| `/api/{api_version}/server/swagger` | GET | None | OpenAPI JSON spec (versioned) |
+| `/api/{api_version}/server/graphql` | POST | None | GraphQL queries (versioned; schema may differ across versions) |
+| `/api/{api_version}/server/healthz` | GET | None | Health check (JSON default; text via API rules) |
+| `/api/{api_version}/server/{admin_path}/*` | ALL | Bearer | Admin API |
 
-**NOTE:** OpenAPI is JSON only — no `.yaml` endpoint, no `.json` suffix on the path. The `/api/{api_version}/swagger` and `/api/swagger` paths return `Content-Type: application/json`.
+**NOTE:** OpenAPI is JSON only — no `.yaml` endpoint, no `.json` suffix on the path. The `/api/{api_version}/server/swagger` and `/api/swagger` paths return `Content-Type: application/json`.
 
 **Old paths removed:** `/openapi`, `/openapi.json`, `/graphql` (GET and POST at root) are no longer served. The new paths above are the only valid routes — do not implement redirects from the old paths.
 
@@ -20704,15 +21079,15 @@ Need additional compatible endpoints?"
 | The contract is stable across versions OR the alias is documented as "current version's contract" | The contract is version-specific and clients should pin a version |
 | The cost of forcing clients to read `/api/autodiscover` first is real | Versioning is the whole point (e.g., `/api/{api_version}/users`) |
 
-**Examples that get an alias:** `/api/swagger`, `/api/graphql`, `/api/debug/*` (current set).
-**Examples that do NOT get an alias:** `/api/{api_version}/users`, `/api/{api_version}/orgs`, `/api/{api_version}/healthz` (these stay versioned only).
+**Examples that get an alias:** `/api/swagger`, `/api/graphql`, `/api/healthz`, `/api/debug/*` (current set).
+**Examples that do NOT get an alias:** `/api/{api_version}/users`, `/api/{api_version}/orgs`, `/api/{api_version}/server/contact` (these stay versioned only).
 
 **Why "served directly — no redirect" (not a 301/302 to the versioned URL):**
 
 | Reason | Detail |
 |--------|--------|
 | **Compatibility** | Many CLI tools, language SDKs, and minimal HTTP clients do not follow redirects by default. A direct response works for everyone. |
-| **Latency** | Saves an extra round-trip on every cold call — matters most for `/api/swagger` (fetched on every SDK regen) and `/api/graphql` (every introspection). |
+| **Latency** | Saves an extra round-trip on every cold call — matters most for `/api/swagger` (fetched on every SDK regen), `/api/graphql` (every introspection), and `/api/healthz` (frequent health probes). |
 | **Caching** | Caches and CDNs cache the alias body directly. A 301 forces clients to cache *both* the redirect and the target, doubling cache entries. |
 | **POST safety** | `/api/graphql` is POST. A 301/302 from POST may convert to GET on some clients (RFC ambiguity). Direct serving avoids this. |
 | **Consistency** | The unversioned alias and versioned URL share one handler tree mounted at both paths — no duplicate code. |
@@ -20726,6 +21101,20 @@ Need additional compatible endpoints?"
 | Auth redirect for protected endpoints (e.g., admin debug API → login) | **Yes** | Security, unrelated |
 
 **Where to apply:** every unversioned `/api/<thing>` alias for a versioned endpoint. Mount the same handler at both the versioned path and the alias — do NOT implement the alias as a redirect to the versioned path.
+
+### Optional root operational alias: `/healthz`
+
+**`/healthz` is NOT a default route.** It exists only when explicitly enabled for integration compatibility.
+
+| Rule | Requirement |
+|------|-------------|
+| Config gate | `server.healthz.root.enabled: true` |
+| Default | Disabled |
+| Canonical route | `/server/healthz` remains canonical |
+| Behavior | Mount the SAME handler as `/server/healthz` |
+| Redirects | Forbidden |
+| Format | Same frontend negotiation as `/server/healthz` (HTML/text/JSON by current rules) |
+| Purpose | Compatibility for tooling that requires a root-level `/healthz` |
 
 ## Response Standards
 
@@ -20826,7 +21215,7 @@ Before proceeding, confirm you understand:
 - [ ] Project-wide theme system: light/dark/auto (dark is default)
 - [ ] Themes apply to entire project: WebUI, admin, Swagger, GraphQL
 - [ ] All 3 API types required: REST, Swagger, GraphQL (Swagger & GraphQL in sync)
-- [ ] Standard endpoints must exist (`/healthz`, `/api/{api_version}/swagger`, `/api/{api_version}/graphql`, `/api/swagger` alias, `/api/graphql` alias, `/server/docs/swagger`, `/server/docs/graphql`, `/{admin_path}`)
+- [ ] Standard endpoints must exist (`/server/healthz`, `/api/{api_version}/server/swagger`, `/api/{api_version}/server/graphql`, `/api/swagger` alias, `/api/graphql` alias, `/server/docs/swagger`, `/server/docs/graphql`, `/server/{admin_path}`)
 - [ ] OpenAPI uses JSON only (no YAML)
 
 ---
@@ -20849,7 +21238,7 @@ Before proceeding, confirm you understand:
 
 **ALL DNS providers are supported.** The admin WebUI provides a dropdown that dynamically shows the appropriate credential fields based on the selected provider.
 
-**Admin WebUI Flow (`/{admin_path}/server/ssl`):**
+**Admin WebUI Flow (`/server/{admin_path}/config/ssl`):**
 
 1. Select DNS provider from dropdown (all lego-supported providers available)
 2. Form dynamically shows required credential fields for that provider
@@ -21600,7 +21989,7 @@ formatURL(host, 8443, true)
 ├───────────────────────────────────────────────────────────┤
 │  Setup Token: {setup_token}                               │
 │                                                           │
-│  Go to {proto}://{fqdn}/{admin_path}/server/setup         │
+│  Go to {proto}://{fqdn}/server/{admin_path}/config/setup         │
 │  and enter this token to complete setup.                  │
 │                                                           │
 │  This token will only be shown ONCE.                      │
@@ -21634,7 +22023,7 @@ formatURL(host, 8443, true)
 
 🔑 SETUP REQUIRED
 Token: {setup_token}
-Go to: {proto}://{fqdn}/{admin_path}/server/setup
+Go to: {proto}://{fqdn}/server/{admin_path}/config/setup
 (Token shown ONCE)
 ```
 
@@ -21682,7 +22071,7 @@ Started: {startup_datetime}
 
 SETUP REQUIRED
 Token: {setup_token}
-Setup URL: {proto}://{fqdn}/{admin_path}/server/setup
+Setup URL: {proto}://{fqdn}/server/{admin_path}/config/setup
 This token will only be shown ONCE.
 ```
 
@@ -21862,8 +22251,8 @@ This is OPTIONAL and only applies to apps where user/org profiles are a core fea
 
 ```
 1. /api/{api_version}/*          → API routes (highest priority)
-2. /{admin_path}/*     → Admin panel (configurable path)
-3. /healthz           → Health check
+2. /server/{admin_path}/*     → Admin panel (configurable path)
+3. /server/healthz           → Health check
 4. /static/*          → Static assets
 5. /users/*           → Explicit user routes
 6. /orgs/*            → Explicit org routes
@@ -21877,7 +22266,7 @@ This is OPTIONAL and only applies to apps where user/org profiles are a core fea
 ```go
 var reservedNames = []string{
     // System routes
-    "api", "admin", "static", "assets", "healthz", "metrics",
+    "api", "server", "admin", "static", "assets", "healthz", "metrics",
     "login", "logout", "register", "signup", "signin", "auth",
     "oauth", "callback", "webhook", "webhooks",
 
@@ -21886,10 +22275,10 @@ var reservedNames = []string{
     "settings", "profile", "account", "dashboard",
     "search", "explore", "discover", "trending",
     "help", "support", "docs", "documentation",
-    "about", "contact", "terms", "privacy", "legal",
+    "about", "contact", "terms", "privacy", "legal", "security",
 
     // Technical
-    "graphql", "rest", "rpc", "ws", "websocket",
+    "graphql", "swagger", "rest", "rpc", "ws", "websocket",
     "cdn", "media", "uploads", "files", "images",
     ".well-known", "robots.txt", "sitemap.xml", "favicon.ico",
 
@@ -22157,15 +22546,15 @@ func detectClientType(r *http.Request) string {
 
 2. **API Endpoints** (programmatic):
    ```bash
-   curl -q -LSsf -X POST /api/{api_version}/auth/register -d '{"username":"test","email":"test@example.com"}'
+   curl -q -LSsf -X POST /api/{api_version}/server/auth/register -d '{"username":"test","email":"test@example.com"}'
    curl -q -LSsf -X PATCH /api/{api_version}/users -d '{"email":"new@test.com"}'  # Current user
-   curl -q -LSsf -X PATCH /api/{api_version}/{admin_path}/users/123 -d '{"email":"new@test.com"}'  # Admin
-   curl -q -LSsf -X DELETE /api/{api_version}/{admin_path}/users/123  # Admin
+   curl -q -LSsf -X PATCH /api/{api_version}/server/{admin_path}/config/users/123 -d '{"email":"new@test.com"}'  # Admin
+   curl -q -LSsf -X DELETE /api/{api_version}/server/{admin_path}/config/users/123  # Admin
    ```
 
 3. **Frontend Direct** (CLI/scripting):
    ```bash
-   curl -q -LSsf -X POST /auth/register -d 'username=test&email=test@example.com'  # Form-encoded
+   curl -q -LSsf -X POST /server/auth/register -d 'username=test&email=test@example.com'  # Form-encoded
    curl -q -LSsf /{username}  # Returns text (auto-detected) - public profile
    ```
 
@@ -23367,7 +23756,7 @@ dismissAllToasts();
 | **Theme** | - | Theme toggle (Dark/Light/Auto) |
 | *(divider)* | - | - |
 | **Help** | `/server/help` | Help documentation |
-| **Sign out** | `/auth/logout` | Log out |
+| **Sign out** | `/server/auth/logout` | Log out |
 
 **HTML Structure:**
 ```html
@@ -23390,7 +23779,7 @@ dismissAllToasts();
     </div>
     <div class="dropdown-divider" role="separator"></div>
     <a href="/server/help" class="dropdown-item" role="menuitem">Help</a>
-    <form action="/auth/logout" method="POST">
+    <form action="/server/auth/logout" method="POST">
       <button type="submit" class="dropdown-item logout" role="menuitem">Sign out</button>
     </form>
   </div>
@@ -23961,7 +24350,7 @@ self.addEventListener('notificationclick', event => {
 });
 ```
 
-**Admin Panel Settings (`/{admin_path}/server/notifications`):**
+**Admin Panel Settings (`/server/{admin_path}/config/notifications`):**
 - Enable/disable push notifications
 - VAPID key generation
 - Test push functionality
@@ -24364,7 +24753,7 @@ Example:
   start_url: "/app/dashboard"
 
   ✅ Controlled: /app/*, /app/settings, /app/users/123
-  ❌ Not controlled: /login, /api/*, /admin/*
+  ❌ Not controlled: /server/auth/*, /api/*, /server/{admin_path}/*
 ```
 
 **Tracking PWA launches:**
@@ -25009,8 +25398,8 @@ See **JavaScript Rules** section below for `app.js` structure.
 ```
 src/server/template/
 ├── layout/
-│   ├── public.tmpl         # Public-facing layout (/, /auth/*, /server/*)
-│   └── admin.tmpl          # Admin panel layout (/admin/*)
+│   ├── public.tmpl         # Public-facing layout (/, /server/auth/*, /server/*)
+│   └── admin.tmpl          # Admin panel layout (/server/{admin_path}/*)
 ├── partial/
 │   ├── public/
 │   │   ├── header.tmpl     # Public header (logo, nav, login)
@@ -25081,8 +25470,8 @@ src/server/template/
 
 | Layout | Routes | Design Philosophy |
 |--------|--------|-------------------|
-| `public.tmpl` | `/`, `/auth/*`, `/server/*`, `/users/*` | Clean, marketing-friendly, top navigation |
-| `admin.tmpl` | `/{admin_path}/*` | Dashboard-style, sidebar navigation, data-dense |
+| `public.tmpl` | `/`, `/server/auth/*`, `/server/*`, `/users/*` | Clean, marketing-friendly, top navigation |
+| `admin.tmpl` | `/server/{admin_path}/*` | Dashboard-style, sidebar navigation, data-dense |
 
 ### Public Layout (`public.tmpl`)
 
@@ -25115,9 +25504,9 @@ src/server/template/
 | Rule | Description |
 |------|-------------|
 | **App-focused** | Navigation reflects the application's features and purpose |
-| **NO admin links** | NEVER link to `/admin` from public pages |
+| **NO admin links** | NEVER link to `/server/{admin_path}` from public pages |
 | **NO admin hints** | Do not advertise that an admin panel exists |
-| **Direct access only** | Admin panel accessed by navigating directly to `{fqdn}/admin` |
+| **Direct access only** | Admin panel accessed by navigating directly to `{fqdn}/server/{admin_path}` |
 
 **Public nav contains (project-specific):**
 - Home (`/`)
@@ -25129,7 +25518,7 @@ src/server/template/
 - ❌ Admin link
 - ❌ Dashboard link (unless user dashboard)
 - ❌ Settings link to admin settings
-- ❌ Any hint of `/admin/*` routes
+- ❌ Any hint of `/server/{admin_path}/*` routes
 
 ### Admin Layout (`admin.tmpl`)
 
@@ -25532,12 +25921,12 @@ Mobile:
           <a href="/users">Profile</a>
           <a href="/users/settings">Settings</a>
           <hr />
-          <a href="/auth/logout">Logout</a>
+          <a href="/server/auth/logout">Logout</a>
         </div>
       </div>
     {{ else }}
       <!-- Logged out: login icon -->
-      <a href="/auth/login" class="user-icon" aria-label="Login">
+      <a href="/server/auth/login" class="user-icon" aria-label="Login">
         <svg>...</svg>
       </a>
     {{ end }}
@@ -26187,7 +26576,7 @@ server:
 - Tags with invalid characters (potential XSS)
 - Tags exceeding max length
 
-**Admin Panel (/{admin_path}/server/seo):**
+**Admin Panel (/server/{admin_path}/config/seo):**
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -26206,6 +26595,7 @@ server:
 |------|---------|-----------|
 | `/sitemap.xml` | Site map for search engines | Yes - auto-generated |
 | `/favicon.ico` | Browser favicon | Embedded default, customizable |
+| `/.well-known/*` | Standards/discovery/verification endpoints only | Mix of dynamic, config-backed, embedded, or feature-gated |
 
 ### Sitemap.xml
 
@@ -26239,8 +26629,8 @@ server:
 | Documentation (`/docs`) | Always | 0.8 | weekly |
 | API docs (`/server/docs/swagger`, `/server/docs/graphql`) | Always | 0.7 | weekly |
 | User profiles (if public) | Dynamic | 0.6 | weekly |
-| Admin pages (`/admin/*`) | **NEVER** | - | - |
-| Auth pages (`/auth/*`) | **NEVER** | - | - |
+| Admin pages (`/server/{admin_path}/*`) | **NEVER** | - | - |
+| Auth pages (`/server/auth/*`) | **NEVER** | - | - |
 | API endpoints (`/api/*`) | **NEVER** | - | - |
 
 **Dynamic Content:**
@@ -26264,7 +26654,7 @@ server:
 - Split into multiple sitemap files: `/sitemap-1.xml`, `/sitemap-2.xml`, etc.
 - Each sitemap file max 50,000 URLs
 
-### Admin Panel (/{admin_path}/server/branding)
+### Admin Panel (/server/{admin_path}/config/branding)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -26533,7 +26923,7 @@ messages:
     # User can dismiss
 ```
 
-### Admin Panel (/{admin_path}/server/announcements)
+### Admin Panel (/server/{admin_path}/config/announcements)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -26591,12 +26981,13 @@ web:
 | Production | `*` | Allow all origins by default (configure if needed) |
 | Development | `*` | Allow all origins |
 
-### Admin Panel (/{admin_path}/server/web)
+### Admin Panel (/server/{admin_path}/config/web)
 
 | Element | Type | Description |
 |---------|------|-------------|
 | CORS Origins | Text input | Comma-separated list of allowed origins |
 | Allow All | Toggle | Quick toggle for `*` (all origins) |
+| Root `/healthz` alias | Toggle | Enables `server.healthz.root.enabled` for compatibility with tools that require `/healthz` |
 | Preview | Read-only | Shows resulting CORS headers |
 
 ## CSRF Protection
@@ -26649,7 +27040,7 @@ web:
     # Endpoints exempt from CSRF (operator-declared). Glob patterns supported.
     # Common exemptions: OAuth callbacks, webhook receivers.
     exempt_paths:
-      - /api/{api_version}/auth/oidc/*/callback
+      - /api/{api_version}/server/auth/oidc/*/callback
       - /api/{api_version}/webhooks/*
 ```
 
@@ -26860,7 +27251,7 @@ When admin edits `custom_html`, show:
 
   <br />
 
-  <a href="/healthz">Last update: {build_datetime}</a>
+  <a href="/server/healthz">Last update: {build_datetime}</a>
 </footer>
 ```
 
@@ -26873,7 +27264,7 @@ When admin edits `custom_html`, show:
   <div class="admin-footer-content">
     <!-- Version info -->
     <span class="admin-footer-version">
-      <a href="/{admin_path}/server/info">{project_name} {projectversion}</a>
+      <a href="/server/{admin_path}/config/info">{project_name} {projectversion}</a>
     </span>
 
     <span class="admin-footer-separator">•</span>
@@ -26952,7 +27343,7 @@ When admin edits `custom_html`, show:
 
 | Element | Description |
 |---------|-------------|
-| Version | Links to `/{admin_path}/server/info` - shows project name and version |
+| Version | Links to `/server/{admin_path}/config/info` - shows project name and version |
 | Docs | External link to ReadTheDocs documentation |
 | Status | Server health indicator (green/yellow/red) with status text |
 
@@ -26962,10 +27353,10 @@ When admin edits `custom_html`, show:
 |------|-------------|
 | **Compact** | Single line, minimal height |
 | **Informational** | Version, docs, status - no navigation |
-| **Status indicator** | Real-time server health from `/healthz` |
+| **Status indicator** | Real-time server health from `/server/healthz` |
 | **Same position rules** | Bottom of page, scrolls with content, centered |
 
-### Admin Panel (/{admin_path}/server/footer)
+### Admin Panel (/server/{admin_path}/config/footer)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -26974,8 +27365,8 @@ When admin edits `custom_html`, show:
 | Rendered preview | Preview pane | Shows rendered footer |
 
 **Related admin pages:**
-- Analytics tracking: `/{admin_path}/server/tracking` (PART 12: Analytics Tracking)
-- Privacy & consent: `/{admin_path}/server/privacy` (PART 12: Privacy & Consent)
+- Analytics tracking: `/server/{admin_path}/config/tracking` (PART 12: Analytics Tracking)
+- Privacy & consent: `/server/{admin_path}/config/privacy` (PART 12: Privacy & Consent)
 
 ## Cookie Consent Banner
 
@@ -26983,7 +27374,7 @@ When admin edits `custom_html`, show:
 
 **Configuration:** `server.privacy.consent` (see PART 12: Privacy & Consent)
 
-**Admin panel:** `/{admin_path}/server/privacy`
+**Admin panel:** `/server/{admin_path}/config/privacy`
 
 ### Banner Layout
 
@@ -27466,7 +27857,7 @@ func trackingScript(r *http.Request) template.HTML {
 **Note:** Tor address is NOT shown here. Tor access is available via:
 - **Footer**: "Tor Support" link → `/server/help#tor-access` (shown when Tor is enabled)
 - **`/server/help`**: Tor Access section with .onion address, copy button, and setup instructions
-- **`/healthz`**: Tor status and .onion address (technical/status view)
+- **`/server/healthz`**: Tor status and .onion address (technical/status view)
 
 ### /server/privacy
 
@@ -27762,7 +28153,7 @@ func trackingScript(r *http.Request) template.HTML {
 
 **Note:** The `tracking` and `third_party.services` fields are populated based on `server.tracking` config. If no tracking is configured, they remain empty.
 
-**Admin Panel (`/{admin_path}/server/privacy`):**
+**Admin Panel (`/server/{admin_path}/config/privacy`):**
 
 | Tab | Fields |
 |-----|--------|
@@ -27785,7 +28176,7 @@ func trackingScript(r *http.Request) template.HTML {
 
 ### /server/contact
 
-**Contact form - sends message to admin or dedicated contact address.**
+**Contact form - sends message to the configured general contact recipient.**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -27795,7 +28186,7 @@ func trackingScript(r *http.Request) template.HTML {
 | Message | Textarea | Yes | Message body |
 | Captcha | Captcha | Yes | Spam prevention |
 
-**Submission sends email to `server.contact` address (or admin email if not set).**
+**Submission sends to `server.contact.general.email` (or falls back to `server.contact.admin.email` if general is empty).**
 
 ### /server/help
 
@@ -27950,9 +28341,11 @@ curl -H "Accept: application/xml" https://jokes.example.com/api/v1/joke</code></
 
 ```yaml
 server:
-  # Contact form recipient
-  # If not set, uses admin email
-  contact: ""
+  contact:
+    general:
+      # Contact form recipient
+      # If empty, falls back to server.contact.admin.email
+      email: ""
 
   pages:
     about:
@@ -27967,8 +28360,6 @@ server:
     contact:
       # Enable contact form
       enabled: true
-      # Recipient email (if empty, uses server.contact or admin email)
-      recipient: ""
       # Captcha type: recaptcha, hcaptcha, simple (built-in)
       captcha: simple
       # Success message after form submission
@@ -27985,7 +28376,7 @@ server:
       content: ""
 ```
 
-### Admin Panel (/{admin_path}/server/pages)
+### Admin Panel (/server/{admin_path}/config/pages)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -28019,6 +28410,17 @@ server:
 | `/api/{api_version}/server/contact` | POST | Submit contact form |
 | `/api/{api_version}/server/help` | GET | Help content (JSON) |
 | `/api/{api_version}/server/terms` | GET | Terms of service (JSON) |
+| `/api/{api_version}/server/healthz` | GET | Health check (JSON default; text via API rules) |
+| `/api/{api_version}/server/swagger` | GET | OpenAPI JSON spec |
+| `/api/{api_version}/server/graphql` | POST | GraphQL endpoint |
+
+**Direct alias endpoints (same handler, no redirect):**
+
+| Alias | Canonical route |
+|-------|-----------------|
+| `/api/swagger` | `/api/{api_version}/server/swagger` |
+| `/api/graphql` | `/api/{api_version}/server/graphql` |
+| `/api/healthz` | `/api/{api_version}/server/healthz` |
 
 ### /server/ Frontend Routes
 
@@ -28030,6 +28432,10 @@ server:
 | `/server/contact` | Contact form page (HTML) |
 | `/server/help` | Help page (HTML) |
 | `/server/terms` | Terms of service page (HTML) |
+| `/server/healthz` | Health page (HTML) |
+| `/healthz` | Optional direct alias to `/server/healthz` when `server.healthz.root.enabled` is `true` |
+| `/server/docs/swagger` | Swagger UI (HTML) |
+| `/server/docs/graphql` | GraphQL UI (HTML) |
 
 **All /server/ pages follow standard frontend rules (PART 16):**
 - Full HTML with header/footer
@@ -28048,13 +28454,13 @@ server:
 
 **The admin panel is completely isolated from the public site.**
 
-**Note:** `/admin` is the default path. It can be changed via `server.admin_path` config. See "Configurable Admin Path" section below.
+**Note:** `/server/admin` is the default admin root. `{admin_path}` is configurable via `server.admin_path`. See "Configurable Admin Path" section below.
 
 | Rule | Description |
 |------|-------------|
-| **NEVER link to admin path** | No links to `/{admin_path}` on ANY public routes (`/**`) |
+| **NEVER link to admin path** | No links to `/server/{admin_path}` on ANY public routes (`/**`) |
 | **Intentional access only** | Users must manually type admin path in browser |
-| **Separate authentication** | Admin account is ONLY valid for `/{admin_path}/**` routes |
+| **Separate authentication** | Admin account is ONLY valid for `/server/{admin_path}/**` routes |
 | **No admin mentions** | Don't advertise admin panel existence anywhere |
 | **Separate session** | Admin session is separate from user sessions |
 
@@ -28062,9 +28468,9 @@ server:
 
 | User Type | Valid Routes | Authentication |
 |-----------|--------------|----------------|
-| **Admin** | `/{admin_path}/**` ONLY | Admin credentials (username/password) |
-| **Guest/Anon** | `/**` (except `/{admin_path}`) | None |
-| **Normal User** | `/**` (except `/{admin_path}`) | User account (if multi-user enabled) |
+| **Admin** | `/server/{admin_path}/**` ONLY | Admin credentials (username/password) |
+| **Guest/Anon** | `/**` (except `/server/{admin_path}`) | None |
+| **Normal User** | `/**` (except `/server/{admin_path}`) | User account (if multi-user enabled) |
 
 **Admin credentials are stored in `users.db` (admins table), NOT in config file.**
 
@@ -28100,85 +28506,89 @@ server:
 ### Route Structure
 
 ```
-/{admin_path}/                          # Admin root (dashboard)
-/{admin_path}/profile                   # Admin's own profile/preferences
-/{admin_path}/preferences               # Admin's own preferences/settings
-/{admin_path}/notifications             # Admin's own notifications
-/{admin_path}/server/                   # Server management (EVERYTHING ELSE)
-/{admin_path}/server/settings           # Server settings
-/{admin_path}/server/ssl                # SSL/TLS configuration
-/{admin_path}/server/email              # Email configuration
-/{admin_path}/server/scheduler          # Scheduled tasks
-/{admin_path}/server/logs               # Server logs
-/{admin_path}/server/logs/audit         # Audit logs
-/{admin_path}/server/backup             # Backup/restore
-/{admin_path}/server/updates            # Update management
-/{admin_path}/server/info               # Server information
-/{admin_path}/server/metrics            # Metrics dashboard
-/{admin_path}/server/network/           # Network settings
-/{admin_path}/server/network/tor        # Tor configuration
-/{admin_path}/server/network/geoip      # GeoIP settings
-/{admin_path}/server/security/          # Security settings
-/{admin_path}/server/security/auth      # Authentication config
-/{admin_path}/server/security/tokens    # API token management
-/{admin_path}/server/security/firewall  # Firewall rules
-/{admin_path}/server/users/             # User management (if multi-user)
-/{admin_path}/server/orgs/              # Org management (if orgs enabled)
-/{admin_path}/server/cluster/           # Cluster management (if clustering)
-/{admin_path}/server/agents/            # Agent management (if agents)
+/server/{admin_path}/                          # Admin root (dashboard)
+/server/{admin_path}/{admin_username}/         # Admin's own account root
+/server/{admin_path}/{admin_username}/profile  # Admin's own profile
+/server/{admin_path}/{admin_username}/preferences   # Admin's own preferences/settings
+/server/{admin_path}/{admin_username}/notifications # Admin's own notifications
+/server/{admin_path}/config/                   # Server management (EVERYTHING ELSE)
+/server/{admin_path}/config/setup              # Initial setup wizard
+/server/{admin_path}/config/settings           # Server settings
+/server/{admin_path}/config/ssl                # SSL/TLS configuration
+/server/{admin_path}/config/email              # Email configuration
+/server/{admin_path}/config/scheduler          # Scheduled tasks
+/server/{admin_path}/config/logs               # Server logs
+/server/{admin_path}/config/logs/audit         # Audit logs
+/server/{admin_path}/config/backup             # Backup/restore
+/server/{admin_path}/config/updates            # Update management
+/server/{admin_path}/config/info               # Server information
+/server/{admin_path}/config/metrics            # Metrics dashboard
+/server/{admin_path}/config/network/           # Network settings
+/server/{admin_path}/config/network/tor        # Tor configuration
+/server/{admin_path}/config/network/geoip      # GeoIP settings
+/server/{admin_path}/config/security/          # Security settings
+/server/{admin_path}/config/security/auth      # Authentication config and provider overview
+/server/{admin_path}/config/security/auth/oidc # OIDC provider management
+/server/{admin_path}/config/security/auth/ldap # LDAP provider management
+/server/{admin_path}/config/security/tokens    # API token management
+/server/{admin_path}/config/security/firewall  # Firewall rules
+/server/{admin_path}/config/users/             # User management (if multi-user)
+/server/{admin_path}/config/orgs/              # Org management (if orgs enabled)
+/server/{admin_path}/config/cluster/           # Cluster management (if clustering)
+/server/{admin_path}/config/agents/            # Agent management (if agents)
 ```
 
 ### Route Hierarchy Rules
 
 | Rule | Description |
 |------|-------------|
-| **`/{admin_path}/` root** | Dashboard ONLY |
-| **`/{admin_path}/profile`** | Admin's OWN profile (not server management) |
-| **`/{admin_path}/preferences`** | Admin's OWN preferences (not server settings) |
-| **`/{admin_path}/notifications`** | Admin's OWN notifications |
-| **`/{admin_path}/server/*`** | ALL server management goes here |
-| **No other direct children** | ONLY profile/preferences/notifications under `/{admin_path}/` |
+| **`/server/{admin_path}/` root** | Dashboard ONLY |
+| **`/server/{admin_path}/{admin_username}/*`** | Admin's OWN account/profile/preferences/notifications only |
+| **`/server/{admin_path}/config/*`** | ALL server management goes here |
+| **No other direct children** | ONLY `{admin_username}` and `config` under `/server/{admin_path}/` |
 
 ### What Goes Where
 
 | Route | Purpose | Example |
 |-------|---------|---------|
-| `/{admin_path}/` | Dashboard overview | System status, quick stats |
-| `/{admin_path}/profile` | Admin's personal account | Change own password, 2FA |
-| `/{admin_path}/preferences` | Admin's UI preferences | Theme, language, timezone |
-| `/{admin_path}/server/*` | **EVERYTHING server-related** | Config, users, logs, etc. |
+| `/server/{admin_path}/` | Dashboard overview | System status, quick stats |
+| `/server/{admin_path}/{admin_username}/profile` | Admin's personal account | Change own password, 2FA |
+| `/server/{admin_path}/{admin_username}/preferences` | Admin's UI preferences | Theme, language, timezone |
+| `/server/{admin_path}/config/*` | **EVERYTHING server-related** | Config, users, logs, etc. |
 
 ### INVALID Routes (NEVER DO THIS)
 
 ```
 # WRONG - Server management at admin root level
-/{admin_path}/settings          # ✗ WRONG - use /{admin_path}/server/settings
-/{admin_path}/users             # ✗ WRONG - use /{admin_path}/server/users
-/{admin_path}/logs              # ✗ WRONG - use /{admin_path}/server/logs
-/{admin_path}/security          # ✗ WRONG - use /{admin_path}/server/security
-/{admin_path}/email             # ✗ WRONG - use /{admin_path}/server/email
-/{admin_path}/tor               # ✗ WRONG - use /{admin_path}/server/network/tor
-/{admin_path}/tokens            # ✗ WRONG - use /{admin_path}/server/security/tokens
-/{admin_path}/agents            # ✗ WRONG - use /{admin_path}/server/agents
-/{admin_path}/cluster           # ✗ WRONG - use /{admin_path}/server/cluster
+/server/{admin_path}/settings          # ✗ WRONG - use /server/{admin_path}/config/settings
+/server/{admin_path}/users             # ✗ WRONG - use /server/{admin_path}/config/users
+/server/{admin_path}/logs              # ✗ WRONG - use /server/{admin_path}/config/logs
+/server/{admin_path}/security          # ✗ WRONG - use /server/{admin_path}/config/security
+/server/{admin_path}/email             # ✗ WRONG - use /server/{admin_path}/config/email
+/server/{admin_path}/tor               # ✗ WRONG - use /server/{admin_path}/config/network/tor
+/server/{admin_path}/tokens            # ✗ WRONG - use /server/{admin_path}/config/security/tokens
+/server/{admin_path}/agents            # ✗ WRONG - use /server/{admin_path}/config/agents
+/server/{admin_path}/cluster           # ✗ WRONG - use /server/{admin_path}/config/cluster
 
 # CORRECT
-/{admin_path}/profile           # ✓ Admin's own profile
-/{admin_path}/preferences       # ✓ Admin's own preferences
-/{admin_path}/server/settings   # ✓ Server settings
-/{admin_path}/server/users      # ✓ User management
+/server/{admin_path}/{admin_username}/profile      # ✓ Admin's own profile
+/server/{admin_path}/{admin_username}/preferences  # ✓ Admin's own preferences
+/server/{admin_path}/config/settings   # ✓ Server settings
+/server/{admin_path}/config/users      # ✓ User management
 ```
 
 ### API Route Hierarchy (Same Pattern)
 
 ```
-/api/{api_version}/{admin_path}/                         # Admin API root
-/api/{api_version}/{admin_path}/profile                  # Admin's own profile
-/api/{api_version}/{admin_path}/preferences              # Admin's own preferences
-/api/{api_version}/{admin_path}/server/                  # Server management API
-/api/{api_version}/{admin_path}/server/settings          # Server settings
-/api/{api_version}/{admin_path}/server/users             # User management
-/api/{api_version}/{admin_path}/server/agents            # Agent management
+/api/{api_version}/server/{admin_path}/                         # Admin API root
+/api/{api_version}/server/{admin_path}/{admin_username}/profile       # Admin's own profile
+/api/{api_version}/server/{admin_path}/{admin_username}/preferences   # Admin's own preferences
+/api/{api_version}/server/{admin_path}/{admin_username}/notifications # Admin's own notifications
+/api/{api_version}/server/{admin_path}/config/                  # Server management API
+/api/{api_version}/server/{admin_path}/config/setup             # Setup flow
+/api/{api_version}/server/{admin_path}/config/settings          # Server settings
+/api/{api_version}/server/{admin_path}/config/users             # User management
+/api/{api_version}/server/{admin_path}/config/agents            # Agent management
 ```
 
 ### Route Conflict Prevention
@@ -28188,39 +28598,42 @@ server:
 ```go
 // Admin route hierarchy validation
 var validAdminRootPaths = map[string]bool{
-    "":              true,  // Dashboard (/{admin_path}/)
-    "profile":       true,  // Admin's own profile
-    "preferences":   true,  // Admin's own preferences
-    "notifications": true,  // Admin's own notifications
-    "server":        true,  // Server management (has sub-routes)
+    "":       true,  // Dashboard (/server/{admin_path}/)
+    "config": true,  // Server management (has sub-routes)
 }
 
 func validateAdminRoute(path string) error {
-    // Extract first segment after /{admin_path}/
+    // Extract first segment after /server/{admin_path}/
     parts := strings.Split(strings.Trim(path, "/"), "/")
     if len(parts) == 0 {
         return nil // Root path is OK
     }
 
     firstSegment := parts[0]
-    if !validAdminRootPaths[firstSegment] {
-        return fmt.Errorf("invalid admin route: /%s/* - must use /server/* for server management", firstSegment)
+    if validAdminRootPaths[firstSegment] {
+        return nil
     }
-    return nil
+
+    // Otherwise the first segment must be the current admin's username.
+    if firstSegment == currentAdminUsername {
+        return nil
+    }
+
+    return fmt.Errorf("invalid admin route: /%s/* - use /server/{admin_path}/{admin_username}/* for admin self routes or /server/{admin_path}/config/* for server management", firstSegment)
 }
 ```
 
 ### Why This Structure?
 
 1. **Clear separation**: Admin's personal settings vs server management
-2. **No conflicts**: Fixed set of root-level paths prevents collisions
+2. **No conflicts**: Only `config` and `{admin_username}` live under the admin root
 3. **Scalability**: All new server features go under `/server/*`
 4. **Predictability**: Developers know where to add new routes
-5. **Security**: Easy to audit - only 4 valid root-level paths
+5. **Security**: Easy to audit - fixed namespace under `/server`
 
 ## Configurable Admin Path
 
-**The `/admin` path can be changed for security (obscurity).**
+**The default `/server/admin` admin root can be changed for security (obscurity).**
 
 ### Configuration
 
@@ -28229,8 +28642,8 @@ func validateAdminRoute(path string) error {
 | `server.admin_path` | `admin` | Path segment for admin panel (no leading slash) |
 
 **When changed, ALL admin routes update:**
-- `/admin/**` → `/{admin_path}/**`
-- `/api/{api_version}/{admin_path}/**` → `/api/{api_version}/{admin_path}/**`
+- `/server/admin/**` → `/server/{admin_path}/**`
+- `/api/{api_version}/server/admin/**` → `/api/{api_version}/server/{admin_path}/**`
 
 ### Validation Rules
 
@@ -28252,7 +28665,12 @@ func validateAdminPath(newPath string, router *mux.Router) error {
     // Normalize first
     newPath = normalizePath(newPath)
     // 1. Check reserved paths
-    reserved := []string{"api", "static", "assets", "health", "version", "metrics", ".well-known"}
+    reserved := []string{
+        "api", "health", "healthz", "metrics", "version", ".well-known",
+        "about", "privacy", "contact", "help", "terms",
+        "docs", "auth", "security",
+        "static", "assets",
+    }
     for _, r := range reserved {
         if newPath == r {
             return fmt.Errorf("'%s' is a reserved path", newPath)
@@ -28273,7 +28691,7 @@ func validateAdminPath(newPath string, router *mux.Router) error {
 
 ### WebUI Change Flow
 
-**When admin path changed via WebUI (`/{admin_path}/server/settings`):**
+**When admin path changed via WebUI (`/server/{admin_path}/config/settings`):**
 
 ```
 1. User submits new admin path
@@ -28290,7 +28708,7 @@ func validateAdminPath(newPath string, router *mux.Router) error {
 **Frontend JavaScript:**
 ```javascript
 async function changeAdminPath(newPath) {
-    const response = await fetch(`/api/{api_version}/{admin_path}/server/settings`, {
+    const response = await fetch(`/api/{api_version}/server/{admin_path}/config/settings`, {
         method: 'PATCH',
         body: JSON.stringify({ admin_path: newPath })
     });
@@ -28302,7 +28720,7 @@ async function changeAdminPath(newPath) {
         // Wait for server reload
         await waitForServerReady();
         // Redirect to new admin path
-        window.location.href = `/${data.new_admin_path}/dashboard`;
+        window.location.href = `/server/${data.new_admin_path}`;
     } else {
         showError(await response.json());
     }
@@ -28484,13 +28902,13 @@ func RegisterAdminRoutes(r *mux.Router) {
 | Icons | Each section has icon for quick recognition |
 | Mobile | Hamburger menu, slide-out drawer |
 
-## /admin (Web Interface)
+## /server/{admin_path} (Web Interface)
 
 ### Authentication
 
 | Feature | Description |
 |---------|-------------|
-| Login page | `/{admin_path}` (when not logged in) |
+| Login page | `/server/{admin_path}` (when not logged in) |
 | Login form | Username/password, centered card |
 | Session | Cookie-based (30 days default, configurable) |
 | CSRF | Protection on all forms |
@@ -28510,8 +28928,8 @@ func RegisterAdminRoutes(r *mux.Router) {
 | **Scope** | Server-wide administration | Own account and data only |
 | **Storage** | `admins` table | `users` table |
 | **Required** | **YES - all projects** | **OPTIONAL** (Multi-User feature) |
-| **Login** | `/auth/login` → `/admin/*` | `/auth/login` → `/users/*` |
-| **Access** | Admin panel (`/admin/*`) | User routes (`/users/*`) |
+| **Login** | `/server/auth/login` → `/server/{admin_path}/*` | `/server/auth/login` → `/users/*` |
+| **Access** | Admin panel (`/server/{admin_path}/*`) | User routes (`/users/*`) |
 | **Created by** | Setup wizard, existing admin, or OIDC/LDAP | Registration or admin invitation |
 
 **Important:** Server Admins and regular users are completely separate account types stored in different database tables. A Server Admin is NOT a "privileged user" - they are a different kind of account entirely.
@@ -28520,10 +28938,10 @@ func RegisterAdminRoutes(r *mux.Router) {
 
 | Route | Server Admin Access |
 |-------|---------------------|
-| `/{admin_path}/*` | Full access |
-| `/users/*` | NO - treated as guest (redirect to `/{admin_path}`) |
-| `/auth/login` | Login page |
-| `/auth/logout` | Logout |
+| `/server/{admin_path}/*` | Full access |
+| `/users/*` | NO - treated as guest (redirect to `/server/{admin_path}`) |
+| `/server/auth/login` | Login page |
+| `/server/auth/logout` | Logout |
 | Public routes (`/`, `/server/*`, etc.) | Guest view (no user-specific content) |
 
 **Admin credentials are stored in `users.db` (`admins` table), NOT in config file.**
@@ -28563,7 +28981,7 @@ func RegisterAdminRoutes(r *mux.Router) {
 ├───────────────────────────────────────────────────────────┤
 │  Setup Token: {setup_token}                               │
 │                                                           │
-│  Go to {proto}://{fqdn}/{admin_path}/server/setup         │
+│  Go to {proto}://{fqdn}/server/{admin_path}/config/setup         │
 │  and enter this token to complete setup.                  │
 │                                                           │
 │  This token will only be shown ONCE.                      │
@@ -28577,21 +28995,23 @@ func RegisterAdminRoutes(r *mux.Router) {
 
 **The app is FULLY FUNCTIONAL before completing the setup wizard.**
 
+**This does NOT relax security.** Pre-setup public surfaces still follow the same public-endpoint, sanitization, rate-limit, TLS, auth, and secret-handling rules as the fully configured app.
+
 | Feature | Available Before Setup? |
 |---------|------------------------|
 | Public API endpoints | ✓ Yes |
 | Public web pages | ✓ Yes |
-| Health checks (`/healthz`) | ✓ Yes |
+| Health checks (`/server/healthz`) | ✓ Yes |
 | OpenAPI docs (`/server/docs/swagger`) | ✓ Yes |
 | GraphQL (if applicable) | ✓ Yes |
-| Admin panel (`/admin`) | ✓ Yes (requires setup token) |
+| Admin panel (`/server/{admin_path}`) | ✓ Yes (requires setup token) |
 | Email features | ✓ Yes (if SMTP auto-detected) |
 | Scheduled tasks | ✓ Yes (with defaults) |
 
 **What Setup Wizard Provides:**
 - Custom admin username/password (instead of generated)
 - Customize app name/branding
-- Configure optional features (SSL, multi-user) - Note: Tor is auto-enabled if binary found, not configurable
+- Review HTTPS/certificate configuration if customization is needed, and enable optional features like multi-user - Note: Tor is auto-enabled if binary found, not configurable
 - Receive API token for programmatic access
 
 ### Setup Flow
@@ -28601,11 +29021,11 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | Step | Action |
 |------|--------|
 | 1 | Server generates one-time setup token (displayed in console ONCE) |
-| 2 | User navigates to `/admin` |
+| 2 | User navigates to `/server/{admin_path}` |
 | 3 | User enters setup token |
-| 4 | Redirect to `/{admin_path}/server/setup` (setup wizard) |
+| 4 | Redirect to `/server/{admin_path}/config/setup` (setup wizard) |
 
-**Setup Wizard Steps (`/{admin_path}/server/setup`):**
+**Setup Wizard Steps (`/server/{admin_path}/config/setup`):**
 
 **Step 1: Create Admin Account**
 | Field | Default | Notes |
@@ -28636,7 +29056,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 **Step 5: Optional Services**
 | Setting | Description |
 |---------|-------------|
-| Enable SSL | Configure HTTPS |
+| Configure HTTPS / certificate source | Review or customize the default secure HTTPS path if needed |
 | Enable Multi-User | Enable Regular User accounts (PART 34) |
 
 **Step 6: Complete**
@@ -28644,7 +29064,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 |--------|-------|
 | Save configuration | Write to `server.yml` |
 | Mark setup complete | Setup token invalidated |
-| Redirect to `/admin` | Logged in as admin |
+| Redirect to `/server/{admin_path}` | Logged in as admin |
 
 **Setup Token Rules:**
 - Generated on first run ONLY
@@ -28659,7 +29079,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 
 | Method | Description |
 |--------|-------------|
-| **Manual creation** | Primary admin invites additional admin accounts via `/{admin_path}/server/admins` |
+| **Manual creation** | Primary admin invites additional admin accounts via `/server/{admin_path}/config/admins` |
 | **OIDC/LDAP group mapping** | Map external identity provider groups to Server Admin role |
 
 ### Admin Hierarchy
@@ -28680,7 +29100,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 ### Admin Invite Flow
 
 ```
-Admin Panel (/{admin_path}/server/admins)
+Admin Panel (/server/{admin_path}/config/admins)
 ┌─────────────────────────────────────────────────────────────┐
 │  Server Administrators                                      │
 ├─────────────────────────────────────────────────────────────┤
@@ -28712,7 +29132,7 @@ Admin clicks "Invite New Admin"
 │                                                             │
 │  Invite URL (share with new admin):                         │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │ https://app.example.com/auth/invite/server/abc123...│    │
+│  │ https://app.example.com/server/auth/invite/server/abc123...│    │
 │  └─────────────────────────────────────────────────────┘    │
 │  [Copy URL]                                                 │
 │                                                             │
@@ -28744,9 +29164,9 @@ Admin clicks "Invite New Admin"
 **Local Sync Fields (`admins` table):**
 | Field | Description |
 |-------|-------------|
-| `username` | From OIDC/LDAP claim |
+| `username` | Final local admin username (claim-derived, admin-chosen on first login, or from the previously linked local admin record) |
 | `password` | Argon2id hash (synced or set locally) |
-| `source` | `local`, `oidc:{provider}`, `ldap` |
+| `source` | `local`, `oidc:{provider}`, `ldap:{provider}` |
 | `external_id` | Provider's user ID |
 | `groups` | JSON array of cached group memberships |
 | `last_sync` | Last successful sync timestamp |
@@ -28758,6 +29178,8 @@ Admin clicks "Invite New Admin"
 | OIDC/LDAP unavailable | Use cached local credentials |
 | User removed from admin group | Next successful OIDC/LDAP login revokes admin |
 | Provider permanently down | Local credentials continue to work |
+
+**Matching rule:** for OIDC/LDAP-backed admins, the stable identity key is `external_id` + provider source, not mutable username/email.
 
 ## Server Admin Security
 
@@ -28791,7 +29213,7 @@ Admin clicks "Invite New Admin"
 
 | Feature | Description |
 |---------|-------------|
-| **Registration** | Admin can register multiple passkeys at `/{admin_path}/profile/security` |
+| **Registration** | Admin can register multiple passkeys at `/server/{admin_path}/{admin_username}/profile/security` |
 | **Login** | Passkey can be used as primary login or as 2FA |
 | **Device-bound** | Each passkey tied to specific device/authenticator |
 | **Naming** | Admin names each passkey for identification |
@@ -28802,7 +29224,7 @@ Admin clicks "Invite New Admin"
 
 | Feature | Description |
 |---------|-------------|
-| **Setup** | QR code + manual entry key at `/{admin_path}/profile/security` |
+| **Setup** | QR code + manual entry key at `/server/{admin_path}/{admin_username}/profile/security` |
 | **Apps supported** | Any TOTP app (Google Authenticator, Authy, 1Password, etc.) |
 | **Backup codes** | 10 one-time recovery codes generated on setup |
 | **Regenerate** | Can regenerate backup codes (invalidates old ones) |
@@ -28892,7 +29314,7 @@ Admin clicks "Invite New Admin"
 - SMTP status shown in notification preferences
 - See PART 18: EMAIL & NOTIFICATIONS for SMTP configuration
 
-#### Admin Appearance Settings (`/{admin_path}/profile/preferences`)
+#### Admin Appearance Settings (`/server/{admin_path}/{admin_username}/preferences`)
 
 **Server admins can customize their admin panel appearance.**
 
@@ -28934,7 +29356,7 @@ Admin clicks "Invite New Admin"
 ```
 
 **Admin theme applies to:**
-- Admin panel (`/admin/*`)
+- Admin panel (`/server/{admin_path}/*`)
 - Admin-accessible Swagger UI
 - Admin-accessible GraphiQL
 
@@ -28953,7 +29375,7 @@ Admin clicks "Invite New Admin"
 | Total admin count (number only) | Other admin 2FA secrets |
 | | Other admin session data |
 
-**Admin Panel (`/{admin_path}/server/admins`):**
+**Admin Panel (`/server/{admin_path}/config/admins`):**
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Server Administrators                                      │
@@ -29029,7 +29451,7 @@ Admin Panel Header:
 - Delete the additional admin account entirely
 - Re-invite them (they set up fresh credentials)
 
-### Login Page (`/admin`)
+### Login Page (`/server/{admin_path}`)
 
 ```
 ┌─────────────────────────────────────────┐
@@ -29059,7 +29481,7 @@ Admin Panel Header:
 - Version number at bottom (small)
 - No "Forgot password" (admin resets via CLI if needed)
 
-### Dashboard (`/{admin_path}/dashboard`)
+### Dashboard (`/server/{admin_path}`)
 
 **Overview of server status and system resources at a glance.**
 
@@ -29121,31 +29543,31 @@ Admin Panel Header:
 
 | Route | Page | Description |
 |-------|------|-------------|
-| `/{admin_path}` | Login | Login form (if not authenticated) |
-| `/{admin_path}/dashboard` | Dashboard | Overview, stats, quick actions |
-| `/{admin_path}/server/settings` | Server Settings | Port, mode, FQDN, etc. |
-| `/{admin_path}/server/branding` | Branding | Title, logo, favicon, colors |
-| `/{admin_path}/server/ssl` | SSL/TLS | Certificates, Let's Encrypt |
-| `/{admin_path}/server/scheduler` | Scheduler | View/edit scheduled tasks |
-| `/{admin_path}/server/email` | Email | SMTP settings, templates |
-| `/{admin_path}/server/logs` | Logs | View access, error, audit logs |
-| `/{admin_path}/server/security/auth` | Authentication | Password, MFA, sessions |
-| `/{admin_path}/server/security/tokens` | API Tokens | Generate, revoke tokens |
-| `/{admin_path}/server/security/ratelimit` | Rate Limiting | Configure rate limits |
-| `/{admin_path}/server/security/firewall` | Firewall | IP allow/block lists |
-| `/{admin_path}/server/security/allowlist` | Allowlist | Trusted IPs (bypass blocklist/ratelimit/geoip) |
-| `/{admin_path}/server/network/tor` | Tor | View .onion address, status (auto-enabled if installed) |
-| `/{admin_path}/server/network/geoip` | GeoIP | Country blocking, database updates |
-| `/{admin_path}/server/network/blocklists` | Blocklists | IP/domain blocklists |
-| `/{admin_path}/server/moderation/users` | Users | User moderation (if multi-user) |
-| `/{admin_path}/server/users/invites` | Invites | Invite codes (if multi-user) |
-| `/{admin_path}/server/backup` | Backup | Create/restore backups |
-| `/{admin_path}/server/maintenance` | Maintenance | Maintenance mode |
-| `/{admin_path}/server/updates` | Updates | Check/apply updates |
-| `/{admin_path}/server/info` | Server Info | Version, environment, deps |
-| `/{admin_path}/server/cluster/nodes` | Nodes | Cluster node management |
-| `/{admin_path}/server/cluster/add` | Add Node | Generate join token |
-| `/{admin_path}/help` | Help | Documentation links |
+| `/server/{admin_path}` | Login | Login form (if not authenticated) |
+| `/server/{admin_path}` | Dashboard | Overview, stats, quick actions |
+| `/server/{admin_path}/config/settings` | Server Settings | Port, mode, FQDN, etc. |
+| `/server/{admin_path}/config/branding` | Branding | Title, logo, favicon, colors |
+| `/server/{admin_path}/config/ssl` | SSL/TLS | Certificates, Let's Encrypt |
+| `/server/{admin_path}/config/scheduler` | Scheduler | View/edit scheduled tasks |
+| `/server/{admin_path}/config/email` | Email | SMTP settings, templates |
+| `/server/{admin_path}/config/logs` | Logs | View access, error, audit logs |
+| `/server/{admin_path}/config/security/auth` | Authentication | Password, MFA, sessions, OIDC/LDAP provider overview |
+| `/server/{admin_path}/config/security/tokens` | API Tokens | Generate, revoke tokens |
+| `/server/{admin_path}/config/security/ratelimit` | Rate Limiting | Configure rate limits |
+| `/server/{admin_path}/config/security/firewall` | Firewall | IP allow/block lists |
+| `/server/{admin_path}/config/security/allowlist` | Allowlist | Trusted IPs (bypass blocklist/ratelimit/geoip) |
+| `/server/{admin_path}/config/network/tor` | Tor | View .onion address, status (auto-enabled if installed) |
+| `/server/{admin_path}/config/network/geoip` | GeoIP | Country blocking, database updates |
+| `/server/{admin_path}/config/network/blocklists` | Blocklists | IP/domain blocklists |
+| `/server/{admin_path}/config/moderation/users` | Users | User moderation (if multi-user) |
+| `/server/{admin_path}/config/users/invites` | Invites | Invite codes (if multi-user) |
+| `/server/{admin_path}/config/backup` | Backup | Create/restore backups |
+| `/server/{admin_path}/config/maintenance` | Maintenance | Maintenance mode |
+| `/server/{admin_path}/config/updates` | Updates | Check/apply updates |
+| `/server/{admin_path}/config/info` | Server Info | Version, environment, deps |
+| `/server/{admin_path}/config/cluster/nodes` | Nodes | Cluster node management |
+| `/server/{admin_path}/config/cluster/add` | Add Node | Generate join token |
+| `/server/{admin_path}/help` | Help | Documentation links |
 
 ### Settings Page Layout
 
@@ -29223,7 +29645,7 @@ Admin Panel Header:
 
 ### Server Settings Field Definitions
 
-**`/{admin_path}/server/settings` - All fields with control types:**
+**`/server/{admin_path}/config/settings` - All fields with control types:**
 
 #### General Section
 
@@ -29241,7 +29663,7 @@ Admin Panel Header:
 | `daemonize` | Toggle | Off | ⚠️ Yes | Detach from terminal on start |
 | `pidfile` | Toggle | On | ⚠️ Yes | Create PID file |
 
-#### Branding Section (`/{admin_path}/server/branding`)
+#### Branding Section (`/server/{admin_path}/config/branding`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -29262,7 +29684,7 @@ Admin Panel Header:
 | `og_image` | File | (none) | No | OpenGraph image |
 | `twitter_handle` | Text | (empty) | No | Twitter @handle |
 
-#### Security Section (`/{admin_path}/server/security`)
+#### Security Section (`/server/{admin_path}/config/security`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -29298,7 +29720,7 @@ Admin Panel Header:
 | `allowlist` | Tags | (empty) | No | Trusted IPs — bypass blocklists, rate limits, GeoIP (not auth) |
 | `blocklist` | Tags | (empty) | No | IPs always blocked |
 
-#### SSL/TLS Section (`/{admin_path}/server/ssl`)
+#### SSL/TLS Section (`/server/{admin_path}/config/ssl`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -29311,7 +29733,7 @@ Admin Panel Header:
 | `ssl.letsencrypt.staging` | Toggle | Off | No | Use LE staging server |
 | `ssl.letsencrypt.challenge` | Dropdown | `http-01` | No | Challenge type |
 
-#### Authentication Section (`/{admin_path}/server/security/auth`)
+#### Authentication Section (`/server/{admin_path}/config/security/auth`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -29323,8 +29745,12 @@ Admin Panel Header:
 | `password.require_uppercase` | Toggle | On | No | Require uppercase |
 | `password.require_number` | Toggle | On | No | Require number |
 | `password.require_special` | Toggle | Off | No | Require special char |
+| `auth.oidc.enabled` | Toggle | Off | No | Enable OIDC login support |
+| `auth.oidc.providers` | Provider table | (empty) | No | Add/edit/remove/test OIDC providers |
+| `auth.ldap.enabled` | Toggle | Off | No | Enable LDAP login support |
+| `auth.ldap.providers` | Provider table | (empty) | No | Add/edit/remove/test LDAP providers |
 
-#### Backup Section (`/{admin_path}/server/backup`)
+#### Backup Section (`/server/{admin_path}/config/backup`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -29338,7 +29764,7 @@ Admin Panel Header:
 | `backup.encryption.enabled` | Toggle | Off | No | Encrypt backups |
 | `backup.encryption.password` | Password | (none) | No | Encryption password |
 
-#### Email/SMTP Section (`/{admin_path}/server/email`)
+#### Email/SMTP Section (`/server/{admin_path}/config/email`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -29351,7 +29777,7 @@ Admin Panel Header:
 | `from.email` | Text | `no-reply@{fqdn}` | No | Sender email |
 | `[Test Connection]` | Button | - | - | Send test email |
 
-#### Notifications Section (`/{admin_path}/server/notifications`)
+#### Notifications Section (`/server/{admin_path}/config/notifications`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -29362,7 +29788,7 @@ Admin Panel Header:
 | `notifications.security_alerts` | Toggle | On | No | Security event alerts |
 | `notifications.update_available` | Toggle | On | No | New version available |
 
-#### Scheduler Section (`/{admin_path}/server/scheduler`)
+#### Scheduler Section (`/server/{admin_path}/config/scheduler`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -29375,7 +29801,7 @@ Admin Panel Header:
 | - Next run | Readonly | timestamp | - | Next execution |
 | - `[Run Now]` | Button | - | - | Trigger immediately |
 
-#### URL Detection Section (`/{admin_path}/server/url`)
+#### URL Detection Section (`/server/{admin_path}/config/url`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -29387,7 +29813,7 @@ Admin Panel Header:
 | Detected domains | Readonly | - | - | Currently detected FQDNs |
 | Inferred wildcard | Readonly | - | - | `*.example.com` if detected |
 
-#### Tor Section (`/{admin_path}/server/tor`) - *if tor installed*
+#### Tor Section (`/server/{admin_path}/config/tor`) - *if tor installed*
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -29396,7 +29822,7 @@ Admin Panel Header:
 | `tor.status` | Readonly | - | - | Running/Stopped |
 | `[Copy Address]` | Button | - | - | Copy onion to clipboard |
 
-#### GeoIP Section (`/{admin_path}/server/network/geoip`)
+#### GeoIP Section (`/server/{admin_path}/config/network/geoip`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -29407,7 +29833,7 @@ Admin Panel Header:
 | `geoip.allow_countries` | Tags | (empty) | No | Allow ONLY these countries (overrides deny) |
 | Database status | Readonly | - | - | Last update, size |
 
-#### Blocklists Section (`/{admin_path}/server/network/blocklists`)
+#### Blocklists Section (`/server/{admin_path}/config/network/blocklists`)
 
 **Transmission-style IP/domain blocklist management. Download, parse, and enforce external blocklists from configurable URLs.**
 
@@ -29611,20 +30037,20 @@ func BlocklistMiddleware(lookup *BlocklistLookup, cfg BlocklistConfig) func(http
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/network/blocklists` | GET | List all blocklist sources with stats |
-| `/api/{api_version}/{admin_path}/server/network/blocklists` | PATCH | Update blocklist settings (enabled, action, etc.) |
-| `/api/{api_version}/{admin_path}/server/network/blocklists/sources` | POST | Add new blocklist source |
-| `/api/{api_version}/{admin_path}/server/network/blocklists/sources/{name}` | PATCH | Update source (enable/disable, URL, format) |
-| `/api/{api_version}/{admin_path}/server/network/blocklists/sources/{name}` | DELETE | Remove blocklist source |
-| `/api/{api_version}/{admin_path}/server/network/blocklists/update` | POST | Trigger immediate update of all enabled sources |
-| `/api/{api_version}/{admin_path}/server/network/blocklists/update/{name}` | POST | Trigger update of specific source |
-| `/api/{api_version}/{admin_path}/server/network/blocklists/stats` | GET | Get aggregate blocklist statistics |
-| `/api/{api_version}/{admin_path}/server/network/blocklists/check/{ip}` | GET | Check if an IP is in any blocklist |
+| `/api/{api_version}/server/{admin_path}/config/network/blocklists` | GET | List all blocklist sources with stats |
+| `/api/{api_version}/server/{admin_path}/config/network/blocklists` | PATCH | Update blocklist settings (enabled, action, etc.) |
+| `/api/{api_version}/server/{admin_path}/config/network/blocklists/sources` | POST | Add new blocklist source |
+| `/api/{api_version}/server/{admin_path}/config/network/blocklists/sources/{name}` | PATCH | Update source (enable/disable, URL, format) |
+| `/api/{api_version}/server/{admin_path}/config/network/blocklists/sources/{name}` | DELETE | Remove blocklist source |
+| `/api/{api_version}/server/{admin_path}/config/network/blocklists/update` | POST | Trigger immediate update of all enabled sources |
+| `/api/{api_version}/server/{admin_path}/config/network/blocklists/update/{name}` | POST | Trigger update of specific source |
+| `/api/{api_version}/server/{admin_path}/config/network/blocklists/stats` | GET | Get aggregate blocklist statistics |
+| `/api/{api_version}/server/{admin_path}/config/network/blocklists/check/{ip}` | GET | Check if an IP is in any blocklist |
 
 **API Response Examples:**
 
 ```json
-// GET /api/{api_version}/{admin_path}/server/network/blocklists
+// GET /api/{api_version}/server/{admin_path}/config/network/blocklists
 {
   "enabled": true,
   "action": "reject",
@@ -29655,7 +30081,7 @@ func BlocklistMiddleware(lookup *BlocklistLookup, cfg BlocklistConfig) func(http
   ]
 }
 
-// GET /api/{api_version}/{admin_path}/server/network/blocklists/check/1.2.3.4
+// GET /api/{api_version}/server/{admin_path}/config/network/blocklists/check/1.2.3.4
 {
   "ip": "1.2.3.4",
   "blocked": true,
@@ -29799,7 +30225,7 @@ func BlocklistMiddleware(lookup *BlocklistLookup, cfg BlocklistConfig) func(http
 | Read-only info | **Readonly** |
 | Trigger action | **Button** |
 
-### Log Viewer (`/{admin_path}/server/logs`)
+### Log Viewer (`/server/{admin_path}/config/logs`)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -29809,9 +30235,9 @@ func BlocklistMiddleware(lookup *BlocklistLookup, cfg BlocklistConfig) func(http
 │  [Access ▼]  [Last 100 ▼]  [Search...        ]  [Auto-refresh: ON]     │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │ 2025-01-15 10:30:45  GET  /api/{api_version}/healthz 200  12ms  192.168.1.1│    │
+│  │ 2025-01-15 10:30:45  GET  /api/{api_version}/server/healthz 200  12ms  192.168.1.1│    │
 │  │ 2025-01-15 10:30:44  POST /api/{api_version}/data    201  45ms  192.168.1.2│    │
-│  │ 2025-01-15 10:30:43  GET  /healthz        200  2ms   192.168.1.1│    │
+│  │ 2025-01-15 10:30:43  GET  /server/healthz        200  2ms   192.168.1.1│    │
 │  │ 2025-01-15 10:30:42  GET  /api/{api_version}/users   401  5ms   10.0.0.50  │    │
 │  │ ...                                                              │    │
 │  └─────────────────────────────────────────────────────────────────┘    │
@@ -29843,10 +30269,10 @@ func BlocklistMiddleware(lookup *BlocklistLookup, cfg BlocklistConfig) func(http
 | `Ctrl+S` | Save current form |
 | `?` | Show shortcuts help |
 
-## /admin Authentication Flow
+## /server/{admin_path} Authentication Flow
 
 ```
-User visits /admin
+User visits /server/{admin_path}
        │
        ▼
 Check for valid admin session
@@ -29891,7 +30317,7 @@ Check for valid admin session
 | Aspect | Admin Session | User Session |
 |--------|---------------|--------------|
 | Cookie name | `admin_session` | `user_session` |
-| Valid routes | `/{admin_path}/**` only | `/**` except `/{admin_path}/**` |
+| Valid routes | `/server/{admin_path}/**` only | `/**` except `/server/{admin_path}/**` |
 | Stored in | `server.db` (admin_sessions) | `users.db` (user_sessions) |
 | Credentials | `admins` table | `users` table |
 | Default duration | 30 days | 7 days |
@@ -29919,7 +30345,7 @@ The admin panel MUST include a scheduler section with:
 - `monthly` - Once per month (configurable day/time)
 - `custom` - Cron expression
 
-## /api/{api_version}/{admin_path} (REST API)
+## /api/{api_version}/server/{admin_path} (REST API)
 
 ### Authentication
 
@@ -29927,144 +30353,149 @@ The admin panel MUST include a scheduler section with:
 
 **These admin API routes are ALWAYS available, regardless of whether Multi-User (PART 34) is implemented.**
 
-### Admin - Server (`/api/{api_version}/{admin_path}/server/`)
+### Admin - Server (`/api/{api_version}/server/{admin_path}/config/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/setup` | GET | Get setup status |
-| `/api/{api_version}/{admin_path}/server/setup/verify` | POST | Verify setup token |
-| `/api/{api_version}/{admin_path}/server/setup/account` | POST | Create admin account (Step 1) |
-| `/api/{api_version}/{admin_path}/server/setup/token` | POST | Generate API token (Step 2) |
-| `/api/{api_version}/{admin_path}/server/setup/config` | POST | Save server config (Step 3) |
-| `/api/{api_version}/{admin_path}/server/setup/security` | POST | Security settings (Step 4) |
-| `/api/{api_version}/{admin_path}/server/setup/services` | POST | Configure services (Step 5) |
-| `/api/{api_version}/{admin_path}/server/setup/complete` | POST | Complete setup wizard (Step 6) |
-| `/api/{api_version}/{admin_path}/server/settings` | GET | Get server settings |
-| `/api/{api_version}/{admin_path}/server/settings` | PATCH | Update server settings |
-| `/api/{api_version}/{admin_path}/server/status` | GET | Server status (detailed) |
-| `/api/{api_version}/{admin_path}/server/stats` | GET | Statistics |
-| `/api/{api_version}/{admin_path}/server/restart` | POST | Restart server |
+| `/api/{api_version}/server/{admin_path}/config/setup` | GET | Get setup status |
+| `/api/{api_version}/server/{admin_path}/config/setup/verify` | POST | Verify setup token |
+| `/api/{api_version}/server/{admin_path}/config/setup/account` | POST | Create admin account (Step 1) |
+| `/api/{api_version}/server/{admin_path}/config/setup/token` | POST | Generate API token (Step 2) |
+| `/api/{api_version}/server/{admin_path}/config/setup/config` | POST | Save server config (Step 3) |
+| `/api/{api_version}/server/{admin_path}/config/setup/security` | POST | Security settings (Step 4) |
+| `/api/{api_version}/server/{admin_path}/config/setup/services` | POST | Configure services (Step 5) |
+| `/api/{api_version}/server/{admin_path}/config/setup/complete` | POST | Complete setup wizard (Step 6) |
+| `/api/{api_version}/server/{admin_path}/config/settings` | GET | Get server settings |
+| `/api/{api_version}/server/{admin_path}/config/settings` | PATCH | Update server settings |
+| `/api/{api_version}/server/{admin_path}/config/status` | GET | Server status (detailed) |
+| `/api/{api_version}/server/{admin_path}/config/stats` | GET | Statistics |
+| `/api/{api_version}/server/{admin_path}/config/restart` | POST | Restart server |
 
-### Admin - Server Admins (`/api/{api_version}/{admin_path}/server/admins/`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/admins` | GET | List Server Admins |
-| `/api/{api_version}/{admin_path}/server/admins/{id}` | GET | Get admin details |
-| `/api/{api_version}/{admin_path}/server/admins/{id}` | DELETE | Delete admin |
-| `/api/{api_version}/{admin_path}/server/admins/{id}/disable` | POST | Disable admin |
-| `/api/{api_version}/{admin_path}/server/admins/{id}/enable` | POST | Enable admin |
-| `/api/{api_version}/{admin_path}/server/admins/invite` | POST | Generate admin invite link |
-
-### Admin - Profile (`/api/{api_version}/{admin_path}/profile/`)
+### Admin - Server Admins (`/api/{api_version}/server/{admin_path}/config/admins/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/profile` | GET | Get admin profile |
-| `/api/{api_version}/{admin_path}/profile` | PATCH | Update admin profile |
-| `/api/{api_version}/{admin_path}/profile/password` | POST | Change admin password |
-| `/api/{api_version}/{admin_path}/profile/token` | GET | Get current API token (masked) |
-| `/api/{api_version}/{admin_path}/profile/token` | POST | Regenerate API token |
-| `/api/{api_version}/{admin_path}/profile/preferences` | GET | Get admin preferences (theme, notifications) |
-| `/api/{api_version}/{admin_path}/profile/preferences` | PATCH | Update admin preferences |
+| `/api/{api_version}/server/{admin_path}/config/admins` | GET | List Server Admins |
+| `/api/{api_version}/server/{admin_path}/config/admins/{id}` | GET | Get admin details |
+| `/api/{api_version}/server/{admin_path}/config/admins/{id}` | DELETE | Delete admin |
+| `/api/{api_version}/server/{admin_path}/config/admins/{id}/disable` | POST | Disable admin |
+| `/api/{api_version}/server/{admin_path}/config/admins/{id}/enable` | POST | Enable admin |
+| `/api/{api_version}/server/{admin_path}/config/admins/invite` | POST | Generate admin invite link |
 
-### Admin - Branding (`/api/{api_version}/{admin_path}/server/branding/`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/branding` | GET | Get branding settings |
-| `/api/{api_version}/{admin_path}/server/branding` | PATCH | Update branding |
-
-### Admin - SSL (`/api/{api_version}/{admin_path}/server/ssl/`)
+### Admin - Profile (`/api/{api_version}/server/{admin_path}/{admin_username}/profile/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/ssl` | GET | Get SSL settings |
-| `/api/{api_version}/{admin_path}/server/ssl` | PATCH | Update SSL settings |
-| `/api/{api_version}/{admin_path}/server/ssl/renew` | POST | Force certificate renewal |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/profile` | GET | Get admin profile |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/profile` | PATCH | Update admin profile |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/profile/password` | POST | Change admin password |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/profile/token` | GET | Get current API token (masked) |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/profile/token` | POST | Regenerate API token |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/preferences` | GET | Get admin preferences (theme, notifications) |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/preferences` | PATCH | Update admin preferences |
 
-### Admin - Tor (`/api/{api_version}/{admin_path}/server/tor/`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/tor` | GET | Get Tor status |
-| `/api/{api_version}/{admin_path}/server/tor` | PATCH | Update Tor settings |
-| `/api/{api_version}/{admin_path}/server/tor/regenerate` | POST | Regenerate .onion address |
-| `/api/{api_version}/{admin_path}/server/tor/vanity` | GET | Get vanity generation status |
-| `/api/{api_version}/{admin_path}/server/tor/vanity` | POST | Start vanity generation |
-| `/api/{api_version}/{admin_path}/server/tor/vanity` | DELETE | Cancel vanity generation |
-| `/api/{api_version}/{admin_path}/server/tor/vanity/apply` | POST | Apply vanity address |
-| `/api/{api_version}/{admin_path}/server/tor/import` | POST | Import external keys |
-
-### Admin - Web (`/api/{api_version}/{admin_path}/server/web/`)
+### Admin - Branding (`/api/{api_version}/server/{admin_path}/config/branding/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/web` | GET | Get web settings |
-| `/api/{api_version}/{admin_path}/server/web` | PATCH | Update web settings |
-| `/api/{api_version}/{admin_path}/server/web/robots` | GET | Get robots.txt config |
-| `/api/{api_version}/{admin_path}/server/web/robots` | PATCH | Update robots.txt |
-| `/api/{api_version}/{admin_path}/server/web/robots/preview` | GET | Preview robots.txt |
-| `/api/{api_version}/{admin_path}/server/web/security` | GET | Get security.txt config |
-| `/api/{api_version}/{admin_path}/server/web/security` | PATCH | Update security.txt |
-| `/api/{api_version}/{admin_path}/server/web/security/preview` | GET | Preview security.txt |
+| `/api/{api_version}/server/{admin_path}/config/branding` | GET | Get branding settings |
+| `/api/{api_version}/server/{admin_path}/config/branding` | PATCH | Update branding |
 
-### Admin - Pages (`/api/{api_version}/{admin_path}/server/pages/`)
+### Admin - SSL (`/api/{api_version}/server/{admin_path}/config/ssl/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/pages` | GET | Get all page settings |
-| `/api/{api_version}/{admin_path}/server/pages/about` | GET | Get about page content |
-| `/api/{api_version}/{admin_path}/server/pages/about` | PATCH | Update about page |
-| `/api/{api_version}/{admin_path}/server/pages/privacy` | GET | Get privacy policy |
-| `/api/{api_version}/{admin_path}/server/pages/privacy` | PATCH | Update privacy policy |
-| `/api/{api_version}/{admin_path}/server/pages/contact` | GET | Get contact page settings |
-| `/api/{api_version}/{admin_path}/server/pages/contact` | PATCH | Update contact page |
-| `/api/{api_version}/{admin_path}/server/pages/help` | GET | Get help page content |
-| `/api/{api_version}/{admin_path}/server/pages/help` | PATCH | Update help page |
+| `/api/{api_version}/server/{admin_path}/config/ssl` | GET | Get SSL settings |
+| `/api/{api_version}/server/{admin_path}/config/ssl` | PATCH | Update SSL settings |
+| `/api/{api_version}/server/{admin_path}/config/ssl/renew` | POST | Force certificate renewal |
 
-### Admin - Email (`/api/{api_version}/{admin_path}/server/email/`)
+### Admin - Tor (`/api/{api_version}/server/{admin_path}/config/tor/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/email` | GET | Get email settings |
-| `/api/{api_version}/{admin_path}/server/email` | PATCH | Update email settings |
-| `/api/{api_version}/{admin_path}/server/email/test` | POST | Send test email |
-| `/api/{api_version}/{admin_path}/server/email/templates` | GET | List email templates |
-| `/api/{api_version}/{admin_path}/server/email/templates/{name}` | GET | Get template |
-| `/api/{api_version}/{admin_path}/server/email/templates/{name}` | PUT | Update template |
-| `/api/{api_version}/{admin_path}/server/email/templates/{name}/reset` | POST | Reset to default |
-| `/api/{api_version}/{admin_path}/server/email/templates/{name}/preview` | POST | Preview template |
+| `/api/{api_version}/server/{admin_path}/config/tor` | GET | Get Tor status |
+| `/api/{api_version}/server/{admin_path}/config/tor` | PATCH | Update Tor settings |
+| `/api/{api_version}/server/{admin_path}/config/tor/regenerate` | POST | Regenerate .onion address |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | GET | Get vanity generation status |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | POST | Start vanity generation |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | DELETE | Cancel vanity generation |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity/apply` | POST | Apply vanity address |
+| `/api/{api_version}/server/{admin_path}/config/tor/import` | POST | Import external keys |
 
-### Admin - Scheduler (`/api/{api_version}/{admin_path}/server/scheduler/`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/scheduler` | GET | List scheduled tasks |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}` | GET | Get task details |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}` | PATCH | Update task |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}/run` | POST | Run task now |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}/enable` | POST | Enable task |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}/disable` | POST | Disable task |
-
-### Admin - Backup (`/api/{api_version}/{admin_path}/server/backup/`)
+### Admin - Web (`/api/{api_version}/server/{admin_path}/config/web/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/backup` | GET | List backups |
-| `/api/{api_version}/{admin_path}/server/backup` | POST | Create backup |
-| `/api/{api_version}/{admin_path}/server/backup/{id}` | GET | Get backup details |
-| `/api/{api_version}/{admin_path}/server/backup/{id}` | DELETE | Delete backup |
-| `/api/{api_version}/{admin_path}/server/backup/{id}/download` | GET | Download backup file |
-| `/api/{api_version}/{admin_path}/server/backup/restore` | POST | Restore from backup |
+| `/api/{api_version}/server/{admin_path}/config/web` | GET | Get web settings |
+| `/api/{api_version}/server/{admin_path}/config/web` | PATCH | Update web settings |
+| `/api/{api_version}/server/{admin_path}/config/web/robots` | GET | Get robots.txt config |
+| `/api/{api_version}/server/{admin_path}/config/web/robots` | PATCH | Update robots.txt |
+| `/api/{api_version}/server/{admin_path}/config/web/robots/preview` | GET | Preview robots.txt |
+| `/api/{api_version}/server/{admin_path}/config/web/security` | GET | Get security.txt config |
+| `/api/{api_version}/server/{admin_path}/config/web/security` | PATCH | Update security.txt |
+| `/api/{api_version}/server/{admin_path}/config/web/security/preview` | GET | Preview security.txt |
+| `/api/{api_version}/server/{admin_path}/config/web/well-known` | GET | Get well-known namespace settings and supported entries |
+| `/api/{api_version}/server/{admin_path}/config/web/well-known` | PATCH | Update optional well-known entry settings |
+| `/api/{api_version}/server/{admin_path}/config/web/well-known/preview/{name}` | GET | Preview the exact rendered body for one well-known entry |
 
-### Admin - Logs (`/api/{api_version}/{admin_path}/server/logs/`)
+**`/api/{api_version}/server/{admin_path}/config/web` includes `server.healthz.root.enabled` and well-known namespace status in its settings payload.**
+
+### Admin - Pages (`/api/{api_version}/server/{admin_path}/config/pages/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/logs` | GET | List log files |
-| `/api/{api_version}/{admin_path}/server/logs/{type}` | GET | Get log entries |
-| `/api/{api_version}/{admin_path}/server/logs/{type}/download` | GET | Download log file |
+| `/api/{api_version}/server/{admin_path}/config/pages` | GET | Get all page settings |
+| `/api/{api_version}/server/{admin_path}/config/pages/about` | GET | Get about page content |
+| `/api/{api_version}/server/{admin_path}/config/pages/about` | PATCH | Update about page |
+| `/api/{api_version}/server/{admin_path}/config/pages/privacy` | GET | Get privacy policy |
+| `/api/{api_version}/server/{admin_path}/config/pages/privacy` | PATCH | Update privacy policy |
+| `/api/{api_version}/server/{admin_path}/config/pages/contact` | GET | Get contact page settings |
+| `/api/{api_version}/server/{admin_path}/config/pages/contact` | PATCH | Update contact page |
+| `/api/{api_version}/server/{admin_path}/config/pages/help` | GET | Get help page content |
+| `/api/{api_version}/server/{admin_path}/config/pages/help` | PATCH | Update help page |
+
+### Admin - Email (`/api/{api_version}/server/{admin_path}/config/email/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/config/email` | GET | Get email settings |
+| `/api/{api_version}/server/{admin_path}/config/email` | PATCH | Update email settings |
+| `/api/{api_version}/server/{admin_path}/config/email/test` | POST | Send test email |
+| `/api/{api_version}/server/{admin_path}/config/email/templates` | GET | List email templates |
+| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}` | GET | Get template |
+| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}` | PUT | Update template |
+| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}/reset` | POST | Reset to default |
+| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}/preview` | POST | Preview template |
+
+### Admin - Scheduler (`/api/{api_version}/server/{admin_path}/config/scheduler/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/config/scheduler` | GET | List scheduled tasks |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}` | GET | Get task details |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}` | PATCH | Update task |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/run` | POST | Run task now |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/enable` | POST | Enable task |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/disable` | POST | Disable task |
+
+### Admin - Backup (`/api/{api_version}/server/{admin_path}/config/backup/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/config/backup` | GET | List backups |
+| `/api/{api_version}/server/{admin_path}/config/backup` | POST | Create backup |
+| `/api/{api_version}/server/{admin_path}/config/backup/{id}` | GET | Get backup details |
+| `/api/{api_version}/server/{admin_path}/config/backup/{id}` | DELETE | Delete backup |
+| `/api/{api_version}/server/{admin_path}/config/backup/{id}/download` | GET | Download backup file |
+| `/api/{api_version}/server/{admin_path}/config/backup/restore` | POST | Restore from backup |
+
+### Admin - Logs (`/api/{api_version}/server/{admin_path}/config/logs/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/config/logs` | GET | List log files |
+| `/api/{api_version}/server/{admin_path}/config/logs/{type}` | GET | Get log entries |
+| `/api/{api_version}/server/{admin_path}/config/logs/{type}/download` | GET | Download log file |
 
 ## Agent Management (OPTIONAL - When Agent is Enabled)
 
@@ -30072,13 +30503,13 @@ The admin panel MUST include a scheduler section with:
 
 **See PART 33 for full agent binary and setup details.**
 
-### Admin Panel (`/{admin_path}/server/agents`)
+### Admin Panel (`/server/{admin_path}/config/agents`)
 
 **Main agent dashboard showing all registered agents:**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  /{admin_path}/server/agents                                                         │
+│  /server/{admin_path}/config/agents                                                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  Connected Agents                                              [+ Add Agent] │
@@ -30107,13 +30538,13 @@ The admin panel MUST include a scheduler section with:
 | **Last Seen** | Time since last heartbeat/report |
 | **Health** | ✓ Good / ⚠ Warn / ✗ Error (based on agent metrics) |
 
-### Admin Panel (`/{admin_path}/server/agents/{name}`)
+### Admin Panel (`/server/{admin_path}/config/agents/{name}`)
 
 **Detailed view of a single agent:**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  /{admin_path}/server/agents/web-server-01                         [← Back to List] │
+│  /server/{admin_path}/config/agents/web-server-01                         [← Back to List] │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  web-server-01                                             ● Online         │
@@ -30160,13 +30591,13 @@ The admin panel MUST include a scheduler section with:
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Admin Panel (`/{admin_path}/server/agents/add`)
+### Admin Panel (`/server/{admin_path}/config/agents/add`)
 
 **Simple agent registration page:**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  /{admin_path}/server/agents/add                                   [← Back to List] │
+│  /server/{admin_path}/config/agents/add                                   [← Back to List] │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  Add New Agent                                                              │
@@ -30276,13 +30707,13 @@ func getDefaultAgentName() string {
 - Agent reconnection after disconnect
 - Agent status change (online/offline)
 
-### Admin Panel (`/{admin_path}/server/agents/remove`)
+### Admin Panel (`/server/{admin_path}/config/agents/remove`)
 
 **Agent removal page with confirmation:**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  /{admin_path}/server/agents/remove                                [← Back to List] │
+│  /server/{admin_path}/config/agents/remove                                [← Back to List] │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  Remove Agent                                                               │
@@ -30331,7 +30762,7 @@ func getDefaultAgentName() string {
 
 | Scope | Base Route | Owner Token | Agent Token |
 |-------|------------|-------------|-------------|
-| Admin | `/api/{api_version}/{admin_path}/server/agents/` | `adm_` | `adm_agt_` |
+| Admin | `/api/{api_version}/server/{admin_path}/config/agents/` | `adm_` | `adm_agt_` |
 | User | `/api/{api_version}/users/agents/` | `usr_` | `usr_agt_` |
 | Org | `/api/{api_version}/orgs/{slug}/agents/` | `org_` | `org_agt_` |
 
@@ -30357,7 +30788,7 @@ func getDefaultAgentName() string {
 **Examples:**
 ```
 # Admin agent (server infrastructure)
-POST /api/{api_version}/{admin_path}/server/agents/register
+POST /api/{api_version}/server/{admin_path}/config/agents/register
 Authorization: Bearer adm_agt_abc123...
 
 # User agent (personal SaaS monitoring)
@@ -30375,7 +30806,7 @@ Agent data can be exposed via project-specific routes for different audiences:
 
 | Route | Description | Example |
 |-------|-------------|---------|
-| `/{admin_path}/server/agents/*` | Admin management UI | Full control |
+| `/server/{admin_path}/config/agents/*` | Admin management UI | Full control |
 | `/users/agents/*` | User's agent dashboard | Personal agents |
 | `/orgs/{slug}/agents/*` | Org agent dashboard | Org agents |
 | `/{custom}/status` | Public status page | Status dashboard |
@@ -30578,7 +31009,7 @@ server:
 - ✓ Show clear message: "Email features require SMTP configuration"
 
 **Admin Panel:**
-- If SMTP not configured, show banner: "⚠️ SMTP not configured. Email features disabled. [Configure SMTP](/{admin_path}/server/email)"
+- If SMTP not configured, show banner: "⚠️ SMTP not configured. Email features disabled. [Configure SMTP](/server/{admin_path}/config/email)"
 - Email-dependent features (password reset link, etc.) hidden until SMTP configured
 - Test email button validates SMTP actually works before enabling email features
 
@@ -30900,7 +31331,7 @@ If this was you, no action is required.
 If you did not log in, your account may be compromised. Take action:
 
 1. Change your password immediately:
-   {app_url}/auth/password/forgot
+   {app_url}/server/auth/password/forgot
 
 2. Review your active sessions:
    {app_url}/settings/sessions
@@ -30938,7 +31369,7 @@ Details:
 If this activity was not you:
 
 1. Change your password immediately:
-   {app_url}/auth/password/forgot
+   {app_url}/server/auth/password/forgot
 
 2. Review account activity:
    {app_url}/settings/security
@@ -30975,7 +31406,7 @@ Method used: {method}
 If you did not disable 2FA, your account may be compromised:
 
 1. Change your password immediately:
-   {app_url}/auth/password/forgot
+   {app_url}/server/auth/password/forgot
 
 2. Re-enable 2FA:
    {app_url}/settings/security
@@ -31014,7 +31445,7 @@ If you made this change, no action is required.
 If you did not change your password, your account may be compromised:
 
 1. Reset your password immediately:
-   {app_url}/auth/password/forgot
+   {app_url}/server/auth/password/forgot
 
 2. Review your account security:
    {app_url}/settings/security
@@ -31083,7 +31514,7 @@ We recommend you take the following steps to protect your account:
 {recommended_actions}
 
 1. Change your password immediately:
-   {app_url}/auth/password/forgot
+   {app_url}/server/auth/password/forgot
 
 2. Review your account activity:
    {app_url}/users/security
@@ -31336,7 +31767,7 @@ Do not reply to this email.
 | `{notify_deadline}` | Deadline for user notification (based on strictest standard) |
 | `{admin_url}` | Admin panel URL |
 
-## Admin Panel (/{admin_path}/server/email/templates)
+## Admin Panel (/server/{admin_path}/config/email/templates)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -31368,8 +31799,8 @@ Do not reply to this email.
 | `{fqdn}` | Current FQDN |
 | `{recipient_email}` | `user@example.com` |
 | `{recipient_username}` | `sampleuser` |
-| `{reset_link}` | `https://{fqdn}/auth/reset/sample123...` |
-| `{verify_link}` | `https://{fqdn}/auth/verify/sample123...` |
+| `{reset_link}` | `https://{fqdn}/server/auth/reset/sample123...` |
+| `{verify_link}` | `https://{fqdn}/server/auth/verify/sample123...` |
 | `{expires}` | `24 hours` |
 | `{ip}` | `192.168.1.100` |
 | `{timestamp}` | Current timestamp |
@@ -31485,7 +31916,7 @@ Do not reply to this email.
 
 ## Server Admin Notifications
 
-**Notifications shown to Server Admins in `/admin/*` routes.**
+**Notifications shown to Server Admins in `/server/{admin_path}/*` routes.**
 
 | Event | Toast | Banner | Center | Description |
 |-------|:-----:|:------:|:------:|-------------|
@@ -31597,7 +32028,7 @@ Do not reply to this email.
   "type": "warning",
   "title": "SSL Certificate Expiring",
   "message": "Certificate expires in 3 days",
-  "link": "/{admin_path}/server/ssl",
+  "link": "/server/{admin_path}/config/ssl",
   "read": false,
   "created_at": "2025-01-15T10:30:00Z"
 }
@@ -31618,7 +32049,7 @@ Do not reply to this email.
 
 **Both Server Admins and users can configure their notification preferences.**
 
-### Admin Notification Preferences (`/{admin_path}/profile/notifications`)
+### Admin Notification Preferences (`/server/{admin_path}/{admin_username}/notifications`)
 
 | Category | Events | Default | Can Disable? |
 |----------|--------|---------|--------------|
@@ -31631,7 +32062,7 @@ Do not reply to this email.
 **Security notifications cannot be disabled** - these are critical for account security.
 
 ```
-Admin Notification Preferences (/{admin_path}/profile/notifications)
+Admin Notification Preferences (/server/{admin_path}/{admin_username}/notifications)
 ┌─────────────────────────────────────────────────────────────┐
 │  Notification Preferences                                   │
 ├─────────────────────────────────────────────────────────────┤
@@ -32023,7 +32454,7 @@ In cluster mode, tasks are distributed to prevent duplicate execution:
 
 | Task Type | Execution |
 |-----------|-----------|
-| **Global Tasks** | Run on ONE node only (leader election) |
+| **Global Tasks** | Run on ONE node only (primary election) |
 | **Local Tasks** | Run on EVERY node |
 
 **Global Tasks (run once per cluster):**
@@ -32103,7 +32534,7 @@ Execute task
 | `retry_delay` | 5m | Delay between retries |
 | `backoff` | exponential | Delay multiplier (5m, 10m, 20m) |
 
-### Admin Panel (/{admin_path}/server/scheduler)
+### Admin Panel (/server/{admin_path}/config/scheduler)
 
 | Section | Contents |
 |---------|----------|
@@ -32210,13 +32641,13 @@ Execute task
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/scheduler` | GET | List all tasks |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}` | GET | Get task details |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}` | PATCH | Update task settings |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}/run` | POST | Run task immediately |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}/enable` | POST | Enable task |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}/disable` | POST | Disable task |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}/history` | GET | Get execution history |
+| `/api/{api_version}/server/{admin_path}/config/scheduler` | GET | List all tasks |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}` | GET | Get task details |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}` | PATCH | Update task settings |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/run` | POST | Run task immediately |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/enable` | POST | Enable task |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/disable` | POST | Disable task |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/history` | GET | Get execution history |
 
 ### Shutdown Behavior
 
@@ -32322,7 +32753,7 @@ All databases from [sapics/ip-location-db](https://github.com/sapics/ip-location
 | City | `city`, `region`, `postal_code`, `latitude`, `longitude`, `timezone` |
 | WHOIS | `registrant_org`, `asn`, `country_code` (combined lookup) |
 
-## Admin Panel (/{admin_path}/server/network/geoip)
+## Admin Panel (/server/{admin_path}/config/network/geoip)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -32371,7 +32802,7 @@ All databases from [sapics/ip-location-db](https://github.com/sapics/ip-location
 
 ## Access Control
 
-**`/metrics` is INTERNAL ONLY. See TERMINOLOGY > Monitoring Endpoints for /healthz vs /metrics distinction.**
+**`/metrics` is INTERNAL ONLY. See TERMINOLOGY > Monitoring Endpoints for /server/healthz vs /metrics distinction.**
 
 | Deployment | Access Method | Recommendation |
 |------------|---------------|----------------|
@@ -32670,7 +33101,7 @@ server:
 | `cluster_nodes_healthy` | Gauge | - | Healthy nodes in cluster |
 | `cluster_is_primary` | Gauge | - | 1 if this node is primary, 0 otherwise |
 | `cluster_sync_lag_seconds` | Gauge | - | Replication lag from primary |
-| `cluster_elections_total` | Counter | - | Total leader elections |
+| `cluster_elections_total` | Counter | - | Total primary elections |
 
 ### Tor Metrics (if using PART 32 Tor)
 
@@ -32718,7 +33149,7 @@ server:
 {project_name}_http_requests_total{method="GET",path="/api/v1/users/:id",status="200"} 892
 {project_name}_http_requests_total{method="GET",path="/api/v1/users/:id",status="404"} 23
 {project_name}_http_requests_total{method="POST",path="/api/v1/users",status="201"} 42
-{project_name}_http_requests_total{method="GET",path="/healthz",status="200"} 8640
+{project_name}_http_requests_total{method="GET",path="/server/healthz",status="200"} 8640
 
 # HELP {project_name}_http_request_duration_seconds HTTP request duration in seconds
 # TYPE {project_name}_http_request_duration_seconds histogram
@@ -33787,7 +34218,7 @@ groups:
 }
 ```
 
-## Admin Panel (/{admin_path}/server/metrics)
+## Admin Panel (/server/{admin_path}/config/metrics)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -33928,8 +34359,8 @@ When `server.compliance.enabled: true`:
 | Action | Location | Notes |
 |--------|----------|-------|
 | Set during setup | Setup wizard Step 4 | Optional (unless compliance) |
-| Set later | `/{admin_path}/server/backup` | Click "Set Encryption Password" |
-| Change password | `/{admin_path}/server/backup` | New backups use new password |
+| Set later | `/server/{admin_path}/config/backup` | Click "Set Encryption Password" |
+| Change password | `/server/{admin_path}/config/backup` | New backups use new password |
 | Remove encryption | Only if compliance disabled | Cannot remove if compliance enabled |
 
 **Important:**
@@ -33955,7 +34386,7 @@ When `server.compliance.enabled: true`:
 **API Backup with Encryption:**
 
 ```
-POST /api/{api_version}/{admin_path}/server/backup
+POST /api/{api_version}/server/{admin_path}/config/backup
 Content-Type: application/json
 
 {
@@ -33980,7 +34411,7 @@ Content-Type: application/json
 
 Shown on:
 - First backup if encryption not configured
-- `/{admin_path}/server/backup` page (dismissable)
+- `/server/{admin_path}/config/backup` page (dismissable)
 
 ### Backup Retention
 
@@ -34330,14 +34761,14 @@ Restoring...
 
 ```bash
 # Encrypted backup - password required
-POST /api/{api_version}/{admin_path}/server/backup/restore
+POST /api/{api_version}/server/{admin_path}/config/backup/restore
 {
   "backup_file": "backup_2025-01-15.tar.gz.enc",
   "password": "backup-encryption-password"
 }
 
 # Unencrypted backup - no password
-POST /api/{api_version}/{admin_path}/server/backup/restore
+POST /api/{api_version}/server/{admin_path}/config/backup/restore
 {
   "backup_file": "backup_2025-01-15.tar.gz"
 }
@@ -34377,7 +34808,7 @@ POST /api/{api_version}/{admin_path}/server/backup/restore
 ├─────────────────────────────────────────────────────────────┤
 │  Setup Token: a1b2c3d4e5f67890abcdef1234567890              │
 │                                                             │
-│  Go to {proto}://{fqdn}/{admin_path} and enter this token   │
+│  Go to {proto}://{fqdn}/server/{admin_path} and enter this token   │
 │  to verify you are the server administrator.                │
 │                                                             │
 │  Your existing password and settings will be preserved.     │
@@ -34466,7 +34897,7 @@ POST /api/{api_version}/{admin_path}/server/backup/restore
 # │  Setup Token: a1b2c3d4e5f67890abcdef1234567890              │
 # │                                                             │
 # │  1. Start the service: {project_name} --service start        │
-# │  2. Go to: {proto}://{fqdn}/{admin_path}                    │
+# │  2. Go to: {proto}://{fqdn}/server/{admin_path}                    │
 # │  3. Enter the setup token above                             │
 # │  4. Create new admin account via setup wizard               │
 # │                                                             │
@@ -34497,7 +34928,7 @@ POST /api/{api_version}/{admin_path}/server/backup/restore
 | Admin locked out of 2FA | ✓ Yes (only if no recovery keys) |
 | User forgot password | ✗ No (use password reset) |
 | User locked out | ✗ No (admin can help via UI) |
-| Routine password change | ✗ No (use /{admin_path}/profile) |
+| Routine password change | ✗ No (use /server/{admin_path}/{admin_username}/profile) |
 
 ### Recovery Flow
 
@@ -34515,7 +34946,7 @@ POST /api/{api_version}/{admin_path}/server/backup/restore
 │  Admin credentials cleared, new setup token generated           │
 │                           │                                     │
 │                           ▼                                     │
-│  Admin visits /admin and enters setup token                     │
+│  Admin visits /server/{admin_path} and enters setup token       │
 │                           │                                     │
 │                           ▼                                     │
 │  Setup wizard: Create new admin account                         │
@@ -38481,7 +38912,7 @@ networks:
 
 | When in Container | Behavior |
 |-------------------|----------|
-| Show setup token | On first run - one-time setup token displayed in console for `/admin` access |
+| Show setup token | On first run - one-time setup token displayed in console for `/server/{admin_path}` access |
 | Defaults | Use container-appropriate defaults |
 | Logging | Log to stdout/stderr (captured by container runtime) |
 | Tor | Application manages Tor process internally |
@@ -41827,7 +42258,6 @@ curl -q -LSsf -H "Accept: text/plain" /api/v1/jokes/random         # Plain text 
 ```bash
 # Every *.txt endpoint MUST be tested:
 curl -q -LSsf /robots.txt                            # Robots file
-curl -q -LSsf /security.txt                          # Security policy
 curl -q -LSsf /.well-known/security.txt              # Security policy (well-known)
 curl -q -LSsf /api/v1/jokes/random.txt               # API .txt extension
 
@@ -41873,7 +42303,6 @@ done
 # Backend .txt endpoints - test ALL of them
 txt_endpoints=(
     "/robots.txt"
-    "/security.txt"
     "/.well-known/security.txt"
     "/api/v1/jokes/random.txt"
     "/api/v1/users/john.txt"
@@ -41905,10 +42334,10 @@ GET    /api/{api_version}/users/{username}     # Read public profile (API JSON)
 GET    /api/{api_version}/users/{username}.txt # Read public profile (API plain text)
 
 # API - Admin managing users (by ID)
-GET    /api/{api_version}/{admin_path}/users        # List all users (admin)
-GET    /api/{api_version}/{admin_path}/users/1      # Read specific user (admin)
-PATCH  /api/{api_version}/{admin_path}/users/1      # Update specific user (admin)
-DELETE /api/{api_version}/{admin_path}/users/1      # Delete specific user (admin)
+GET    /api/{api_version}/server/{admin_path}/config/users        # List all users (admin)
+GET    /api/{api_version}/server/{admin_path}/config/users/1      # Read specific user (admin)
+PATCH  /api/{api_version}/server/{admin_path}/config/users/1      # Update specific user (admin)
+DELETE /api/{api_version}/server/{admin_path}/config/users/1      # Delete specific user (admin)
 
 # Frontend routes (smart detection) - CLI gets beautiful formatted text via HTML2TextConverter
 curl -q -LSsf /users                              # CLI → formatted text (current user)
@@ -42029,8 +42458,8 @@ make test
 |--------------|-----------|
 | **Public API** | All `/api/{api_version}/*` endpoints |
 | **Public Web** | All frontend routes |
-| **Admin API** | All `/api/{api_version}/{admin_path}/*` endpoints |
-| **Admin Web** | All `/{admin_path}/*` routes |
+| **Admin API** | All `/api/{api_version}/server/{admin_path}/*` endpoints |
+| **Admin Web** | All `/server/{admin_path}/*` routes |
 | **Error cases** | 400, 401, 403, 404, 500 responses |
 | **Edge cases** | Empty data, invalid input, rate limits |
 
@@ -42151,9 +42580,9 @@ test_endpoint GET "/api/{api_version}/jokes/categories"
 test_endpoint GET "/api/{api_version}/jokes/{id}"
 
 # ADMIN API (with auth)
-test_endpoint GET "/api/{api_version}/{admin_path}/server/settings"
-test_endpoint PUT "/api/{api_version}/{admin_path}/server/settings"
-test_endpoint GET "/api/{api_version}/{admin_path}/server/logs"
+test_endpoint GET "/api/{api_version}/server/{admin_path}/config/settings"
+test_endpoint PUT "/api/{api_version}/server/{admin_path}/config/settings"
+test_endpoint GET "/api/{api_version}/server/{admin_path}/config/logs"
 
 # At end: verify ALL endpoints were tested
 verify_all_endpoints_tested
@@ -42372,16 +42801,16 @@ docker run --rm \
 
     echo '=== API Endpoint Tests ==='
     # Test JSON response (default)
-    curl -q -LSsf http://localhost:64580/api/{api_version}/healthz || echo 'FAILED: /api/{api_version}/healthz'
+    curl -q -LSsf http://localhost:64580/api/{api_version}/server/healthz || echo 'FAILED: /api/{api_version}/server/healthz'
 
     # Test .txt extension (plain text)
-    curl -q -LSsf http://localhost:64580/api/{api_version}/healthz.txt || echo 'FAILED: /api/{api_version}/healthz.txt'
+    curl -q -LSsf http://localhost:64580/api/{api_version}/server/healthz.txt || echo 'FAILED: /api/{api_version}/server/healthz.txt'
 
     # Test Accept header: application/json
-    curl -q -LSsf -H 'Accept: application/json' http://localhost:64580/healthz || echo 'FAILED: Accept JSON'
+    curl -q -LSsf -H 'Accept: application/json' http://localhost:64580/server/healthz || echo 'FAILED: Accept JSON'
 
     # Test Accept header: text/plain
-    curl -q -LSsf -H 'Accept: text/plain' http://localhost:64580/healthz || echo 'FAILED: Accept text/plain'
+    curl -q -LSsf -H 'Accept: text/plain' http://localhost:64580/server/healthz || echo 'FAILED: Accept text/plain'
 
     echo '=== Project-Specific Endpoint Tests ==='
     # MUST test ALL endpoints from IDEA.md - both API and frontend
@@ -42406,9 +42835,9 @@ docker run --rm \
     #   curl -q -LSsf http://localhost:64580/api/{api_version}/users/testuser || echo 'FAILED: READ public profile API JSON'
     #   curl -q -LSsf http://localhost:64580/api/{api_version}/users/testuser.txt || echo 'FAILED: READ public profile API .txt'
     #   # API - Admin routes (by ID)
-    #   curl -q -LSsf http://localhost:64580/api/{api_version}/{admin_path}/users || echo 'FAILED: LIST users admin API'
-    #   curl -q -LSsf http://localhost:64580/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: READ user admin API'
-    #   curl -q -LSsf -X DELETE http://localhost:64580/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: DELETE user admin API'
+    #   curl -q -LSsf http://localhost:64580/api/{api_version}/server/{admin_path}/config/users || echo 'FAILED: LIST users admin API'
+    #   curl -q -LSsf http://localhost:64580/api/{api_version}/server/{admin_path}/config/users/1 || echo 'FAILED: READ user admin API'
+    #   curl -q -LSsf -X DELETE http://localhost:64580/api/{api_version}/server/{admin_path}/config/users/1 || echo 'FAILED: DELETE user admin API'
     #   # Frontend (smart detection - test with text for simplicity)
     #   USERS=\$(curl -q -LSsf http://localhost:64580/users)  # CLI auto-detects text (current user)
     #   USER=\$(curl -q -LSsf http://localhost:64580/testuser)  # CLI auto-detects text (public profile)
@@ -42427,13 +42856,13 @@ docker run --rm \
             -H \"X-Setup-Token: \$SETUP_TOKEN\" \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:64580/api/{api_version}/{admin_path}/setup || echo 'Admin setup failed (may already exist)'
+            http://localhost:64580/api/{api_version}/server/{admin_path}/setup || echo 'Admin setup failed (may already exist)'
 
         # Login and get session
         SESSION=\$(curl -q -LSsf -X POST \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:64580/api/{api_version}/{admin_path}/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
+            http://localhost:64580/api/{api_version}/server/{admin_path}/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
 
         if [ -n \"\$SESSION\" ]; then
             echo '✓ Admin login successful'
@@ -42441,7 +42870,7 @@ docker run --rm \
             # Generate API token for CLI/Agent testing
             API_TOKEN=\$(curl -q -LSsf -X POST \\
                 -H \"Authorization: Bearer \$SESSION\" \\
-                http://localhost:64580/api/{api_version}/{admin_path}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
+                http://localhost:64580/api/{api_version}/server/{admin_path}/{admin_username}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
 
             if [ -n \"\$API_TOKEN\" ]; then
                 echo \"✓ API token created: \${API_TOKEN:0:12}...\"
@@ -42639,16 +43068,16 @@ incus exec "$CONTAINER_NAME" -- bash -c "
 
     echo '=== API Endpoint Tests ==='
     # Test JSON response (default)
-    curl -q -LSsf http://localhost:80/api/{api_version}/healthz || echo 'FAILED: /api/{api_version}/healthz'
+    curl -q -LSsf http://localhost:80/api/{api_version}/server/healthz || echo 'FAILED: /api/{api_version}/server/healthz'
 
     # Test .txt extension (plain text)
-    curl -q -LSsf http://localhost:80/api/{api_version}/healthz.txt || echo 'FAILED: /api/{api_version}/healthz.txt'
+    curl -q -LSsf http://localhost:80/api/{api_version}/server/healthz.txt || echo 'FAILED: /api/{api_version}/server/healthz.txt'
 
     # Test Accept header: application/json
-    curl -q -LSsf -H 'Accept: application/json' http://localhost:80/healthz || echo 'FAILED: Accept JSON'
+    curl -q -LSsf -H 'Accept: application/json' http://localhost:80/server/healthz || echo 'FAILED: Accept JSON'
 
     # Test Accept header: text/plain
-    curl -q -LSsf -H 'Accept: text/plain' http://localhost:80/healthz || echo 'FAILED: Accept text/plain'
+    curl -q -LSsf -H 'Accept: text/plain' http://localhost:80/server/healthz || echo 'FAILED: Accept text/plain'
 
     echo '=== Project-Specific Endpoint Tests ==='
     # MUST test ALL endpoints from IDEA.md - both API and frontend
@@ -42673,9 +43102,9 @@ incus exec "$CONTAINER_NAME" -- bash -c "
     #   curl -q -LSsf http://localhost:80/api/{api_version}/users/testuser || echo 'FAILED: READ public profile API JSON'
     #   curl -q -LSsf http://localhost:80/api/{api_version}/users/testuser.txt || echo 'FAILED: READ public profile API .txt'
     #   # API - Admin routes (by ID)
-    #   curl -q -LSsf http://localhost:80/api/{api_version}/{admin_path}/users || echo 'FAILED: LIST users admin API'
-    #   curl -q -LSsf http://localhost:80/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: READ user admin API'
-    #   curl -q -LSsf -X DELETE http://localhost:80/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: DELETE user admin API'
+    #   curl -q -LSsf http://localhost:80/api/{api_version}/server/{admin_path}/config/users || echo 'FAILED: LIST users admin API'
+    #   curl -q -LSsf http://localhost:80/api/{api_version}/server/{admin_path}/config/users/1 || echo 'FAILED: READ user admin API'
+    #   curl -q -LSsf -X DELETE http://localhost:80/api/{api_version}/server/{admin_path}/config/users/1 || echo 'FAILED: DELETE user admin API'
     #   # Frontend (smart detection - test with text for simplicity)
     #   USERS=\$(curl -q -LSsf http://localhost:80/users)  # CLI auto-detects text (current user)
     #   USER=\$(curl -q -LSsf http://localhost:80/testuser)  # CLI auto-detects text (public profile)
@@ -42694,13 +43123,13 @@ incus exec "$CONTAINER_NAME" -- bash -c "
             -H \"X-Setup-Token: \$SETUP_TOKEN\" \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:80/api/{api_version}/{admin_path}/setup || echo 'Admin setup failed (may already exist)'
+            http://localhost:80/api/{api_version}/server/{admin_path}/setup || echo 'Admin setup failed (may already exist)'
 
         # Login and get session
         SESSION=\$(curl -q -LSsf -X POST \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:80/api/{api_version}/{admin_path}/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
+            http://localhost:80/api/{api_version}/server/{admin_path}/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
 
         if [ -n \"\$SESSION\" ]; then
             echo '✓ Admin login successful'
@@ -42708,7 +43137,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "
             # Generate API token for CLI/Agent testing
             API_TOKEN=\$(curl -q -LSsf -X POST \\
                 -H \"Authorization: Bearer \$SESSION\" \\
-                http://localhost:80/api/{api_version}/{admin_path}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
+                http://localhost:80/api/{api_version}/server/{admin_path}/{admin_username}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
 
             if [ -n \"\$API_TOKEN\" ]; then
                 echo \"✓ API token created: \${API_TOKEN:0:12}...\"
@@ -42872,7 +43301,7 @@ eval "$({project_name}-agent --shell init)"
 
 ## Testing Admin Routes
 
-**Admin routes (`/admin/**`) require authentication. Tests MUST verify authentication works.**
+**Admin routes (`/server/{admin_path}/**`) require authentication. Tests MUST verify authentication works.**
 
 **CRITICAL: Do NOT bypass authentication in tests - TEST that it works!**
 
@@ -42894,7 +43323,7 @@ sleep 3
 # 1. Test that unauthenticated access is REJECTED
 echo "Testing unauthenticated access is blocked..."
 # Note: Use -q -LSs (no -f) when capturing HTTP status codes, since -f exits on 4xx/5xx
-HTTP_CODE=$(curl -q -LSs -o /dev/null -w "%{http_code}" http://localhost:64580/{admin_path})
+HTTP_CODE=$(curl -q -LSs -o /dev/null -w "%{http_code}" http://localhost:64580/server/{admin_path})
 if [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "401" ]; then
     echo "✓ Unauthenticated access properly rejected"
 else
@@ -42918,7 +43347,7 @@ echo "✓ Setup token found: ${SETUP_TOKEN:0:8}..."
 echo "Testing admin access with setup token..."
 HTTP_CODE=$(curl -q -LSs -o /dev/null -w "%{http_code}" \
     -H "X-Setup-Token: $SETUP_TOKEN" \
-    http://localhost:64580/{admin_path})
+    http://localhost:64580/server/{admin_path})
 
 if [ "$HTTP_CODE" = "200" ]; then
     echo "✓ Admin access works with setup token"
@@ -42934,14 +43363,14 @@ curl -q -LSsf -X POST \
     -H "X-Setup-Token: $SETUP_TOKEN" \
     -H "Content-Type: application/json" \
     -d '{"username":"testadmin","password":"TestPass123!"}' \
-    http://localhost:64580/api/{api_version}/{admin_path}/setup
+    http://localhost:64580/api/{api_version}/server/{admin_path}/setup
 
 # 5. Test login with created admin
 echo "Testing admin login..."
 SESSION=$(curl -q -LSsf -X POST \
     -H "Content-Type: application/json" \
     -d '{"username":"testadmin","password":"TestPass123!"}' \
-    http://localhost:64580/api/{api_version}/{admin_path}/login | jq -r '.session_token')
+    http://localhost:64580/api/{api_version}/server/{admin_path}/login | jq -r '.session_token')
 
 if [ -z "$SESSION" ] || [ "$SESSION" = "null" ]; then
     echo "✗ FAILED: Admin login failed"
@@ -42954,7 +43383,7 @@ echo "✓ Admin login successful"
 # 6. Test admin routes with valid session
 echo "Testing admin routes with session..."
 curl -q -LSsf -H "Authorization: Bearer $SESSION" \
-    http://localhost:64580/api/{api_version}/{admin_path}/users > /dev/null
+    http://localhost:64580/api/{api_version}/server/{admin_path}/config/users > /dev/null
 
 echo "✓ Admin routes work with authentication"
 
@@ -42965,7 +43394,7 @@ INVALID=$(curl -q -LSs -X POST \
     -H "Content-Type: application/json" \
     -d '{"username":"testadmin","password":"wrongpassword"}' \
     -w "%{http_code}" \
-    http://localhost:64580/api/{api_version}/{admin_path}/login)
+    http://localhost:64580/api/{api_version}/server/{admin_path}/login)
 
 if echo "$INVALID" | grep -q "401\|403"; then
     echo "✓ Invalid credentials properly rejected"
@@ -43378,6 +43807,13 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 
 ### Documentation Directory (`docs/`)
 
+**`docs/` is the operator/user/integrator documentation set. It MUST explain the shipped product as it actually behaves now.**
+
+- `docs/` MUST cover the browser surface, admin surface, API surface, configuration surface, and any enabled public protocol/integration surface
+- If the project exposes public discovery or standards endpoints (for example `/.well-known/**`, Swagger/GraphQL docs, autodiscover, OAuth/OIDC provider metadata, native app association files, or security-reporting endpoints), the relevant docs pages MUST explain them
+- If a feature exists in code and affects operators, admins, integrators, or end users, it MUST be reflected in `docs/`
+- `docs/` is prose/reference documentation; generated OpenAPI/GraphQL output does NOT replace the required docs pages
+
 | File | Required | Purpose |
 |------|:--------:|---------|
 | `index.md` | ✓ | Documentation homepage |
@@ -43386,6 +43822,8 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 | `api.md` | ✓ | API documentation (endpoints, formats) |
 | `cli.md` | If applicable | CLI reference (flags, commands) |
 | `admin.md` | ✓ | Admin panel guide |
+| `security.md` | ✓ | Security model, auth, health/public endpoints, security reporting, and well-known namespace |
+| `integrations.md` | If applicable | External identity, native app links, autodiscovery, webhooks, federation, and other protocol/platform integrations |
 | `development.md` | ✓ | Development/contributing guide |
 | `stylesheets/dark.css` | Optional | Dark theme customization |
 | `stylesheets/light.css` | Optional | Light theme customization |
@@ -43504,8 +43942,10 @@ nav:
     - Configuration: configuration.md
   - Usage:
     - API Reference: api.md
-    - CLI Reference: cli.md
+    - CLI Reference: cli.md         # Remove if project has no CLI surface
     - Admin Panel: admin.md
+    - Security: security.md
+    - Integrations: integrations.md # Remove if project has no external/public integrations
   - Development:
     - Contributing: development.md
 
@@ -43854,6 +44294,8 @@ docker run -p 64580:80 {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_nam
 - [Configuration](configuration.md) - All configuration options
 - [API Reference](api.md) - REST API, Swagger, GraphQL
 - [Admin Panel](admin.md) - WebUI administration
+- [Security](security.md) - Auth, public endpoints, reporting, and hardening behavior
+- [Integrations](integrations.md) - External identity, discovery, and platform integrations
 - [Development](development.md) - Contributing guide
 
 ## Links
@@ -43941,7 +44383,12 @@ All settings can be overridden via environment:
 
 ## Admin Panel
 
-All settings are configurable via the WebUI at `/admin`.
+All settings are configurable via the WebUI at `/server/{admin_path}`.
+
+Document:
+- external auth provider settings (OIDC/LDAP) if enabled
+- well-known namespace settings and optional entries if enabled
+- health/public endpoint toggles that operators can change
 ```
 
 ### docs/api.md
@@ -43953,11 +44400,16 @@ All settings are configurable via the WebUI at `/admin`.
 
 Base URL: `/api/{api_version}/`
 
+Document:
+- canonical versioned routes
+- direct aliases such as `/api/swagger`, `/api/graphql`, and `/api/healthz`
+- public docs routes under `/server/docs/*`
+
 ### Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/healthz` | GET | Health check |
+| `/api/{api_version}/server/healthz` | GET | Health check |
 | `/api/{api_version}/{resource}` | GET | List resources |
 
 ## Swagger UI
@@ -43982,7 +44434,7 @@ GraphQL playground: [/server/docs/graphql](/server/docs/graphql)
 
 ## Access
 
-- URL: `/admin`
+- URL: `/server/{admin_path}`
 - First-run setup wizard creates admin account
 - Session-based authentication
 
@@ -43995,9 +44447,77 @@ GraphQL playground: [/server/docs/graphql](/server/docs/graphql)
 - SSL/TLS management
 - Monitoring & logs
 
+Document:
+- `/server/{admin_path}/config/security/auth/*` for OIDC/LDAP provider management
+- `/server/{admin_path}/config/web/*` for robots/security/well-known management
+- any security-reporting or public-endpoint admin pages enabled by the project
+
 ## Admin API
 
-Programmatic access via `/api/{api_version}/{admin_path}/` with bearer token authentication.
+Programmatic access via `/api/{api_version}/server/{admin_path}/` with bearer token authentication.
+```
+
+### docs/security.md
+
+```markdown
+# Security
+
+## Authentication & Identity
+
+- Local auth routes live under `/server/auth/*`
+- External identity for users/admins is documented here:
+  - OIDC providers
+  - LDAP providers
+  - first-login username confirmation flow
+
+## Public Security Endpoints
+
+- `/.well-known/security.txt`
+- `/.well-known/pgp-key.asc` (when enabled)
+- `/.well-known/change-password`
+- `/server/healthz`
+- `/api/{api_version}/server/healthz`
+
+## Security Reporting
+
+- Explain how researchers use `/.well-known/security.txt`
+- Explain `/server/contact?security_id=...`
+- Link to `/server/security/policy`
+
+## Well-Known Namespace
+
+- Document which `/.well-known/*` entries are enabled for this project
+- State that unknown entries return `404`
+- Document feature-gated entries such as WebFinger, OpenID Provider Metadata, App Links, Apple association, and MTA-STS only when they are actually enabled
+```
+
+### docs/integrations.md
+
+```markdown
+# Integrations
+
+## External Identity
+
+- OIDC providers, scopes, and claim mapping
+- LDAP providers, attribute mapping, and group mapping
+- Which flows apply to users, admins, or both
+
+## Discovery & Protocol Endpoints
+
+- Public docs endpoints (`/server/docs/swagger`, `/server/docs/graphql`)
+- API aliases (`/api/swagger`, `/api/graphql`, `/api/healthz`)
+- Any enabled `/.well-known/*` discovery/integration endpoints
+
+## Platform Integrations
+
+- Android App Links (`/.well-known/assetlinks.json`) if enabled
+- Apple Universal Links / WebCredentials (`/.well-known/apple-app-site-association`) if enabled
+- Autodiscovery, federation, webhooks, or client/agent bootstrap endpoints if the project supports them
+
+## Operator Notes
+
+- Which integrations are optional vs required
+- What must be configured before enabling each integration
 ```
 
 ### docs/development.md
@@ -47346,7 +47866,7 @@ func ensureTorFile(path string, content []byte) error {
 
 ## Admin Panel
 
-### /{admin_path}/server/tor (WebUI)
+### /server/{admin_path}/config/tor (WebUI)
 
 **Hidden service is ALWAYS enabled if Tor binary is found.** No enable/disable toggle.
 
@@ -47638,20 +48158,20 @@ make
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/tor` | GET | Get Tor status, config, and .onion address |
-| `/api/{api_version}/{admin_path}/server/tor` | PATCH | Update Tor settings (validates before saving) |
-| `/api/{api_version}/{admin_path}/server/tor/validate` | POST | Validate config without saving |
-| `/api/{api_version}/{admin_path}/server/tor/regenerate` | POST | Regenerate .onion address |
-| `/api/{api_version}/{admin_path}/server/tor/restart` | POST | Restart Tor process |
-| `/api/{api_version}/{admin_path}/server/tor/vanity` | GET | Get vanity generation status |
-| `/api/{api_version}/{admin_path}/server/tor/vanity` | POST | Start vanity generation |
-| `/api/{api_version}/{admin_path}/server/tor/vanity` | DELETE | Cancel vanity generation |
-| `/api/{api_version}/{admin_path}/server/tor/vanity/apply` | POST | Apply vanity address |
-| `/api/{api_version}/{admin_path}/server/tor/import` | POST | Import external keys |
+| `/api/{api_version}/server/{admin_path}/config/tor` | GET | Get Tor status, config, and .onion address |
+| `/api/{api_version}/server/{admin_path}/config/tor` | PATCH | Update Tor settings (validates before saving) |
+| `/api/{api_version}/server/{admin_path}/config/tor/validate` | POST | Validate config without saving |
+| `/api/{api_version}/server/{admin_path}/config/tor/regenerate` | POST | Regenerate .onion address |
+| `/api/{api_version}/server/{admin_path}/config/tor/restart` | POST | Restart Tor process |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | GET | Get vanity generation status |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | POST | Start vanity generation |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | DELETE | Cancel vanity generation |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity/apply` | POST | Apply vanity address |
+| `/api/{api_version}/server/{admin_path}/config/tor/import` | POST | Import external keys |
 
 ### Response Format
 
-**GET `/api/{api_version}/{admin_path}/server/tor`**
+**GET `/api/{api_version}/server/{admin_path}/config/tor`**
 
 ```json
 {
@@ -47680,7 +48200,7 @@ make
 }
 ```
 
-**POST `/api/{api_version}/{admin_path}/server/tor/validate`** (or PATCH with invalid config)
+**POST `/api/{api_version}/server/{admin_path}/config/tor/validate`** (or PATCH with invalid config)
 
 ```json
 {
@@ -47698,7 +48218,7 @@ make
 }
 ```
 
-**PATCH `/api/{api_version}/{admin_path}/server/tor`** (success)
+**PATCH `/api/{api_version}/server/{admin_path}/config/tor`** (success)
 
 ```json
 {
@@ -48423,7 +48943,7 @@ if env.IsAutoDetectDisplayModeGUI() {
 
 | Binary | First Run | Configuration Method |
 |--------|-----------|---------------------|
-| **Server** | Start with defaults, show status banner | WebUI at `/{admin_path}` |
+| **Server** | Start with defaults, show status banner | WebUI at `/server/{admin_path}` |
 | **CLI** | Setup wizard (GUI/TUI) | Setup wizard (no WebUI for CLI) |
 | **Agent** | Start with connection string, show status banner | Server provides connection string |
 
@@ -48440,11 +48960,11 @@ if env.IsAutoDetectDisplayModeGUI() {
 | **Headless/daemon** | Log to file |
 
 **No built-in TUI/GUI wizard for Server or Agent binaries.** They just run:
-- **Server**: Has web-based setup at `/{admin_path}/server/setup` (accessed via browser, see PART 17)
+- **Server**: Has web-based setup at `/server/{admin_path}/config/setup` (accessed via browser, see PART 17)
 - **Agent**: Configured via connection string from server admin panel
 
 **Note:** "Setup wizard" has two meanings:
-1. **Server's web-based setup** - HTML pages served by server, accessed in browser at `/{admin_path}/server/setup`
+1. **Server's web-based setup** - HTML pages served by server, accessed in browser at `/server/{admin_path}/config/setup`
 2. **CLI's built-in TUI/GUI wizard** - interactive wizard built into CLI binary itself
 
 Only CLI has a built-in wizard. Server serves web pages for setup.
@@ -49913,7 +50433,7 @@ On every CLI command:
 2. Try server.primary
 3. If fails → try server.cluster nodes (silent failover)
 4. Execute command on first available node
-5. Background: GET /api/{api_version}/healthz
+5. Background: GET /api/{api_version}/server/healthz
 6. Read cluster.primary and cluster.nodes from response
 7. Update server.primary and server.cluster in cli.yml (async, non-blocking)
 ```
@@ -51776,7 +52296,7 @@ func GenerateAgentCommand(serverURL, token string) string {
 
 | Scope | Token Prefix | Issued By | Route |
 |-------|--------------|-----------|-------|
-| Admin | `adm_agt_` | Admin panel | `/api/{api_version}/{admin_path}/server/agents/*` |
+| Admin | `adm_agt_` | Admin panel | `/api/{api_version}/server/{admin_path}/config/agents/*` |
 | User | `usr_agt_` | User settings | `/api/{api_version}/users/agents/*` |
 | Org | `org_agt_` | Org settings | `/api/{api_version}/orgs/{slug}/agents/*` |
 
@@ -51803,7 +52323,7 @@ func GenerateAgentToken(scope AgentScope) string {
 
 | Scope | Endpoint |
 |-------|----------|
-| Admin | `POST /api/{api_version}/{admin_path}/server/agents/register` |
+| Admin | `POST /api/{api_version}/server/{admin_path}/config/agents/register` |
 | User | `POST /api/{api_version}/users/agents/register` |
 | Org | `POST /api/{api_version}/orgs/{slug}/agents/register` |
 
@@ -51938,7 +52458,7 @@ mode: ""                           # production, development (empty = auto-detec
 **Failover Flow:**
 ```
 1. Agent connects to server.primary
-2. Agent calls GET /api/{api_version}/healthz
+2. Agent calls GET /api/{api_version}/server/healthz
 3. Agent reads cluster.primary and cluster.nodes from response
 4. Agent saves to server.primary and server.cluster in agent.yml
 5. If primary fails:
@@ -51955,7 +52475,7 @@ mode: ""                           # production, development (empty = auto-detec
 1. Load agent.yml
 2. Try server.primary
 3. If fails → try server.cluster nodes
-4. Once connected → GET /api/{api_version}/healthz
+4. Once connected → GET /api/{api_version}/server/healthz
 5. Update server.primary and server.cluster from response
 6. Begin normal operation
 ```
@@ -52123,7 +52643,7 @@ The Agent is essentially the Server's "little sibling" - same professional struc
 |--------|--------|-------|
 | **Listens for connections** | ✅ Yes (`--port`, `--address`) | ❌ No |
 | **Connects to parent server** | ❌ No (IS the server) | ✅ Yes (`--server`, `--token`) |
-| **Setup** | ✅ Web-based (token entered at `/{admin_path}/server/setup`) | ❌ No (registers with server via connection string) |
+| **Setup** | ✅ Web-based (token entered at `/server/{admin_path}/config/setup`) | ❌ No (registers with server via connection string) |
 | **Admin operations** | N/A (IS the server) | ❌ No (Client's job) |
 | **WebUI** | ✅ Yes | ❌ No (headless) |
 | **Database** | ✅ `server.db` | ✅ `agent.db` (if needed) |
@@ -52346,7 +52866,7 @@ PARTS 34-36 ship marked `OPTIONAL - NON-NEGOTIABLE WHEN IMPLEMENTED`. A project 
 | **Purpose** | Manage server, configuration | Use application features |
 | **Storage** | `admins` table | `users` table |
 | **Required** | **YES - all projects** | **NO - optional** |
-| **Access** | `/{admin_path}/*` only | `/users/*` routes |
+| **Access** | `/server/{admin_path}/*` only | `/users/*` routes |
 | **Created by** | Setup wizard, admin invite | Registration, admin invitation |
 
 **See PART 17: ADMIN PANEL for Server Admin authentication, setup wizard, MFA, and admin management.**
@@ -52377,6 +52897,8 @@ users:
 
 **Note:** Registration mode controls how NEW regular-user accounts are created. It does **not** control login for existing users or user profile visibility.
 
+**External identity note:** OIDC/LDAP-backed regular users count as "new regular-user accounts" when the system creates the first local user record for that external identity. Their first-login account creation MUST respect `auto_register` and the username collision rules in PART 34.
+
 **Admin Permission Reminder (see PART 17):**
 - Admin CANNOT set user passwords (only user can, via invite link or reset)
 - Admin CANNOT view user passwords, 2FA secrets, or private data
@@ -52386,7 +52908,7 @@ users:
 
 **Anyone can register. This is the default when multi-user is enabled.**
 
-- `/auth/register` → Registration form
+- `/server/auth/register` → Registration form
 - User submits username, email, password
 - Email verification sent (if `require_email_verification: true`)
 - After verification → account immediately active
@@ -52398,7 +52920,7 @@ users:
 **Only admin-issued invite links/codes can create accounts.**
 
 ```
-Admin Panel (/{admin_path}/server/users)
+Admin Panel (/server/{admin_path}/config/users)
 ┌─────────────────────────────────────────────────────────────────┐
 │  Users                                                          │
 ├─────────────────────────────────────────────────────────────────┤
@@ -52428,7 +52950,7 @@ Admin clicks "Invite New User"
 │                                                                 │
 │  Invite URL (share with new user):                              │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │ https://app.example.com/auth/invite/user/abc123...      │    │
+│  │ https://app.example.com/server/auth/invite/user/abc123...      │    │
 │  └─────────────────────────────────────────────────────────┘    │
 │  [Copy URL]                                                     │
 │                                                                 │
@@ -52452,8 +52974,8 @@ Admin clicks "Invite New User"
 - Only Server Admin can generate invites (users cannot invite other users)
 
 **Invite mode behavior:**
-- `/auth/register` → 404 (no public registration form)
-- `/auth/invite/user/{token}` → Password setup form (if valid token)
+- `/server/auth/register` → 404 (no public registration form)
+- `/server/auth/invite/user/{token}` → Password setup form (if valid token)
 - Only Server Admin can initiate user creation
 - Use for: Internal tools, controlled access, enterprise deployments
 
@@ -52461,8 +52983,8 @@ Admin clicks "Invite New User"
 
 **Only Server Admin can create the account record directly. No invite-only self-service flow exists.**
 
-- `/auth/register` → 404 (no public registration form)
-- Server Admin creates the user at `/{admin_path}/server/users`
+- `/server/auth/register` → 404 (no public registration form)
+- Server Admin creates the user at `/server/{admin_path}/config/users`
 - System generates a one-time activation/password-setup link for that specific user
 - If SMTP is enabled, send the activation link automatically; otherwise show a copyable link for manual delivery
 - Admin still cannot set the user's password
@@ -52473,8 +52995,8 @@ Admin clicks "Invite New User"
 
 **No new regular-user accounts can be created.**
 
-- `/auth/register` → 404 (no public registration form)
-- New `/auth/invite/user/{token}` links are not issued
+- `/server/auth/register` → 404 (no public registration form)
+- New `/server/auth/invite/user/{token}` links are not issued
 - Existing unused invite/activation links must be rejected once mode is set to `disabled`
 - Server Admin cannot create new regular-user accounts through the normal UI/API
 - Existing users can still log in
@@ -52501,7 +53023,7 @@ Admin clicks "Invite New User"
 │     └── Status: FULLY FUNCTIONAL ✓                                       │
 │                                                                          │
 │  3. ADMIN OPTIONALLY CHANGES REGISTRATION MODE                           │
-│     └── /{admin_path}/server/settings → registration mode                       │
+│     └── /server/{admin_path}/config/settings → registration mode                       │
 │     └── Mode: open (default) | invite | admin_only | disabled            │
 │     └── Mode controls how NEW regular-user accounts are created          │
 │                                                                          │
@@ -52509,7 +53031,7 @@ Admin clicks "Invite New User"
 │     ┌────────────────────────────────────────────────────────────────────────┐ │
 │     │ Method                │ open │ invite │ admin_only │ disabled │      │ │
 │     ├────────────────────────────────────────────────────────────────────────┤ │
-│     │ /auth/register        │  ✓   │   ✗    │     ✗      │    ✗     │      │ │
+│     │ /server/auth/register        │  ✓   │   ✗    │     ✗      │    ✗     │      │ │
 │     │ Admin invite→user     │  ✓   │   ✓    │     ✗      │    ✗     │      │ │
 │     │ Admin create→activate │  ✓   │   ✗    │     ✓      │    ✗     │      │ │
 │     └────────────────────────────────────────────────────────────────────────┘ │
@@ -52547,10 +53069,10 @@ Admin clicks "Invite New User"
 
 | Route | Regular User Access |
 |-------|---------------------|
-| `/{admin_path}/*` | NO - 403 Forbidden (unless user has admin role) |
+| `/server/{admin_path}/*` | NO - 403 Forbidden (unless user has admin role) |
 | `/users/*` | Full access to own profile, settings, tokens |
-| `/auth/login` | Login page |
-| `/auth/logout` | Logout |
+| `/server/auth/login` | Login page |
+| `/server/auth/logout` | Logout |
 | Public routes | Authenticated view (may show user-specific content) |
 
 **Regular User Accounts:**
@@ -52695,6 +53217,7 @@ var UsernameBlocklist = []string{
     "firewall", "localhost", "local", "internal", "external", "public",
     "private", "network", "database", "db", "cache", "redis", "mysql",
     "postgres", "mongodb", "elastic", "nginx", "apache", "docker",
+    "healthz", "metrics", "swagger",
 
     // Application & Service Names
     "app", "application", "bot", "robot", "crawler", "spider", "scraper",
@@ -52721,11 +53244,13 @@ var UsernameBlocklist = []string{
     "true", "false", "test", "testing", "debug", "demo", "example",
     "sample", "temp", "temporary", "tmp", "backup", "archive", "log",
     "logs", "audit", "report", "reports", "analytics", "stats", "status",
+    "about", "contact", "privacy", "terms", "docs",
 
     // API & Endpoints
     "api", "rest", "graphql", "grpc", "websocket", "ws", "wss", "http",
     "https", "endpoint", "endpoints", "route", "routes", "path", "url",
     "uri", "callback", "hook", "hooks", "event", "events", "stream",
+    "autodiscover",
 
     // Content & Media
     "blog", "news", "article", "articles", "post", "posts", "page", "pages",
@@ -52773,9 +53298,10 @@ var UsernameBlocklist = []string{
 ```
 
 **Blocklist Notes:**
-- Server admin account is exempt from this blocklist
+- Server admin accounts are exempt from this blocklist, including the initial/primary server admin
 - Blocklist is checked case-insensitively
 - Also blocks usernames that contain blocklisted words as substrings for critical terms (admin, root, system, mod, official, verified)
+- The username blocklist MUST cover all reserved public and operational route names that would collide with top-level or server-owned paths
 - Custom blocklist entries can be added via config
 
 ### Username & Email Rules
@@ -52813,7 +53339,7 @@ func DetectIdentifierType(input string) string {
 
 **API Request:**
 
-`POST /api/{api_version}/auth/login`
+`POST /api/{api_version}/server/auth/login`
 
 Identifier can be: username, user_id, or email.
 
@@ -53143,7 +53669,7 @@ PATCH /api/{api_version}/users/avatar
 
 **Admin Password Reset Flow:**
 ```
-Admin Panel (/{admin_path}/server/moderation/users/{id})
+Admin Panel (/server/{admin_path}/config/moderation/users/{id})
 ┌─────────────────────────────────────────────────────────────┐
 │  User: johndoe                                              │
 │  Email: j***n@e***.com (masked)                             │
@@ -53198,8 +53724,8 @@ User receives: "Password reset requested by administrator.
 **Generic Errors (NEVER reveal existence):**
 | Scenario | Error Message |
 |----------|---------------|
-| Username/email taken | `Unable to complete registration. [Forgot credentials?](/auth/password/forgot)` |
-| Login failed (any reason) | `Invalid credentials. [Forgot password?](/auth/password/forgot)` |
+| Username/email taken | `Unable to complete registration. [Forgot credentials?](/server/auth/password/forgot)` |
+| Login failed (any reason) | `Invalid credentials. [Forgot password?](/server/auth/password/forgot)` |
 | Reset request | `If an account exists, instructions have been sent.` |
 
 **Why Generic Errors?**
@@ -53259,7 +53785,7 @@ User receives: "Password reset requested by administrator.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Admin Panel MFA Setup (`/{admin_path}/account/security`):**
+**Admin Panel MFA Setup (`/server/{admin_path}/account/security`):**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -53284,7 +53810,7 @@ User receives: "Password reset requested by administrator.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**TOTP Setup Flow (`/{admin_path}/account/security/totp/setup`):**
+**TOTP Setup Flow (`/server/{admin_path}/account/security/totp/setup`):**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -53310,7 +53836,7 @@ User receives: "Password reset requested by administrator.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Passkey Setup Flow (`/{admin_path}/account/security/passkey/setup`):**
+**Passkey Setup Flow (`/server/{admin_path}/account/security/passkey/setup`):**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -53356,10 +53882,10 @@ User receives: "Password reset requested by administrator.
 **What CAN be recovered:**
 | User Knows | User Forgot | Recovery Method |
 |------------|-------------|-----------------|
-| Email | Password | `/auth/password/forgot` → email link → set new password |
-| Username | Password | `/auth/password/forgot` → email link → set new password |
-| Email + Password | 2FA code | `/auth/login` → `/auth/recovery/use` → disable/reset 2FA |
-| Username + Password | 2FA code | `/auth/login` → `/auth/recovery/use` → disable/reset 2FA |
+| Email | Password | `/server/auth/password/forgot` → email link → set new password |
+| Username | Password | `/server/auth/password/forgot` → email link → set new password |
+| Email + Password | 2FA code | `/server/auth/login` → `/server/auth/recovery/use` → disable/reset 2FA |
+| Username + Password | 2FA code | `/server/auth/login` → `/server/auth/recovery/use` → disable/reset 2FA |
 
 **What CANNOT be recovered:**
 | Scenario | Result |
@@ -53409,7 +53935,7 @@ See **PART 22: BACKUP & RESTORE → Admin Recovery Command** for full details.
 **Flow:**
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  /auth/login                                                │
+│  /server/auth/login                                                │
 ├─────────────────────────────────────────────────────────────┤
 │  Username/Email: [john@example.com        ]                 │
 │  Password:       [••••••••••••            ]                 │
@@ -53487,11 +54013,11 @@ See **PART 22: BACKUP & RESTORE → Admin Recovery Command** for full details.
 
 **Recovery Key API Flow:**
 ```
-POST /api/{api_version}/auth/login
+POST /api/{api_version}/server/auth/login
   → { "identifier": "john@example.com", "password": "secretpassword" }
   ← { "ok": true, "data": { "requires_2fa": true, "session_token": "temp_xxx" } }
 
-POST /api/{api_version}/auth/recovery/use
+POST /api/{api_version}/server/auth/recovery/use
   → { "session_token": "temp_xxx", "recovery_key": "a1b2c3d4-e5f6" }
   ← { "ok": true, "data": { "token": "auth_xxx", "remaining_keys": 9 } }
 
@@ -53527,7 +54053,7 @@ server:
           client_id: "{client_id}"
           client_secret: "{client_secret}"
           scopes: ["openid", "profile", "email", "groups"]
-          # Auto-create user on first login
+          # Auto-create regular user on first login (ONLY if multi-user is enabled)
           auto_register: true
           # Map OIDC claims to user fields
           claims_mapping:
@@ -53536,41 +54062,210 @@ server:
             name: "name"
             # Claim containing group memberships
             groups: "groups"
+          # Username confirmation behavior for new external accounts
+          username_resolution:
+            mode: prompt_on_first_login   # prompt_on_first_login | prompt_if_conflict | reject_if_conflict
+            allow_custom_on_first_login: true
           # Map external groups to Server Admin role
           # Users in these groups become Server Admins
           admin_groups:
             - "admins"
+            - "administrators"
             - "server-admins"
             - "app-administrators"
+            - "platform-admins"
+            - "infra-admins"
+            - "ops-admins"
           # Map external groups to user roles (if multi-user enabled)
           role_mapping:
-            admin: ["admins", "app-administrators"]
-            moderator: ["moderators", "support-staff"]
-            user: ["users", "members"]
+            admin: ["admins", "administrators", "app-admins", "app-administrators", "platform-admins"]
+            moderator: ["moderators", "support", "support-staff", "helpdesk", "reviewers"]
+            user: ["users", "user", "members", "member", "employees", "staff", "developers", "engineering"]
 
-    ldap:
-      enabled: false
-      server: "ldap://ldap.example.com:389"
-      bind_dn: "cn=readonly,dc=example,dc=com"
-      bind_password: "{ldap_password}"
-      base_dn: "dc=example,dc=com"
-      user_filter: "(uid={username})"
-      # Map LDAP attributes to user fields
-      attributes:
-        username: "uid"
-        email: "mail"
-        name: "cn"
-        groups: "memberOf"
-      # Map LDAP groups to Server Admin role
-      admin_groups:
-        - "cn=admins,ou=groups,dc=example,dc=com"
-        - "cn=server-admins,ou=groups,dc=example,dc=com"
-      # Map LDAP groups to user roles (if multi-user enabled)
-      role_mapping:
-        admin: ["cn=admins,ou=groups,dc=example,dc=com"]
-        moderator: ["cn=moderators,ou=groups,dc=example,dc=com"]
-        user: ["cn=users,ou=groups,dc=example,dc=com"]
+      ldap:
+        enabled: false
+        providers:
+          - name: corp
+            display_name: "Corporate LDAP"
+            server: "ldap://ldap.example.com:389"
+            bind_dn: "cn=readonly,dc=example,dc=com"
+            bind_password: "{ldap_password}"
+            base_dn: "dc=example,dc=com"
+            user_filter: "(uid={username})"
+            # Auto-create regular user on first login (ONLY if multi-user is enabled)
+            auto_register: true
+            # Map LDAP attributes to user fields
+            attributes:
+              username: "uid"
+              email: "mail"
+              name: "cn"
+              groups: "memberOf"
+            username_resolution:
+              mode: prompt_on_first_login   # prompt_on_first_login | prompt_if_conflict | reject_if_conflict
+              allow_custom_on_first_login: true
+            # Map LDAP groups to Server Admin role
+            admin_groups:
+              - "cn=admins,ou=groups,dc=example,dc=com"
+              - "cn=administrators,ou=groups,dc=example,dc=com"
+              - "cn=server-admins,ou=groups,dc=example,dc=com"
+              - "cn=app-administrators,ou=groups,dc=example,dc=com"
+              - "cn=platform-admins,ou=groups,dc=example,dc=com"
+              - "cn=infra-admins,ou=groups,dc=example,dc=com"
+            # Map LDAP groups to user roles (if multi-user enabled)
+            role_mapping:
+              admin:
+                - "cn=admins,ou=groups,dc=example,dc=com"
+                - "cn=administrators,ou=groups,dc=example,dc=com"
+                - "cn=app-admins,ou=groups,dc=example,dc=com"
+                - "cn=app-administrators,ou=groups,dc=example,dc=com"
+              moderator:
+                - "cn=moderators,ou=groups,dc=example,dc=com"
+                - "cn=support,ou=groups,dc=example,dc=com"
+                - "cn=support-staff,ou=groups,dc=example,dc=com"
+                - "cn=helpdesk,ou=groups,dc=example,dc=com"
+              user:
+                - "cn=users,ou=groups,dc=example,dc=com"
+                - "cn=members,ou=groups,dc=example,dc=com"
+                - "cn=employees,ou=groups,dc=example,dc=com"
+                - "cn=staff,ou=groups,dc=example,dc=com"
+                - "cn=developers,ou=groups,dc=example,dc=com"
+                - "cn=engineering,ou=groups,dc=example,dc=com"
 ```
+
+### OIDC Provider Expectations & Common Providers
+
+**OIDC support applies to BOTH regular users and Server Admins.** The difference is role mapping:
+- regular users: created/synced via `auto_register`, `claims_mapping`, and `role_mapping`
+- server admins: granted by `admin_groups`
+
+### External Identity Provider Requirements
+
+- External identity support for Server Admins MUST include BOTH OIDC and LDAP
+- OIDC and LDAP MUST each support multiple named providers
+- All OIDC and LDAP providers MUST be manageable from the Admin WebUI under `/server/{admin_path}/config/security/auth/*`
+- If `server.users.enabled: true`, the same provider definitions MUST also apply the regular-user auth rules (`auto_register`, username resolution, and `role_mapping`)
+- If `server.users.enabled: false`, those same providers remain valid for Server Admin auth only
+- Provider identity is part of the stored source value: `oidc:{provider}` or `ldap:{provider}`
+
+**Why regular-user OIDC/LDAP support matters:** organizations that already run OIDC/LDAP expect the app to plug into their existing identity infrastructure instead of forcing a second local account system. When multi-user mode is enabled, the project MUST support regular-user OIDC/LDAP login so the app fits into the operator's existing SSO/directory environment.
+
+**Common OIDC providers to support cleanly:**
+
+| Provider Type | Typical Username Claim | Typical Email Claim | Typical Groups / Roles Source | Notes |
+|--------------|------------------------|---------------------|-------------------------------|-------|
+| **Google** | `email` or hosted-domain-safe localpart derived from email | `email` | Usually none by default | Consumer Google usually has no groups claim; do NOT invent admin mapping |
+| **GitHub** | `preferred_username` if provided by broker, else `login`-style mapped username | `email` (may be absent/private) | Usually none unless brokered | Direct GitHub OIDC often lacks stable groups; use only through a broker if group-based admin is required |
+| **Keybase / brokered social identity** | Provider-specific; usually broker-mapped to `preferred_username` or another explicit claim | Provider/broker-specific | Usually none unless brokered | Treat as generic OIDC through the broker. Do NOT hardcode claim names without explicit mapping |
+| **Keycloak** | `preferred_username` | `email` | `groups` or realm/client roles | Supports both groups and roles; document exact claim used |
+| **Authentik** | `preferred_username` | `email` | `groups` | Common self-hosted default |
+| **Okta / Auth0 / Azure AD / Zitadel / Dex / generic enterprise broker** | `preferred_username`, `upn`, or email-derived fallback | `email` or `mail` | `groups`, `roles`, or provider-specific claim | Must be explicitly mapped in config |
+
+**OIDC provider rules:**
+- The project MUST NOT assume every provider exposes the same claims
+- `claims_mapping` is REQUIRED whenever the provider does not cleanly expose `preferred_username`, `email`, `name`, and `groups`
+- If group-based admin access is needed, the exact claim carrying group/role membership MUST be documented in config
+- Providers without a trustworthy username claim MUST derive an initial candidate username from email localpart or another documented stable field, then run normal collision checks
+- If a provider does not expose email, the project MUST document whether email is optional, separately collected, or that provider is unsupported
+
+### Starter Group Mapping Presets
+
+**The setup UI SHOULD offer starter presets for OIDC and LDAP group mapping so a typical enterprise/provider setup works with minimal manual editing.**
+
+**Security rule:** these are starter presets, not an excuse to auto-grant broad admin access blindly. Operators MUST still be able to review and trim the mapped groups before saving.
+
+| Mapping Type | Typical OIDC Group Names | Typical LDAP Group DNs / Names |
+|--------------|--------------------------|--------------------------------|
+| **Server Admin** | `admins`, `administrators`, `server-admins`, `app-administrators`, `platform-admins`, `infra-admins`, `ops-admins` | `cn=admins,...`, `cn=administrators,...`, `cn=server-admins,...`, `cn=app-administrators,...`, `cn=platform-admins,...`, `cn=infra-admins,...` |
+| **App Admin Role** | `admins`, `administrators`, `app-admins`, `app-administrators`, `platform-admins` | `cn=admins,...`, `cn=administrators,...`, `cn=app-admins,...`, `cn=app-administrators,...` |
+| **Moderator Role** | `moderators`, `support`, `support-staff`, `helpdesk`, `reviewers` | `cn=moderators,...`, `cn=support,...`, `cn=support-staff,...`, `cn=helpdesk,...`, `cn=reviewers,...` |
+| **User Role** | `users`, `user`, `members`, `member`, `employees`, `staff`, `developers`, `engineering` | `cn=users,...`, `cn=members,...`, `cn=employees,...`, `cn=staff,...`, `cn=developers,...`, `cn=engineering,...` |
+
+**Preset rules:**
+- For OIDC, these names are matched exactly against the configured group/role claim
+- For LDAP, these should be emitted as full DN examples in config, but the setup UI may allow shorthand entry and expand to the configured group base DN
+- Providers that emit roles instead of groups MUST allow the operator to point `claims_mapping.groups` at that roles claim
+- The starter preset is a convenience baseline; custom mappings remain fully supported and canonical
+
+### Common LDAP Mapping Presets
+
+**LDAP MUST support custom mappings, but the template should define the usual defaults clearly.**
+
+| Directory Type | User Filter | Username Attr | Email Attr | Display Name Attr | Groups Attr | Admin Groups Format |
+|----------------|------------|---------------|------------|-------------------|-------------|---------------------|
+| **OpenLDAP** | `(uid={username})` | `uid` | `mail` | `cn` | `memberOf` | Full group DN |
+| **Active Directory** | `(&(objectClass=user)(sAMAccountName={username}))` | `sAMAccountName` | `mail` | `displayName` | `memberOf` | Full group DN |
+| **FreeIPA / 389 DS style** | `(&(objectClass=person)(uid={username}))` | `uid` | `mail` | `cn` | `memberOf` | Full group DN |
+| **Generic POSIX LDAP** | `(uid={username})` | `uid` | `mail` | `cn` | `memberOf` or `isMemberOf` | Full group DN |
+
+**LDAP rules:**
+- The project MUST support overriding every LDAP attribute/filter mapping
+- `admin_groups` MUST use the exact identifier format returned by the configured directory lookup
+- If nested groups are needed (common in AD), the project MUST document whether it resolves nested membership or only direct membership
+- If the LDAP directory does not expose `memberOf`, the project MUST support a documented alternate membership lookup or explicitly state that the provider is unsupported
+
+### OIDC/LDAP Username Resolution for Regular Users
+
+**Regular-user OIDC/LDAP login MUST support a first-login username confirmation step for every new external account, not only conflict cases.**
+
+| Scenario | Required Behavior |
+|----------|-------------------|
+| Provider returns valid unique username claim | Prefill the form with it; user may keep it or edit it before account creation |
+| Username claim missing | Derive a candidate from mapped email/localpart or another documented stable claim, then prefill the form |
+| Candidate starts with `@` | Strip the leading `@` before prefilling |
+| Candidate is an email address | Use the localpart before `@` as the initial prefill |
+| Candidate is reserved | Suggest the same base plus random numeric digits that do not clash, then let the user edit it |
+| Candidate collides with existing user | Suggest the same base plus random numeric digits that do not clash, then let the user edit it |
+| Candidate collides with existing org slug | Suggest the same base plus random numeric digits that do not clash, then let the user edit it |
+| Custom username is invalid/reserved/taken | Show validation error and require another choice or another generated suggestion |
+| `auto_register: false` | Do NOT create account automatically; require pre-created local account linked by `external_id` or explicit admin provisioning |
+
+**First-login rule for regular users:**
+- If external authentication is creating a new local user record, complete external authentication first, store the identity in a short-lived pre-auth session, then send the user to `/server/auth/external/username`
+- The form MUST be prefilled with a normalized candidate derived from the mapped username claim first, then email localpart or another documented stable claim if needed
+- Normalization MUST strip a leading `@`; if the candidate is an email address, use only the localpart before `@`
+- If the normalized candidate is blocked or collides, the server MUST generate an available suggestion by appending random numeric digits, but MUST still show the final suggestion to the user before account creation
+- The username-selection step MUST use the same global namespace validation as local registration (`reserved` + existing user + existing org collision)
+- The chosen username is written once when the local account is created; after that, OIDC/LDAP login matches by `external_id`, not by re-deriving username every time
+- The project MUST NOT silently append random digits or mutate usernames without showing the user the final result first
+
+### OIDC/LDAP Username Resolution for Server Admins
+
+**OIDC/LDAP-backed Server Admins MUST support the same first-login username confirmation step for every new external admin account, not only conflict cases.**
+
+| Scenario | Required Behavior |
+|----------|-------------------|
+| Provider returns valid unique admin username | Prefill the form with it; admin may keep it or edit it before account creation |
+| Username claim missing | Derive a candidate from mapped email/localpart or another documented stable claim, then prefill the form |
+| Candidate starts with `@` | Strip the leading `@` before prefilling |
+| Candidate is an email address | Use the localpart before `@` as the initial prefill |
+| Candidate collides with existing Server Admin username | Suggest the same base plus random numeric digits that do not clash, then let the admin edit it |
+| Candidate collides with reserved admin-route child (for example `config`) | Suggest the same base plus random numeric digits that do not clash, then let the admin edit it |
+| Candidate fails admin username validation | Show validation error and require another choice or another generated suggestion |
+
+**First-login rule for Server Admins:**
+- If external authentication is creating a new local admin record, complete external authentication first, store the identity in a short-lived pre-auth session, then send the admin to `/server/auth/external/username`
+- The form MUST be prefilled with a normalized candidate derived from the mapped username claim first, then email localpart or another documented stable claim if needed
+- Normalization MUST strip a leading `@`; if the candidate is an email address, use only the localpart before `@`
+- If the normalized candidate is blocked or collides, the server MUST generate an available suggestion by appending random numeric digits, but MUST still show the final suggestion to the admin before account creation
+- The username-selection step MUST validate:
+  - no collision with existing admin usernames
+  - no collision with reserved admin-root children such as `config`
+  - the normal syntax/length rules for admin usernames
+- Server Admin usernames remain exempt from the public username blocklist, but they are NOT exempt from route-collision checks
+- The chosen username is written once when the local admin record is created; after that, OIDC/LDAP admin login matches by `external_id`, not by re-deriving username every time
+
+### Local Sync Rules for Regular Users
+
+| Field | Description |
+|-------|-------------|
+| `username` | Final local username (claim-derived or user-chosen on first login) |
+| `password` | Local Argon2id hash. Use a real fallback password hash when local fallback login is supported; otherwise store an unusable random secret so password login stays disabled for that external-only account |
+| `source` | `local`, `oidc:{provider}`, `ldap:{provider}` |
+| `external_id` | Stable provider subject / LDAP unique ID |
+| `groups` | Cached external groups/roles from last successful login |
+| `last_sync` | Last successful OIDC/LDAP sync timestamp |
+
+**Matching rule:** for OIDC/LDAP-backed regular users, the stable identity key is `external_id` + provider source, NOT mutable username/email.
 
 ### Server Admin Group Mapping
 
@@ -53590,16 +54285,32 @@ server:
 5. On next login, group membership is re-evaluated
 6. If user is removed from all `admin_groups` → admin access revoked
 
-**Admin Panel (`/{admin_path}/server/security/auth`):**
+**Admin auth scope rule:**
+- OIDC and LDAP can authenticate regular users and Server Admins through the same `/server/auth/*` surface
+- Server Admin access is NEVER inferred from normal user role mapping alone
+- Server Admin access requires `admin_groups` match (or an explicitly provisioned local admin account)
+
+**Admin Panel (`/server/{admin_path}/config/security/auth`):**
+
+| Route | Purpose |
+|-------|---------|
+| `/server/{admin_path}/config/security/auth` | Authentication overview, shared auth settings, and provider summaries |
+| `/server/{admin_path}/config/security/auth/oidc` | List/manage OIDC providers |
+| `/server/{admin_path}/config/security/auth/oidc/new` | Add OIDC provider |
+| `/server/{admin_path}/config/security/auth/oidc/{provider}` | Edit, test, enable/disable, or remove one OIDC provider |
+| `/server/{admin_path}/config/security/auth/ldap` | List/manage LDAP providers |
+| `/server/{admin_path}/config/security/auth/ldap/new` | Add LDAP provider |
+| `/server/{admin_path}/config/security/auth/ldap/{provider}` | Edit, test, enable/disable, or remove one LDAP provider |
 
 | Element | Type | Description |
 |---------|------|-------------|
-| OIDC Providers | Section | List of configured OIDC providers |
-| LDAP Configuration | Section | LDAP server settings |
-| Admin Groups | Tag input | Groups that grant Server Admin access |
-| Role Mapping | Table | Map external groups to application roles |
-| Test Connection | Button | Test OIDC/LDAP connectivity |
-| Test Group Mapping | Button | Test user's groups and resulting role |
+| OIDC Providers | Section | List of configured OIDC providers with add/edit/remove/test actions |
+| LDAP Providers | Section | List of configured LDAP providers with add/edit/remove/test actions |
+| Applies To | Readonly summary | Server Admin auth always; regular-user auth too when multi-user mode is enabled |
+| Admin Groups | Tag input | Per-provider groups that grant Server Admin access |
+| Role Mapping | Table | Per-provider mapping from external groups to application roles |
+| Test Connection | Button | Test one selected OIDC/LDAP provider |
+| Test Group Mapping | Button | Test one selected provider's groups and resulting role |
 
 **Sane Defaults:**
 - `admin_groups`: Empty (no external groups granted admin by default)
@@ -53734,7 +54445,7 @@ server:
 
 **Open Mode:**
 ```
-1. User visits /auth/register
+1. User visits /server/auth/register
 2. Submits form (username, email, password)
 3. Email verification sent (if enabled)
 4. Account active
@@ -53742,7 +54453,7 @@ server:
 
 **Invite Mode:**
 ```
-1. Admin creates invite at /{admin_path}/server/users (sets username)
+1. Admin creates invite at /server/{admin_path}/config/users (sets username)
 2. Admin shares invite URL with new user
 3. User clicks link → sets own password (admin cannot set)
 4. Account active
@@ -53750,7 +54461,7 @@ server:
 
 **Admin-Only Mode:**
 ```
-1. Admin creates the user record at /{admin_path}/server/users
+1. Admin creates the user record at /server/{admin_path}/config/users
 2. System generates a one-time activation/password-setup link
 3. Link is emailed automatically (if SMTP enabled) or copied manually
 4. User clicks link → sets own password (admin cannot set)
@@ -54161,7 +54872,7 @@ PATCH /api/{api_version}/users/settings
 
 ## Admin Panel
 
-### /{admin_path}/server/moderation/users (User Moderation)
+### /server/{admin_path}/config/moderation/users (User Moderation)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -54171,7 +54882,7 @@ PATCH /api/{api_version}/users/settings
 | Disable/Enable | Toggle | Temporarily disable account |
 | Revoke sessions | Button | Log user out everywhere |
 
-### /{admin_path}/server/moderation/users/{id} (User Detail)
+### /server/{admin_path}/config/moderation/users/{id} (User Detail)
 
 | Section | Contents |
 |---------|----------|
@@ -54180,7 +54891,7 @@ PATCH /api/{api_version}/users/settings
 | Activity | Login history, API usage |
 | Actions | Disable, delete, impersonate |
 
-### /{admin_path}/server/roles (Role Management)
+### /server/{admin_path}/config/roles (Role Management)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -54189,7 +54900,7 @@ PATCH /api/{api_version}/users/settings
 | Edit permissions | Checkboxes | Set role permissions |
 | Delete role | Button | Remove role (reassign users first) |
 
-### /{admin_path}/server/users/invites (User Invitation Codes)
+### /server/{admin_path}/config/users/invites (User Invitation Codes)
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -54206,13 +54917,13 @@ PATCH /api/{api_version}/users/settings
 
 | Rule | Description |
 |------|-------------|
-| **Scoped** | Routes grouped by scope: `/auth`, `/user`, `/org`, `/admin` |
+| **Scoped** | Routes grouped by scope: `/server`, `/server/auth`, `/users`, `/orgs`, `/server/{admin_path}` |
 | **Mirrored** | Web (`/`) and API (`/api/{api_version}/`) use same structure |
 | **Intuitive** | Simple, predictable paths |
 | **Params over queries** | Use path params, limit query params to defined cases |
 | **Duplicated when needed** | Same resource may exist in multiple scopes |
-| **Auth under /auth/** | NEVER `/login`, `/register`, `/password/*` at root - ALWAYS `/auth/login`, `/auth/register`, `/auth/password/*`, etc. |
-| **Admin scoped** | `/{admin_path}/**` requires authenticated admin - unauthenticated flows (invites) go through `/auth/` |
+| **Auth under /server/auth/** | NEVER `/login`, `/register`, `/password/*` at root - ALWAYS `/server/auth/login`, `/server/auth/register`, `/server/auth/password/*`, etc. |
+| **Admin scoped** | `/server/{admin_path}/**` requires authenticated admin - unauthenticated flows (invites) go through `/server/auth/` |
 
 **Note:** `{api_version}` defaults to `v1` but is configurable via `server.api_version` in server.yml. Do not hardcode `v1` in code.
 
@@ -54230,11 +54941,11 @@ PATCH /api/{api_version}/users/settings
 |-------|-----|-----|-------------|
 | Public | `/**` | `/api/{api_version}/**` | Public resources, unauthenticated (project-specific) |
 | Server Pages | `/server/` | `/api/{api_version}/server/` | Public pages (about, help, contact, privacy, etc.) |
-| Auth | `/auth/` | `/api/{api_version}/auth/` | Authentication flows |
+| Auth | `/server/auth/` | `/api/{api_version}/server/auth/` | Authentication flows |
 | Users | `/users/` | `/api/{api_version}/users/` | User resources |
 | Orgs | `/orgs/` | `/api/{api_version}/orgs/` | Organization resources |
-| Server Admin | `/{admin_path}/` | `/api/{api_version}/{admin_path}/` | Admin panel |
-| Server Settings | `/{admin_path}/server/` | `/api/{api_version}/{admin_path}/server/` | Server configuration within admin |
+| Server Admin | `/server/{admin_path}/` | `/api/{api_version}/server/{admin_path}/` | Admin panel |
+| Server Settings | `/server/{admin_path}/config/` | `/api/{api_version}/server/{admin_path}/config/` | Server configuration within admin |
 
 ### Default Auth by Scope (Canonical Rule)
 
@@ -54247,11 +54958,11 @@ PATCH /api/{api_version}/users/settings
 | `None` | nothing | n/a | — public route |
 | `Session` | session cookie (browser) | `sessions` table; signed with `cookie_signing_key` (PART 11 → "Cryptographic Keys") | login flow |
 | `Bearer` | `Authorization: Bearer adm_…` / `usr_…` / `org_…` (or agent variants) | `tokens` table; SHA-256 hash compared (PART 11 → "API Token Security") | token creation flow |
-| `Reset token` | one-shot URL param (`/auth/password/reset?token=…`) | hashed in `password_resets` table; single-use; expires per `auth.password_reset_ttl` (default 1h) | `/auth/password/forgot` flow (sent via email) |
-| `Verify token` | one-shot URL param (`/auth/verify/{token}`) | hashed in `email_verifications` table; single-use; expires per `auth.email_verify_ttl` (default 48h) | sent via email on registration / email change |
-| `Invite token` | one-shot URL param (`/auth/invite/{user|server}/{token}`) | hashed in `invites` table; single-use; expires per `invites.ttl` (default 7d) | admin issues from `/{admin_path}/server/admins` (server invite) or user from `/users/orgs/{slug}/invites` (org invite) |
+| `Reset token` | one-shot URL param (`/server/auth/password/reset?token=…`) | hashed in `password_resets` table; single-use; expires per `auth.password_reset_ttl` (default 1h) | `/server/auth/password/forgot` flow (sent via email) |
+| `Verify token` | one-shot URL param (`/server/auth/verify/{token}`) | hashed in `email_verifications` table; single-use; expires per `auth.email_verify_ttl` (default 48h) | sent via email on registration / email change |
+| `Invite token` | one-shot URL param (`/server/auth/invite/{user|server}/{token}`) | hashed in `invites` table; single-use; expires per `invites.ttl` (default 7d) | admin issues from `/server/{admin_path}/config/admins` (server invite) or user from `/users/orgs/{slug}/invites` (org invite) |
 | `Tracking token` | one-shot URL param (`/server/security/report/{tracking_id}?token=…`) | per-tracking-id token; single-use-per-day (researcher can refresh by re-clicking the email link); expires 30 days after report closes | sent via email when researcher submits a security report (PART 11 → "Security Reports") |
-| `Partial-session` | short-lived cookie issued mid-flow (post-password-correct, pre-2FA) | `partial_sessions` table; consumed when 2FA / recovery completes; expires per `auth.partial_session_ttl` (default 5m) | `/auth/login` flow when 2FA is required |
+| `Partial-session` | short-lived cookie issued mid-flow (post-password-correct, pre-2FA) | `partial_sessions` table; consumed when 2FA / recovery completes; expires per `auth.partial_session_ttl` (default 5m) | `/server/auth/login` flow when 2FA is required |
 
 **All one-shot tokens (`Reset`, `Verify`, `Invite`, `Tracking`, `Partial-session`) share the same construction:**
 - Generated from `crypto/rand` (32 bytes → URL-safe base64).
@@ -54264,12 +54975,12 @@ PATCH /api/{api_version}/users/settings
 |-------|-----------|----------|-----------|----------|
 | Public | `/` (project root, project-specific public) | None | `/api/{api_version}/` | None |
 | Server Pages | `/server/*` (about, help, contact, privacy, dpo, terms, docs/swagger, docs/graphql) | None | `/api/{api_version}/server/*` | None |
-| Auth | `/auth/*` (login, register, password/*, verify, invite, etc.) | None (most) | `/api/{api_version}/auth/*` | None (most) |
+| Auth | `/server/auth/*` (login, register, password/*, verify, invite, etc.) | None (most) | `/api/{api_version}/server/auth/*` | None (most) |
 | Users (current) | `/users/*` | Session | `/api/{api_version}/users/*` | Bearer `usr_` token |
 | Users (public profile) | `/users/{user_name}`, `/orgs/{slug}` and `/users/{user_name}/repos`, `/users/{user_name}/followers`, `/users/{user_name}/following` | None* | `/api/{api_version}/users/{user_name}`, `/api/{api_version}/users/{user_name}/repos`, etc. | None* |
 | Orgs (member) | `/orgs/{slug}/*` (non-public) | Session | `/api/{api_version}/orgs/{slug}/*` (non-public) | Bearer `usr_` (member) or `org_` token |
-| Server Admin | `/{admin_path}/*` | Session (admin) | `/api/{api_version}/{admin_path}/*` | Bearer `adm_` token |
-| Server Settings | `/{admin_path}/server/*` | Session (admin) | `/api/{api_version}/{admin_path}/server/*` | Bearer `adm_` token |
+| Server Admin | `/server/{admin_path}/*` | Session (admin) | `/api/{api_version}/server/{admin_path}/*` | Bearer `adm_` token |
+| Server Settings | `/server/{admin_path}/config/*` | Session (admin) | `/api/{api_version}/server/{admin_path}/config/*` | Bearer `adm_` token |
 
 **\* "None\*"** means publicly accessible but with response-field filtering: only fields the resource has marked public are returned. See PART 34 (Multi-User) and PART 35 (Organizations) for the filter rules.
 
@@ -54277,14 +54988,15 @@ PATCH /api/{api_version}/users/settings
 
 | Route | Method | Auth | Notes |
 |-------|--------|------|-------|
-| `/healthz` | GET | None | Frontend health (PART 13) |
+| `/server/healthz` | GET | None | Frontend health (PART 13) |
+| `/healthz` | GET | None | Only when `server.healthz.root.enabled: true`; same handler as `/server/healthz`, never a redirect |
 | `/metrics` | GET | Optional | Prometheus (may be IP-restricted in config) |
-| `/sitemap.xml`, `/robots.txt`, `/favicon.ico`, `/manifest.json`, `/.well-known/*` | GET | None | Conventional web files |
+| `/sitemap.xml`, `/robots.txt`, `/favicon.ico`, `/manifest.json`, `/.well-known/*` | GET | None | Conventional web files; `/.well-known/*` is limited to documented allowlisted entries only |
 | `/server/docs/swagger`, `/server/docs/graphql` | GET | None | Public API docs (HTML) |
-| `/api/swagger`, `/api/{api_version}/swagger` | GET | None | Public OpenAPI JSON spec |
-| `/api/graphql`, `/api/{api_version}/graphql` | POST | None for introspection; per-operation otherwise | GraphQL — see PART 14 GraphQL section for resolver-level auth |
+| `/api/swagger`, `/api/{api_version}/server/swagger` | GET | None | Public OpenAPI JSON spec |
+| `/api/graphql`, `/api/{api_version}/server/graphql` | POST | None for introspection; per-operation otherwise | GraphQL — see PART 14 GraphQL section for resolver-level auth |
 | `/api/autodiscover` | GET | None | Public client/agent auto-config |
-| `/api/{api_version}/healthz` | GET | None | Public JSON health |
+| `/api/{api_version}/server/healthz` | GET | None | Public JSON health |
 | `/api/{api_version}/server/reports/*` | POST | None | Public reports sink (CSP, NEL, deprecation, intervention, crash, error, default). See PART 14 → "Public Reports Scope". Browsers cannot present credentials when emitting these reports. Rate-limited per-IP. |
 | `/server/security/policy` | GET | None | Disclosure policy page (HTML). See PART 11 → "Security Reports". |
 | `/server/security/thanks` | GET | None | Acknowledgments / hall-of-fame (HTML). See PART 11. |
@@ -54292,15 +55004,15 @@ PATCH /api/{api_version}/users/settings
 | `/.well-known/pgp-key.asc` | GET | None | Project PGP public key for security reports. 404 until admin generates a keypair. |
 | `/server/contact?security_id=...` | GET / POST | None — but the `security_id` query param switches the form to security-report mode (no other auth) | See PART 11 → "Security Reports". Without/invalid `security_id`, behaves as the standard contact form. |
 
-**Auth-flow exceptions (within `/auth/*` and `/api/{api_version}/auth/*`):**
+**Auth-flow exceptions (within `/server/auth/*` and `/api/{api_version}/server/auth/*`):**
 
 | Route | Auth | Why |
 |-------|------|-----|
-| `/auth/login`, `/auth/register`, `/auth/password/forgot`, `/auth/password/reset`, `/auth/username/forgot`, `/auth/verify/{token}`, `/auth/invite/*/{token}`, `/auth/passkey/challenge`, `/auth/passkey/verify` | None | Pre-session entry points |
-| `/auth/logout` | Session (web) / Bearer (API) | Must know whose session to end |
-| `/auth/refresh` | Session (web) / Bearer (API) | Must have a session/token to refresh |
-| `/auth/2fa` | Partial-session (post-password, pre-2FA) | Continuation of in-progress login |
-| `/auth/recovery/use` | Partial-session OR password-recovery token | 2FA bypass during account recovery |
+| `/server/auth/login`, `/server/auth/register`, `/server/auth/password/forgot`, `/server/auth/password/reset`, `/server/auth/username/forgot`, `/server/auth/verify/{token}`, `/server/auth/invite/*/{token}`, `/server/auth/passkey/challenge`, `/server/auth/passkey/verify` | None | Pre-session entry points |
+| `/server/auth/logout` | Session (web) / Bearer (API) | Must know whose session to end |
+| `/server/auth/refresh` | Session (web) / Bearer (API) | Must have a session/token to refresh |
+| `/server/auth/2fa` | Partial-session (post-password, pre-2FA) | Continuation of in-progress login |
+| `/server/auth/recovery/use` | Partial-session OR password-recovery token | 2FA bypass during account recovery |
 
 **Project-specific public routes** (e.g., `/jokes/random`, `/quotes`, `/ip`, `/weather`) inherit `Public → None` unless the project's IDEA.md declares a write/admin endpoint.
 
@@ -54541,7 +55253,7 @@ curl -q -LSsf https://api.example.com/api/autodiscover
 
 | Cookie | Scope | Max Age | Notes |
 |--------|-------|---------|-------|
-| `admin_session` | `/{admin_path}/` | 30 days | Admin web sessions |
+| `admin_session` | `/server/{admin_path}/` | 30 days | Admin web sessions |
 | `user_session` | `/users/`, `/orgs/` | 7 days | User web sessions |
 
 ## Web Routes
@@ -54551,7 +55263,7 @@ curl -q -LSsf https://api.example.com/api/autodiscover
 | Path | Description |
 |------|-------------|
 | `/` | Home page |
-| `/healthz` | Health check |
+| `/server/healthz` | Health check |
 | `/server/docs/swagger` | Swagger UI |
 | `/server/docs/graphql` | GraphiQL interface |
 
@@ -54564,25 +55276,27 @@ curl -q -LSsf https://api.example.com/api/autodiscover
 | `/server/contact` | Contact form |
 | `/server/help` | Help / documentation |
 
-### Auth (`/auth/`)
+### Auth (`/server/auth/`)
 
 | Path | Description |
 |------|-------------|
-| `/auth/login` | Login form (username/email + password) |
-| `/auth/logout` | Logout |
-| `/auth/register` | Registration form |
-| `/auth/2fa` | 2FA verification step (after password, before session) |
-| `/auth/passkey` | Passkey authentication (WebAuthn) |
-| `/auth/password/forgot` | Request password reset (sends email) |
-| `/auth/password/reset/{token}` | Set new password (from email link) |
-| `/auth/username/forgot` | Request username reminder (sends email) |
-| `/auth/recovery/use` | Use recovery key (2FA bypass) |
-| `/auth/verify/{token}` | Email verification |
-| `/auth/invite/user/{token}` | User invite acceptance (set username, password) |
-| `/auth/invite/server/{token}` | Server admin invite acceptance (set username, password) |
-| `/auth/oidc/{provider}` | OIDC login initiation (redirect to provider) |
-| `/auth/oidc/{provider}/callback` | OIDC callback (provider redirects back) |
-| `/auth/ldap` | LDAP login form (if separate from main login) |
+| `/server/auth/login` | Login form (username/email + password) |
+| `/server/auth/logout` | Logout |
+| `/server/auth/register` | Registration form |
+| `/server/auth/2fa` | 2FA verification step (after password, before session) |
+| `/server/auth/passkey` | Passkey authentication (WebAuthn) |
+| `/server/auth/password/forgot` | Request password reset (sends email) |
+| `/server/auth/password/reset/{token}` | Set new password (from email link) |
+| `/server/auth/username/forgot` | Request username reminder (sends email) |
+| `/server/auth/recovery/use` | Use recovery key (2FA bypass) |
+| `/server/auth/verify/{token}` | Email verification |
+| `/server/auth/invite/user/{token}` | User invite acceptance (set username, password) |
+| `/server/auth/invite/server/{token}` | Server admin invite acceptance (set username, password) |
+| `/server/auth/oidc/{provider}` | OIDC login initiation (redirect to provider) |
+| `/server/auth/oidc/{provider}/callback` | OIDC callback (provider redirects back) |
+| `/server/auth/ldap` | LDAP provider chooser |
+| `/server/auth/ldap/{provider}` | LDAP login form for the selected provider |
+| `/server/auth/external/username` | First-login username confirmation page after successful OIDC/LDAP auth when a new user/admin record is being created |
 
 ### Users (`/users/`)
 
@@ -54620,50 +55334,72 @@ Organizations - only for projects with multi-user collaboration.
 | `/orgs/{slug}/security/sessions` | Active sessions (org-wide) |
 | `/orgs/{slug}/billing` | Billing & subscription (if applicable) |
 
-### Admin (`/{admin_path}/`)
+### Admin (`/server/{admin_path}/`)
 
 | Path | Description |
 |------|-------------|
-| `/{admin_path}` | Dashboard |
-| `/{admin_path}/profile` | Your admin account (password, API token, 2FA) |
-| `/{admin_path}/profile/preferences` | Admin preferences (theme, notifications) |
+| `/server/{admin_path}` | Dashboard |
+| `/server/{admin_path}/{admin_username}/profile` | Your admin account (password, API token, 2FA) |
+| `/server/{admin_path}/{admin_username}/preferences` | Admin preferences (theme, notifications) |
 
-### Admin - Server (`/{admin_path}/server/`)
-
-| Path | Description |
-|------|-------------|
-| `/{admin_path}/server/setup` | Initial setup wizard |
-| `/{admin_path}/server/settings` | Server settings |
-| `/{admin_path}/server/branding` | Branding & SEO |
-| `/{admin_path}/server/ssl` | SSL/TLS settings |
-| `/{admin_path}/server/tor` | Tor hidden service |
-| `/{admin_path}/server/web` | Web settings (robots.txt, security.txt) |
-| `/{admin_path}/server/pages` | Standard pages (about, privacy, contact) |
-| `/{admin_path}/server/email` | Email/SMTP settings |
-| `/{admin_path}/server/email/templates` | Email templates |
-| `/{admin_path}/server/notifications` | Notification settings |
-| `/{admin_path}/server/scheduler` | Scheduled tasks |
-| `/{admin_path}/server/backup` | Backup & restore |
-| `/{admin_path}/server/logs` | Log viewer |
-| `/{admin_path}/server/roles` | Role definitions |
-| `/{admin_path}/server/users/invites` | User registration invite codes (multi-user apps) |
-
-### Admin - Server Admins (`/{admin_path}/server/admins/`)
+### Admin - Server (`/server/{admin_path}/config/`)
 
 | Path | Description |
 |------|-------------|
-| `/{admin_path}/server/admins` | Server admin accounts |
-| `/{admin_path}/server/admins/invite` | Invite new Server Admin (generates link) |
-| `/{admin_path}/server/admins/{id}` | Admin detail |
+| `/server/{admin_path}/config/setup` | Initial setup wizard |
+| `/server/{admin_path}/config/settings` | Server settings |
+| `/server/{admin_path}/config/branding` | Branding & SEO |
+| `/server/{admin_path}/config/ssl` | SSL/TLS settings |
+| `/server/{admin_path}/config/tor` | Tor hidden service |
+| `/server/{admin_path}/config/web` | Web settings (robots.txt, security.txt, well-known) |
+| `/server/{admin_path}/config/pages` | Standard pages (about, privacy, contact) |
+| `/server/{admin_path}/config/email` | Email/SMTP settings |
+| `/server/{admin_path}/config/email/templates` | Email templates |
+| `/server/{admin_path}/config/notifications` | Notification settings |
+| `/server/{admin_path}/config/scheduler` | Scheduled tasks |
+| `/server/{admin_path}/config/backup` | Backup & restore |
+| `/server/{admin_path}/config/logs` | Log viewer |
+| `/server/{admin_path}/config/roles` | Role definitions |
+| `/server/{admin_path}/config/security/auth` | Auth settings and external provider overview |
+| `/server/{admin_path}/config/users/invites` | User registration invite codes (multi-user apps) |
 
-### Admin - Moderation (`/{admin_path}/server/moderation/`)
+### Admin - Auth Providers (`/server/{admin_path}/config/security/auth/`)
 
 | Path | Description |
 |------|-------------|
-| `/{admin_path}/server/moderation/users` | User moderation |
-| `/{admin_path}/server/moderation/users/{id}` | User detail |
-| `/{admin_path}/server/moderation/orgs` | Org moderation |
-| `/{admin_path}/server/moderation/orgs/{slug}` | Org detail |
+| `/server/{admin_path}/config/security/auth` | Authentication overview, password/MFA/session settings, and external-auth summaries |
+| `/server/{admin_path}/config/security/auth/oidc` | OIDC provider list |
+| `/server/{admin_path}/config/security/auth/oidc/new` | Add OIDC provider |
+| `/server/{admin_path}/config/security/auth/oidc/{provider}` | OIDC provider detail/edit/test/remove |
+| `/server/{admin_path}/config/security/auth/ldap` | LDAP provider list |
+| `/server/{admin_path}/config/security/auth/ldap/new` | Add LDAP provider |
+| `/server/{admin_path}/config/security/auth/ldap/{provider}` | LDAP provider detail/edit/test/remove |
+
+### Admin - Web (`/server/{admin_path}/config/web/`)
+
+| Path | Description |
+|------|-------------|
+| `/server/{admin_path}/config/web` | Web settings overview |
+| `/server/{admin_path}/config/web/robots` | robots.txt settings |
+| `/server/{admin_path}/config/web/security` | security.txt settings |
+| `/server/{admin_path}/config/web/well-known` | Well-known namespace settings, optional entry toggles, and previews |
+
+### Admin - Server Admins (`/server/{admin_path}/config/admins/`)
+
+| Path | Description |
+|------|-------------|
+| `/server/{admin_path}/config/admins` | Server admin accounts |
+| `/server/{admin_path}/config/admins/invite` | Invite new Server Admin (generates link) |
+| `/server/{admin_path}/config/admins/{id}` | Admin detail |
+
+### Admin - Moderation (`/server/{admin_path}/config/moderation/`)
+
+| Path | Description |
+|------|-------------|
+| `/server/{admin_path}/config/moderation/users` | User moderation |
+| `/server/{admin_path}/config/moderation/users/{id}` | User detail |
+| `/server/{admin_path}/config/moderation/orgs` | Org moderation |
+| `/server/{admin_path}/config/moderation/orgs/{slug}` | Org detail |
 
 ## API Routes
 
@@ -54671,13 +55407,14 @@ Organizations - only for projects with multi-user collaboration.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/healthz` | GET | Health check |
-| `/api/{api_version}/swagger` | GET | OpenAPI JSON spec (versioned) |
-| `/api/{api_version}/graphql` | POST | GraphQL queries (versioned) |
-| `/api/swagger` | GET | OpenAPI JSON spec — alias for current `{api_version}` |
-| `/api/graphql` | POST | GraphQL queries — alias for current `{api_version}` |
+| `/api/{api_version}/server/healthz` | GET | Health check |
+| `/api/{api_version}/server/swagger` | GET | OpenAPI JSON spec (versioned) |
+| `/api/{api_version}/server/graphql` | POST | GraphQL queries (versioned) |
+| `/api/healthz` | GET | Health check — direct alias for current `{api_version}` |
+| `/api/swagger` | GET | OpenAPI JSON spec — direct alias for current `{api_version}` |
+| `/api/graphql` | POST | GraphQL queries — direct alias for current `{api_version}` |
 
-**Note:** Swagger and GraphQL endpoints follow the same `/api/{api_version}/...` versioning rule as the rest of the API. The unversioned `/api/swagger` and `/api/graphql` are aliases that resolve to the current `{api_version}`. The interactive UIs live under `/server/docs/swagger` and `/server/docs/graphql` (see PART 16).
+**Note:** Swagger, GraphQL, and health endpoints follow the same `/api/{api_version}/...` versioning rule as the rest of the API. The unversioned `/api/swagger`, `/api/graphql`, and `/api/healthz` paths are direct aliases that resolve to the current `{api_version}` without redirects. The interactive UIs live under `/server/docs/swagger` and `/server/docs/graphql` (see PART 16).
 
 ### Server (`/api/{api_version}/server/`)
 
@@ -54716,7 +55453,7 @@ Organizations - only for projects with multi-user collaboration.
 | Logging | Each report writes one entry to `security.log` (CSP/NEL/error) or `server.log` (deprecation/intervention/crash) — see PART 11 log events |
 | Rate limit | Per-IP, configurable via `web.csp.reports_sample_rate` (CSP) and `web.reports.rate_limit_per_minute` (other types). Default 60/min/IP. |
 | Storage | Append to log only. Reports do NOT touch the application database — they are operational telemetry, not user data. |
-| Operator visibility | Admin panel `/{admin_path}/server/reports/*` views show recent entries with filtering by type, time range, and source IP/origin. Admin views are bearer-auth (the public POST endpoints are not). |
+| Operator visibility | Admin panel `/server/{admin_path}/config/reports/*` views show recent entries with filtering by type, time range, and source IP/origin. Admin views are bearer-auth (the public POST endpoints are not). |
 
 **Authoring rule for new public reports:** if the project (or a third-party browser feature) needs to add a new public POST sink for telemetry, ALWAYS add it as `/api/{api_version}/server/reports/{new_name}` — never invent a new top-level path. This keeps the API tree predictable and the rate-limit / auth / logging policy uniform.
 
@@ -54743,34 +55480,36 @@ Organizations - only for projects with multi-user collaboration.
 | No echo, ever | Response body is always `{"ok": true}` (or 204 No Content). NEVER reflect any field from the request body in the response. |
 | No user identifier correlation | Reports are NOT joined with any logged-in user — even if the browser was authenticated when emitting the report. They are anonymous operational telemetry. |
 | No DB writes | Reports go to log files only (`security.log` for csp/nel/error, `server.log` for the rest). They do not touch the application database. |
-| Admin views run the same sanitization | The `/{admin_path}/server/reports/*` admin views display the *already-sanitized* log entries. There is no "raw" view, even for admins. |
+| Admin views run the same sanitization | The `/server/{admin_path}/config/reports/*` admin views display the *already-sanitized* log entries. There is no "raw" view, even for admins. |
 | Sample to prevent flood | High-volume types (csp from a misbehaving extension, nel from a flaky network) are dropped above the rate limit, NEVER buffered to disk first. |
 
 **Why the no-echo / no-correlation / no-DB rules:** a malicious extension or page in another tab could trigger reports on our domain. Treating reports as "trusted because they come from our origin" is wrong — the browser is the trust boundary, and the browser's contents are attacker-controlled. By keeping reports anonymous, append-only, log-only, and never echoed, a poisoned report cannot corrupt application state, leak another user's data, or escalate.
 
-### Auth (`/api/{api_version}/auth/`)
+### Auth (`/api/{api_version}/server/auth/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/auth/register` | POST | Register new user |
-| `/api/{api_version}/auth/login` | POST | User login (returns session or 2FA challenge) |
-| `/api/{api_version}/auth/logout` | POST | User logout |
-| `/api/{api_version}/auth/2fa` | POST | Complete 2FA verification |
-| `/api/{api_version}/auth/passkey/challenge` | POST | Get WebAuthn challenge |
-| `/api/{api_version}/auth/passkey/verify` | POST | Verify WebAuthn response |
-| `/api/{api_version}/auth/password/forgot` | POST | Request password reset (sends email) |
-| `/api/{api_version}/auth/password/reset` | POST | Set new password (with token from email) |
-| `/api/{api_version}/auth/username/forgot` | POST | Request username reminder (sends email) |
-| `/api/{api_version}/auth/recovery/use` | POST | Use recovery key (2FA bypass) |
-| `/api/{api_version}/auth/verify` | POST | Verify email address |
-| `/api/{api_version}/auth/refresh` | POST | Refresh session/token |
-| `/api/{api_version}/auth/invite/user/{token}` | GET | Validate user invite token |
-| `/api/{api_version}/auth/invite/user/{token}` | POST | Complete user invite (set username, password) |
-| `/api/{api_version}/auth/invite/server/{token}` | GET | Validate Server Admin invite token |
-| `/api/{api_version}/auth/invite/server/{token}` | POST | Complete admin invite (set username, password) |
-| `/api/{api_version}/auth/oidc/{provider}` | GET | Get OIDC authorization URL |
-| `/api/{api_version}/auth/oidc/{provider}/callback` | POST | Exchange OIDC code for session |
-| `/api/{api_version}/auth/ldap` | POST | LDAP authentication |
+| `/api/{api_version}/server/auth/register` | POST | Register new user |
+| `/api/{api_version}/server/auth/login` | POST | User login (returns session or 2FA challenge) |
+| `/api/{api_version}/server/auth/logout` | POST | User logout |
+| `/api/{api_version}/server/auth/2fa` | POST | Complete 2FA verification |
+| `/api/{api_version}/server/auth/passkey/challenge` | POST | Get WebAuthn challenge |
+| `/api/{api_version}/server/auth/passkey/verify` | POST | Verify WebAuthn response |
+| `/api/{api_version}/server/auth/password/forgot` | POST | Request password reset (sends email) |
+| `/api/{api_version}/server/auth/password/reset` | POST | Set new password (with token from email) |
+| `/api/{api_version}/server/auth/username/forgot` | POST | Request username reminder (sends email) |
+| `/api/{api_version}/server/auth/recovery/use` | POST | Use recovery key (2FA bypass) |
+| `/api/{api_version}/server/auth/verify` | POST | Verify email address |
+| `/api/{api_version}/server/auth/refresh` | POST | Refresh session/token |
+| `/api/{api_version}/server/auth/invite/user/{token}` | GET | Validate user invite token |
+| `/api/{api_version}/server/auth/invite/user/{token}` | POST | Complete user invite (set username, password) |
+| `/api/{api_version}/server/auth/invite/server/{token}` | GET | Validate Server Admin invite token |
+| `/api/{api_version}/server/auth/invite/server/{token}` | POST | Complete admin invite (set username, password) |
+| `/api/{api_version}/server/auth/oidc/{provider}` | GET | Get OIDC authorization URL for user/admin login |
+| `/api/{api_version}/server/auth/oidc/{provider}/callback` | POST | Exchange OIDC code for session, then apply user/admin mapping rules |
+| `/api/{api_version}/server/auth/ldap` | GET | List enabled LDAP providers and their display names for login UI/client selection |
+| `/api/{api_version}/server/auth/ldap/{provider}` | POST | LDAP authentication for the selected provider, then apply user/admin mapping rules |
+| `/api/{api_version}/server/auth/external/username` | POST | Complete external user/admin account creation after the first-login username confirmation step |
 
 ### Users (`/api/{api_version}/users/`)
 
@@ -54836,188 +55575,193 @@ Organizations - only for projects with multi-user collaboration.
 | `/api/{api_version}/orgs/{slug}/security/audit/retention` | PATCH | Update retention (org owner only) |
 | `/api/{api_version}/orgs/{slug}/security/sessions` | GET | List org-wide sessions |
 
-### Admin - Server (`/api/{api_version}/{admin_path}/server/`)
+### Admin - Server (`/api/{api_version}/server/{admin_path}/config/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/setup` | GET | Get setup status (is_complete, current_step) |
-| `/api/{api_version}/{admin_path}/server/setup/verify` | POST | Verify setup token |
-| `/api/{api_version}/{admin_path}/server/setup/account` | POST | Create admin account (Step 1) |
-| `/api/{api_version}/{admin_path}/server/setup/token` | POST | Generate API token (Step 2) |
-| `/api/{api_version}/{admin_path}/server/setup/config` | POST | Save server config (Step 3) |
-| `/api/{api_version}/{admin_path}/server/setup/security` | POST | Security settings - backup password, 2FA (Step 4) |
-| `/api/{api_version}/{admin_path}/server/setup/services` | POST | Configure services (Step 5) |
-| `/api/{api_version}/{admin_path}/server/setup/complete` | POST | Complete setup wizard (Step 6) |
-| `/api/{api_version}/{admin_path}/server/settings` | GET | Get server settings |
-| `/api/{api_version}/{admin_path}/server/settings` | PATCH | Update server settings |
-| `/api/{api_version}/{admin_path}/server/status` | GET | Server status (detailed, admin-only) |
-| `/api/{api_version}/{admin_path}/server/stats` | GET | Statistics |
-| `/api/{api_version}/{admin_path}/server/restart` | POST | Restart server |
+| `/api/{api_version}/server/{admin_path}/config/setup` | GET | Get setup status (is_complete, current_step) |
+| `/api/{api_version}/server/{admin_path}/config/setup/verify` | POST | Verify setup token |
+| `/api/{api_version}/server/{admin_path}/config/setup/account` | POST | Create admin account (Step 1) |
+| `/api/{api_version}/server/{admin_path}/config/setup/token` | POST | Generate API token (Step 2) |
+| `/api/{api_version}/server/{admin_path}/config/setup/config` | POST | Save server config (Step 3) |
+| `/api/{api_version}/server/{admin_path}/config/setup/security` | POST | Security settings - backup password, 2FA (Step 4) |
+| `/api/{api_version}/server/{admin_path}/config/setup/services` | POST | Configure services (Step 5) |
+| `/api/{api_version}/server/{admin_path}/config/setup/complete` | POST | Complete setup wizard (Step 6) |
+| `/api/{api_version}/server/{admin_path}/config/settings` | GET | Get server settings |
+| `/api/{api_version}/server/{admin_path}/config/settings` | PATCH | Update server settings |
+| `/api/{api_version}/server/{admin_path}/config/status` | GET | Server status (detailed, admin-only) |
+| `/api/{api_version}/server/{admin_path}/config/stats` | GET | Statistics |
+| `/api/{api_version}/server/{admin_path}/config/restart` | POST | Restart server |
 
-### Admin - Server Roles (`/api/{api_version}/{admin_path}/server/roles/`)
+### Admin - Server Roles (`/api/{api_version}/server/{admin_path}/config/roles/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/roles` | GET | List roles |
-| `/api/{api_version}/{admin_path}/server/roles` | POST | Create role |
-| `/api/{api_version}/{admin_path}/server/roles/{id}` | GET | Get role details |
-| `/api/{api_version}/{admin_path}/server/roles/{id}` | PATCH | Update role |
-| `/api/{api_version}/{admin_path}/server/roles/{id}` | DELETE | Delete role |
+| `/api/{api_version}/server/{admin_path}/config/roles` | GET | List roles |
+| `/api/{api_version}/server/{admin_path}/config/roles` | POST | Create role |
+| `/api/{api_version}/server/{admin_path}/config/roles/{id}` | GET | Get role details |
+| `/api/{api_version}/server/{admin_path}/config/roles/{id}` | PATCH | Update role |
+| `/api/{api_version}/server/{admin_path}/config/roles/{id}` | DELETE | Delete role |
 
-### Admin - User Invites (`/api/{api_version}/{admin_path}/server/users/invites/`)
+### Admin - User Invites (`/api/{api_version}/server/{admin_path}/config/users/invites/`)
 
 User registration invite codes (multi-user apps only).
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/users/invites` | GET | List user invite codes |
-| `/api/{api_version}/{admin_path}/server/users/invites` | POST | Create user invite code |
-| `/api/{api_version}/{admin_path}/server/users/invites/{id}` | GET | Get invite details |
-| `/api/{api_version}/{admin_path}/server/users/invites/{id}` | DELETE | Revoke invite |
+| `/api/{api_version}/server/{admin_path}/config/users/invites` | GET | List user invite codes |
+| `/api/{api_version}/server/{admin_path}/config/users/invites` | POST | Create user invite code |
+| `/api/{api_version}/server/{admin_path}/config/users/invites/{id}` | GET | Get invite details |
+| `/api/{api_version}/server/{admin_path}/config/users/invites/{id}` | DELETE | Revoke invite |
 
-### Admin - Server Admins (`/api/{api_version}/{admin_path}/server/admins/`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/admins` | GET | List Server Admins |
-| `/api/{api_version}/{admin_path}/server/admins/{id}` | GET | Get admin details |
-| `/api/{api_version}/{admin_path}/server/admins/{id}` | DELETE | Delete admin |
-| `/api/{api_version}/{admin_path}/server/admins/{id}/disable` | POST | Disable admin |
-| `/api/{api_version}/{admin_path}/server/admins/{id}/enable` | POST | Enable admin |
-| `/api/{api_version}/{admin_path}/server/admins/invite` | POST | Generate admin invite link |
-
-### Admin - Moderation Users (`/api/{api_version}/{admin_path}/server/moderation/users/`)
+### Admin - Server Admins (`/api/{api_version}/server/{admin_path}/config/admins/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/moderation/users` | GET | List all users |
-| `/api/{api_version}/{admin_path}/server/moderation/users/{id}` | GET | Get user details |
-| `/api/{api_version}/{admin_path}/server/moderation/users/{id}` | DELETE | Delete user |
-| `/api/{api_version}/{admin_path}/server/moderation/users/disable` | POST | Disable user |
-| `/api/{api_version}/{admin_path}/server/moderation/users/enable` | POST | Enable user |
-| `/api/{api_version}/{admin_path}/server/moderation/users/impersonate` | POST | Get impersonation token |
+| `/api/{api_version}/server/{admin_path}/config/admins` | GET | List Server Admins |
+| `/api/{api_version}/server/{admin_path}/config/admins/{id}` | GET | Get admin details |
+| `/api/{api_version}/server/{admin_path}/config/admins/{id}` | DELETE | Delete admin |
+| `/api/{api_version}/server/{admin_path}/config/admins/{id}/disable` | POST | Disable admin |
+| `/api/{api_version}/server/{admin_path}/config/admins/{id}/enable` | POST | Enable admin |
+| `/api/{api_version}/server/{admin_path}/config/admins/invite` | POST | Generate admin invite link |
 
-### Admin - Moderation Orgs (`/api/{api_version}/{admin_path}/server/moderation/orgs/`)
+### Admin - Moderation Users (`/api/{api_version}/server/{admin_path}/config/moderation/users/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/config/moderation/users` | GET | List all users |
+| `/api/{api_version}/server/{admin_path}/config/moderation/users/{id}` | GET | Get user details |
+| `/api/{api_version}/server/{admin_path}/config/moderation/users/{id}` | DELETE | Delete user |
+| `/api/{api_version}/server/{admin_path}/config/moderation/users/disable` | POST | Disable user |
+| `/api/{api_version}/server/{admin_path}/config/moderation/users/enable` | POST | Enable user |
+| `/api/{api_version}/server/{admin_path}/config/moderation/users/impersonate` | POST | Get impersonation token |
+
+### Admin - Moderation Orgs (`/api/{api_version}/server/{admin_path}/config/moderation/orgs/`)
 
 Moderation only - Server Admin does not manage org members/roles.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/moderation/orgs` | GET | List all organizations |
-| `/api/{api_version}/{admin_path}/server/moderation/orgs/{slug}` | GET | Get organization details |
-| `/api/{api_version}/{admin_path}/server/moderation/orgs/{slug}` | DELETE | Delete organization |
-| `/api/{api_version}/{admin_path}/server/moderation/orgs/{slug}/disable` | POST | Disable organization |
-| `/api/{api_version}/{admin_path}/server/moderation/orgs/{slug}/enable` | POST | Enable organization |
+| `/api/{api_version}/server/{admin_path}/config/moderation/orgs` | GET | List all organizations |
+| `/api/{api_version}/server/{admin_path}/config/moderation/orgs/{slug}` | GET | Get organization details |
+| `/api/{api_version}/server/{admin_path}/config/moderation/orgs/{slug}` | DELETE | Delete organization |
+| `/api/{api_version}/server/{admin_path}/config/moderation/orgs/{slug}/disable` | POST | Disable organization |
+| `/api/{api_version}/server/{admin_path}/config/moderation/orgs/{slug}/enable` | POST | Enable organization |
 
-### Admin - Profile (`/api/{api_version}/{admin_path}/profile/`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/profile` | GET | Get admin profile |
-| `/api/{api_version}/{admin_path}/profile` | PATCH | Update admin profile (username, icon) |
-| `/api/{api_version}/{admin_path}/profile/password` | POST | Change admin password |
-| `/api/{api_version}/{admin_path}/profile/token` | GET | Get current API token (masked) |
-| `/api/{api_version}/{admin_path}/profile/token` | POST | Regenerate API token (returns new token ONCE) |
-| `/api/{api_version}/{admin_path}/profile/preferences` | GET | Get admin preferences (theme, notifications) |
-| `/api/{api_version}/{admin_path}/profile/preferences` | PATCH | Update admin preferences |
-
-### Admin - Branding (`/api/{api_version}/{admin_path}/server/branding/`)
+### Admin - Profile (`/api/{api_version}/server/{admin_path}/{admin_username}/profile/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/branding` | GET | Get branding settings |
-| `/api/{api_version}/{admin_path}/server/branding` | PATCH | Update branding |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/profile` | GET | Get admin profile |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/profile` | PATCH | Update admin profile (username, icon) |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/profile/password` | POST | Change admin password |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/profile/token` | GET | Get current API token (masked) |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/profile/token` | POST | Regenerate API token (returns new token ONCE) |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/preferences` | GET | Get admin preferences (theme, notifications) |
+| `/api/{api_version}/server/{admin_path}/{admin_username}/preferences` | PATCH | Update admin preferences |
 
-### Admin - SSL (`/api/{api_version}/{admin_path}/server/ssl/`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/ssl` | GET | Get SSL settings |
-| `/api/{api_version}/{admin_path}/server/ssl` | PATCH | Update SSL settings |
-| `/api/{api_version}/{admin_path}/server/ssl/renew` | POST | Force certificate renewal |
-
-### Admin - Tor (`/api/{api_version}/{admin_path}/server/tor/`)
+### Admin - Branding (`/api/{api_version}/server/{admin_path}/config/branding/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/tor` | GET | Get Tor status |
-| `/api/{api_version}/{admin_path}/server/tor` | PATCH | Update Tor settings |
-| `/api/{api_version}/{admin_path}/server/tor/regenerate` | POST | Regenerate .onion address |
-| `/api/{api_version}/{admin_path}/server/tor/vanity` | GET | Get vanity generation status |
-| `/api/{api_version}/{admin_path}/server/tor/vanity` | POST | Start vanity generation |
-| `/api/{api_version}/{admin_path}/server/tor/vanity` | DELETE | Cancel vanity generation |
-| `/api/{api_version}/{admin_path}/server/tor/vanity/apply` | POST | Apply vanity address |
-| `/api/{api_version}/{admin_path}/server/tor/import` | POST | Import external keys |
+| `/api/{api_version}/server/{admin_path}/config/branding` | GET | Get branding settings |
+| `/api/{api_version}/server/{admin_path}/config/branding` | PATCH | Update branding |
 
-### Admin - Web (robots.txt, security.txt) (`/api/{api_version}/{admin_path}/server/web/`)
+### Admin - SSL (`/api/{api_version}/server/{admin_path}/config/ssl/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/web` | GET | Get web settings |
-| `/api/{api_version}/{admin_path}/server/web` | PATCH | Update web settings |
-| `/api/{api_version}/{admin_path}/server/web/robots` | GET | Get robots.txt config |
-| `/api/{api_version}/{admin_path}/server/web/robots` | PATCH | Update robots.txt |
-| `/api/{api_version}/{admin_path}/server/web/robots/preview` | GET | Preview robots.txt |
-| `/api/{api_version}/{admin_path}/server/web/security` | GET | Get security.txt config |
-| `/api/{api_version}/{admin_path}/server/web/security` | PATCH | Update security.txt |
-| `/api/{api_version}/{admin_path}/server/web/security/preview` | GET | Preview security.txt |
+| `/api/{api_version}/server/{admin_path}/config/ssl` | GET | Get SSL settings |
+| `/api/{api_version}/server/{admin_path}/config/ssl` | PATCH | Update SSL settings |
+| `/api/{api_version}/server/{admin_path}/config/ssl/renew` | POST | Force certificate renewal |
 
-### Admin - Pages (`/api/{api_version}/{admin_path}/server/pages/`)
+### Admin - Tor (`/api/{api_version}/server/{admin_path}/config/tor/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/pages` | GET | Get all page settings |
-| `/api/{api_version}/{admin_path}/server/pages/about` | GET | Get about page content |
-| `/api/{api_version}/{admin_path}/server/pages/about` | PATCH | Update about page content |
-| `/api/{api_version}/{admin_path}/server/pages/privacy` | GET | Get privacy policy content |
-| `/api/{api_version}/{admin_path}/server/pages/privacy` | PATCH | Update privacy policy content |
-| `/api/{api_version}/{admin_path}/server/pages/contact` | GET | Get contact page settings |
-| `/api/{api_version}/{admin_path}/server/pages/contact` | PATCH | Update contact page settings |
-| `/api/{api_version}/{admin_path}/server/pages/help` | GET | Get help page content |
-| `/api/{api_version}/{admin_path}/server/pages/help` | PATCH | Update help page content |
+| `/api/{api_version}/server/{admin_path}/config/tor` | GET | Get Tor status |
+| `/api/{api_version}/server/{admin_path}/config/tor` | PATCH | Update Tor settings |
+| `/api/{api_version}/server/{admin_path}/config/tor/regenerate` | POST | Regenerate .onion address |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | GET | Get vanity generation status |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | POST | Start vanity generation |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | DELETE | Cancel vanity generation |
+| `/api/{api_version}/server/{admin_path}/config/tor/vanity/apply` | POST | Apply vanity address |
+| `/api/{api_version}/server/{admin_path}/config/tor/import` | POST | Import external keys |
 
-### Admin - Email (`/api/{api_version}/{admin_path}/server/email/`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/email` | GET | Get email settings |
-| `/api/{api_version}/{admin_path}/server/email` | PATCH | Update email settings |
-| `/api/{api_version}/{admin_path}/server/email/test` | POST | Send test email |
-| `/api/{api_version}/{admin_path}/server/email/templates` | GET | List email templates |
-| `/api/{api_version}/{admin_path}/server/email/templates/{name}` | GET | Get template |
-| `/api/{api_version}/{admin_path}/server/email/templates/{name}` | PUT | Update template |
-| `/api/{api_version}/{admin_path}/server/email/templates/{name}/reset` | POST | Reset to default |
-| `/api/{api_version}/{admin_path}/server/email/templates/{name}/preview` | POST | Preview template |
-
-### Admin - Scheduler (`/api/{api_version}/{admin_path}/server/scheduler/`)
+### Admin - Web (robots.txt, security.txt, well-known) (`/api/{api_version}/server/{admin_path}/config/web/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/scheduler` | GET | List scheduled tasks |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}` | GET | Get task details |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}` | PATCH | Update task |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}/run` | POST | Run task now |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}/enable` | POST | Enable task |
-| `/api/{api_version}/{admin_path}/server/scheduler/{id}/disable` | POST | Disable task |
+| `/api/{api_version}/server/{admin_path}/config/web` | GET | Get web settings |
+| `/api/{api_version}/server/{admin_path}/config/web` | PATCH | Update web settings |
+| `/api/{api_version}/server/{admin_path}/config/web/robots` | GET | Get robots.txt config |
+| `/api/{api_version}/server/{admin_path}/config/web/robots` | PATCH | Update robots.txt |
+| `/api/{api_version}/server/{admin_path}/config/web/robots/preview` | GET | Preview robots.txt |
+| `/api/{api_version}/server/{admin_path}/config/web/security` | GET | Get security.txt config |
+| `/api/{api_version}/server/{admin_path}/config/web/security` | PATCH | Update security.txt |
+| `/api/{api_version}/server/{admin_path}/config/web/security/preview` | GET | Preview security.txt |
+| `/api/{api_version}/server/{admin_path}/config/web/well-known` | GET | Get well-known namespace settings and supported entries |
+| `/api/{api_version}/server/{admin_path}/config/web/well-known` | PATCH | Update optional well-known entry settings |
+| `/api/{api_version}/server/{admin_path}/config/web/well-known/preview/{name}` | GET | Preview the exact rendered body for one well-known entry |
 
-### Admin - Backup (`/api/{api_version}/{admin_path}/server/backup/`)
+**`/api/{api_version}/server/{admin_path}/config/web` includes `server.healthz.root.enabled` and well-known namespace status in its settings payload.**
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/backup` | GET | List backups |
-| `/api/{api_version}/{admin_path}/server/backup` | POST | Create backup |
-| `/api/{api_version}/{admin_path}/server/backup/{id}` | GET | Get backup details |
-| `/api/{api_version}/{admin_path}/server/backup/{id}` | DELETE | Delete backup |
-| `/api/{api_version}/{admin_path}/server/backup/{id}/download` | GET | Download backup file |
-| `/api/{api_version}/{admin_path}/server/backup/restore` | POST | Restore from backup |
-
-### Admin - Logs (`/api/{api_version}/{admin_path}/server/logs/`)
+### Admin - Pages (`/api/{api_version}/server/{admin_path}/config/pages/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/logs` | GET | List log files |
-| `/api/{api_version}/{admin_path}/server/logs/{type}` | GET | Get log entries |
-| `/api/{api_version}/{admin_path}/server/logs/{type}/download` | GET | Download log file |
+| `/api/{api_version}/server/{admin_path}/config/pages` | GET | Get all page settings |
+| `/api/{api_version}/server/{admin_path}/config/pages/about` | GET | Get about page content |
+| `/api/{api_version}/server/{admin_path}/config/pages/about` | PATCH | Update about page content |
+| `/api/{api_version}/server/{admin_path}/config/pages/privacy` | GET | Get privacy policy content |
+| `/api/{api_version}/server/{admin_path}/config/pages/privacy` | PATCH | Update privacy policy content |
+| `/api/{api_version}/server/{admin_path}/config/pages/contact` | GET | Get contact page settings |
+| `/api/{api_version}/server/{admin_path}/config/pages/contact` | PATCH | Update contact page settings |
+| `/api/{api_version}/server/{admin_path}/config/pages/help` | GET | Get help page content |
+| `/api/{api_version}/server/{admin_path}/config/pages/help` | PATCH | Update help page content |
+
+### Admin - Email (`/api/{api_version}/server/{admin_path}/config/email/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/config/email` | GET | Get email settings |
+| `/api/{api_version}/server/{admin_path}/config/email` | PATCH | Update email settings |
+| `/api/{api_version}/server/{admin_path}/config/email/test` | POST | Send test email |
+| `/api/{api_version}/server/{admin_path}/config/email/templates` | GET | List email templates |
+| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}` | GET | Get template |
+| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}` | PUT | Update template |
+| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}/reset` | POST | Reset to default |
+| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}/preview` | POST | Preview template |
+
+### Admin - Scheduler (`/api/{api_version}/server/{admin_path}/config/scheduler/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/config/scheduler` | GET | List scheduled tasks |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}` | GET | Get task details |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}` | PATCH | Update task |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/run` | POST | Run task now |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/enable` | POST | Enable task |
+| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/disable` | POST | Disable task |
+
+### Admin - Backup (`/api/{api_version}/server/{admin_path}/config/backup/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/config/backup` | GET | List backups |
+| `/api/{api_version}/server/{admin_path}/config/backup` | POST | Create backup |
+| `/api/{api_version}/server/{admin_path}/config/backup/{id}` | GET | Get backup details |
+| `/api/{api_version}/server/{admin_path}/config/backup/{id}` | DELETE | Delete backup |
+| `/api/{api_version}/server/{admin_path}/config/backup/{id}/download` | GET | Download backup file |
+| `/api/{api_version}/server/{admin_path}/config/backup/restore` | POST | Restore from backup |
+
+### Admin - Logs (`/api/{api_version}/server/{admin_path}/config/logs/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/config/logs` | GET | List log files |
+| `/api/{api_version}/server/{admin_path}/config/logs/{type}` | GET | Get log entries |
+| `/api/{api_version}/server/{admin_path}/config/logs/{type}/download` | GET | Download log file |
 
 ## Email Templates (User-Related)
 
@@ -55285,7 +56029,7 @@ On restart, the application:
 
 **Method 2: Admin WebUI**
 
-`/{admin_path}/server/database`
+`/server/{admin_path}/config/database`
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -55382,7 +56126,7 @@ Settings can be stored in database OR config file. Sync between them:
 **SQLite → YAML (Export settings to file):**
 
 ```
-Admin WebUI: /{admin_path}/server/settings → "Export to YAML"
+Admin WebUI: /server/{admin_path}/config/settings → "Export to YAML"
          │
          ▼
 Read all settings from server.db
@@ -55541,7 +56285,7 @@ Local MariaDB INSERT                     Local PostgreSQL INSERT
 
 **On existing node:**
 
-1. Go to `/{admin_path}/server/nodes/add`
+1. Go to `/server/{admin_path}/config/nodes/add`
 2. Click "Generate Token" button
 3. Server generates:
    - Token: `node_{random_32_chars}`
@@ -55550,7 +56294,7 @@ Local MariaDB INSERT                     Local PostgreSQL INSERT
 
 **On new server:**
 
-1. Go to `/{admin_path}/server/nodes/add`
+1. Go to `/server/{admin_path}/config/nodes/add`
 2. Enter:
    - URL from existing node
    - Token from existing node
@@ -55565,7 +56309,7 @@ Local MariaDB INSERT                     Local PostgreSQL INSERT
 Existing Node                          New Node
      │                                      │
      ▼                                      │
-/{admin_path}/server/nodes/add               │
+/server/{admin_path}/config/nodes/add               │
      │                                      │
      ▼                                      │
 Generate Token                              │
@@ -55575,7 +56319,7 @@ Generate Token                              │
      └──────── Share token + URL ──────────►│
                                             │
                                             ▼
-                                   /{admin_path}/server/nodes/add
+                                   /server/{admin_path}/config/nodes/add
                                             │
                                             ▼
                                    Enter URL + Token
@@ -55594,7 +56338,7 @@ Generate Token                              │
 ```
 NEW NODE                                    EXISTING NODE
     │                                            │
-    │  1. POST /api/{api_version}/{admin_path}/server/nodes/join   │
+    │  1. POST /api/{api_version}/server/{admin_path}/config/nodes/join   │
     │     Body: { "token": "node_xxx" }          │
     │─────────────────────────────────────────►  │
     │                                            │
@@ -55646,7 +56390,7 @@ NEW NODE                                    EXISTING NODE
 
 #### Bootstrap Data Structure
 
-**Response from existing node (`POST /api/{api_version}/{admin_path}/server/nodes/join`):**
+**Response from existing node (`POST /api/{api_version}/server/{admin_path}/config/nodes/join`):**
 
 ```json
 {
@@ -55800,7 +56544,7 @@ func updateHeartbeat(db *sql.DB, nodeID string) {
 
 **A node can only remove ITSELF from the cluster.**
 
-1. Go to `/{admin_path}/server/nodes/remove` (on the node to remove)
+1. Go to `/server/{admin_path}/config/nodes/remove` (on the node to remove)
 2. Click "Remove from Cluster"
 3. Confirmation modal: "Are you sure you want to remove {nodename} from the cluster?"
    - [Yes, Remove] [Cancel]
@@ -55814,7 +56558,7 @@ func updateHeartbeat(db *sql.DB, nodeID string) {
 
 #### Viewing Nodes
 
-**`/{admin_path}/server/nodes`** - Node list
+**`/server/{admin_path}/config/nodes`** - Node list
 
 | Column | Description |
 |--------|-------------|
@@ -55824,7 +56568,7 @@ func updateHeartbeat(db *sql.DB, nodeID string) {
 | Version | Application version |
 | Last Seen | Last heartbeat time |
 
-**`/{admin_path}/server/nodes/{node}`** - Node detail
+**`/server/{admin_path}/config/nodes/{node}`** - Node detail
 
 | Section | Contents |
 |---------|----------|
@@ -55838,7 +56582,7 @@ func updateHeartbeat(db *sql.DB, nodeID string) {
 
 | Setting | Default | Changeable |
 |---------|---------|------------|
-| Node ID | `{hostname}` | Yes, via `/{admin_path}/server/nodes/settings` |
+| Node ID | `{hostname}` | Yes, via `/server/{admin_path}/config/nodes/settings` |
 | Display Name | `{hostname}` | Yes |
 
 #### First Node Behavior
@@ -55849,7 +56593,7 @@ func updateHeartbeat(db *sql.DB, nodeID string) {
 Single Instance (SQLite)
          │
          ▼
-Admin goes to /{admin_path}/server/nodes/add
+Admin goes to /server/{admin_path}/config/nodes/add
          │
          ▼
 Clicks "Generate Token"
@@ -55870,23 +56614,23 @@ On confirm:
 
 | Route | Description |
 |-------|-------------|
-| `/{admin_path}/server/nodes` | List all nodes |
-| `/{admin_path}/server/nodes/add` | Add node (generate token OR join) |
-| `/{admin_path}/server/nodes/remove` | Remove THIS node from cluster |
-| `/{admin_path}/server/nodes/settings` | Node identity settings |
-| `/{admin_path}/server/nodes/{node}` | View specific node details |
+| `/server/{admin_path}/config/nodes` | List all nodes |
+| `/server/{admin_path}/config/nodes/add` | Add node (generate token OR join) |
+| `/server/{admin_path}/config/nodes/remove` | Remove THIS node from cluster |
+| `/server/{admin_path}/config/nodes/settings` | Node identity settings |
+| `/server/{admin_path}/config/nodes/{node}` | View specific node details |
 
 #### API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/nodes` | GET | List all nodes |
-| `/api/{api_version}/{admin_path}/server/nodes/token` | POST | Generate join token |
-| `/api/{api_version}/{admin_path}/server/nodes/join` | POST | Join cluster with token |
-| `/api/{api_version}/{admin_path}/server/nodes/leave` | POST | Remove this node from cluster |
-| `/api/{api_version}/{admin_path}/server/nodes/{node}` | GET | Get node details |
-| `/api/{api_version}/{admin_path}/server/nodes/settings` | GET | Get node identity settings |
-| `/api/{api_version}/{admin_path}/server/nodes/settings` | PATCH | Update node identity |
+| `/api/{api_version}/server/{admin_path}/config/nodes` | GET | List all nodes |
+| `/api/{api_version}/server/{admin_path}/config/nodes/token` | POST | Generate join token |
+| `/api/{api_version}/server/{admin_path}/config/nodes/join` | POST | Join cluster with token |
+| `/api/{api_version}/server/{admin_path}/config/nodes/leave` | POST | Remove this node from cluster |
+| `/api/{api_version}/server/{admin_path}/config/nodes/{node}` | GET | Get node details |
+| `/api/{api_version}/server/{admin_path}/config/nodes/settings` | GET | Get node identity settings |
+| `/api/{api_version}/server/{admin_path}/config/nodes/settings` | PATCH | Update node identity |
 
 ### Supported Remote Databases
 
@@ -55934,7 +56678,7 @@ When using remote database, the same tables are created but with appropriate typ
 **Notes:**
 - Only ONE row ever exists (id=1)
 - Created via setup wizard on first run
-- Setup token displayed in console ONCE, used to access `/{admin_path}/server/setup`
+- Setup token displayed in console ONCE, used to access `/server/{admin_path}/config/setup`
 - Admin password and API token created during setup wizard (user must copy)
 
 #### Admin Sessions Table
@@ -56331,7 +57075,7 @@ GET /api/{api_version}/orgs/acme-corp
 
 ### Org Settings
 
-**Org/team creation policy is configured at the server level (`server.orgs.creation.mode` / `/{admin_path}/server/settings`). It is NOT editable inside an individual org/team.**
+**Org/team creation policy is configured at the server level (`server.orgs.creation.mode` / `/server/{admin_path}/config/settings`). It is NOT editable inside an individual org/team.**
 
 **Settings Categories:**
 
@@ -57196,15 +57940,15 @@ func CustomDomainMiddleware(resolver *DomainResolver) func(http.Handler) http.Ha
 | `/orgs/{slug}/domains/{domain}/verify` | Trigger verification |
 | `/orgs/{slug}/domains/{domain}/delete` | Delete confirmation |
 
-### Admin Domain Management (`/{admin_path}/server/domains/`)
+### Admin Domain Management (`/server/{admin_path}/config/domains/`)
 
 | Path | Description |
 |------|-------------|
-| `/{admin_path}/server/domains` | List all custom domains |
-| `/{admin_path}/server/domains/{domain}` | View/manage any domain |
-| `/{admin_path}/server/domains/{domain}/suspend` | Suspend domain |
-| `/{admin_path}/server/domains/{domain}/unsuspend` | Unsuspend domain |
-| `/{admin_path}/server/domains/{domain}/delete` | Force delete domain |
+| `/server/{admin_path}/config/domains` | List all custom domains |
+| `/server/{admin_path}/config/domains/{domain}` | View/manage any domain |
+| `/server/{admin_path}/config/domains/{domain}/suspend` | Suspend domain |
+| `/server/{admin_path}/config/domains/{domain}/unsuspend` | Unsuspend domain |
+| `/server/{admin_path}/config/domains/{domain}/delete` | Force delete domain |
 
 ## API Routes
 
@@ -57226,16 +57970,16 @@ func CustomDomainMiddleware(resolver *DomainResolver) func(http.Handler) http.Ha
 
 Same routes as user, scoped to organization.
 
-### Admin Domain API (`/api/{api_version}/{admin_path}/server/domains/`)
+### Admin Domain API (`/api/{api_version}/server/{admin_path}/config/domains/`)
 
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/domains` | GET | List all domains (paginated) |
-| `/api/{api_version}/{admin_path}/server/domains/{domain}` | GET | Get any domain details |
-| `/api/{api_version}/{admin_path}/server/domains/{domain}` | DELETE | Force delete any domain |
-| `/api/{api_version}/{admin_path}/server/domains/{domain}/suspend` | POST | Suspend domain |
-| `/api/{api_version}/{admin_path}/server/domains/{domain}/unsuspend` | POST | Unsuspend domain |
-| `/api/{api_version}/{admin_path}/server/domains/{domain}/ssl/renew` | POST | Force SSL renewal |
+| `/api/{api_version}/server/{admin_path}/config/domains` | GET | List all domains (paginated) |
+| `/api/{api_version}/server/{admin_path}/config/domains/{domain}` | GET | Get any domain details |
+| `/api/{api_version}/server/{admin_path}/config/domains/{domain}` | DELETE | Force delete any domain |
+| `/api/{api_version}/server/{admin_path}/config/domains/{domain}/suspend` | POST | Suspend domain |
+| `/api/{api_version}/server/{admin_path}/config/domains/{domain}/unsuspend` | POST | Unsuspend domain |
+| `/api/{api_version}/server/{admin_path}/config/domains/{domain}/ssl/renew` | POST | Force SSL renewal |
 
 ## Verification Flow
 
@@ -57385,7 +58129,7 @@ func (s *DomainService) getServerPublicIPs() []net.IP {
 
 // discoverPublicIPs discovers our public IP addresses
 // Called on startup and every 12 hours (hardcoded, sensible interval)
-// Safe to expose in /healthz - same info available via `dig`
+// Safe to expose in /server/healthz - same info available via `dig`
 func discoverPublicIPs() ([]net.IP, error) {
     var ips []net.IP
 
@@ -57671,9 +58415,9 @@ server:
         description: "Remove unverified domains after TTL"
 ```
 
-**Public IP in /healthz:**
+**Public IP in /server/healthz:**
 
-The discovered public IPs are safe to include in `/healthz` - same info anyone can get with `dig {fqdn}`.
+The discovered public IPs are safe to include in `/server/healthz` - same info anyone can get with `dig {fqdn}`.
 - IPv4: From external lookup (needed for containers/NAT)
 - IPv6: From local interface if global unicast address exists
 
@@ -58118,7 +58862,7 @@ maintainer_email: jane@example.com
 - [ ] No external runtime dependencies - everything embedded
 - [ ] Use ONLY approved libraries (see PART 5)
 - [ ] Follow exact config paths: `server.xxx`, not variations
-- [ ] Follow exact route patterns: `/api/{api_version}/{admin_path}/server/xxx`
+- [ ] Follow exact route patterns: `/api/{api_version}/server/{admin_path}/config/xxx`
 - [ ] Token prefixes: `adm_` (admin), `usr_` (user), `org_` (org)
 - [ ] Setup token: 32 hex chars, no dashes
 
@@ -58377,8 +59121,9 @@ make docker # Build Docker image
 - [ ] Cluster configuration (if applicable)
 
 **PART 13: Health & Versioning**
-- [ ] `/healthz` endpoint exists (frontend - smart detection)
-- [ ] `/api/{api_version}/healthz` endpoint exists (API - supports .txt)
+- [ ] `/server/healthz` endpoint exists (frontend - smart detection)
+- [ ] If `server.healthz.root.enabled=true`, `/healthz` maps directly to `/server/healthz` (same handler, no redirect)
+- [ ] `/api/{api_version}/server/healthz` endpoint exists (API - supports .txt)
 - [ ] Returns 200 OK when healthy
 - [ ] Smart detection: browser → HTML, CLI → formatted text
 - [ ] Extended healthz response includes:
@@ -58390,7 +59135,7 @@ make docker # Build Docker image
 - [ ] NEVER expose sensitive data (tokens, credentials, paths, internal IPs)
 - [ ] `release.txt` contains version
 - [ ] Semantic versioning: MAJOR.MINOR.PATCH
-- [ ] Version exposed in `/healthz` response
+- [ ] Version exposed in `/server/healthz` response
 - [ ] Version exposed in `--version` output
 - [ ] `--status` flag returns exit 0 (healthy) or 1 (unhealthy)
 
@@ -58438,8 +59183,8 @@ make docker # Build Docker image
 ### Phase 6: Admin & Email (PARTS 17-18)
 
 **PART 17: Admin Panel**
-- [ ] Admin UI at `/{admin_path}`
-- [ ] Admin API at `/api/{api_version}/{admin_path}/`
+- [ ] Admin UI at `/server/{admin_path}`
+- [ ] Admin API at `/api/{api_version}/server/{admin_path}/`
 - [ ] First-run setup wizard
 - [ ] All settings configurable via UI
 - [ ] Settings organized by category
@@ -58583,6 +59328,8 @@ make docker # Build Docker image
   - [ ] docs/configuration.md
   - [ ] docs/api.md
   - [ ] docs/admin.md
+  - [ ] docs/security.md
+  - [ ] docs/integrations.md (if project exposes external/public integrations)
   - [ ] docs/development.md
 - [ ] ReadTheDocs builds successfully
 - [ ] Documentation badge in README.md
@@ -58605,7 +59352,7 @@ make docker # Build Docker image
 - [ ] Tor status in admin panel
 - [ ] Tor config in `{config_dir}/tor/torrc`
 - [ ] Tor data in `{data_dir}/tor/`
-- [ ] Tor fields in `/api/{api_version}/healthz`:
+- [ ] Tor fields in `/api/{api_version}/server/healthz`:
   - [ ] `features.tor.enabled` (yes/no)
   - [ ] `features.tor.running` (yes/no)
   - [ ] `features.tor.status` (healthy/error:{message})
@@ -58760,7 +59507,7 @@ make docker # Build Docker image
 - [ ] Server admins in separate table (`admins`)
 - [ ] Regular users in separate table (`users`)
 - [ ] Separate session tables (`admin_sessions`, `user_sessions`)
-- [ ] Admin routes protected (`/{admin_path}/*`)
+- [ ] Admin routes protected (`/server/{admin_path}/*`)
 - [ ] No privilege escalation path from user to admin
 
 ---
@@ -58826,7 +59573,7 @@ make docker # Build Docker image
 - [ ] Frontend is fully functional (not just display)
 - [ ] All CRUD operations work from both frontend and API
 - [ ] No orphan routes (frontend-only or API-only)
-- [ ] Routes follow scope rules (`/auth/`, `/users/`, `/orgs/`, `/admin/`)
+- [ ] Routes follow scope rules (`/server/`, `/server/auth/`, `/users/`, `/orgs/`, `/server/{admin_path}/`)
 
 ### REST API (`/api/{api_version}/`)
 
@@ -58840,17 +59587,17 @@ make docker # Build Docker image
 - [ ] Sorting: sort, order parameters
 - [ ] HATEOAS links (optional but recommended)
 
-### OpenAPI/Swagger (`/server/docs/swagger` UI, `/api/{api_version}/swagger` spec)
+### OpenAPI/Swagger (`/server/docs/swagger` UI, `/api/{api_version}/server/swagger` spec)
 
 - [ ] Swagger UI accessible
-- [ ] OpenAPI spec at `/api/{api_version}/swagger` (with `/api/swagger` alias for current version)
+- [ ] OpenAPI spec at `/api/{api_version}/server/swagger` (with `/api/swagger` alias for current version)
 - [ ] All endpoints documented
 - [ ] Request/response schemas defined
 - [ ] Authentication documented
 - [ ] Examples provided
 - [ ] Theme matches project theme
 
-### GraphQL (`/server/docs/graphql` UI, `/api/{api_version}/graphql` POST endpoint)
+### GraphQL (`/server/docs/graphql` UI, `/api/{api_version}/server/graphql` POST endpoint)
 
 - [ ] GraphQL endpoint accessible
 - [ ] GraphiQL/Playground available
@@ -58920,8 +59667,8 @@ make docker # Build Docker image
 - [ ] Documentation pages included
 - [ ] API docs (`/server/docs/swagger`, `/server/docs/graphql`) included
 - [ ] User profiles included ONLY if public
-- [ ] Admin pages (`/admin/*`) NEVER included
-- [ ] Auth pages (`/auth/*`) NEVER included
+- [ ] Admin pages (`/server/{admin_path}/*`) NEVER included
+- [ ] Auth pages (`/server/auth/*`) NEVER included
 - [ ] API endpoints (`/api/*`) NEVER included
 - [ ] `lastmod` dates accurate
 - [ ] Large sites (>50k URLs) use sitemap index
@@ -58954,6 +59701,10 @@ make docker # Build Docker image
 - [ ] `/sitemap.xml` generated (see above)
 - [ ] `/favicon.ico` served (embedded default or custom)
 - [ ] `/.well-known/security.txt` served (RFC 9116)
+- [ ] `/.well-known/change-password` behaves correctly for authenticated vs unauthenticated users
+- [ ] `/.well-known/pgp-key.asc` is served only when a security-report keypair exists; otherwise 404
+- [ ] Optional `/.well-known/*` entries only exist when their matching feature/integration is explicitly enabled
+- [ ] Unknown `/.well-known/*` entries return `404` and never expose a directory listing
 - [ ] Security.txt has valid Contact and Expires fields
 
 ---
@@ -59136,7 +59887,7 @@ make docker # Build Docker image
 - [ ] Stored as SHA-256 hash in `{config_dir}/setup_token.txt`
 - [ ] Plaintext token shown ONCE in console banner
 - [ ] File deleted after successful setup completion
-- [ ] Setup URL displayed: `{proto}://{fqdn}/{admin_path}/server/setup`
+- [ ] Setup URL displayed: `{proto}://{fqdn}/server/{admin_path}/config/setup`
 - [ ] Token section only appears on first run (never again after setup)
 
 ### CLI Flag Syntax (ALL Binaries)
@@ -59540,6 +60291,8 @@ Before starting integration:
 - [ ] Create docs/ directory for ReadTheDocs
 - [ ] Write docs/index.md
 - [ ] Write docs/installation.md
+- [ ] Write docs/configuration.md, docs/api.md, docs/admin.md, docs/security.md
+- [ ] Write docs/integrations.md if project exposes external/public integrations
 - [ ] Configure mkdocs.yml
 ```
 
@@ -59626,6 +60379,8 @@ When bootstrapping a new project from this specification:
    touch docs/configuration.md
    touch docs/api.md
    touch docs/admin.md
+   touch docs/security.md
+   touch docs/integrations.md
    touch docs/development.md
    touch docs/requirements.txt
    touch docs/stylesheets/dark.css
@@ -59664,7 +60419,7 @@ When bootstrapping a new project from this specification:
 4. **Add service support** per PART 24
 5. **Create Makefile** per PART 26
 
-**Test:** Server starts and responds to `/healthz`
+**Test:** Server starts and responds to `/server/healthz`
 
 #### Step 3: Docker & CI/CD (PARTS 27-28)
 
@@ -59694,7 +60449,7 @@ When bootstrapping a new project from this specification:
 4. **Implement first-run setup wizard**
 5. **Add all admin configuration pages**
 
-**Test:** Admin panel accessible at `/admin`
+**Test:** Admin panel accessible at `/server/{admin_path}`
 
 #### Step 6: API Layer (PART 14)
 
@@ -59740,7 +60495,7 @@ Implement the required client, then any project-specific optional features:
 
 #### Step 9: Documentation (PART 30)
 
-1. **Create all docs/*.md files**
+1. **Create all required docs/*.md files**
 2. **Configure mkdocs.yml**
 3. **Configure .readthedocs.yaml**
 4. **Add docs/requirements.txt**
@@ -59799,8 +60554,8 @@ Implement the required client, then any project-specific optional features:
 - [ ] Admin panel accessible
 - [ ] First-run setup wizard works
 - [ ] REST API endpoints defined
-- [ ] Swagger UI accessible at `/server/docs/swagger`; OpenAPI JSON at `/api/{api_version}/swagger` (with `/api/swagger` alias)
-- [ ] GraphiQL UI accessible at `/server/docs/graphql`; GraphQL POST at `/api/{api_version}/graphql` (with `/api/graphql` alias)
+- [ ] Swagger UI accessible at `/server/docs/swagger`; OpenAPI JSON at `/api/{api_version}/server/swagger` (with `/api/swagger` alias)
+- [ ] GraphiQL UI accessible at `/server/docs/graphql`; GraphQL POST at `/api/{api_version}/server/graphql` (with `/api/graphql` alias)
 - [ ] All three APIs in sync
 
 ### Infrastructure
