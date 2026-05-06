@@ -75,7 +75,9 @@ AI reads AI.md for the first time
 │   │   │   - {INTERNAL_NAME} → UPPERCASE form of {internal_name}
 │   │   │   - {plist_name} → derived: io.github.{project_org}.{internal_name}
 │   │   │
-│   │   └─► 4. Create IDEA.md if it doesn't exist (from template or ask user)
+│   │   └─► 4. Create IDEA.md if it doesn't exist
+│   │       - If a long-form/project-specific `CLAUDE.md` already exists, MIGRATE its valid project description, project variables, and business logic into IDEA.md first
+│   │       - Do NOT copy loader-only instructions, duplicated AI.md rules, or stale implementation text into IDEA.md
 │   │       - On creation, write `internal_name: <project_name>` to `## Project variables` and warn the user it is frozen forever
 │   │
 │   └─► NO (already configured)
@@ -197,6 +199,34 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
   - the required defenses or explicit non-goals for each meaningful threat
 - If the project depends on an external service, API, webhook, identity provider, payment processor, or network source, `## Business logic` MUST state the trust assumption and failure mode - AI MUST NOT invent one later in code
 - If a security-sensitive choice is intentionally allowed (for example permanent root/admin runtime, external route compatibility, remote fetches, public uploads, or third-party embeds), the reason MUST be documented in `### Security decisions & exceptions`
+
+## Migrating Existing `CLAUDE.md` Into `IDEA.md`
+
+**If a repository already has a pre-template `CLAUDE.md` with real project details, those project details MUST be migrated into `IDEA.md`.**
+
+**What belongs in `IDEA.md`:**
+- project description / elevator pitch
+- project-specific terminology
+- project variables that can be expressed as `key: value`
+- business logic, roles, flows, constraints, trust boundaries, abuse cases, and security exceptions
+
+**What does NOT belong in `IDEA.md`:**
+- generic Claude/Copilot usage instructions
+- loader boilerplate whose job is only to point at `AI.md`
+- duplicated global implementation rules that already live in `AI.md`
+- stale code snippets, one-off notes, or tool-specific chatter with no business/spec value
+
+**Migration rules:**
+1. **Read existing `CLAUDE.md` first** - never overwrite blindly
+2. Extract valid project-specific content and reorganize it into the required `IDEA.md` layout:
+   - `## Project description`
+   - `## Project variables`
+   - `## Business logic`
+3. Normalize discovered variables into lower_snake_case `key: value` entries
+4. If `internal_name` cannot be proven from the existing project state, initialize it to `project_name` on first migration and treat it as frozen after that
+5. If a `CLAUDE.md` statement conflicts with `AI.md`, `AI.md` wins; either fix the migrated text or ask the user if the intent is unclear
+6. After migration, keep `CLAUDE.md` only as the short efficient loader and keep the real project plan/spec in `IDEA.md`
+7. Never silently discard meaningful project-specific content; migrate it, trim it, or ask the user where it belongs
 
 ---
 
@@ -1241,7 +1271,8 @@ Each AI tool directory MUST have a project memory file containing critical rules
 - If it already matches the expected loader structure, leave it alone except for needed spec-reference refreshes
 - If it already contains valid project rules/spec references, **preserve and merge** that content into the new efficient-loader structure
 - Keep project-specific MUST/NEVER rules, terminology, and workflow notes
-- Move long-form/spec content into `AI.md` or `.claude/rules/*.md` as appropriate, then leave `CLAUDE.md` as the short loader
+- Move project-specific description/variables/business logic into `IDEA.md`
+- Move long-form implementation/spec content into `AI.md` or `.claude/rules/*.md` as appropriate, then leave `CLAUDE.md` as the short loader
 - If existing `CLAUDE.md` conflicts with `AI.md`, then `AI.md` wins; update `CLAUDE.md` to reference the canonical rule instead of duplicating stale text
 - `CLAUDE.md` must end up short and efficient, but valid existing guidance must be migrated, not discarded
 
@@ -2435,13 +2466,14 @@ Before I proceed, can you confirm [specific question]?
 ```
 1. Read AI.md PART 0 and PART 1 completely
 2. Read existing CLAUDE.md if it exists
-3. Check if .claude/rules/ directory exists
-4. If missing or outdated: CREATE/UPDATE all rule files (see table below)
-5. If CLAUDE.md is missing: create the efficient loader version
-6. If CLAUDE.md exists and starts with `# Project SPEC`: treat it as the standard loader format; update only if references/rules are stale
-7. If CLAUDE.md exists but is not in the standard loader format: merge/migrate valid project-specific guidance into the efficient loader structure - NEVER overwrite blindly
-8. If TODO.AI.md exists: read and check for needed updates
-9. Commit all COMMIT, NEVER, and MUST rules to memory
+3. If IDEA.md is missing and existing CLAUDE.md contains project-specific content: migrate that content into IDEA.md before proceeding
+4. Check if .claude/rules/ directory exists
+5. If missing or outdated: CREATE/UPDATE all rule files (see table below)
+6. If CLAUDE.md is missing: create the efficient loader version
+7. If CLAUDE.md exists and starts with `# Project SPEC`: treat it as the standard loader format; update only if references/rules are stale
+8. If CLAUDE.md exists but is not in the standard loader format: migrate project-specific content to IDEA.md, then merge remaining valid loader guidance into the efficient loader structure - NEVER overwrite blindly
+9. If TODO.AI.md exists: read and check for needed updates
+10. Commit all COMMIT, NEVER, and MUST rules to memory
 ```
 
 **Rule Files to Create/Update:**
