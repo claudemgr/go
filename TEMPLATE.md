@@ -2,17 +2,26 @@
 
 **Name**: {project_name}
 
+**Note:** `{PROJECT_NAME}` and `{project_name}` in this file are reference tokens, not setup-time text replacements. Their values are resolved from `IDEA.md ## Project variables` while `AI.md` remains read-only.
+
 ---
 
-# 🆕 FIRST-TIME AI.md SETUP
+# 🆕 FIRST-TIME PROJECT SETUP
 
-**If you see `{project_name}` or `{PROJECT_NAME}` placeholders in this file, this is a fresh template that needs configuration.**
+**`AI.md` is a read-only specification. Project-specific values live in `IDEA.md ## Project variables`, and the placeholders in this file are resolved from there.**
 
-## Detecting Fresh Template
+## Detecting Unconfigured Project Setup
 
 ```bash
-# Check if placeholders exist (fresh template)
-grep -q '{project_name}' AI.md && echo "FRESH TEMPLATE - needs setup"
+# Project is not configured until IDEA.md exists and has required variables
+[ ! -f IDEA.md ] && echo "SETUP NEEDED - IDEA.md missing"
+
+have_name=$(grep -cE '^project_name:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
+have_org=$(grep -cE '^project_org:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
+have_internal=$(grep -cE '^internal_name:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
+
+[ "$have_name" -eq 0 ] || [ "$have_org" -eq 0 ] || [ "$have_internal" -eq 0 ] && \
+  echo "SETUP NEEDED - IDEA.md project variables incomplete"
 ```
 
 ## Auto-Detecting Project Values
@@ -21,9 +30,9 @@ grep -q '{project_name}' AI.md && echo "FRESH TEMPLATE - needs setup"
 
 | Value | Primary Source | Fallback |
 |-------|----------------|----------|
-| `{project_name}` | IDEA.md (if exists) | `basename "$PWD"` |
-| `{project_org}` | IDEA.md (if exists) | `basename "$(dirname "$PWD")"` |
-| `{internal_name}` | IDEA.md (always — set once at first run, never edited after) | First-time setup: copy from `{project_name}` |
+| `{project_name}` | IDEA.md `## Project variables` | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then `basename "$PWD"` |
+| `{project_org}` | IDEA.md `## Project variables` | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then `basename "$(dirname "$PWD")"` |
+| `{internal_name}` | IDEA.md `## Project variables` (always — set once at first run, never edited after) | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then first-time setup: copy from `{project_name}` |
 | `{plist_name}` | **Derived (not stored)**: `io.github.{project_org}.{internal_name}` | — |
 
 **Detection commands (use commands — never guess):**
@@ -56,35 +65,35 @@ plist_name="io.github.${project_org}.${internal_name}"
 ```
 AI reads AI.md for the first time
 │
-├─► Check: Does AI.md contain literal "{project_name}"?
+├─► Check: Does IDEA.md exist with required `## Project variables` entries?
 │   │
-│   ├─► YES (fresh template)
+│   ├─► NO (setup needed)
 │   │   │
 │   │   ├─► 1. Check if IDEA.md exists
-│   │   │   ├─► YES: Extract project_name / project_org from IDEA.md `## Project variables`
-│   │   │   └─► NO: Infer from directory structure (commands above) — never guess
+│   │   │   ├─► YES: Read `## Project variables`; if incomplete, fill only the missing required values
+│   │   │   └─► NO: Check existing `CLAUDE.md` and `.claude/CLAUDE.md` for valid project-specific details, then fall back to directory structure commands — never guess
 │   │   │
 │   │   ├─► 2. Confirm with user: "Project: {project_name}, Org: {project_org} - correct?"
 │   │   │
-│   │   ├─► 3. Replace ALL placeholders in AI.md:
-│   │   │   - {project_name} → actual project name (lowercase)
-│   │   │   - {PROJECT_NAME} → actual project name (UPPERCASE)
-│   │   │   - {project_org} → actual org name (lowercase)
-│   │   │   - {PROJECT_ORG} → actual org name (UPPERCASE)
-│   │   │   - {internal_name} → on first run = project_name; afterwards read from IDEA.md, IMMUTABLE
-│   │   │   - {INTERNAL_NAME} → UPPERCASE form of {internal_name}
-│   │   │   - {plist_name} → derived: io.github.{project_org}.{internal_name}
+│   │   ├─► 3. Create IDEA.md if it doesn't exist
+│   │   │   - If a long-form/project-specific `CLAUDE.md` or `.claude/CLAUDE.md` already exists, MIGRATE its valid project description, project variables, and business logic into IDEA.md first
+│   │   │   - Do NOT copy loader-only instructions, duplicated AI.md rules, or stale implementation text into IDEA.md
+│   │   │   - On creation, write `internal_name: <project_name>` to `## Project variables` and warn the user it is frozen forever
 │   │   │
-│   │   └─► 4. Create IDEA.md if it doesn't exist
-│   │       - If a long-form/project-specific `CLAUDE.md` already exists, MIGRATE its valid project description, project variables, and business logic into IDEA.md first
-│   │       - Do NOT copy loader-only instructions, duplicated AI.md rules, or stale implementation text into IDEA.md
-│   │       - On creation, write `internal_name: <project_name>` to `## Project variables` and warn the user it is frozen forever
+│   │   └─► 4. Create or update IDEA.md `## Project variables`:
+│   │       - project_name  → actual project name (lowercase)
+│   │       - project_org   → actual org name (lowercase)
+│   │       - internal_name → on first run = project_name; afterwards read from IDEA.md, IMMUTABLE
+│   │       - Derived UPPERCASE placeholders are computed from these values when referenced
+│   │       - {plist_name} is derived as io.github.{project_org}.{internal_name} and is NOT stored
 │   │
-│   └─► NO (already configured)
-│       └─► Proceed with normal operation - read PART 0 first
+│   └─► YES (already configured)
+│       └─► Proceed with normal operation - read PART 0 first and resolve placeholders from IDEA.md as needed
 ```
 
 ## Placeholder Reference
+
+**These placeholders are reference tokens used by the spec. They are resolved from `IDEA.md ## Project variables` and are not meant to be manually rewritten throughout `AI.md` during project setup.**
 
 | Placeholder | Case | Mutability | Example |
 |-------------|------|------------|---------|
@@ -98,7 +107,7 @@ AI reads AI.md for the first time
 
 **`{internal_name}` rule:** set ONCE on first run (initial value = `{project_name}`), then immutable for the project's lifetime. Used for every on-disk identifier (`{config_dir}`, `{data_dir}`, `{log_dir}`, `{cache_dir}`, systemd unit, `{plist_name}`) so a project rename does not orphan paths or services.
 
-**After setup, this section becomes reference-only. The placeholders above will show actual values.**
+**After setup, this section remains reference-only. The placeholders above are resolved from `IDEA.md ## Project variables`; `AI.md` itself stays read-only.**
 
 ---
 
@@ -133,8 +142,8 @@ Free-form prose. This is the human-readable elevator pitch.)
 
 ## Project variables
 
-(All project variables in `key: value` form. Values are the substitutions used to
-expand placeholders in AI.md. Required keys at minimum: `project_name`, `project_org`,
+(All project variables in `key: value` form. Values are the canonical source used to
+resolve placeholders referenced in AI.md. Required keys at minimum: `project_name`, `project_org`,
 `internal_name`. Add more as the project needs — `app_name`, `official_site`,
 `maintainer_name`, `maintainer_email`, etc. Use lower_snake_case for keys.)
 
@@ -170,7 +179,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
 | Section | Why |
 |---------|-----|
 | `## Project description` | Top — anyone opening IDEA.md sees the project pitch first |
-| `## Project variables` | Middle — extraction tools (and the FIRST-TIME AI.md SETUP flow above) parse this section to substitute `{project_name}`, `{PROJECT_NAME}`, `{project_org}`, etc. throughout AI.md |
+| `## Project variables` | Middle — extraction tools (and the FIRST-TIME PROJECT SETUP flow above) parse this section to resolve `{project_name}`, `{PROJECT_NAME}`, `{project_org}`, etc. when AI.md references them |
 | `## Business logic` | Bottom — the bulk of the file, the actual product spec |
 
 **Rules for `## Project variables`:**
@@ -179,7 +188,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
 - Keys are **lower_snake_case** only — they match the lowercase placeholders in AI.md
 - The setup flow renders `{KEY_UPPER}` automatically by uppercasing the lowercase key — do NOT list both forms
 - Never guess values: use commands (`basename "$PWD"`, `git config user.email`, `date`, etc.) and confirm with the user
-- If a placeholder appears in AI.md but has no entry in `## Project variables`, the setup flow MUST stop and ask, not invent a value
+- If a placeholder referenced by AI.md has no entry in `## Project variables`, the setup flow MUST stop and ask, not invent a value
 
 **Rules for `## Business logic`:**
 
@@ -202,7 +211,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
 
 ## Migrating Existing `CLAUDE.md` Into `IDEA.md`
 
-**If a repository already has a pre-template `CLAUDE.md` with real project details, those project details MUST be migrated into `IDEA.md`.**
+**If a repository already has a pre-template `CLAUDE.md` or `.claude/CLAUDE.md` with real project details, those project details MUST be migrated into `IDEA.md`.**
 
 **What belongs in `IDEA.md`:**
 - project description / elevator pitch
@@ -217,15 +226,15 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
 - stale code snippets, one-off notes, or tool-specific chatter with no business/spec value
 
 **Migration rules:**
-1. **Read existing `CLAUDE.md` first** - never overwrite blindly
+1. **Read existing `CLAUDE.md` and `.claude/CLAUDE.md` first** - never overwrite blindly
 2. Extract valid project-specific content and reorganize it into the required `IDEA.md` layout:
    - `## Project description`
    - `## Project variables`
    - `## Business logic`
 3. Normalize discovered variables into lower_snake_case `key: value` entries
 4. If `internal_name` cannot be proven from the existing project state, initialize it to `project_name` on first migration and treat it as frozen after that
-5. If a `CLAUDE.md` statement conflicts with `AI.md`, `AI.md` wins; either fix the migrated text or ask the user if the intent is unclear
-6. After migration, keep `CLAUDE.md` only as the short efficient loader and keep the real project plan/spec in `IDEA.md`
+5. If statements from `CLAUDE.md` or `.claude/CLAUDE.md` conflict with `AI.md`, `AI.md` wins; either fix the migrated text or ask the user if the intent is unclear
+6. After migration, keep root `CLAUDE.md` and/or `.claude/CLAUDE.md` only as short efficient loaders and keep the real project plan/spec in `IDEA.md`
 7. Never silently discard meaningful project-specific content; migrate it, trim it, or ask the user where it belongs
 
 ---
@@ -602,7 +611,7 @@ if cacheSize > 1024*1024*1024 {
 |------|-------------|
 | **NEVER use Makefile in CI** | Workflows have explicit commands with all env vars |
 | **GitHub/Gitea/Jenkins must match** | Same platforms, same env vars, same logic |
-| **VERSION from tag** | Strip `v` prefix from semver only: `v1.2.3` → `1.2.3`, `dev` → `dev` |
+| **VERSION precedence** | `release.txt` wins when present; otherwise use the workflow/build-specific fallback (tag, beta timestamp, etc.) |
 | **LDFLAGS** | `-s -w -X 'main.Version=...' -X 'main.CommitID=...' -X 'main.BuildDate=...' -X 'main.OfficialSite=...'` |
 | **Docker builds on EVERY push** | Any branch push triggers Docker image build |
 | **Docker tags** | Any push → `devel`, `{commit}`; beta → adds `beta`; tag → `{version}`, `latest`, `YYMM`, `{commit}` |
@@ -1263,18 +1272,18 @@ Each AI tool directory MUST have a project memory file containing critical rules
 
 **Claude Code Note:** Claude prefers `CLAUDE.md` at project root (discovered recursively). `.claude/CLAUDE.md` is an alternate location. Personal preferences go in `CLAUDE.local.md` (auto-gitignored).
 
-**Role of `CLAUDE.md`:** `CLAUDE.md` is the **efficient loader**, not the full spec. It MUST stay short and point back to `AI.md`, which remains the source of truth.
+**Role of `CLAUDE.md`:** root `CLAUDE.md` and `.claude/CLAUDE.md` are **efficient loaders**, not the full spec. They MUST stay short and point back to `AI.md`, which remains the source of truth.
 
-**If `CLAUDE.md` already exists:**
-- **READ it first** - NEVER overwrite blindly
-- If it already uses the standard loader marker/header, treat it as the canonical loader format
-- If it already matches the expected loader structure, leave it alone except for needed spec-reference refreshes
-- If it already contains valid project rules/spec references, **preserve and merge** that content into the new efficient-loader structure
+**If `CLAUDE.md` or `.claude/CLAUDE.md` already exists:**
+- **READ both first** - NEVER overwrite blindly
+- If a file already uses the standard loader marker/header, treat it as the canonical loader format
+- If a file already matches the expected loader structure, leave it alone except for needed spec-reference refreshes
+- If a file already contains valid project rules/spec references, **preserve and merge** that content into the new efficient-loader structure
 - Keep project-specific MUST/NEVER rules, terminology, and workflow notes
 - Move project-specific description/variables/business logic into `IDEA.md`
-- Move long-form implementation/spec content into `AI.md` or `.claude/rules/*.md` as appropriate, then leave `CLAUDE.md` as the short loader
-- If existing `CLAUDE.md` conflicts with `AI.md`, then `AI.md` wins; update `CLAUDE.md` to reference the canonical rule instead of duplicating stale text
-- `CLAUDE.md` must end up short and efficient, but valid existing guidance must be migrated, not discarded
+- Move long-form implementation/spec content into `AI.md` or `.claude/rules/*.md` as appropriate, then leave root `CLAUDE.md` / `.claude/CLAUDE.md` as short loaders
+- If existing root `CLAUDE.md` or `.claude/CLAUDE.md` conflicts with `AI.md`, then `AI.md` wins; update the loader file to reference the canonical rule instead of duplicating stale text
+- Loader files must end up short and efficient, but valid existing guidance must be migrated, not discarded
 
 **Required Content Structure (~50-100 lines max):**
 
@@ -1302,9 +1311,24 @@ On EVERY new conversation or after "context compacted" message:
 
 ## Asking Questions
 
-- **Never guess** - if unsure, ASK the user
+- **Default to continuing work** - do not stop just to ask whether you should continue; if the next step is implied by the spec, the current task, or the current findings, continue
+- **Never guess** - if the answer cannot be determined from `AI.md`, `IDEA.md`, the codebase, or repo state **and** the missing information materially changes behavior, scope, or safety, ASK the user
+- **Do NOT ask for permission to keep going** - continue until the current task is complete, blocked by a real decision, or the user explicitly asks to pause
 - **Question mark = question** - when user ends with `?`, answer/clarify, don't execute
 - **Use AskUserQuestion wizard** - presents one question at a time with options + "Other" for custom input + Submit/Cancel; layout varies by context (yes/no, multi-select, with descriptions); less overwhelming than plain text questions
+
+**Ask only when at least one of these is true:**
+1. A required business/product decision is missing
+2. Two or more reasonable implementations would produce materially different behavior
+3. The action is destructive, irreversible, or impacts production/user data beyond normal safe development work
+4. The spec explicitly says to ask or confirm
+5. The user explicitly requested a plan, pause, or checkpoint before execution
+
+**Do NOT ask just to confirm routine continuation:**
+- after finishing one obvious sub-step and the next step is clear
+- before running normal repo validations/checks already implied by the task
+- before making tightly related follow-up edits required to keep the spec internally consistent
+- before updating related docs/checklists/examples required by the same change
 
 ## Before ANY Code Change
 
@@ -1353,7 +1377,7 @@ On EVERY new conversation or after "context compacted" message:
 14. Skip validation → Server validates EVERYTHING
 15. Implement without reading spec → Read relevant PART first
 16. Modify TEMPLATE.md or AI.md PART 0-33 content → READ-ONLY SPEC. Project changes go in IDEA.md. The ONLY edits permitted to TEMPLATE.md/AI.md are flipping PARTS 34-36 OPTIONAL→REQUIRED for projects that adopt those features (see PARTS 34-36 flip mechanism)
-17. Edit `## Project variables` in IDEA.md without confirming with the user → Variables drive substitution into AI.md; wrong values silently corrupt every reference
+17. Edit `## Project variables` in IDEA.md without confirming with the user → Variables drive placeholder resolution used by AI.md; wrong values silently corrupt every reference
 18. Read an image larger than 1000×1000 directly into context → Resize to ≤1000×1000 first via the fallback chain (`magick` → `convert` → `gm convert` → `vipsthumbnail` → `sips` → `ffmpeg`). If none are available, do NOT read the image — tell the user which tool to install. See "Large Image Handling" below.
 19. Use a non-conforming IDEA.md without migration → If IDEA.md exists but lacks the three required sections (`## Project description`, `## Project variables`, `## Business logic`), STOP and migrate it before doing anything else. See "IDEA.md Migration" below.
 
@@ -2265,7 +2289,8 @@ grep -n "^|" AI.md | head -50
 1. **Search with grep** - use multiple keywords
 2. **Check related PARTs** - information may be in adjacent sections
 3. **Read the FINAL CHECKPOINT** - summary of all requirements
-4. **ASK the user** - don't guess
+4. **Continue researching or implementing the non-ambiguous parts**
+5. **ASK the user only if the unresolved point is actually blocking** - don't guess
 
 ---
 
@@ -2465,13 +2490,13 @@ Before I proceed, can you confirm [specific question]?
 
 ```
 1. Read AI.md PART 0 and PART 1 completely
-2. Read existing CLAUDE.md if it exists
-3. If IDEA.md is missing and existing CLAUDE.md contains project-specific content: migrate that content into IDEA.md before proceeding
+2. Read existing `CLAUDE.md` and `.claude/CLAUDE.md` if they exist
+3. If IDEA.md is missing and either Claude loader file contains project-specific content: migrate that content into IDEA.md before proceeding
 4. Check if .claude/rules/ directory exists
 5. If missing or outdated: CREATE/UPDATE all rule files (see table below)
 6. If CLAUDE.md is missing: create the efficient loader version
-7. If CLAUDE.md exists and starts with `# Project SPEC`: treat it as the standard loader format; update only if references/rules are stale
-8. If CLAUDE.md exists but is not in the standard loader format: migrate project-specific content to IDEA.md, then merge remaining valid loader guidance into the efficient loader structure - NEVER overwrite blindly
+7. If a Claude loader file exists and starts with `# Project SPEC`: treat it as the standard loader format; update only if references/rules are stale
+8. If a Claude loader file exists but is not in the standard loader format: migrate project-specific content to IDEA.md, then merge remaining valid loader guidance into the efficient loader structure - NEVER overwrite blindly
 9. If TODO.AI.md exists: read and check for needed updates
 10. Commit all COMMIT, NEVER, and MUST rules to memory
 ```
@@ -36725,19 +36750,22 @@ func (ws *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, s c
 
 ### Version File: `release.txt`
 
-- Source of truth for stable version (see PART 13)
+- Canonical single-line version source (see PART 13)
 - Semantic versioning: `MAJOR.MINOR.PATCH` (e.g., `1.2.3`)
+- If `release.txt` exists, it wins over derived/tag/env defaults
 
 ### Official Site File: `site.txt` (Optional)
 
 - **OPTIONAL** - only create if project has an official hosted instance
 - Single line containing the official site URL (e.g., `https://api.example.com`)
 - **NEVER guess or assume** - must be explicitly created by user
-- Used to embed default `--server` URL in CLI/Agent binaries
+- Canonical single-line official site source when present
+- If `site.txt` exists, it wins over `IDEA.md`, README, env vars, CI secrets, and other fallbacks
+- If `site.txt` and `IDEA.md ## Project variables` both exist, `IDEA.md` should match `site.txt`; `site.txt` is the easy-to-update operational override
 - If not present, CLI/Agent users must always specify `--server` flag
 - Sources checked in order:
-  1. Environment variable: `OFFICIALSITE=https://example.com`
-  2. File: `site.txt` in project root
+  1. File: `site.txt` in project root
+  2. Environment variable: `OFFICIALSITE=https://example.com`
   3. CI/CD secrets (repository secrets)
   4. Empty (self-hosted projects)
 
@@ -36889,8 +36917,8 @@ binaries/
 PROJECTNAME := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git)?$$|\1|' || basename "$$(pwd)")
 PROJECTORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$$|\1|' || basename "$$(dirname "$$(pwd)")")
 
-# Version: env var > release.txt > default
-VERSION ?= $(shell cat release.txt 2>/dev/null || echo "0.1.0")
+# Version precedence: release.txt > env/default fallback
+VERSION := $(shell [ -f release.txt ] && cat release.txt || echo "${VERSION:-0.1.0}")
 
 # Build info - use TZ env var or system timezone
 # Format: "December 4, 2025 at 13:05:13"
@@ -36900,11 +36928,11 @@ COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 # Official site URL (OPTIONAL - never guess or assume)
 # Sources (in order of precedence):
-#   1. Environment variable: OFFICIALSITE=https://example.com
-#   2. File: site.txt in project root (single line, URL only)
+#   1. File: site.txt in project root (single line, URL only)
+#   2. Environment variable: OFFICIALSITE=https://example.com
 #   3. Empty (self-hosted projects - users must use --server flag)
 # NEVER infer from project name, domain, or any other source
-OFFICIALSITE ?= $(shell [ -f site.txt ] && cat site.txt || echo "")
+OFFICIALSITE := $(shell [ -f site.txt ] && cat site.txt || echo "${OFFICIALSITE:-}")
 
 # Linker flags to embed build info
 LDFLAGS := -s -w \
@@ -39050,7 +39078,7 @@ All workflows MUST set these environment variables:
 
 ```yaml
 # Set in "Set build info" step, NOT as static env:
-#   echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+#   if [ -f release.txt ]; then echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV; else echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV; fi
 #   echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 #   echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
 # Then use in build step:
@@ -39111,10 +39139,14 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
+          else
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+          fi
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
-          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # OFFICIALSITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
             echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
@@ -39273,10 +39305,14 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITHUB_ENV
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITHUB_ENV
+          fi
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
-          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # OFFICIALSITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
             echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
@@ -39351,7 +39387,12 @@ jobs:
           merge-multiple: true
 
       - name: Set version
-        run: echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITHUB_ENV
+        run: |
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITHUB_ENV
+          fi
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
@@ -39422,10 +39463,14 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
+          fi
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
-          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # OFFICIALSITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
             echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
@@ -39500,7 +39545,12 @@ jobs:
           merge-multiple: true
 
       - name: Set version
-        run: echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
+        run: |
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
+          fi
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
@@ -39874,10 +39924,14 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "VERSION=${GITEA_REF_NAME#v}" >> $GITEA_ENV
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
+          else
+            echo "VERSION=${GITEA_REF_NAME#v}" >> $GITEA_ENV
+          fi
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
-          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # OFFICIALSITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
             echo "OFFICIALSITE=$(cat site.txt)" >> $GITEA_ENV
@@ -40022,10 +40076,14 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITEA_ENV
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITEA_ENV
+          fi
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
-          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # OFFICIALSITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
             echo "OFFICIALSITE=$(cat site.txt)" >> $GITEA_ENV
@@ -40100,7 +40158,12 @@ jobs:
           merge-multiple: true
 
       - name: Set version
-        run: echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITEA_ENV
+        run: |
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITEA_ENV
+          fi
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
@@ -40171,10 +40234,14 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITEA_ENV
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITEA_ENV
+          fi
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
-          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # OFFICIALSITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
             echo "OFFICIALSITE=$(cat site.txt)" >> $GITEA_ENV
@@ -40249,7 +40316,12 @@ jobs:
           merge-multiple: true
 
       - name: Set version
-        run: echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITEA_ENV
+        run: |
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITEA_ENV
+          fi
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
@@ -40594,7 +40666,7 @@ stages:
     - export VERSION="${CI_COMMIT_TAG#v}"
     - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
     - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
-    # OFFICIALSITE (optional): Set in CI/CD Variables, or site.txt file, or leave empty
+    # OFFICIALSITE (optional): site.txt wins; otherwise use CI/CD Variables or leave empty
     # Never guess or assume - must be explicitly defined by user
     - |
       if [ -f site.txt ]; then
@@ -41183,7 +41255,7 @@ pipeline {
                     }
                     env.COMMIT_ID = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     env.BUILD_DATE = sh(script: 'date +"%a %b %d, %Y at %H:%M:%S %Z"', returnStdout: true).trim()
-                    // OFFICIALSITE (optional): Set in Jenkins credentials, or site.txt file, or leave empty
+                    // OFFICIALSITE (optional): site.txt wins; otherwise use Jenkins credentials or leave empty
                     // Never guess or assume - must be explicitly defined by user
                     env.OFFICIALSITE = sh(script: '[ -f site.txt ] && cat site.txt || echo "${OFFICIALSITE:-}"', returnStdout: true).trim()
                     env.LDFLAGS = "-s -w -X 'main.Version=${env.VERSION}' -X 'main.CommitID=${env.COMMIT_ID}' -X 'main.BuildDate=${env.BUILD_DATE}' -X 'main.OfficialSite=${env.OFFICIALSITE}'"
@@ -50547,7 +50619,7 @@ Flags:
 ...
 ```
 
-**Official site (`{official_site}`) is defined in the project's AI.md or README.md and compiled into the binary.**
+**Official site (`{official_site}`) is taken from `site.txt` when that file exists. Otherwise fall back to `IDEA.md ## Project variables` (`official_site`) and other compatibility sources.**
 
 **What official site affects:**
 - README.md: Default production site URL in examples
@@ -50560,14 +50632,17 @@ Flags:
 - Any runtime behavior (just a compiled default)
 
 Sources for official site (check in order):
-1. AI.md: `Official Site: https://...` or `{official_site}: https://...`
-2. README.md: `Official site is: https://...` or `Site: https://...`
-3. AI asks user (if not found in docs)
-4. If user selects "none", project has no default server
+1. `site.txt`: single line URL `https://...`
+2. `IDEA.md ## Project variables`: `official_site: https://...`
+3. README.md: `Official site is: https://...` or `Site: https://...` (compatibility fallback only)
+4. AI asks user (if not found in canonical project files)
+5. If user selects "none", project has no default server
+
+**Conflict rule:** if both `site.txt` and `IDEA.md` exist and disagree, `site.txt` wins. Update `IDEA.md` to match or remove the stale `official_site` entry.
 
 **AI should ask if not defined:**
 ```
-Official site not found in AI.md or README.md.
+Official site not found in site.txt, IDEA.md, or README.md.
 What is the official site for this project?
 
 1) https://projectname.example.com
@@ -58632,7 +58707,7 @@ When implementing custom domains for a project:
 **Every IDEA.md has exactly three top-level sections in this order:**
 
 1. `## Project description` — free-form prose: what the project is, who uses it, what problem it solves
-2. `## Project variables` — `key: value` lines that drive substitution into AI.md (`project_name`, `project_org`, `internal_name`, etc.)
+2. `## Project variables` — `key: value` lines that provide the canonical values AI.md resolves for `project_name`, `project_org`, `internal_name`, etc.
 3. `## Business logic` — features, data models, business rules, endpoints (WHAT, not HOW)
 
 **See PART 0 → "IDEA.md Required Layout" for the authoritative rules: variable-key naming, the immutable `internal_name` rule, the missing-value setup flow, and the migration procedure for legacy free-form IDEA.md files.**
@@ -59034,6 +59109,8 @@ make docker # Build Docker image
 **PART 0-2: Meta & Rules**
 - [ ] AI.md exists and is READ-ONLY (implementation spec)
 - [ ] IDEA.md exists and contains project-specific business logic
+- [ ] If pre-template `CLAUDE.md` or `.claude/CLAUDE.md` existed, its project-specific content was migrated into IDEA.md
+- [ ] Claude loader files are now short loaders only and no longer hold the primary business spec
 - [ ] MIT License in LICENSE.md
 - [ ] All embedded library licenses listed
 - [ ] No proprietary dependencies
@@ -60149,14 +60226,16 @@ When integrating this specification into an existing project:
 ### Phase 2: Planning
 
 1. **Do NOT start making changes yet**
-2. **Review TODO.AI.md with the human** - get approval on priorities
+2. **Review TODO.AI.md with the human only if priorities, scope, or breaking-change handling are unclear**
 3. **Ask clarifying questions:**
-   - Are there existing features that should be preserved?
-   - Are there breaking changes acceptable?
-   - What is the migration timeline (can it be done incrementally)?
-   - Are there production systems that need careful migration?
+    - Are there existing features that should be preserved?
+    - Are there breaking changes acceptable?
+    - What is the migration timeline (can it be done incrementally)?
+    - Are there production systems that need careful migration?
 4. **Create a migration plan** for each major change
 5. **Identify risks** - data migration, API breaking changes, downtime requirements
+
+**Default execution rule:** once the migration plan is clear enough to act safely, continue working through it without repeatedly stopping to ask whether to proceed.
 
 ### Phase 3: Incremental Implementation
 
@@ -60188,7 +60267,7 @@ After each significant change:
 2. **Update TODO.AI.md** - mark items complete
 3. **Update IDEA.md** - reflect current project state
 4. **Document breaking changes** - if any
-5. **Get human approval** before proceeding to next phase
+5. **Get human approval before proceeding to the next phase only if** the next phase introduces breaking behavior, destructive migration steps, production-impacting risk, or unresolved scope decisions
 
 ---
 
@@ -60574,6 +60653,7 @@ Implement the required client, then any project-specific optional features:
 
 - [ ] Directory structure created per spec
 - [ ] AI.md created and customized
+- [ ] If `CLAUDE.md` or `.claude/CLAUDE.md` existed, IDEA.md was created/migrated before other work
 - [ ] go.mod initialized
 - [ ] .gitignore created with proper rules
 - [ ] Basic src/main.go exists
