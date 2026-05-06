@@ -946,7 +946,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 |----------------|--------|
 | `SUMMARY.md` | Unnecessary - AI.md is the spec |
 | `COMPLIANCE.md` | Unnecessary - compliance is in AI.md |
-| `NOTES.md` | Unnecessary - use `PLAN.md`, `PLAN.AI.md`, or `TODO.AI.md` as appropriate |
+| `NOTES.md` | Unnecessary - use `PLAN.md`, `PLAN.AI.md`, `TODO.md`, or `TODO.AI.md` as appropriate |
 | `CHANGELOG.md` | Use GitHub/Gitea releases instead |
 | `AUDIT.md`, `REPORT.md`, `ANALYSIS.md` | Don't create report-only docs. Fix issues directly. Temporary `AUDIT.AI.md` is the explicit-audit exception |
 | `CONTRIBUTING.md` in root | Belongs in `.github/` |
@@ -958,7 +958,6 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | `*.example.*`, `*.sample.*` | No example files (defaults in binary) |
 | `server.yml`, `cli.yml` | Config files are runtime-generated, never in repo |
 | `.env*` | No .env files |
-| `TODO.md` | Use `TODO.AI.md` for AI tasks only |
 
 ### NEVER Create These Directories
 
@@ -984,9 +983,12 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | `AI.md` | ✓ | Project specification (HOW - implementation patterns) |
 | `IDEA.md` | ✓ | Project idea (WHAT - business logic, features) |
 | `CLAUDE.md` | ✓ | Claude Code quick loader - critical rules + references into `AI.md` |
-| `PLAN.md` | Optional | Human implementation plan |
-| `TODO.AI.md` | Optional | AI task tracking (3+ tasks only) |
-| `PLAN.AI.md` | Optional | AI implementation plan (if exists, this is THE plan) |
+| `PLAN.md` | Optional | Project plan — human edits/owns. AI reads, interprets, executes, and marks items done in place. Never rewrite or restructure |
+| `PLAN.AI.md` | Optional | Project plan — AI creates/updates. If it exists, this is THE plan |
+| `TODO.md` | Optional | Task list — human edits/owns. AI reads, interprets, executes, and marks items done in place. Never delete, empty, or restructure |
+| `TODO.AI.md` | Optional | Task list — AI creates/updates (3+ tasks only) |
+
+**Why two variants of PLAN/TODO exist:** humans and AI write tasks at different levels of detail. A human might write `[ ] fix bugs`; AI would write a structured task with reproduction steps, acceptance criteria, and file paths. The split lets each party use their natural style. **AI's job with human files:** read terse items, figure out what they mean (investigate, propose, ask if genuinely unclear — don't refuse for being short), do the work, then check the box. AI must NOT "improve" the wording into AI-style verbose form. The completion rituals (`TODO.AI.md` ✅ empty, `PLAN.AI.md` "Fully Implemented" rewrite) apply only to the AI-owned variants.
 | `README.md` | ✓ | Public documentation |
 | `LICENSE.md` | ✓ | License file |
 | `Makefile` | ✓ | Build targets |
@@ -2497,7 +2499,7 @@ Before I proceed, can you confirm [specific question]?
 6. If CLAUDE.md is missing: create the efficient loader version
 7. If a Claude loader file exists and starts with `# Project SPEC`: treat it as the standard loader format; update only if references/rules are stale
 8. If a Claude loader file exists but is not in the standard loader format: migrate project-specific content to IDEA.md, then merge remaining valid loader guidance into the efficient loader structure - NEVER overwrite blindly
-9. If TODO.AI.md exists: read and check for needed updates
+9. If TODO.AI.md or TODO.md exists: read both and check for needed updates (treat both files the same; never delete or empty the human-owned TODO.md)
 10. Commit all COMMIT, NEVER, and MUST rules to memory
 ```
 
@@ -2943,14 +2945,18 @@ See IDEA.md for the full project breakdown.
 - This signals the plan is done and IDEA.md contains the project vision
 - If new planning is needed later, replace the completion message with the new plan
 
+**This completion ritual applies ONLY to PLAN.AI.md.** The human-owned `PLAN.md` is never rewritten or emptied by AI — AI may only mark individual items done in place.
+
 ## Project Files
 
 | File | Purpose | Update When |
 |------|---------|-------------|
 | **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH | OPTIONAL→REQUIRED only |
 | **IDEA.md** | Project plan (WHAT) - must follow AI.md | Features change |
-| **TODO.AI.md** | Task tracking | Tasks added/completed |
-| **PLAN.AI.md** | Implementation plan | Planning new features |
+| **TODO.AI.md** | Task tracking (AI-owned) | Tasks added/completed |
+| **TODO.md** | Task tracking (human-owned) | AI may mark items done; never delete/empty |
+| **PLAN.AI.md** | Implementation plan (AI-owned) | Planning new features |
+| **PLAN.md** | Implementation plan (human-owned) | AI may mark items done; never rewrite |
 | **README.md** | User documentation | Usage changes |
 
 **Hierarchy:**
@@ -2973,7 +2979,7 @@ See IDEA.md for the full project breakdown.
 ## Before Starting Work
 
 1. **Read AI.md COMPLETELY** - not just parts you think are relevant
-2. **Check TODO.AI.md** - see pending tasks and their priority
+2. **Check TODO.AI.md and TODO.md** - read both if present; see pending tasks and their priority
 3. **Verify understanding** - if ANYTHING is unclear, ASK first
 4. **Never assume** - when in doubt, ask the user
 
@@ -2982,7 +2988,7 @@ See IDEA.md for the full project breakdown.
 1. **Re-read spec before EACH implementation** - every single time
 2. **Follow spec EXACTLY** - no "improvements" without explicit permission
 3. **Check yourself every 3-5 changes** - am I drifting?
-4. **Update TODO.AI.md** as tasks are completed
+4. **Update TODO.AI.md and TODO.md** as tasks are completed (mark items done in whichever file lists them)
 5. **Test your changes** - don't commit untested code
 6. **Keep changes focused** - one feature/fix per task
 7. **If uncertain** - STOP, re-read spec, or ASK
@@ -3291,6 +3297,8 @@ Implemented core server functionality and admin panel.
 - Detailed description follows
 - Use bullet points for multiple changes
 - Be specific about what changed and why
+
+**This completion ritual applies ONLY to TODO.AI.md.** The human-owned `TODO.md` is never emptied or truncated by AI — AI may only mark individual items done in place. The ✅ commit format is also reserved for TODO.AI.md completion.
 
 ## Project Audit
 
@@ -5016,8 +5024,10 @@ func gUBE(e string) (*U, error) {
 |------|----------|---------|---------|
 | **AI.md** | Project repository | Implementation spec (HOW) | **NEVER** |
 | **IDEA.md** | Project repository | Project spec (WHAT) | **YES** |
-| **TODO.AI.md** | Project repository | Task tracking (3+ tasks) | **YES** |
-| **PLAN.AI.md** | Project repository | Implementation plan | **YES** |
+| **TODO.AI.md** | Project repository | Task tracking (AI-owned, 3+ tasks) | **YES** |
+| **TODO.md** | Project repository | Task tracking (human-owned) | **MARK ITEMS DONE ONLY** (never delete/empty) |
+| **PLAN.AI.md** | Project repository | Implementation plan (AI-owned) | **YES** |
+| **PLAN.md** | Project repository | Implementation plan (human-owned) | **MARK ITEMS DONE ONLY** (never rewrite) |
 
 ### Documentation Rules
 
@@ -5032,7 +5042,10 @@ func gUBE(e string) (*U, error) {
 ```
 AI.md (implementation spec - READ-ONLY)
 IDEA.md (project spec - update as needed)
-    └── TODO.AI.md (task tracking)
+    ├── PLAN.AI.md  (AI-owned plan, optional)
+    ├── PLAN.md     (human-owned plan, optional - AI marks items done only)
+    ├── TODO.AI.md  (AI-owned task tracking)
+    └── TODO.md     (human-owned task tracking - AI marks items done only)
 ```
 
 ### README.md
@@ -6372,8 +6385,10 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 ├── README.md               # Production first, dev last
 ├── LICENSE.md              # MIT + embedded licenses
 ├── AI.md                   # Project specification
-├── TODO.AI.md              # Task tracking for 3+ tasks
-├── PLAN.AI.md                 # Implementation plan (optional)
+├── TODO.AI.md              # Task tracking for 3+ tasks (AI-owned)
+├── TODO.md                 # Task tracking (human-owned, optional - AI marks items done only)
+├── PLAN.AI.md              # Implementation plan (AI-owned, optional)
+├── PLAN.md                 # Implementation plan (human-owned, optional - AI marks items done only)
 ├── Jenkinsfile             # Jenkins pipeline
 ├── release.txt             # Version tracking
 └── site.txt                # Official site URL (optional)
@@ -59011,13 +59026,13 @@ maintainer_email: jane@example.com
 
 1. **FIRST:** Read AI.md PART 0 and PART 1 (critical rules) - MANDATORY every conversation
 2. Read the relevant `.claude/rules/*.md` files for your current task
-3. Read TODO.AI.md for current tasks (if exists)
+3. Read TODO.AI.md and TODO.md for current tasks (if either exists)
 4. Identify the specific PART(s) for your task
 5. Check for cross-references to other sections
 6. Ask clarifying questions BEFORE implementing
 7. Implement exactly as specified
 8. Verify consistency with related sections
-9. Update TODO.AI.md when tasks complete
+9. Update TODO.AI.md (and mark items done in TODO.md if listed there) when tasks complete
 
 **After context compaction:** Re-read PART 0, 1 and relevant rules files before continuing.
 
@@ -60196,7 +60211,7 @@ make docker # Build Docker image
 
 **ALL sections marked NON-NEGOTIABLE must be implemented exactly as specified.**
 
-**When in doubt:** Re-read AI.md (HOW), IDEA.md (WHAT), and TODO.AI.md. Ask questions. Never assume.
+**When in doubt:** Re-read AI.md (HOW), IDEA.md (WHAT), TODO.AI.md, and TODO.md. Ask questions. Never assume.
 
 ---
 
@@ -60264,7 +60279,7 @@ When integrating this specification into an existing project:
 After each significant change:
 
 1. **Test thoroughly** - verify nothing broke
-2. **Update TODO.AI.md** - mark items complete
+2. **Update TODO.AI.md** - mark items complete (also mark matching items done in TODO.md if present)
 3. **Update IDEA.md** - reflect current project state
 4. **Document breaking changes** - if any
 5. **Get human approval before proceeding to the next phase only if** the next phase introduces breaking behavior, destructive migration steps, production-impacting risk, or unresolved scope decisions
