@@ -667,7 +667,8 @@ src/agent/                  # Agent (OPTIONAL - monitoring/management projects o
 docker/                     # Docker files (REQUIRED)
 docker/Dockerfile           # Multi-stage Dockerfile
 docker/docker-compose.yml   # Production docker-compose
-docker/file_system/              # BUILD-TIME overlay (entrypoint.sh) - NOT runtime volumes
+docker/rootfs/              # BUILD-TIME container filesystem overlay (entrypoint.sh, service configs)
+volumes/                    # RUNTIME volume data if created locally (gitignored)
 binaries/                   # Build output (gitignored)
 releases/                   # Release artifacts (gitignored)
 ```
@@ -675,7 +676,8 @@ releases/                   # Release artifacts (gitignored)
 **Notes:**
 - `src/client/` is REQUIRED for all projects (client binary is mandatory). See PART 33 for client details.
 - `src/agent/` is OPTIONAL (only for monitoring/management projects). See PART 33 for agent details.
-- `docker/file_system/` is for BUILD-TIME container overlay (copied into image). Runtime volumes (`./rootfs/config`, `./rootfs/data`) are NEVER in the repo - they exist only where docker-compose runs (production server or temp dir).
+- `docker/rootfs/` is the BUILD-TIME container overlay (copied into image).
+- Runtime volumes use `./volumes/config` and `./volumes/data` relative to where `docker run` or `docker compose` is executed; they are NEVER committed to the repo.
 
 ## File & Directory Naming Conventions
 
@@ -1694,7 +1696,7 @@ Instructions for how this agent should behave...
 | Directory | Required | Purpose | Gitignored |
 |-----------|:--------:|---------|:----------:|
 | `src/` | ✓ | All Go source code | No |
-| `docker/` | ✓ | Dockerfile, compose files, rootfs overlay | No |
+| `docker/` | ✓ | Dockerfile, compose files, and build-time `rootfs/` overlay | No |
 | `docs/` | ✓ | MkDocs documentation only | No |
 | `scripts/` | ✓ | Production/install scripts | No |
 | `tests/` | ✓ | Repository-root executable integration test scripts (`run_tests.sh`, `docker.sh`, `incus.sh`, optional helpers). Go unit tests live alongside code as `*_test.go` | No |
@@ -1707,7 +1709,7 @@ Instructions for how this agent should behave...
 | `.windsurf/` | Auto | Windsurf AI config (regenerated) | **Yes** |
 | `binaries/` | Auto | Build output | **Yes** |
 | `releases/` | Auto | Release artifacts | **Yes** |
-| `rootfs/` | Auto | Runtime volume data | **Yes** |
+| `volumes/` | Auto | Runtime volume data (if created locally) | **Yes** |
 
 **RULE: If a directory doesn't appear in this list, it MUST NOT exist - ask before creating.**
 
@@ -3295,7 +3297,7 @@ Implemented core server functionality and admin panel.
 | **docker/Dockerfile** | PART 27, actual code | Build stages, packages, paths correct |
 | **docker/docker-compose.yml** | PART 27, actual config | Ports, volumes, env vars match |
 | **docker/docker-compose.dev.yml** | PART 27 | Dev workflow correct |
-| **docker/file_system/** | Actual entrypoint needs | Scripts match what app expects |
+| **docker/rootfs/** | Actual container overlay needs | Entrypoint and overlay files match what the image expects |
 | **.github/CODEOWNERS** | Actual repo layout | Catch-all owner exists and sensitive paths are covered |
 | **.github/dependabot.yml** | Actual ecosystems | Go modules, Actions, and Docker are covered when used |
 | **.github/SECURITY.md** | security.txt/contact/reporting flow | Reporting instructions and support window are accurate |
@@ -5378,8 +5380,8 @@ if cfg.Server.Healthz.Root.Enabled {
 docker run -d \
   --name {project_name} \
   -p 64580:80 \
-  -v ./rootfs/config:/config:z \
-  -v ./rootfs/data:/data:z \
+  -v ./volumes/config:/config:z \
+  -v ./volumes/data:/data:z \
   {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
 ```
 
@@ -6297,12 +6299,14 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 │   ├── docker-compose.yml  # Production compose (NO debug)
 │   ├── docker-compose.dev.yml  # Development compose
 │   ├── docker-compose.test.yml # Test compose (DEBUG=true)
-│   └── file_system/        # Container filesystem overlay
-│       └── usr/
-│           └── local/
-│               └── bin/
-│                   └── entrypoint.sh  # Container entrypoint
-├── rootfs/                 # Runtime volume data (gitignored)
+│   └── rootfs/            # Build-time container filesystem overlay (committed)
+│       ├── usr/
+│       │   └── local/
+│       │       └── bin/
+│       │           └── entrypoint.sh  # Container entrypoint
+│       ├── etc/           # Optional service/supervisor configs for container images
+│       └── config/        # Optional image-bundled defaults for AIO/service configs
+├── volumes/                # Runtime volume data if created locally (gitignored)
 │   ├── config/             # Config volumes per service
 │   ├── data/               # Data volumes per service
 │   └── db/                 # Database volumes per type
@@ -6321,7 +6325,8 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 **Gitignored directories:**
 - `binaries/` - All build output (local + all platforms)
 - `releases/` - Release output
-- `rootfs/` - Runtime volume data
+- `docker/rootfs/` - Build-time container overlay
+- `volumes/` - Runtime volume data (if created locally)
 
 ### .gitignore (REQUIRED)
 
@@ -6438,7 +6443,7 @@ binaries/
 releases/
 
 # Runtime volume data (NEVER commit)
-rootfs/
+volumes/
 
 # IDE
 .idea/
@@ -6473,7 +6478,7 @@ CLAUDE.local.md
 Jenkinsfile
 
 # Runtime volume data (NEVER include in image)
-rootfs/
+volumes/
 
 # Build output (container builds from source)
 binaries/
@@ -6509,7 +6514,7 @@ Makefile
 |----------|------------|-------------|
 | **Git** | `.git/`, `.gitignore`, `.gitattributes` | Not needed, adds size |
 | **CI/CD** | `.github/`, `.gitea/`, `.forgejo/`, `.gitlab-ci.yml`, `Jenkinsfile` | CI files not needed in container |
-| **Runtime** | `rootfs/` | Runtime volumes, not build-time |
+| **Runtime** | `volumes/` | Runtime volumes, not build-time |
 | **Build output** | `binaries/`, `releases/` | Container builds from source |
 | **Tests** | `tests/` | Test scripts not needed in production |
 | **Docs** | `docs/`, `*.md` | Documentation not needed in container |
@@ -6523,8 +6528,8 @@ Makefile
 |------------|----------|
 | `src/` | Source code - required for build |
 | `go.mod`, `go.sum` | Go module files - required |
-| `docker/` | Dockerfile, rootfs overlay - required |
-| `docker/file_system/` | Build-time overlay files (entrypoint.sh) |
+| `docker/` | Dockerfile and compose files - required |
+| `docker/rootfs/` | Build-time overlay files (entrypoint.sh, service configs) |
 
 **RULE: Keep the base directory organized and clean - no clutter!**
 
@@ -7220,8 +7225,8 @@ Before proceeding, confirm you understand:
 **Docker volume mounts map host paths to container paths:**
 ```yaml
 volumes:
-  - './rootfs/config:/config:z'   # Host ./rootfs/config → Container /config
-  - './rootfs/data:/data:z'       # Host ./rootfs/data → Container /data
+  - './volumes/config:/config:z'   # Host ./volumes/config → Container /config
+  - './volumes/data:/data:z'       # Host ./volumes/data → Container /data
 ```
 
 ---
@@ -26626,7 +26631,7 @@ server:
 |-----------|---------|----------|------------------|
 | Homepage (`/`) | Always | 1.0 | daily |
 | Public pages | Always | 0.8 | weekly |
-| Documentation (`/docs`) | Always | 0.8 | weekly |
+| Public documentation pages (project-defined, if any) | Dynamic | 0.8 | weekly |
 | API docs (`/server/docs/swagger`, `/server/docs/graphql`) | Always | 0.7 | weekly |
 | User profiles (if public) | Dynamic | 0.6 | weekly |
 | Admin pages (`/server/{admin_path}/*`) | **NEVER** | - | - |
@@ -37448,7 +37453,7 @@ The **only** time binaries are copied is during CI/CD release process, where the
 
 ## Docker Directory Structure
 
-All Docker-related files MUST be in `docker/`:
+Docker build/runtime definitions are split between `docker/` and runtime `./volumes/` mounts:
 
 ```
 docker/
@@ -37457,7 +37462,7 @@ docker/
 ├── docker-compose.yml      # Production compose - HUMAN USE ONLY
 ├── docker-compose.dev.yml  # Development compose - HUMAN USE ONLY
 ├── docker-compose.test.yml # Test compose - AI/AUTOMATED TESTING ONLY
-└── file_system/            # Container filesystem overlay (build-time only)
+└── rootfs/
     └── usr/
         └── local/
             └── bin/
@@ -37468,14 +37473,14 @@ docker/
 - Docker build context is project root (`.`)
 - Dockerfile specified with `-f docker/Dockerfile`
 - Multi-stage build: Go binary compiled in builder stage
-- rootfs copied from `docker/file_system/`
+- build-time overlay copied from `docker/rootfs/`
 
 **Rules:**
 - NEVER place Dockerfile or docker-compose.yml in project root
-- ALWAYS use `docker/` directory for all Docker files
+- ALWAYS use `docker/` for Dockerfiles/compose files and `docker/rootfs/` for build-time overlay files
 - ALWAYS use `entrypoint.sh` for container startup
 - ALWAYS use multi-stage build (no pre-built binaries needed)
-- rootfs structure mirrors container filesystem
+- `docker/rootfs/` mirrors the container filesystem
 
 ## Dockerfile Requirements
 
@@ -37550,19 +37555,19 @@ All compose files mount two volumes:
 
 ```yaml
 volumes:
-  - './rootfs/config:/config:z'
-  - './rootfs/data:/data:z'
+  - './volumes/config:/config:z'
+  - './volumes/data:/data:z'
 ```
 
 | Host Path | Container Path |
 |-----------|----------------|
-| `./rootfs/config/` | `/config/` |
-| `./rootfs/data/` | `/data/` |
+| `./volumes/config/` | `/config/` |
+| `./volumes/data/` | `/data/` |
 
 **Expected host directory structure (auto-created by binary on first run):**
 
 ```
-./rootfs/
+./volumes/
 ├── config/
 │   └── {project_name}/        # App config
 └── data/
@@ -37716,9 +37721,9 @@ RUN apk add --no-cache \
 # Copy binary from builder stage (multi-stage build)
 COPY --from=builder /build/binary/{project_name} /usr/local/bin/{project_name}
 
-# Copy BUILD-TIME overlay (entrypoint.sh) from docker/file_system/ into image
-# Note: This is docker/file_system/ (build context), NOT runtime ./rootfs/ volumes
-COPY docker/file_system/ /
+# Copy BUILD-TIME overlay (entrypoint.sh) from docker/rootfs/ into image
+# Note: This is docker/rootfs/ (build context), NOT runtime ./volumes/ mounts
+COPY docker/rootfs/ /
 
 # Copy Dockerfile to image (for reference and backup)
 COPY docker/Dockerfile /root/Dockerfile
@@ -37762,7 +37767,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
 ### Entrypoint Script (REQUIRED)
 
-**Location:** `docker/file_system/usr/local/bin/entrypoint.sh`
+**Location:** `docker/rootfs/usr/local/bin/entrypoint.sh`
 
 **Entrypoint is MINIMAL.** It only does:
 1. Set environment variables/flags
@@ -37921,8 +37926,8 @@ services:
       - DEBUG=false
       - TZ=${TZ:-America/New_York}
     volumes:
-      - './rootfs/config:/config:z'
-      - './rootfs/data:/data:z'
+      - './volumes/config:/config:z'
+      - './volumes/data:/data:z'
     ports:
       - '172.17.0.1:64580:80'
     healthcheck:
@@ -38005,8 +38010,8 @@ services:
       - DB_USER={project_name}
       - CACHE_HOST={project_name}-cache
     volumes:
-      - './rootfs/config:/config:z'
-      - './rootfs/data:/data:z'
+      - './volumes/config:/config:z'
+      - './volumes/data:/data:z'
     ports:
       - '172.17.0.1:64580:80'
     healthcheck:
@@ -38034,7 +38039,7 @@ services:
       - POSTGRES_USER={project_name}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-{project_name}}
     volumes:
-      - './rootfs/data/db/postgres/{project_name}:/var/lib/postgresql/data:z'
+      - './volumes/data/db/postgres/{project_name}:/var/lib/postgresql/data:z'
     healthcheck:
       test: pg_isready -U {project_name} -d {project_name}
       interval: 10s
@@ -38051,7 +38056,7 @@ services:
     restart: always
     logging: *default-logging
     volumes:
-      - './rootfs/data/db/valkey/{project_name}:/data:z'
+      - './volumes/data/db/valkey/{project_name}:/data:z'
     healthcheck:
       test: valkey-cli ping || exit 1
       interval: 10s
@@ -38138,8 +38143,8 @@ services:
       - DEBUG=false
       - TZ=${TZ:-America/New_York}
     volumes:
-      - './rootfs/config:/config:z'
-      - './rootfs/data:/data:z'
+      - './volumes/config:/config:z'
+      - './volumes/data:/data:z'
     ports:
       - '172.17.0.1:64580:80'
     healthcheck:
@@ -38245,7 +38250,7 @@ RUN mkdir -p /config/postgres /config/valkey \
     && chown -R postgres:postgres /data/db/postgres /data/log/postgres /run/postgresql
 
 # Copy configs and entrypoint
-COPY docker/file_system/ /
+COPY docker/rootfs/ /
 
 # Copy application binary from builder
 COPY --from=builder /build/{project_name} /usr/local/bin/
@@ -38273,7 +38278,7 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=90s --retries=3 \
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 ```
 
-**All-in-One supervisor config (`docker/file_system/etc/supervisor/conf.d/services.conf`):**
+**All-in-One supervisor config (`docker/rootfs/etc/supervisor/conf.d/services.conf`):**
 
 ```ini
 [supervisord]
@@ -38315,7 +38320,7 @@ stdout_logfile=/data/log/app.log
 stderr_logfile=/data/log/app.log
 ```
 
-**All-in-One PostgreSQL config (`docker/file_system/config/postgres/postgresql.conf`):**
+**All-in-One PostgreSQL config (`docker/rootfs/config/postgres/postgresql.conf`):**
 
 ```ini
 # PostgreSQL configuration optimized for AIO containers
@@ -38356,7 +38361,7 @@ autovacuum_naptime = 60s
 ssl = off
 ```
 
-**All-in-One Valkey config (`docker/file_system/config/valkey/valkey.conf`):**
+**All-in-One Valkey config (`docker/rootfs/config/valkey/valkey.conf`):**
 
 ```ini
 # Valkey configuration optimized for AIO containers
@@ -38393,7 +38398,7 @@ logfile ""
 protected-mode no
 ```
 
-**All-in-One entrypoint.sh (`docker/file_system/usr/local/bin/entrypoint.sh`):**
+**All-in-One entrypoint.sh (`docker/rootfs/usr/local/bin/entrypoint.sh`):**
 
 ```bash
 #!/bin/bash
@@ -38493,43 +38498,43 @@ docker build -t {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:late
 - Horizontal scaling of specific components
 - Microservice architecture
 
-### Two `rootfs/` Contexts (CRITICAL - Understand This)
+### Build-Time `docker/rootfs/` vs Runtime `./volumes/` (CRITICAL - Understand This)
 
-**There are TWO completely different `rootfs/` directories - do not confuse them:**
+**There are TWO different filesystem concepts here - do not confuse them:**
 
 | Context | Location | Purpose | In Repo? |
 |---------|----------|---------|----------|
-| **Build-time** | `docker/file_system/` | Container overlay (entrypoint.sh) | YES |
-| **Runtime** | `./rootfs/` in docker-compose | Volume mounts (config, data) | NEVER |
+| **Build-time** | `docker/rootfs/` | Container overlay (entrypoint.sh, service configs) | YES |
+| **Runtime** | `./volumes/` next to the compose file | Volume mounts (config, data) | NEVER |
 
-**Build-time `docker/file_system/`** (in repo):
-```
+**Build-time `docker/rootfs/`** (in repo):
+``` 
 docker/
-├── Dockerfile           # COPY docker/file_system/ / ← copies into container image
+├── Dockerfile           # COPY docker/rootfs/ / ← copies into container image
 ├── docker-compose.yml
-└── file_system/         # BUILD overlay - committed to git
+└── rootfs/              # BUILD overlay - committed to git
     └── usr/local/bin/
         └── entrypoint.sh
 ```
 
-**Runtime `./rootfs/`** (never in repo):
+**Runtime `./volumes/`** (never committed from repo-local runs):
 ```
 # Production (Server Admin's choice of location):
 /path/to/deployment/
 ├── docker-compose.yml   # copied from repo
-└── rootfs/              # RUNTIME - created on server
+└── volumes/             # RUNTIME - created on server
     ├── config/
     └── data/
 
 # Development (temp dir):
 $TEMP_DIR/
 ├── docker-compose.yml   # copied from repo
-└── rootfs/              # RUNTIME - created in temp
+└── volumes/             # RUNTIME - created in temp
     ├── config/
     └── data/
 ```
 
-**Why same name works:** The `./rootfs/` path in docker-compose.yml is relative to where docker-compose runs from, not where it lives in the repo. Dockerfile's `COPY docker/file_system/ /` uses build context (`.` project root).
+**Why this works:** The `./volumes/` path in `docker run`/`docker-compose.yml` is relative to where the container command runs from, not where it lives in the repo. Dockerfile's `COPY docker/rootfs/ /` uses build context (`.` project root).
 
 ### Volume Paths (Local Side)
 
@@ -38537,8 +38542,8 @@ $TEMP_DIR/
 
 | Volume Mount | Purpose |
 |--------------|---------|
-| `./rootfs/config:/config:z` | Configuration files (organized by component) |
-| `./rootfs/data:/data:z` | All persistent data (organized by component) |
+| `./volumes/config:/config:z` | Configuration files (organized by component) |
+| `./volumes/data:/data:z` | All persistent data (organized by component) |
 
 **Container internal structure (organized by component):**
 
@@ -38560,8 +38565,8 @@ $TEMP_DIR/
 **Rules:**
 - Production volumes use `:z` suffix (SELinux shared label)
 - Development volumes omit `:z` (not needed in temp dir)
-- `docker/file_system/` is for container overlay (entrypoint.sh) - NOT for runtime volumes
-- NEVER create runtime `rootfs/` in the project repo
+- `docker/rootfs/` is for container overlay (entrypoint.sh, service configs) - NOT for runtime volumes
+- NEVER commit runtime `volumes/` from local runs
 
 ### Running Docker Compose
 
@@ -38570,7 +38575,7 @@ $TEMP_DIR/
 **Always use temp directory workflow:**
 1. Create unique temp dir with apimgr prefix
 2. Copy `docker/docker-compose.yml` to temp dir
-3. Create `rootfs/` structure in temp dir
+3. Create `volumes/` structure in temp dir
 4. Run docker compose from temp dir
 5. Data lives in temp dir, isolated from project
 
@@ -38581,12 +38586,12 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel)"  # Use git top-level
 # Or use absolute path: PROJECT_ROOT="/path/to/your/project"
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
-mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
+mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 
 # Copy docker-compose.yml
 cp "$PROJECT_ROOT/docker/docker-compose.yml" "$TEMP_DIR/"
 
-# Run from temp dir - ./rootfs/ resolves to $TEMP_DIR/rootfs/
+# Run from temp dir - ./volumes/ resolves to $TEMP_DIR/volumes/
 cd "$TEMP_DIR" && docker compose up -d
 
 # Stop and cleanup
@@ -38610,7 +38615,7 @@ rm -rf "$TEMP_DIR"
 **NEVER:**
 - Run docker compose in project directory
 - Run docker compose with `--project-directory` pointing to project root
-- Mount volumes to `{project_root}/rootfs/`
+- Mount volumes to `{project_root}/volumes/`
 
 ### Port Mapping
 
@@ -38671,10 +38676,10 @@ services:
       # Development: accessible from all interfaces
       - "64580:80"
     volumes:
-      # TEMP DIR WORKFLOW: ./rootfs/ resolves to $TEMP_DIR/rootfs/
+      # TEMP DIR WORKFLOW: ./volumes/ resolves to $TEMP_DIR/volumes/
       # NEVER run from project directory - always use temp dir workflow
-      - ./rootfs/config:/config:z
-      - ./rootfs/data:/data:z
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
     networks:
       - {project_name}-dev
 
@@ -38688,7 +38693,7 @@ networks:
 ```bash
 mkdir -p "${TMPDIR:-/tmp}/{project_org}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{project_org}/{internal_name}-XXXXXX")
-mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
+mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 cp docker/docker-compose.dev.yml "$TEMP_DIR/docker-compose.yml"
 cd "$TEMP_DIR" && docker compose up -d
 ```
@@ -38726,10 +38731,10 @@ services:
       # Production: bound to Docker bridge only (reverse proxy handles external)
       - "172.17.0.1:64580:80"
     volumes:
-      # TEMP DIR WORKFLOW: ./rootfs/ resolves to $TEMP_DIR/rootfs/
+      # TEMP DIR WORKFLOW: ./volumes/ resolves to $TEMP_DIR/volumes/
       # NEVER run from project directory - always use temp dir workflow
-      - ./rootfs/config:/config:z
-      - ./rootfs/data:/data:z
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
     networks:
       - {project_name}
 
@@ -38743,7 +38748,7 @@ networks:
 ```bash
 mkdir -p "${TMPDIR:-/tmp}/{project_org}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{project_org}/{internal_name}-XXXXXX")
-mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
+mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 cp docker/docker-compose.yml "$TEMP_DIR/"
 cd "$TEMP_DIR" && docker compose up -d
 ```
@@ -38772,11 +38777,11 @@ services:
     ports:
       - "64581:80"
     volumes:
-      # CRITICAL: ./rootfs/ must resolve to $TEMP_DIR/rootfs/, NOT project directory
+      # CRITICAL: ./volumes/ must resolve to $TEMP_DIR/volumes/, NOT project directory
       # This file MUST be copied to a temp directory before running
       # AI: NEVER run this from the project directory
-      - ./rootfs/config:/config:z
-      - ./rootfs/data:/data:z
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
     networks:
       - {project_name}-test
 
@@ -38790,7 +38795,7 @@ networks:
 ```bash
 mkdir -p "${TMPDIR:-/tmp}/{project_org}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{project_org}/{internal_name}-XXXXXX")
-mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
+mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
 rm -rf "$TEMP_DIR"  # Cleanup after tests
@@ -38828,8 +38833,8 @@ services:
       # Production: bound to Docker bridge only (reverse proxy handles external)
       - "172.17.0.1:64580:80"
     volumes:
-      - ./rootfs/config:/config:z
-      - ./rootfs/data:/data:z
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
     networks:
       - {project_name}
 
@@ -38844,7 +38849,7 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD:-{project_name}}
       - TZ=America/New_York
     volumes:
-      - ./rootfs/data/db/postgres/{project_name}:/var/lib/postgresql/data:z
+      - ./volumes/data/db/postgres/{project_name}:/var/lib/postgresql/data:z
     healthcheck:
       test: pg_isready -U {project_name} -d {project_name}
       interval: 10s
@@ -38882,12 +38887,12 @@ networks:
 
 | Container Path | Local Path | Purpose |
 |----------------|-----------|---------|
-| `/config` | `./rootfs/config` | Configuration root (organized by component) |
-| `/data` | `./rootfs/data` | Data root (organized by component) |
-| `/config/{project_name}/` | `./rootfs/config/{project_name}/` | Binary's config |
-| `/data/{project_name}/` | `./rootfs/data/{project_name}/` | Binary's data |
-| `/data/db/` | `./rootfs/data/db/` | Database data |
-| `/data/log/` | `./rootfs/data/log/` | Log files |
+| `/config` | `./volumes/config` | Configuration root (organized by component) |
+| `/data` | `./volumes/data` | Data root (organized by component) |
+| `/config/{project_name}/` | `./volumes/config/{project_name}/` | Binary's config |
+| `/data/{project_name}/` | `./volumes/data/{project_name}/` | Binary's data |
+| `/data/db/` | `./volumes/data/db/` | Database data |
+| `/data/log/` | `./volumes/data/log/` | Log files |
 
 ## Tor in Container
 
@@ -41929,7 +41934,7 @@ When a test or debug step requires `reboot`, `systemctl`, `iptables`, `mount`, p
 | REQUIRED | Example |
 |----------|---------|
 | Temp directory | `/tmp/{project_org}/{internal_name}-XXXXXX/` |
-| Volume mounts | `/tmp/{project_org}/{internal_name}-XXXXXX/rootfs/` |
+| Volume mounts | `/tmp/{project_org}/{internal_name}-XXXXXX/volumes/` |
 | Test databases | In temp directory, never project |
 
 **The project directory is for SOURCE CODE ONLY. All runtime/test data goes to the OS temp directory.**
@@ -41947,7 +41952,7 @@ When a test or debug step requires `reboot`, `systemctl`, `iptables`, `mount`, p
 
 **AI must NEVER:**
 - Run `docker compose up` with `docker-compose.yml` or `docker-compose.dev.yml`
-- Use `./rootfs/`, `./docker/rootfs/`, or `./docker/file_system/` for runtime (project directory pollution)
+- Use `./volumes/`, `./docker/rootfs/`, or any other project-directory path for runtime mounts (project directory pollution)
 - Create or modify files in the project directory during testing
 - Mount project directory paths as volumes
 
@@ -41962,12 +41967,12 @@ When a test or debug step requires `reboot`, `systemctl`, `iptables`, `mount`, p
 # 1. Create temp directory (REQUIRED)
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
-mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
+mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 
 # 2. Copy ONLY docker-compose.test.yml to temp dir
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 
-# 3. Run from temp dir (./rootfs resolves to $TEMP_DIR/rootfs)
+# 3. Run from temp dir (./volumes resolves to $TEMP_DIR/volumes)
 cd "$TEMP_DIR" && docker compose up -d
 
 # 4. Run tests...
@@ -41981,11 +41986,10 @@ rm -rf "$TEMP_DIR"
 
 | Path | Allowed | Why |
 |------|---------|-----|
-| `./rootfs/` | ❌ NEVER | Pollutes project directory |
-| `./docker/rootfs/` | ❌ NEVER | Pollutes project directory |
-| `./docker/file_system/` | ❌ NEVER for runtime | Build-time only (Dockerfile COPY) |
-| `$TEMP_DIR/rootfs/` | ✅ ALWAYS | Proper temp directory isolation |
-| `/tmp/{org}/{project}-XXXXXX/rootfs/` | ✅ ALWAYS | Full path equivalent |
+| `./volumes/` | ❌ NEVER in the source repo | Pollutes project directory |
+| `./docker/rootfs/` | ❌ NEVER for runtime | Build-time overlay only |
+| `$TEMP_DIR/volumes/` | ✅ ALWAYS | Proper temp directory isolation |
+| `/tmp/{org}/{project}-XXXXXX/volumes/` | ✅ ALWAYS | Full path equivalent |
 
 ### Summary
 
@@ -42062,8 +42066,8 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 | Purpose | Path Pattern | Example |
 |---------|--------------|---------|
 | Dev/Test runtime | `{tempdir}/{project_org}/{internal_name}-XXXXXX/` | `/tmp/{project_org}/{internal_name}-aB3xY9/` |
-| Config volume | `{tempdir}/{project_org}/{internal_name}-XXXXXX/rootfs/config/` | `/tmp/{project_org}/{internal_name}-aB3xY9/rootfs/config/` |
-| Data volume | `{tempdir}/{project_org}/{internal_name}-XXXXXX/rootfs/data/` | `/tmp/{project_org}/{internal_name}-aB3xY9/rootfs/data/` |
+| Config volume | `{tempdir}/{project_org}/{internal_name}-XXXXXX/volumes/config/` | `/tmp/{project_org}/{internal_name}-aB3xY9/volumes/config/` |
+| Data volume | `{tempdir}/{project_org}/{internal_name}-XXXXXX/volumes/data/` | `/tmp/{project_org}/{internal_name}-aB3xY9/volumes/data/` |
 
 ### OS Temp Directories
 
@@ -43823,7 +43827,7 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 | `cli.md` | If applicable | CLI reference (flags, commands) |
 | `admin.md` | ✓ | Admin panel guide |
 | `security.md` | ✓ | Security model, auth, health/public endpoints, security reporting, and well-known namespace |
-| `integrations.md` | If applicable | External identity, native app links, autodiscovery, webhooks, federation, and other protocol/platform integrations |
+| `integrations.md` | ✓ | External identity, native app links, autodiscovery, webhooks, federation, and other protocol/platform integrations (or an explicit "none enabled" statement) |
 | `development.md` | ✓ | Development/contributing guide |
 | `stylesheets/dark.css` | Optional | Dark theme customization |
 | `stylesheets/light.css` | Optional | Light theme customization |
@@ -43945,7 +43949,7 @@ nav:
     - CLI Reference: cli.md         # Remove if project has no CLI surface
     - Admin Panel: admin.md
     - Security: security.md
-    - Integrations: integrations.md # Remove if project has no external/public integrations
+    - Integrations: integrations.md
   - Development:
     - Contributing: development.md
 
@@ -58940,7 +58944,7 @@ GOCACHE := $(HOME)/.local/share/go/build  # Local machine path for build cache
 # Temp dir workflow
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
-mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
+mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 cd "$TEMP_DIR" && docker compose up -d
 ```
@@ -58950,7 +58954,7 @@ cd "$TEMP_DIR" && docker compose up -d
 |--------------|--------|
 | `config/`, `data/`, `logs/`, `cache/` | Runtime dirs go to temp/OS paths |
 | `server.yml`, `cli.yml` | Generated at runtime, not in repo |
-| `rootfs/` in project root | Only in `docker/file_system/` for build overlay |
+| `volumes/` in project root | Runtime mount data belongs in temp/deployment dirs, not the source repo |
 | `.env` with secrets | Use environment variables or admin panel |
 
 **Config Files:**
@@ -58985,8 +58989,8 @@ make docker # Build Docker image
 **File Locations:**
 | Type | Development/Test | Production |
 |------|------------------|------------|
-| Config | `/tmp/{org}/{proj}-XXX/rootfs/config/` | `/etc/{org}/{proj}/` (Linux) |
-| Data | `/tmp/{org}/{proj}-XXX/rootfs/data/` | `/var/lib/{org}/{proj}/` (Linux) |
+| Config | `/tmp/{org}/{proj}-XXX/volumes/config/` | `/etc/{org}/{proj}/` (Linux) |
+| Data | `/tmp/{org}/{proj}-XXX/volumes/data/` | `/var/lib/{org}/{proj}/` (Linux) |
 | Binary | `binaries/{project_name}` | `/usr/local/bin/{project_name}` |
 
 ---
@@ -59329,7 +59333,7 @@ make docker # Build Docker image
   - [ ] docs/api.md
   - [ ] docs/admin.md
   - [ ] docs/security.md
-  - [ ] docs/integrations.md (if project exposes external/public integrations)
+  - [ ] docs/integrations.md
   - [ ] docs/development.md
 - [ ] ReadTheDocs builds successfully
 - [ ] Documentation badge in README.md
@@ -60292,7 +60296,7 @@ Before starting integration:
 - [ ] Write docs/index.md
 - [ ] Write docs/installation.md
 - [ ] Write docs/configuration.md, docs/api.md, docs/admin.md, docs/security.md
-- [ ] Write docs/integrations.md if project exposes external/public integrations
+- [ ] Write docs/integrations.md
 - [ ] Configure mkdocs.yml
 ```
 
@@ -60341,7 +60345,7 @@ When bootstrapping a new project from this specification:
    # Create all required directories
    mkdir -p src/{config,server,swagger,graphql,mode,paths,ssl,scheduler,service,admin}
    mkdir -p src/server/{handler,service,model,store,template}
-   mkdir -p docker/file_system/usr/local/bin
+   mkdir -p docker/rootfs/usr/local/bin
    mkdir -p docs/stylesheets
    mkdir -p tests
    mkdir -p scripts
@@ -60369,7 +60373,7 @@ When bootstrapping a new project from this specification:
    touch docker/docker-compose.yml
    touch docker/docker-compose.dev.yml
    touch docker/docker-compose.test.yml
-   touch docker/file_system/usr/local/bin/entrypoint.sh
+   touch docker/rootfs/usr/local/bin/entrypoint.sh
 
    # ReadTheDocs files
    touch mkdocs.yml
