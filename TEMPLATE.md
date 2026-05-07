@@ -3003,7 +3003,7 @@ See IDEA.md for the full project breakdown.
 
 ## Commit Message File
 
-**AI assistants CANNOT run `git add`, `git commit`, or `git push`.** Instead, create/update the commit message file.
+**AI assistants CANNOT run plain `git commit` or plain `git push`.** `git add` is allowed for explicit staging when needed, but commits themselves MUST go through `gitcommit <command>`. Create/update the commit message file before committing.
 
 **File:** `{project_dir}/.git/COMMIT_MESS`
 
