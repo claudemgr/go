@@ -2041,18 +2041,9 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 | Term | Definition |
 |------|------------|
-| **Server Web Setup** | Web-based setup flow at `/server/setup` (HTML pages served by server, accessed in browser) - creates Primary Admin, customizes branding |
 | **CLI Setup Wizard** | Built-in TUI/GUI wizard in CLI binary - prompts for server URL, tests connection, saves config (CLI is the ONLY binary with a built-in wizard) |
-| **Setup Token** | One-time 32-char hex token generated on server first-run, displayed in console, required to access server's web-based setup |
 
-**Setup Token Storage (file-based):**
-- File: `{config_dir}/setup_token.txt` (contains SHA-256 hash of token)
-- Generated on first-run if no admins exist in database
-- Plaintext token shown ONCE in console output, then only hash stored
-- Token invalidated (file deleted) after successful setup completion
-- File-based because database may not exist yet on first run
-
-**Key distinction:** Server serves web pages for setup (browser-based). CLI has a built-in interactive wizard (TUI/GUI). Agent has no wizard (uses connection string).
+**Key distinction:** Server is configured by editing `server.yml` directly. CLI has a built-in interactive wizard (TUI/GUI). Agent has no wizard (uses connection string).
 
 ## Other Terms
 
@@ -8679,7 +8670,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 | `--maintenance backup` | ❌ No | Can write to backup dir? (already owned) | N/A |
 | `--maintenance restore` | 🔐 Auth | Requires admin auth OR root OR first-run | N/A |
 | `--maintenance update` | ⚠️ Check | Can write to binary path? | None (error) |
-| `--maintenance setup` | 🔐 Auth | Only first-run OR valid setup token | N/A |
+| `--maintenance setup` | 🔐 Auth | Only first-run OR root | N/A |
 | `--maintenance mode` | 🔐 Auth | Requires admin auth OR root | N/A |
 | (normal start) | ❌ No | Adapts paths to current user | N/A |
 
@@ -8691,7 +8682,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
 | Operation | Danger | Authorization Required |
 |-----------|--------|----------------------|
-| `--maintenance setup` | Creates admin account | First-run only OR valid setup token |
+| `--maintenance setup` | Creates admin account | First-run only OR root |
 | `--maintenance restore` | Overwrites ALL data | Admin auth OR root OR empty database |
 | `--maintenance mode` | Changes server behavior | Admin auth OR root |
 
@@ -8704,14 +8695,11 @@ Binary checks:
 ├─ Is database empty (no admins exist)?
 │   └─ YES → Allow setup (first-run)
 ├─ Is user root/admin?
-│   └─ YES → Allow setup (regenerates setup token, requires confirmation)
-├─ Is valid setup token provided (--token=XXX)?
-│   └─ YES → Allow setup (one-time use, token invalidated after)
+│   └─ YES → Allow setup (requires confirmation)
 └─ NO authorization → Reject with:
    "Setup already completed. To reconfigure:
-    1. Use existing admin credentials via WebUI
-    2. Run as root: sudo {project_name} --maintenance setup
-    3. Use setup token shown at first-run (if you saved it)"
+    1. Edit server.yml directly and restart the server
+    2. Run as root: sudo {project_name} --maintenance setup"
 ```
 
 **Restore authorization flow:**
@@ -8806,7 +8794,7 @@ func canBackup() bool {
 }
 
 // Setup: check authorization (not just access)
-func canSetup(token string) (bool, string) {
+func canSetup() (bool, string) {
     // First-run: always allowed
     if isDatabaseEmpty() {
         return true, "first-run"
@@ -8814,10 +8802,6 @@ func canSetup(token string) (bool, string) {
     // Elevated (root/admin): allowed with confirmation
     if isElevated() {
         return true, "elevated"
-    }
-    // Valid setup token: allowed (one-time)
-    if token != "" && validateSetupToken(token) {
-        return true, "token"
     }
     // No authorization
     return false, ""
@@ -9814,13 +9798,13 @@ func FromEnv() {
 | Behavior | Description |
 |----------|-------------|
 | No arguments | Initialize (if needed) and start server |
-| First run | Auto-create config with defaults, show banner with URLs and setup token |
+| First run | Auto-create `server.yml` with defaults if absent, show banner with URLs and version |
 | First run | Auto-create required directories |
 | Double-click (Windows) | Console window opens, server runs in foreground with banner |
 | Signals | Proper handling (SIGTERM, SIGINT, SIGHUP) |
 | PID file | Enabled by default |
 
-**See PART 32 "First-Run / Double-Click Behavior" for CLI setup wizard (CLI is the only binary with a setup wizard).**
+**See PART 32 "First-Run / Double-Click Behavior" for CLI setup wizard (CLI is the only binary with a built-in setup wizard).**
 
 ## Embedded Assets
 
@@ -10242,7 +10226,7 @@ func (e *DisplayEnv) detectPlatformDisplay() {
 | **CLI** | ✅ Full app | ✅ Full app (default) | ✅ Commands | ❌ Error |
 | **Agent** | Status window | Status banner | Commands | Default (service) |
 
-**Server/Agent just show status banners (not interactive). CLI is the only full TUI/GUI app with setup wizard.**
+**Server/Agent just show status banners (not interactive). CLI is the only full TUI/GUI app with a built-in setup wizard.**
 
 **See PART 32 for full CLI/TUI/GUI mode implementation details.**
 
@@ -10422,8 +10406,6 @@ type BannerConfig struct {
     AppMode    string   // production/development
     Debug      bool
     URLs       []string
-    ShowSetup  bool     // Show setup token (server only, first run)
-    SetupToken string
 }
 
 func PrintStartupBanner(cfg BannerConfig) {
@@ -10942,7 +10924,7 @@ PHASE 3: Handle maintenance commands (NO startup)
    ├─ --maintenance restore → restore data, exit
    ├─ --maintenance update  → update binary, exit
    ├─ --maintenance mode    → set mode, exit
-   └─ --maintenance setup   → run setup wizard, exit
+   └─ --maintenance setup   → reset admin credentials, exit
 
 PHASE 4: Handle update commands (NO startup)
 ────────────────────────────────────────────
@@ -11026,7 +11008,6 @@ PHASE 5: Server startup (actual server start)
     ├─ If MISSING (first run):
     │   ├─ Generate default server.yml
     │   ├─ Save determined port(s) to config
-    │   ├─ Generate one-time setup token (32 hex chars)
     │   ├─ Write config file
     │   └─ Set first_run = true
     ├─ If EXISTS:
@@ -11090,7 +11071,7 @@ PHASE 5: Server startup (actual server start)
     ├─ Log "Listening on {address}:{port}"
     ├─ Log "Mode: {production|development}"
     ├─ Log "Tor: {.onion address}" (if enabled)
-    └─ If first_run: display setup token in console
+    └─ If first_run: log path to generated `server.yml`
 
 21. Enter main loop (block until shutdown signal received)
 ```
@@ -13127,7 +13108,6 @@ All templates, Swagger/OpenAPI, GraphQL, email links, etc. MUST use these resolv
 | `{smtp_address}` | SMTP server address (if configured) | `172.17.0.1` |
 | `{smtp_port}` | SMTP server port | `25` |
 | `{startup_datetime}` | Server start timestamp | `Wed Jan 15, 2025 at 09:00:00 EST` |
-| `{setup_token}` | First-run setup token (shown ONCE) | `a1b2c3d4e5f67890abcdef1234567890` |
 
 **URL Format:** `{proto}://{fqdn}/path` or `{proto}://{fqdn}:{port}/path`
 
@@ -14685,7 +14665,7 @@ func isSerializationError(err error) bool {
 | Cache hit/miss/eviction patterns | Cache layer | Tuning |
 | Internal IP / hostname of upstream services in error messages | Network layer | Diagnosing routing issues |
 | Goroutine dump, pprof profiles, expvar | `/api/{api_version}/debug/*` (PART 6) | Already debug-gated; reaffirmed |
-| Setup token reminder (after first install, periodically until used) | Startup banner | Helps the operator who lost the email |
+| Config file path reminder (after first install) | Startup banner | Helps the operator find and edit `server.yml` |
 
 **Debug mode response shape:**
 
@@ -14811,7 +14791,7 @@ When `DEBUG=true` is active and an error occurs, the canonical error body (PART 
 | CORS on by default, credential-aware | "Just works" for public APIs and authenticated apps (PART 16 → CORS) |
 | Rate limit on by default | Per-IP + per-identifier on auth endpoints; configurable but non-zero by default |
 | Argon2id for passwords | No bcrypt/MD5/SHA-* options — secure algorithm not negotiable |
-| Setup token shown ONCE on first start | No default admin credentials, ever |
+| Admin credentials defined in `server.yml` | No hardcoded default credentials shipped in binary |
 | `--debug` / `DEBUG=true` requires explicit opt-in | Debug endpoints disabled in production by default (PART 6) |
 | Errors return canonical generic messages | Stack traces only in `debug.log`, never in HTTP response (PART 5) |
 | Secret-in-config detection on startup | Warning logged if config contains hardcoded `password=`, `token=`, `secret=` — operator nudged toward env vars / vault |
@@ -14832,7 +14812,7 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 | Property | Detail |
 |----------|--------|
 | Length | 32 bytes (256 bits) of `crypto/rand` |
-| Generated | First start, before the setup token is shown. Stored in `server.db` row `app_secrets.installation_secret`, base64-encoded. |
+| Generated | First start. Stored in `server.db` row `app_secrets.installation_secret`, base64-encoded. |
 | Scope | Cluster-wide. The first node generates it; subsequent nodes joining the cluster receive it via the secure cluster join protocol (PART 10 → "Cluster" — the join token is HMAC-derived and the `installation_secret` is delivered as part of the same handshake payload). NEVER appears in a request, response, log, or admin UI. |
 | Used by | `{security_id}` HMAC (PART 11 → "Security Reports"); PGP private-key KDF (PART 11 → "GPG Keypair Management"); future derived material (cluster-internal request signing, cookie signing salts). |
 | Rotation | Manual via CLI command or config file. Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt admin password, log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and re-bases all live HMACs. The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
@@ -21878,19 +21858,9 @@ formatURL(host, 8443, true)
 │  ✅ Server started on {startup_datetime}                  │
 ╰───────────────────────────────────────────────────────────╯
 
-┌───────────────────────────────────────────────────────────┐
-│  🔑 SETUP REQUIRED                                        │
-├───────────────────────────────────────────────────────────┤
-│  Setup Token: {setup_token}                               │
-│                                                           │
-│  Go to {proto}://{fqdn}/server/setup                             │
-│  and enter this token to complete setup.                  │
-│                                                           │
-│  This token will only be shown ONCE.                      │
-└───────────────────────────────────────────────────────────┘
 ```
 
-**Note:** Setup token is displayed ONCE on first run. After setup wizard is completed, this section never appears again.
+**Note:** On first run, a default `server.yml` is written to `{config_dir}/server.yml`. Edit it before or after starting the server.
 
 ---
 
@@ -21914,11 +21884,6 @@ formatURL(host, 8443, true)
 🌐 {proto}://{address}:{port}
 📡 Listening: {proto}://{address}:{port}
 ✅ Started: {startup_datetime}
-
-🔑 SETUP REQUIRED
-Token: {setup_token}
-Go to: {proto}://{fqdn}/server/setup
-(Token shown ONCE)
 ```
 
 **40-59 cols (Minimal - abbreviated, no icons):**
@@ -21933,7 +21898,6 @@ Go to: {proto}://{fqdn}/server/setup
 {PROJECT_NAME} {projectversion}
 {app_mode}
 {address}:{port}
-SETUP: {setup_token}
 ```
 
 **<40 cols (Micro - single line):**
@@ -21962,11 +21926,6 @@ Mode: {app_mode}
 URL: {proto}://{address}:{port}
 Listening: {proto}://{address}:{port}
 Started: {startup_datetime}
-
-SETUP REQUIRED
-Token: {setup_token}
-Setup URL: {proto}://{fqdn}/server/setup
-This token will only be shown ONCE.
 ```
 
 **--color flag overrides (applies to all sizes):**
@@ -28502,7 +28461,6 @@ server:
 | Password reset | 24 hours | Yes |
 | Email verification | 48 hours | Yes |
 | Account recovery | 1 hour | Yes |
-| Setup token | 24 hours | No (security) |
 
 **MFA Reminder Schedule:**
 | Recipient | First Reminder | Repeat | Stop When |
@@ -31763,7 +31721,7 @@ When `server.compliance.enabled: true`:
 
 | Action | Location | Notes |
 |--------|----------|-------|
-| Set during setup | Setup wizard Step 4 | Optional (unless compliance) |
+| Set during initial config | `backup.encryption_password` in `server.yml` | Optional (unless compliance) |
 | Set later | `backup.encryption_password` in config file | Restart server to apply |
 | Change password | `backup.encryption_password` in config file | New backups use new password |
 | Remove encryption | Only if compliance disabled | Cannot remove if compliance enabled |
@@ -32211,13 +32169,8 @@ POST /api/{api_version}/server/config/backup/restore
 ┌─────────────────────────────────────────────────────────────┐
 │  🔑 RESTORE COMPLETE - RE-AUTHENTICATION REQUIRED           │
 ├─────────────────────────────────────────────────────────────┤
-│  Setup Token: a1b2c3d4e5f67890abcdef1234567890              │
-│                                                             │
-│  Run: {project_name} --maintenance verify-token {token}     │
-│  to verify you are the server administrator.                │
-│                                                             │
-│  Your existing password and settings will be preserved.     │
-│  This token will only be shown ONCE.                        │
+│  Your existing password and settings have been preserved.   │
+│  Log in with your existing admin credentials to continue.   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -32234,14 +32187,11 @@ POST /api/{api_version}/server/config/backup/restore
 - All configuration
 - All user accounts
 
-**What Requires Re-Setup:**
-- Initial setup token verification (one-time)
-
 ### Additional Admins on Restore
 
 | Admin Type | Restore Behavior |
 |------------|------------------|
-| **Primary Admin** | Must re-authenticate with setup token |
+| **Primary Admin** | Can log in with existing credentials after restore |
 | **Additional Admins (local)** | Can log in immediately with existing credentials |
 | **OIDC/LDAP Admins** | Can log in if OIDC/LDAP provider accessible |
 
@@ -32251,7 +32201,7 @@ POST /api/{api_version}/server/config/backup/restore
 {project_name} --maintenance setup
 ```
 
-**Purpose:** Resets admin credentials and generates a new setup token. This is the ONLY way for a Server Admin to recover access if they have lost their password, API token, AND recovery keys.
+**Purpose:** Resets admin credentials. This is the ONLY way for a Server Admin to recover access if they have lost their password, API token, AND recovery keys.
 
 ### Setup Authorization
 
@@ -32261,8 +32211,7 @@ POST /api/{api_version}/server/config/backup/restore
 |-----------|--------------|
 | Database empty (first-run) | ✅ Allowed (initial setup) |
 | Running as root | ✅ Allowed (with confirmation) |
-| Valid setup token provided | ✅ Allowed (one-time use) |
-| Random user, no token | ❌ Denied |
+| Random user | ❌ Denied |
 
 ### What It Does
 
@@ -32270,7 +32219,6 @@ POST /api/{api_version}/server/config/backup/restore
 |--------|-------------|
 | **Clears admin password** | Admin password is set to null/empty |
 | **Clears admin API token** | Admin API token is invalidated |
-| **Generates new setup token** | One-time setup token displayed in console |
 | **Preserves everything else** | User accounts, data, configuration unchanged |
 
 ### What It Does NOT Do
@@ -32299,14 +32247,8 @@ POST /api/{api_version}/server/config/backup/restore
 # ├─────────────────────────────────────────────────────────────┤
 # │  Admin password and API token have been cleared.            │
 # │                                                             │
-# │  Setup Token: a1b2c3d4e5f67890abcdef1234567890              │
-# │                                                             │
-# │  1. Start the service: {project_name} --service start        │
-# │  2. Run: {project_name} --maintenance setup --token <token> │
-# │  3. Follow the setup wizard prompts                         │
-# │  4. Create new admin account                                │
-# │                                                             │
-# │  This token will only be shown ONCE.                        │
+# │  Edit server.yml to set new admin credentials, then         │
+# │  start the service: {project_name} --service start           │
 # └─────────────────────────────────────────────────────────────┘
 
 # Start the service
@@ -32317,9 +32259,7 @@ POST /api/{api_version}/server/config/backup/restore
 
 | Consideration | Requirement |
 |---------------|-------------|
-| **Requires authorization** | Root, or valid setup token (see Setup Authorization above) |
-| **Console access required** | Setup token only displayed in terminal |
-| **One-time token** | Token expires after use or after 24 hours |
+| **Requires authorization** | Root (see Setup Authorization above) |
 | **Logged** | Action logged to audit log (if available) |
 | **Service should be stopped** | Recommended to stop service first |
 
@@ -32345,17 +32285,16 @@ POST /api/{api_version}/server/config/backup/restore
 │  Admin locked out (no password, no token, no recovery keys)     │
 │                           │                                     │
 │                           ▼                                     │
-│  Server admin runs: {project_name} --maintenance setup           │
+│  Root runs: {project_name} --maintenance setup                   │
 │                           │                                     │
 │                           ▼                                     │
-│  Admin credentials cleared, new setup token generated           │
+│  Admin credentials cleared                                      │
 │                           │                                     │
 │                           ▼                                     │
-│  Admin runs: {project_name} --maintenance setup --token <token>  │
+│  Edit server.yml to set new admin credentials                   │
 │                           │                                     │
 │                           ▼                                     │
-│  Setup wizard: Create new admin account                         │
-│  (username, password, API token, 2FA optional)                  │
+│  Start the service: {project_name} --service start               │
 │                           │                                     │
 │                           ▼                                     │
 │  Admin access restored, new recovery keys issued                │
@@ -33001,8 +32940,7 @@ Maintenance commands:
                     production    - Normal operation (default)
                     development   - Debug logging, dev endpoints
 
-  setup             Run interactive setup wizard
-                    Creates primary Server Admin, configures server
+  setup             Reset admin credentials (first-run or root only)
 
 Examples:
   {project_name} --maintenance backup
@@ -36320,7 +36258,6 @@ networks:
 
 | When in Container | Behavior |
 |-------------------|----------|
-| Show setup token | On first run - one-time setup token displayed in console for CLI setup |
 | Defaults | Use container-appropriate defaults |
 | Logging | Log to stdout/stderr (captured by container runtime) |
 | Tor | Application manages Tor process internally |
@@ -40159,12 +40096,12 @@ fi
    - Agent (`./src/agent`) if exists
 3. Install test tools in container (Docker: `apk add --no-cache curl bash file jq`)
 4. Copy binaries to test container
-5. Start server and capture logs (for setup token extraction)
+5. Start server
 6. Run full beta test suite:
    - Version and help checks (server, CLI, agent if built)
    - Binary info verification
    - **Binary rename tests** (copy binary, verify --help shows new name)
-   - **Admin setup** (use setup token → create admin → login → generate API token)
+   - **Admin setup** (login with credentials from server.yml → generate API token)
    - Test API endpoints (.txt extension, Accept headers)
    - Test frontend smart detection (browser → HTML, CLI → formatted text)
    - Test project-specific endpoints (from IDEA.md)
@@ -40246,8 +40183,6 @@ docker run --rm \
     /app/${PROJECT_NAME} --port 64580 > /tmp/server.log 2>&1 &
     SERVER_PID=\$!
     sleep 3
-    # Show setup token if present (for debugging)
-    grep -i 'setup.*token' /tmp/server.log 2>/dev/null || true
 
     echo '=== API Endpoint Tests ==='
     # Test JSON response (default)
@@ -40294,44 +40229,28 @@ docker run --rm \
     #
     # Test ALL project-specific endpoints defined in IDEA.md
 
-    echo '=== Admin Setup & API Token Creation ==='
-    # Get setup token from server output (captured during startup)
-    SETUP_TOKEN=\$(cat /tmp/server.log 2>/dev/null | grep -oP 'Setup Token.*:\\s*\\K[a-f0-9]+' | head -1 || echo '')
+    echo '=== Admin Login & API Token Creation ==='
+    # Login using credentials defined in server.yml
+    SESSION=\$(curl -q -LSsf -X POST \\
+        -H \"Content-Type: application/json\" \\
+        -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
+        http://localhost:64580/api/{api_version}/server/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
 
-    if [ -n \"\$SETUP_TOKEN\" ]; then
-        echo \"Setup token found: \${SETUP_TOKEN:0:8}...\"
+    if [ -n \"\$SESSION\" ]; then
+        echo '✓ Admin login successful'
 
-        # Create admin account
-        curl -q -LSsf -X POST \\
-            -H \"X-Setup-Token: \$SETUP_TOKEN\" \\
-            -H \"Content-Type: application/json\" \\
-            -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:64580/api/{api_version}/server/setup || echo 'Admin setup failed (may already exist)'
+        # Generate API token for CLI/Agent testing
+        API_TOKEN=\$(curl -q -LSsf -X POST \\
+            -H \"Authorization: Bearer \$SESSION\" \\
+            http://localhost:64580/api/{api_version}/server/{admin_username}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
 
-        # Login and get session
-        SESSION=\$(curl -q -LSsf -X POST \\
-            -H \"Content-Type: application/json\" \\
-            -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:64580/api/{api_version}/server/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
-
-        if [ -n \"\$SESSION\" ]; then
-            echo '✓ Admin login successful'
-
-            # Generate API token for CLI/Agent testing
-            API_TOKEN=\$(curl -q -LSsf -X POST \\
-                -H \"Authorization: Bearer \$SESSION\" \\
-                http://localhost:64580/api/{api_version}/server/{admin_username}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
-
-            if [ -n \"\$API_TOKEN\" ]; then
-                echo \"✓ API token created: \${API_TOKEN:0:12}...\"
-            else
-                echo 'API token creation failed (continuing without token)'
-            fi
+        if [ -n \"\$API_TOKEN\" ]; then
+            echo \"✓ API token created: \${API_TOKEN:0:12}...\"
         else
-            echo 'Admin login failed (continuing without session)'
+            echo 'API token creation failed (continuing without token)'
         fi
     else
-        echo 'No setup token found (server may already be configured)'
+        echo 'Admin login failed (check credentials in server.yml)'
     fi
 
     echo '=== Binary Rename Tests ==='
@@ -40561,44 +40480,28 @@ incus exec "$CONTAINER_NAME" -- bash -c "
     #
     # Test ALL project-specific endpoints defined in IDEA.md
 
-    echo '=== Admin Setup & API Token Creation ==='
-    # Get setup token from journal
-    SETUP_TOKEN=\$(journalctl -u ${PROJECT_NAME} --no-pager 2>/dev/null | grep -oP 'Setup Token.*:\\s*\\K[a-f0-9]+' | head -1 || echo '')
+    echo '=== Admin Login & API Token Creation ==='
+    # Login using credentials defined in server.yml
+    SESSION=\$(curl -q -LSsf -X POST \\
+        -H \"Content-Type: application/json\" \\
+        -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
+        http://localhost:80/api/{api_version}/server/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
 
-    if [ -n \"\$SETUP_TOKEN\" ]; then
-        echo \"Setup token found: \${SETUP_TOKEN:0:8}...\"
+    if [ -n \"\$SESSION\" ]; then
+        echo '✓ Admin login successful'
 
-        # Create admin account
-        curl -q -LSsf -X POST \\
-            -H \"X-Setup-Token: \$SETUP_TOKEN\" \\
-            -H \"Content-Type: application/json\" \\
-            -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:80/api/{api_version}/server/setup || echo 'Admin setup failed (may already exist)'
+        # Generate API token for CLI/Agent testing
+        API_TOKEN=\$(curl -q -LSsf -X POST \\
+            -H \"Authorization: Bearer \$SESSION\" \\
+            http://localhost:80/api/{api_version}/server/{admin_username}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
 
-        # Login and get session
-        SESSION=\$(curl -q -LSsf -X POST \\
-            -H \"Content-Type: application/json\" \\
-            -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:80/api/{api_version}/server/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
-
-        if [ -n \"\$SESSION\" ]; then
-            echo '✓ Admin login successful'
-
-            # Generate API token for CLI/Agent testing
-            API_TOKEN=\$(curl -q -LSsf -X POST \\
-                -H \"Authorization: Bearer \$SESSION\" \\
-                http://localhost:80/api/{api_version}/server/{admin_username}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
-
-            if [ -n \"\$API_TOKEN\" ]; then
-                echo \"✓ API token created: \${API_TOKEN:0:12}...\"
-            else
-                echo 'API token creation failed (continuing without token)'
-            fi
+        if [ -n \"\$API_TOKEN\" ]; then
+            echo \"✓ API token created: \${API_TOKEN:0:12}...\"
         else
-            echo 'Admin login failed (continuing without session)'
+            echo 'API token creation failed (continuing without token)'
         fi
     else
-        echo 'No setup token found (server may already be configured)'
+        echo 'Admin login failed (check credentials in server.yml)'
     fi
 
     echo '=== Binary Rename Tests ==='
@@ -40712,14 +40615,14 @@ fi
 | **Test container tools** | Docker alpine MUST install: `apk add --no-cache curl bash file jq` |
 | **Test all binaries** | Test `--version` and `--help` for server, client, and agent if built |
 | **Binary rename test** | Copy binary with new name, verify `--help` shows renamed name (not hardcoded) |
-| **Admin setup** | Use setup token to create admin account, login, generate API token |
+| **Admin setup** | Login with credentials from server.yml, generate API token |
 | **CLI full functionality** | Test CLI with API token against running server (not just --help) |
 | **Agent full functionality** | Test agent with API token against running server (not just --help) |
 | **API endpoint testing** | MUST test .txt extension and Accept headers on API routes |
 | **Frontend testing** | MUST test smart detection (CLI → formatted text, browser → HTML) |
 | **Content negotiation** | Test JSON, text/plain, and text/html responses |
 | **Project-specific tests** | MUST test ALL endpoints from IDEA.md (CRUD, API, frontend) |
-| **Admin authentication** | Test setup token, login, and rejection (no bypass) |
+| **Admin authentication** | Test login and rejection (no bypass) |
 | **Cleanup** | ALWAYS use `trap` for cleanup |
 | **Exit codes** | 0 = success, non-zero = failure |
 | **Output** | Clear progress messages with `echo` |
@@ -40782,27 +40685,8 @@ else
     exit 1
 fi
 
-# 2. Get setup token from server logs (using proper temp dir structure)
-SETUP_TOKEN=$(grep -oP 'Setup Token.*:\s*\K[a-f0-9]+' "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}/server.log" | head -1)
-
-if [ -z "$SETUP_TOKEN" ]; then
-    echo "✗ FAILED: No setup token found in logs"
-    kill $SERVER_PID
-    exit 1
-fi
-
-echo "✓ Setup token found: ${SETUP_TOKEN:0:8}..."
-
-# 3. Complete setup wizard (create admin account)
-echo "Creating admin account via API..."
-curl -q -LSsf -X POST \
-    -H "X-Setup-Token: $SETUP_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d '{"username":"testadmin","password":"TestPass123!"}' \
-    http://localhost:64580/api/{api_version}/server/setup
-
-# 4. Test login with created admin
-echo "Testing admin login..."
+# 2. Test login using credentials defined in server.yml
+echo "Testing admin login (credentials from server.yml)..."
 SESSION=$(curl -q -LSsf -X POST \
     -H "Content-Type: application/json" \
     -d '{"username":"testadmin","password":"TestPass123!"}' \
@@ -40891,8 +40775,7 @@ func AdminAuthMiddleware(next http.Handler) http.Handler {
 | Rule | Requirement |
 |------|-------------|
 | **Test authentication** | Tests MUST verify auth works, not bypass it |
-| **Use setup token** | First-run setup token for initial admin access |
-| **Create test admin** | Create admin account via setup API |
+| **Use server.yml credentials** | Admin credentials are defined in `server.yml` |
 | **Test login flow** | Verify credentials, sessions, and access control |
 | **Test rejection** | Verify unauthenticated and invalid credentials are rejected |
 | **Debug mode** | ONLY for manual development, NEVER in automated tests |
@@ -46379,7 +46262,7 @@ if env.IsAutoDetectDisplayModeGUI() {
 
 | Binary | First Run | Configuration Method |
 |--------|-----------|---------------------|
-| **Server** | Start with defaults, show status banner | Config file or CLI |
+| **Server** | Generate default `server.yml` if absent, show status banner | Edit `server.yml` directly |
 | **CLI** | Setup wizard (GUI/TUI) | Setup wizard (no WebUI for CLI) |
 | **Agent** | Start with connection string, show status banner | Server provides connection string |
 
@@ -46396,14 +46279,8 @@ if env.IsAutoDetectDisplayModeGUI() {
 | **Headless/daemon** | Log to file |
 
 **No built-in TUI/GUI wizard for Server or Agent binaries.** They just run:
-- **Server**: Has web-based setup at `/server/setup` (accessed via browser on first run)
+- **Server**: Configured by editing `server.yml` directly; generates a default `server.yml` on first run
 - **Agent**: Configured via connection string provided by the server admin API
-
-**Note:** "Setup wizard" has two meanings:
-1. **Server's web-based setup** - HTML pages served by server, accessed in browser at `/server/setup`
-2. **CLI's built-in TUI/GUI wizard** - interactive wizard built into CLI binary itself
-
-Only CLI has a built-in wizard. Server serves web pages for setup.
 
 **Agent connection string example (obtained from server admin API):**
 ```
@@ -49500,7 +49377,7 @@ Answer these questions for your specific project:
 
 ### Agent Binary Structure (Same as Server)
 
-**Agent shares the same CLI structure, banner, and modes as the server binary (minus setup token).**
+**Agent shares the same CLI structure, banner, and modes as the server binary.**
 
 | Component | Server | Agent | Notes |
 |-----------|--------|-------|-------|
@@ -49509,7 +49386,6 @@ Answer these questions for your specific project:
 | Debug flag | ✅ | ✅ | Enables verbose logging |
 | Service management | ✅ | ✅ | install/uninstall/start/stop |
 | Self-update | ✅ | ✅ | --update flag |
-| Setup token | ✅ | ❌ | Agent uses server-issued token |
 | WebUI | ✅ | ❌ | Agent is headless |
 
 ### Agent Startup Banner
@@ -49697,7 +49573,7 @@ Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
 
 ### Agent Setup Process
 
-**Agent setup is initiated via the SERVER admin API, NOT via setup token:**
+**Agent setup is initiated via the SERVER admin API:**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -50521,7 +50397,6 @@ maintainer_email: jane@example.com
 - [ ] Follow exact config paths: `server.xxx`, not variations
 - [ ] Follow exact route patterns: `/api/{api_version}/server/config/xxx`
 - [ ] Token prefixes: `adm_` (admin), `usr_` (user), `org_` (org)
-- [ ] Setup token: 32 hex chars, no dashes
 
 ### Container Rules
 
@@ -51124,7 +50999,6 @@ make docker # Build Docker image
 
 - [ ] Token prefixes enforced: `adm_` (admin), `usr_` (user), `org_` (org)
 - [ ] Agent token prefixes enforced: `adm_agt_`, `usr_agt_`, `org_agt_` (scoped to owner)
-- [ ] Setup token: 32 hex characters, no dashes
 - [ ] Tokens hashed before storage (SHA-256)
 - [ ] Token expiration enforced
 - [ ] Token revocation works immediately
@@ -51508,15 +51382,11 @@ make docker # Build Docker image
 - [ ] Uses shared `ColorEnabled()` and `EmojiEnabled()` functions (PART 8)
 - [ ] Plain mode: no emojis, no box drawing (╭╮╰╯│─), no ANSI colors
 
-### Setup Token (First Run)
+### First-Run Config Generation
 
-- [ ] Generated on first run if no admins exist
-- [ ] 32-character hex string (no dashes)
-- [ ] Stored as SHA-256 hash in `{config_dir}/setup_token.txt`
-- [ ] Plaintext token shown ONCE in console banner
-- [ ] File deleted after successful setup completion
-- [ ] Setup instructions displayed: run `{project_name} --maintenance setup --token <token>`
-- [ ] Token section only appears on first run (never again after setup)
+- [ ] On first run, default `server.yml` written to `{config_dir}/server.yml` if absent
+- [ ] Config file path logged to console on first run
+- [ ] Server starts normally after generating default config
 
 ### CLI Flag Syntax (ALL Binaries)
 
@@ -51556,7 +51426,6 @@ make docker # Build Docker image
 - [ ] `{smtp_address}` - SMTP server address (if configured)
 - [ ] `{smtp_port}` - SMTP server port
 - [ ] `{startup_datetime}` - Server start timestamp
-- [ ] `{setup_token}` - First-run setup token (shown ONCE)
 - [ ] `{PROJECT_NAME}` - Project name (uppercase for display)
 - [ ] `{projectversion}` - Current version
 
@@ -51660,7 +51529,7 @@ make docker # Build Docker image
 - [ ] Swagger/OpenAPI: endpoint descriptions translated
 - [ ] GraphQL: type/field descriptions translated
 - [ ] Startup banners: all label text translated (Mode, Server, Listening, etc.)
-- [ ] Setup wizard: all steps, labels, prompts translated
+- [ ] CLI setup wizard: all steps, labels, prompts translated
 
 ## HOST SYSTEM SAFETY CHECKLIST
 
@@ -52181,7 +52050,7 @@ Implement the required client, then any project-specific optional features:
 - [ ] Configuration loading works (file, env, flags)
 - [ ] Logging configured properly
 - [ ] Admin panel accessible
-- [ ] First-run setup wizard works
+- [ ] First-run default `server.yml` generation works
 - [ ] REST API endpoints defined
 - [ ] Swagger UI accessible at `/server/docs/swagger`; OpenAPI JSON at `/api/{api_version}/server/swagger` (with `/api/swagger` alias)
 - [ ] GraphiQL UI accessible at `/server/docs/graphql`; GraphQL POST at `/api/{api_version}/server/graphql` (with `/api/graphql` alias)
