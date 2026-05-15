@@ -30158,6 +30158,8 @@ server:
 
 All databases from [sapics/ip-location-db](https://github.com/sapics/ip-location-db) - no API key required.
 
+**Go library:** use `github.com/oschwald/maxminddb-golang` — NOT `geoip2-golang`. ip-location-db embeds custom `database_type` strings (`asn ipv4`, `city ipv6`, `country ipvAll`, etc.) that `geoip2.Open()` rejects with `InvalidDatabaseError`. Field names, type strings, and Go struct definitions are in `~/.claude/memory/security_conventions.md`.
+
 | Database | File | CDN URL |
 |----------|------|---------|
 | ASN | `asn.mmdb` | `https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb` |
