@@ -1153,7 +1153,7 @@ No hidden telemetry. Any analytics, crash reporting, or update pings must be doc
 |------|-------------|
 | Explicit commands | CI must run explicit `go` / `make` commands, not hide core release logic behind undocumented wrappers |
 | Least privilege | CI tokens/permissions default to read-only |
-| Pinned actions | Third-party actions pinned to full commit SHAs |
+| Pinned actions | Third-party actions pinned to full commit SHAs; verify runtime and maintenance status on every SHA update |
 | No unsafe fork secrets | Fork PRs do not receive secrets or publish permissions |
 | Version precedence | `release.txt` wins when present |
 | Site precedence | `site.txt` wins when present |
@@ -1193,6 +1193,26 @@ jobs:
 ```
 
 Third-party registry publishing uses repository secrets, not GitHub token permissions (e.g. `NODE_AUTH_TOKEN` for npm).
+
+## Third-party Action Pinning
+
+Every external action (`uses: owner/action@...`) MUST be pinned to a full commit SHA — never a mutable tag or branch:
+
+```yaml
+# Wrong — tag can silently change or be deleted
+- uses: actions/checkout@v4
+
+# Correct — SHA is immutable
+- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+```
+
+**When updating a pinned SHA**, verify three things:
+
+1. **Action is still maintained** — check the upstream repo is not archived, deprecated, or abandoned
+2. **Runtime is still supported** — open the action's `action.yml` at the new SHA and check `runs.using`; if it names a runtime that GitHub has deprecated or scheduled for removal, the action will silently fail after that date. Example: `node20` is removed from GitHub-hosted runners on **2026-09-16** — any action still on `node20` must be updated to a SHA where it has migrated to `node24` — all common `actions/*` and `docker/*` actions have already done so
+3. **No supply-chain change** — skim the diff between the old and new SHA; unexpected new dependencies, changed entrypoints, or network calls added to setup steps are red flags
+
+Dependabot covers `github-actions` ecosystem updates automatically when `.github/dependabot.yml` is configured — but it only updates the SHA, not the runtime verification. The runtime check is always manual.
 
 ## Minimum Public Repo Workflows
 
