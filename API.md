@@ -125,7 +125,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 | File | Role | Update When |
 |------|------|-------------|
-| **AI.md** | SOURCE OF TRUTH - implementation rules | OPTIONAL→REQUIRED only (see PARTS 34-36) |
+| **AI.md** | SOURCE OF TRUTH - implementation rules | READ-ONLY (do not modify) |
 | **IDEA.md** | PROJECT PLAN - must follow AI.md | Features change, project variables change |
 
 **Rule:** If IDEA.md conflicts with AI.md, AI.md wins. Fix IDEA.md.
@@ -1027,16 +1027,15 @@ Claude Code creates `.claude/rules/` on first session (see PART 0: Session Initi
 | `binary-rules.md` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client & Agent |
 | `backend-rules.md` | 9, 10, 11, 32 | Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service |
 | `api-rules.md` | 13, 14, 15 | Health & Versioning, API Structure, SSL/TLS & Let's Encrypt |
-| `frontend-rules.md` | 16, 17 | Web Frontend, Admin Panel |
-| `features-rules.md` | 18-23 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
-| `service-rules.md` | 24, 25 | Privilege Escalation & Service, Service Support |
-| `makefile-rules.md` | 26 | Makefile (local dev only, NOT CI/CD) |
-| `docker-rules.md` | 27 | Docker |
-| `cicd-rules.md` | 28 | CI/CD Workflows |
-| `testing-rules.md` | 29, 30, 31 | Testing & Development, ReadTheDocs Documentation, I18N & A11Y |
-| `optional-rules.md` | 34-36 | Multi-User, Organizations, Custom Domains (all OPTIONAL) |
+| `frontend-rules.md` | 16 | Web Frontend |
+| `features-rules.md` | 17-22 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
+| `service-rules.md` | 23, 24 | Privilege Escalation & Service, Service Support |
+| `makefile-rules.md` | 25 | Makefile (local dev only, NOT CI/CD) |
+| `docker-rules.md` | 26 | Docker |
+| `cicd-rules.md` | 27 | CI/CD Workflows |
+| `testing-rules.md` | 28, 29, 30 | Testing & Development, ReadTheDocs Documentation, I18N & A11Y |
 
-**Note:** PART 33 (IDEA.md Reference) and FINAL (Compliance Checklist) are reference-only, not rule files. Only PARTs 34-36 are truly optional (marked "OPTIONAL - NON-NEGOTIABLE WHEN IMPLEMENTED" in spec). PART 31 (Tor Hidden Service) is REQUIRED - auto-enabled when Tor binary is found.
+**Note:** PART 33 (IDEA.md Reference) and FINAL (Compliance Checklist) are reference-only, not rule files. PART 30 (Tor Hidden Service) is REQUIRED - auto-enabled when Tor binary is found.
 
 **Rules File Features:**
 - All `.md` files in `rules/` are automatically discovered recursively
@@ -1116,7 +1115,7 @@ paths:
 | client | CLI binary `{project_name}-cli` - REQUIRED |
 | agent | Optional binary `{project_name}-agent` |
 | Server Admin | App administrator (NOT OS root) |
-| Regular User | End-user (PART 34, optional feature) |
+| Regular User | End-user (optional feature, not in this spec) |
 
 ## COMPLIANCE CHECK
 Before completing ANY task:
@@ -1155,7 +1154,7 @@ For complete details, see AI.md PART 0, 1
 - ✅ Progressive enhancement (works without JS)
 - ✅ Mobile-first responsive CSS
 - ✅ CSS `word-break: break-all` for long strings (IPv6, .onion, tokens)
-- ✅ Full admin panel with ALL settings
+- ✅ All settings configurable via API and config file
 - ✅ WCAG 2.1 AA accessibility
 - ✅ Touch targets minimum 44x44px
 - ✅ /server/about content from IDEA.md (name, tagline, description, features)
@@ -1217,14 +1216,13 @@ Cursor uses `.mdc` files. Create the same logical groupings:
 | `binary-rules.mdc` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client & Agent |
 | `backend-rules.mdc` | 9, 10, 11, 32 | Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service |
 | `api-rules.mdc` | 13, 14, 15 | Health & Versioning, API Structure, SSL/TLS & Let's Encrypt |
-| `frontend-rules.mdc` | 16, 17 | Web Frontend, Admin Panel |
-| `features-rules.mdc` | 18-23 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
-| `service-rules.mdc` | 24, 25 | Privilege Escalation & Service, Service Support |
-| `makefile-rules.mdc` | 26 | Makefile (local dev only, NOT CI/CD) |
-| `docker-rules.mdc` | 27 | Docker |
-| `cicd-rules.mdc` | 28 | CI/CD Workflows |
-| `testing-rules.mdc` | 29, 30, 31 | Testing & Development, ReadTheDocs Documentation, I18N & A11Y |
-| `optional-rules.mdc` | 34-36 | Multi-User, Organizations, Custom Domains (all OPTIONAL) |
+| `frontend-rules.mdc` | 16 | Web Frontend |
+| `features-rules.mdc` | 17-22 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
+| `service-rules.mdc` | 23, 24 | Privilege Escalation & Service, Service Support |
+| `makefile-rules.mdc` | 25 | Makefile (local dev only, NOT CI/CD) |
+| `docker-rules.mdc` | 26 | Docker |
+| `cicd-rules.mdc` | 27 | CI/CD Workflows |
+| `testing-rules.mdc` | 28, 29, 30 | Testing & Development, ReadTheDocs Documentation, I18N & A11Y |
 
 **Aider Rules (.aider/):**
 
@@ -1349,12 +1347,10 @@ On EVERY new conversation or after "context compacted" message:
 ## Key Placeholders
 - `{project_name}` = [actual project name]
 - `{project_org}` = [organization name]
-- `{admin_path}` = [admin URL path, default: admin]
-
 ## Account Types (CRITICAL)
 - **Server Admin** = manages the app (NOT a privileged OS user)
 - **Primary Admin** = first admin, cannot be deleted
-- **Regular User** = end-user (PART 34, optional feature)
+- **Regular User** = end-user (optional feature, not in this spec)
 - Server Admins ≠ Regular Users (separate DB tables)
 
 ## Cluster vs Managed Nodes (CRITICAL)
@@ -1378,7 +1374,7 @@ On EVERY new conversation or after "context compacted" message:
 13. Let long strings break mobile → Use word-break CSS
 14. Skip validation → Server validates EVERYTHING
 15. Implement without reading spec → Read relevant PART first
-16. Modify TEMPLATE.md or AI.md PART 0-32 content → READ-ONLY SPEC. Project changes go in IDEA.md. The ONLY edits permitted to TEMPLATE.md/AI.md are flipping PARTS 34-36 OPTIONAL→REQUIRED for projects that adopt those features (see PARTS 34-36 flip mechanism)
+16. Modify TEMPLATE.md or AI.md content → READ-ONLY SPEC. Project changes go in IDEA.md.
 17. Edit `## Project variables` in IDEA.md without confirming with the user → Variables drive placeholder resolution used by AI.md; wrong values silently corrupt every reference
 18. Read an image larger than 1000×1000 directly into context → Resize to ≤1000×1000 first via the fallback chain (`magick` → `convert` → `gm convert` → `vipsthumbnail` → `sips` → `ffmpeg`). If none are available, do NOT read the image — tell the user which tool to install. See "Large Image Handling" below.
 19. Use a non-conforming IDEA.md without migration → If IDEA.md exists but lacks the three required sections (`## Project description`, `## Project variables`, `## Business logic`), STOP and migrate it before doing anything else. See "IDEA.md Migration" below.
@@ -1390,7 +1386,7 @@ On EVERY new conversation or after "context compacted" message:
 4. All features work without JavaScript
 5. Tor hidden service support (auto-enabled if Tor found)
 6. Built-in scheduler, GeoIP, metrics, email, backup, update
-7. Full admin panel with ALL settings
+7. All settings configurable via API and config file
 8. Client binary for ALL projects
 9. Commit often via `gitcommit <command>` — small, focused commits, each with a fresh accurate `.git/COMMIT_MESS`. See "gitcommit Script" → "Commit Cadence". Do NOT hoard unrelated changes into one big commit
 
@@ -1404,7 +1400,7 @@ On EVERY new conversation or after "context compacted" message:
 ## Where to Find Details
 - AI behavior: `.claude/rules/ai-rules.md` (PART 0, 1)
 - Project structure: `.claude/rules/project-rules.md` (PART 2, 3, 4)
-- Frontend/WebUI: `.claude/rules/frontend-rules.md` (PART 16, 17)
+- Frontend/WebUI: `.claude/rules/frontend-rules.md` (PART 16)
 - Full spec: `AI.md` (~55k lines) ← **SOURCE OF TRUTH**
 
 ## Current Project State
@@ -1914,7 +1910,6 @@ Instructions for how this agent should behave...
 | `{official_site}` | Official project website | `https://jokes.example.com` |
 | `{fqdn}` | Fully qualified domain name | `api.example.com` |
 | `{baseurl}` | URL path prefix (auto-detected from reverse proxy) | `/`, `/myproject` |
-| `{admin_path}` | Admin panel URL path (configurable, default: `admin`) | `admin`, `manage`, `control` |
 | `{api_version}` | API version prefix (default: `v1`) | `v1`, `v2` |
 
 **Directory placeholders (with platform-specific defaults):**
@@ -2035,10 +2030,10 @@ This distinction exists for clarity. When referring to OS-level resources that b
 | Term | Definition |
 |------|------------|
 | **Server Admin** | Administrative account for managing the application (NOT a privileged user) |
-| **Primary Admin** | A Server Admin - specifically the first one created during setup wizard (cannot be deleted, prevents lockout) |
+| **Primary Admin** | A Server Admin - specifically the first one created during server setup (cannot be deleted, prevents lockout) |
 | **Additional Admin** | A Server Admin - added later by Primary Admin or other admins (can be deleted) |
 | **OIDC/LDAP Admin** | A Server Admin - authenticated via external identity provider instead of local password |
-| **Regular User** | End-user account that uses the application's features (PART 34, optional) |
+| **Regular User** | End-user account that uses the application's features (optional feature, not in this spec) |
 
 **CRITICAL:** Server Admins and Regular Users are completely separate account types stored in different database tables. A Server Admin is NOT a "privileged user."
 
@@ -2046,7 +2041,7 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 | Term | Definition |
 |------|------------|
-| **Server Web Setup** | Web-based setup flow at `/server/{admin_path}/config/setup` (HTML pages served by server, accessed in browser) - creates Primary Admin, customizes branding |
+| **Server Web Setup** | Web-based setup flow at `/server/setup` (HTML pages served by server, accessed in browser) - creates Primary Admin, customizes branding |
 | **CLI Setup Wizard** | Built-in TUI/GUI wizard in CLI binary - prompts for server URL, tests connection, saves config (CLI is the ONLY binary with a built-in wizard) |
 | **Setup Token** | One-time 32-char hex token generated on server first-run, displayed in console, required to access server's web-based setup |
 
@@ -2066,7 +2061,7 @@ This distinction exists for clarity. When referring to OS-level resources that b
 | **TUI** | Terminal User Interface - interactive terminal app with menus/panels (client supports TUI mode) |
 | **Text Browsers** | INTERACTIVE browsers (lynx, w3m, links, elinks) that receive **no-JS HTML** and render it in text mode; NO JavaScript support - forms via POST, server-rendered only |
 | **HTTP Tools** | NON-INTERACTIVE tools (curl, wget, httpie) that receive pre-formatted text via HTML2TextConverter; they just dump output |
-| **Admin Panel** | WebUI at `/server/{admin_path}` for server administration (path is configurable, default: `admin`) |
+| **Admin API** | Server administration is file-only — configuration is managed via config file, not web routes |
 | **WebUI** | Web User Interface - browser-based interface served by the server |
 | **SCM** | Windows Service Control Manager - manages Windows services (replaces PID files on Windows) |
 | **Hostname** | Short hostname (e.g., `web01`) - equivalent to `hostname -s` |
@@ -2180,33 +2175,24 @@ server:
 | 14 | ~17822 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
 | 15 | ~19455 | SSL/TLS & Let's Encrypt | SSL certificates |
 | 16 | ~20426 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~26599 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API**, **Blocklists**, **Allowlist**, **GeoIP** |
-| 18 | ~29010 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 19 | ~30333 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 20 | ~30818 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
-| 21 | ~30915 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 22 | ~32360 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
-| 23 | ~33089 | Update Command | Update feature |
-| 24 | ~33568 | Privilege Escalation & Service | Service/privilege work |
-| 25 | ~34477 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 26 | ~34661 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 27 | ~35438 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 28 | ~36946 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 29 | ~39880 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 30 | ~41719 | ReadTheDocs Documentation | Documentation |
-| 31 | ~42451 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
-| 32 | ~44413 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 33 | ~46165 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
-| 34 | ~50588 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
-| 35 | ~54240 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
-| 36 | ~54881 | Custom Domains | **OPTIONAL** - user/org branded domains |
-| 37 | ~55904 | IDEA.md Reference | **Examples only** - NEVER modify |
-| FINAL | ~56158 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
-
-**When Implementing OPTIONAL PARTs (34-36, Agent from 33):**
-1. Change PART title from `OPTIONAL` → `NON-NEGOTIABLE` in AI.md
-2. Update IDEA.md to document the feature as implemented
-3. Follow ALL rules in that PART exactly (no longer optional)
+| 17 | ~28563 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 18 | ~29886 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 19 | ~30333 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
+| 20 | ~30818 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 21 | ~30915 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
+| 22 | ~32360 | Update Command | Update feature |
+| 23 | ~33089 | Privilege Escalation & Service | Service/privilege work |
+| 24 | ~33568 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 25 | ~34477 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 26 | ~34661 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 27 | ~35438 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 28 | ~36946 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 29 | ~39880 | ReadTheDocs Documentation | Documentation |
+| 30 | ~41719 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
+| 31 | ~42451 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 32 | ~44413 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
+| 33 | ~46165 | IDEA.md Reference | **Examples only** - NEVER modify |
+| FINAL | — | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
 
 ### How to Read This File
 
@@ -2512,14 +2498,13 @@ Before I proceed, can you confirm [specific question]?
 | `.claude/rules/binary-rules.md` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client & Agent |
 | `.claude/rules/backend-rules.md` | 9, 10, 11, 32 | Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service |
 | `.claude/rules/api-rules.md` | 13, 14, 15 | Health & Versioning, API Structure, SSL/TLS & Let's Encrypt |
-| `.claude/rules/frontend-rules.md` | 16, 17 | Web Frontend, Admin Panel |
-| `.claude/rules/features-rules.md` | 18-23 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
-| `.claude/rules/service-rules.md` | 24, 25 | Privilege Escalation & Service, Service Support |
+| `.claude/rules/frontend-rules.md` | 16 | Web Frontend |
+| `.claude/rules/features-rules.md` | 17-22 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
+| `.claude/rules/service-rules.md` | 23, 24 | Privilege Escalation & Service, Service Support |
 | `.claude/rules/makefile-rules.md` | 26 | Makefile (local dev only, NOT CI/CD) |
 | `.claude/rules/docker-rules.md` | 27 | Docker |
 | `.claude/rules/cicd-rules.md` | 28 | CI/CD Workflows |
 | `.claude/rules/testing-rules.md` | 29, 30, 31 | Testing & Development, ReadTheDocs Documentation, I18N & A11Y |
-| `.claude/rules/optional-rules.md` | 34-36 | Multi-User, Organizations, Custom Domains (all OPTIONAL) |
 
 **Each rule file MUST contain:**
 1. Header with PART numbers: `# {Topic} Rules (PART X, Y, Z)`
@@ -2540,8 +2525,7 @@ Before I proceed, can you confirm [specific question]?
 
 | Task | Business Logic | Implementation |
 |------|----------------|----------------|
-| Admin auth | — | PART 17 |
-| Multi-user | IDEA.md | PART 34 |
+| Admin auth | — | PART 11 |
 | Frontend/UI | IDEA.md | PART 16 |
 | API endpoints | IDEA.md | PART 14 |
 | Tests | IDEA.md | PART 28 |
@@ -2558,7 +2542,7 @@ Before I proceed, can you confirm [specific question]?
 - Create report/analysis files (fix directly instead)
 - Rely on memory (ALWAYS re-read)
 - Add unrequested features
-- Edit TEMPLATE.md or AI.md PART 0-32 content (READ-ONLY). Project changes belong in IDEA.md. PARTS 34-36 OPTIONAL→REQUIRED is the only sanctioned edit, and it must be applied to BOTH IDEA.md and the per-project AI.md.
+- Edit TEMPLATE.md or AI.md content (READ-ONLY). Project changes belong in IDEA.md.
 - Read an image larger than 1000×1000 directly. Always check dimensions and resize to ≤1000×1000 first (see "Large Image Handling").
 - Treat a non-conforming IDEA.md as authoritative without migration (see "IDEA.md Migration").
 
@@ -2698,7 +2682,7 @@ fi
 - Migration is a one-time operation per project. Once IDEA.md is in the three-section format, do NOT re-run migration on subsequent reads (the detection step above is the gate).
 - If old content does not fit cleanly into one of the three sections, ASK the user — do not invent a fourth section, do not silently drop content.
 - If the old IDEA.md already had `internal_name` set to a value different from `project_name`, KEEP that value. The freeze rule applies — the existing internal_name is the frozen identity, even if it differs from project_name (the project may have already been renamed once).
-- After successful migration, mention to the user that PARTS 34-36 OPTIONAL→REQUIRED flips (if any) should be reviewed against the new `## Project variables` section.
+- After successful migration, verify the new `## Project variables` section is complete and accurate.
 
 ### Host System Safety Rule (ALL Command Execution)
 
@@ -2950,7 +2934,7 @@ See IDEA.md for the full project breakdown.
 
 | File | Purpose | Update When |
 |------|---------|-------------|
-| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH | OPTIONAL→REQUIRED only |
+| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH | READ-ONLY — do not modify |
 | **IDEA.md** | Project plan (WHAT) - must follow AI.md | Features change |
 | **TODO.AI.md** | Task tracking (AI-owned) | Tasks added/completed |
 | **TODO.md** | Task tracking (human-owned) | AI may mark items done; never delete/empty |
@@ -2995,7 +2979,7 @@ See IDEA.md for the full project breakdown.
 ## After Work
 
 1. **Update IDEA.md** if features changed
-2. **Update AI.md** ONLY if changing OPTIONAL→REQUIRED (PARTS 34-36)
+2. **Do NOT modify AI.md** — it is read-only spec
 3. **Update TODO.AI.md** with any new tasks discovered
 4. **Verify compliance** - check against the FINAL CHECKPOINT
 5. **Update COMMIT_MESS** - only if files were changed (skip if no changes)
@@ -3196,7 +3180,7 @@ Implement country-based access control using ip-location-db.
 - Add GeoIP database download on first run
 - Add scheduler task for weekly updates
 - Add deny_countries/allow_countries config options
-- Add admin panel for country management
+- Add API endpoints for country management
 ```
 
 ## gitcommit Script
@@ -3313,12 +3297,12 @@ All tasks from TODO.AI.md have been completed.
 
 All tasks from TODO.AI.md have been completed.
 
-Implemented core server functionality and admin panel.
+Implemented core server functionality and API.
 
 - Added mode package with production/development modes
 - Implemented SSL certificate handling
 - Created scheduler for background tasks
-- Built admin panel with authentication
+- Built admin API with authentication
 ```
 
 **TODO Completion Rules:**
@@ -3372,8 +3356,8 @@ Implemented core server functionality and admin panel.
 | Business logic | IDEA.md | Features implemented match what IDEA.md defines |
 | Threat model / abuse model | IDEA.md → `## Business logic` | Trust boundaries, data sensitivity, abuse cases, and security exceptions are documented and code matches them |
 | Well-known namespace | PART 11 / web routes | `/.well-known/**` only serves documented allowlisted entries, unsupported entries 404, and optional entries exist only when the corresponding feature is defined |
-| External identity auth | PART 34 | OIDC and LDAP both exist, support multiple providers, expose the documented `/server/auth/*` and `/api/{api_version}/server/auth/*` routes, and are manageable from `/server/{admin_path}/config/security/auth/*` |
-| External username onboarding | PART 34 | New OIDC/LDAP-backed users/admins go through the documented first-login username confirmation flow, including prefill normalization and collision-safe numeric suggestions |
+| External identity auth | PART 11 | OIDC and LDAP both exist, support multiple providers, expose the documented `/server/auth/*` and `/api/{api_version}/server/auth/*` routes |
+| External username onboarding | PART 11 | New OIDC/LDAP-backed users/admins go through the documented first-login username confirmation flow, including prefill normalization and collision-safe numeric suggestions |
 | CLI interface | PART 8 | Flags, commands, help output match spec |
 | Client/agent scope | PART 32 | `src/client/` exists for all projects; `src/agent/` only when project needs it |
 | Untrusted content handling | PART 11, PART 16 | User-controlled files/markdown/HTML render as escaped text or sanitized markdown; dangerous types are not served executable on the app origin |
@@ -3424,7 +3408,7 @@ Implemented core server functionality and admin panel.
 
 | Check | Requirement | Verify |
 |-------|-------------|--------|
-| **All 14 rule files exist** | `.claude/rules/*.md` | ai-rules, project-rules, config-rules, binary-rules, backend-rules, api-rules, frontend-rules, features-rules, service-rules, makefile-rules, docker-rules, cicd-rules, testing-rules, optional-rules |
+| **All 13 rule files exist** | `.claude/rules/*.md` | ai-rules, project-rules, config-rules, binary-rules, backend-rules, api-rules, frontend-rules, features-rules, service-rules, makefile-rules, docker-rules, cicd-rules, testing-rules |
 | **Correct PART assignments** | Each file covers correct PARTs | See PART 0 table for file→PART mapping |
 | **Required format** | Each file has all required sections | See format requirements below |
 | **Not outdated** | Rule files newer than AI.md | Regenerate if AI.md modified |
@@ -3769,7 +3753,7 @@ When the specification is unclear:
 | Assuming default values | Check spec for defined defaults |
 | Using .yaml instead of .yml | Always use `server.yml` |
 | Inline comments | Comments above code only |
-| Skipping admin panel | ALL settings need admin UI |
+| Skipping settings API | ALL settings need API endpoints |
 | Forgetting mobile-first | Start with mobile, expand to desktop |
 | Using JavaScript alerts | Use proper notification system |
 | Inline CSS | Use CSS files/classes only |
@@ -4243,65 +4227,30 @@ ls -la docker/
 | 14 | API Structure | ✅ Implement fully |
 | 15 | SSL/TLS & Let's Encrypt | ✅ Implement fully |
 | 16 | Web Frontend | ✅ Implement fully |
-| 17 | Admin Panel | ✅ Implement fully |
-| 18 | Email & Notifications | ✅ Implement fully |
-| 19 | Scheduler | ✅ Implement fully |
-| 20 | GeoIP | ✅ Implement fully |
-| 21 | Metrics | ✅ Implement fully |
-| 22 | Backup & Restore | ✅ Implement fully |
-| 23 | Update Command | ✅ Implement fully |
-| 24 | Privilege Escalation & Service | ✅ Implement fully |
-| 25 | Service Support | ✅ Implement fully |
-| 26 | Makefile | ✅ Implement fully |
-| 27 | Docker | ✅ Implement fully |
-| 28 | CI/CD Workflows | ✅ Implement fully |
-| 29 | Testing & Development | ✅ Implement fully |
-| 30 | ReadTheDocs Documentation | ✅ Implement fully |
-| 31 | I18N & A11Y | ✅ Implement fully |
-| 32 | Tor Hidden Service | ✅ Implement fully |
-| 37 | Project-Specific Sections | ✅ Customize for project |
+| 17 | Email & Notifications | ✅ Implement fully |
+| 18 | Scheduler | ✅ Implement fully |
+| 19 | GeoIP | ✅ Implement fully |
+| 20 | Metrics | ✅ Implement fully |
+| 21 | Backup & Restore | ✅ Implement fully |
+| 22 | Update Command | ✅ Implement fully |
+| 23 | Privilege Escalation & Service | ✅ Implement fully |
+| 24 | Service Support | ✅ Implement fully |
+| 25 | Makefile | ✅ Implement fully |
+| 26 | Docker | ✅ Implement fully |
+| 27 | CI/CD Workflows | ✅ Implement fully |
+| 28 | Testing & Development | ✅ Implement fully |
+| 29 | ReadTheDocs Documentation | ✅ Implement fully |
+| 30 | I18N & A11Y | ✅ Implement fully |
+| 31 | Tor Hidden Service | ✅ Implement fully |
+| 32 | Client & Agent | ✅ Implement fully |
+| 33 | IDEA.md Reference | ✅ Reference only |
 | FINAL | Compliance Checklist | ✅ Verify all items |
 
 ### PART 32: Client & Agent (REQUIRED)
 
 **CLI is REQUIRED for all projects. Agent is OPTIONAL (only for monitoring/remote management projects).**
 
-### OPTIONAL Sections (Become NON-NEGOTIABLE When Implemented)
-
-**IMPORTANT:** Optional sections are a per-project decision. However, once a project implements an optional feature, that entire PART becomes NON-NEGOTIABLE and must be followed exactly.
-
-| PART | Section | When to Include |
-|------|---------|-----------------|
-| 34 | Multi-User | If project needs Regular User accounts, registration, profiles |
-| 35 | Organizations | If project needs multi-user orgs (requires PART 34) |
-| 36 | Custom Domains | If users/orgs need branded domains |
-
-### Optional Section Decision Guide
-
-**PART 34: Multi-User**
-
-| Include | Skip | Reason |
-|---------|------|--------|
-| Apps with Regular User accounts | Admin-only APIs (jokes, quotes) | End-users need registration/login |
-| Multi-tenant platforms | Simple data APIs | User-specific data storage |
-| Social features | Read-only services | Profiles, preferences, API tokens |
-
-**Note:** Server Admin authentication (setup wizard, admin accounts, MFA) is in PART 17 and is **mandatory** for all projects. PART 34 is only for regular end-user features.
-
-**PART 35: Organizations** (requires PART 34)
-
-| Include | Skip | Reason |
-|---------|------|--------|
-| Team collaboration | Single-user apps | Multiple users share resources |
-| B2B platforms | Consumer apps | Org-level billing, admin |
-| Workspace-based apps | Personal tools | Shared workspaces needed |
-
-**PART 36: Custom Domains** (see PART 36 for full decision table)
-
-| Include | Skip | Reason |
-|---------|------|--------|
-| Linktree clone | Weather API | Users want branded URLs |
-| Blog platform | Jokes API | Content published under user's domain |
+### PART 32: Client (REQUIRED)
 
 **PART 32: Client**
 
@@ -4311,40 +4260,14 @@ ls -la docker/
 | DevOps/admin tools | Consumer mobile app | Automation requires CLI |
 | Database management | Static content site | Bulk operations via CLI |
 
-**Once implemented, the optional PART becomes NON-NEGOTIABLE.**
+**Client-Side Preferences:**
 
-### CRITICAL: Unused Optional Features Must Not Exist in Code
-
-**If a project does NOT use PART 34, 35, or 36, those features must be completely absent from the codebase.**
-
-| Rule | Description |
-|------|-------------|
-| **No references** | Zero mentions of users, orgs, or custom domains in code |
-| **No conditionals** | No `if multiUserEnabled` or `if orgsEnabled` checks |
-| **No stubs** | No placeholder functions, empty tables, or "future" comments |
-| **No config options** | No `users.enabled: false` or similar toggle settings |
-| **No UI elements** | No hidden/disabled menu items for unused features |
-
-**The code should be written as if the unused features never existed.**
-
-| If NOT using... | These must NOT appear in code |
-|-----------------|------------------------------|
-| PART 34 (Multi-User) | `users` table, user registration, user preferences table, user API tokens, `/server/auth/register`, user profiles, `allow_user_preference` config options |
-| PART 35 (Organizations) | `organizations` table, org membership, org ownership, org API tokens, `/orgs/*` routes |
-| PART 36 (Custom Domains) | `custom_domains` table, domain verification, user/org domain settings, SSL for custom domains |
-
-**Why?** Unused code is dead code. It adds complexity, security surface, and maintenance burden for features that don't exist. If a feature isn't used, it shouldn't be in the codebase at all.
-
-**Client-Side Preferences (No PART 34 Required):**
-
-User preferences like theme, language, and UI settings can be stored client-side without PART 34:
+User preferences like theme, language, and UI settings can be stored client-side:
 
 | Storage | Use Case | Persistence |
 |---------|----------|-------------|
 | `localStorage` | Theme, language, UI preferences | Until cleared |
 | Cookies | Session preferences, consent flags | Configurable expiry |
-
-These work for anonymous visitors and don't require user accounts. Server-side user preferences (stored in `user_preferences` table) require PART 34.
 
 ## AI Implementation Process
 
@@ -4397,7 +4320,7 @@ These work for anonymous visitors and don't require user accounts. Server-side u
 | **Missing CI/CD** | "Not needed for MVP" | CI/CD is mandatory, implement now |
 | **Custom error format** | Invents error response structure | Use EXACT format from SPEC |
 | **Simplified health** | Returns just `{"status":"ok"}` | Implement FULL health response |
-| **Skipping admin panel** | "Users don't need admin" | Admin panel is mandatory |
+| **Skipping settings API** | "Admins don't need API control" | Settings API is mandatory |
 
 ## Implementation Discipline
 
@@ -4491,7 +4414,7 @@ If blocked on current feature:
 □ Error responses match SPEC format
 □ `/.well-known/**` only serves the documented allowlisted entries and unknown entries return `404`
 □ Canonical `/.well-known/security.txt` is served; `/security.txt` is not required unless explicitly defined in `IDEA.md`
-□ If external auth is enabled, both OIDC and LDAP support multiple providers and are manageable from `/server/{admin_path}/config/security/auth/*`
+□ If external auth is enabled, both OIDC and LDAP support multiple providers and are configured via config file
 □ New OIDC/LDAP-backed users/admins follow the first-login username confirmation flow with normalized prefill and visible collision-safe numeric suggestions
 ```
 
@@ -4528,7 +4451,6 @@ If blocked on current feature:
 □ Debug flag (--debug/DEBUG) working
 □ SSL/TLS support implemented
 □ User authentication implemented
-□ Admin panel implemented
 □ Logging in SPEC format
 ```
 
@@ -4536,7 +4458,6 @@ If blocked on current feature:
 ```
 □ client follows SPEC (required for all projects)
 □ agent follows SPEC (if implemented)
-□ Custom domains follow SPEC (if PART 36 included)
 □ IDEA.md business logic defines scope, trust boundaries, data sensitivity, abuse cases, and security exceptions
 □ Implementation matches the declared threat/abuse model
 ```
@@ -4580,9 +4501,6 @@ Every feature MUST work via:
 |------------------|------------------|---------|
 | `/` | `/api/{api_version}/` | Homepage / API root |
 | `/server/healthz` | `/api/{api_version}/server/healthz` | Health status (both exist independently) |
-| `/server/{admin_path}` | `/api/{api_version}/server/{admin_path}` | Admin dashboard |
-| `/server/{admin_path}/config/settings` | `/api/{api_version}/server/{admin_path}/config/settings` | Server settings |
-| `/server/{admin_path}/config/users` | `/api/{api_version}/server/{admin_path}/config/users` | User management |
 | `/quotes` | `/api/{api_version}/quotes` | Project feature (example) |
 | `/quotes/random` | `/api/{api_version}/quotes/random` | Project feature (example) |
 | `/server/docs/swagger` | `/api/{api_version}/server/swagger` (also `/api/swagger` alias) | Swagger UI / OpenAPI JSON spec |
@@ -4743,7 +4661,7 @@ db.Query("SELECT * FROM users WHERE email = '" + email + "'")
 
 ### Rate Limiting Defaults
 
-**These are sensible defaults - all limits are configurable via admin panel and config file.**
+**These are sensible defaults - all limits are configurable via API and config file.**
 
 | Endpoint Type | Default Limit | Default Window | Response |
 |---------------|---------------|----------------|----------|
@@ -5070,7 +4988,7 @@ func gUBE(e string) (*U, error) {
 
 | Rule | Description |
 |------|-------------|
-| **AI.md is SOURCE OF TRUTH** | Only modify for OPTIONAL→REQUIRED (PARTS 34-36) |
+| **AI.md is SOURCE OF TRUTH** | Read-only — do not modify |
 | **IDEA.md is the project PLAN** | Update when features change, must follow AI.md |
 | **Keep documentation current** | Update when project state changes |
 | **TODO.AI.md for 3+ tasks** | Required when doing 3 or more tasks |
@@ -5539,7 +5457,7 @@ sudo mv {project_name}-cli-linux-amd64 /usr/local/bin/{project_name}-cli
 
 ## Configuration
 
-Configuration is auto-generated on first run. Edit via admin panel at `{proto}://{fqdn}/server/{admin_path}` (admin_path defaults to "admin").
+Configuration is auto-generated on first run. Edit the config file directly.
 
 Key settings:
 - `server.port` - Listen port (default: random 64xxx)
@@ -5741,8 +5659,8 @@ curl -L https://api.example.com/server/healthz
 | Rule | Description |
 |------|-------------|
 | **No SSH/CLI required** | Users should NEVER need to edit config files manually |
-| **Complete coverage** | 100% of `server.yml` settings available in admin panel |
-| **Extend for project** | Projects MUST extend admin UI for project-specific settings |
+| **Complete coverage** | 100% of `server.yml` settings available via API |
+| **Extend for project** | Projects MUST extend admin API for project-specific settings |
 | **Grouped logically** | Settings organized into intuitive sections |
 | **Tooltips/help** | Every setting has a description explaining what it does |
 | **Validation** | Real-time validation with clear error messages |
@@ -6343,17 +6261,16 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 │       ├── ai-rules.md         # PART 0, 1: AI Assistant Rules, Critical Rules
 │       ├── project-rules.md    # PART 2, 3, 4: License & Attribution, Project Structure, OS-Specific Paths
 │       ├── config-rules.md     # PART 5, 6, 12: Configuration, Application Modes, Server Configuration
-│       ├── binary-rules.md     # PART 7, 8, 33: Binary Requirements, Server Binary CLI, Client & Agent
-│       ├── backend-rules.md    # PART 9, 10, 11, 32: Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service
+│       ├── binary-rules.md     # PART 7, 8, 32: Binary Requirements, Server Binary CLI, Client & Agent
+│       ├── backend-rules.md    # PART 9, 10, 11, 31: Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service
 │       ├── api-rules.md        # PART 13, 14, 15: Health & Versioning, API Structure, SSL/TLS & Let's Encrypt
-│       ├── frontend-rules.md   # PART 16, 17: Web Frontend, Admin Panel
+│       ├── frontend-rules.md   # PART 16: Web Frontend
 │       ├── features-rules.md   # PART 17-22: Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command
-│       ├── service-rules.md    # PART 23, 25: Privilege Escalation & Service, Service Support
+│       ├── service-rules.md    # PART 23, 24: Privilege Escalation & Service, Service Support
 │       ├── makefile-rules.md   # PART 25: Makefile (local dev only, NOT CI/CD)
 │       ├── docker-rules.md     # PART 26: Docker
 │       ├── cicd-rules.md       # PART 27: CI/CD Workflows
-│       ├── testing-rules.md    # PART 28, 30, 31: Testing & Development, ReadTheDocs Documentation, I18N & A11Y
-│       └── optional-rules.md   # PART 34-36: Multi-User, Organizations, Custom Domains (all OPTIONAL)
+│       └── testing-rules.md    # PART 28, 29, 30: Testing & Development, ReadTheDocs Documentation, I18N & A11Y
 ├── .cursor/                # Cursor AI configuration (optional)
 │   ├── rules/              # Same groupings as .claude/rules/ but .mdc extension
 │   │   ├── ai-rules.mdc
@@ -6368,8 +6285,7 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 │   │   ├── makefile-rules.mdc
 │   │   ├── docker-rules.mdc
 │   │   ├── cicd-rules.mdc
-│   │   ├── testing-rules.mdc
-│   │   └── optional-rules.mdc
+│   │   └── testing-rules.mdc
 │   └── CURSOR.md           # Project memory - critical rules (REQUIRED)
 ├── .aider/                 # Aider AI configuration (optional)
 │   ├── CONVENTIONS.md      # Single file with all rule sections
@@ -7382,7 +7298,7 @@ port: 8080
 ## Path Normalization & Validation
 
 **All paths MUST be normalized and validated. This is a GLOBAL security rule for all binaries (server, agent, cli) and applies to:**
-- Configuration values (admin_path, static_path, etc.)
+- Configuration values (static_path, etc.)
 - HTTP request paths
 - File paths
 - API parameters containing paths
@@ -7500,16 +7416,6 @@ func SafePath(input string) (string, error) {
 ### Apply Everywhere
 
 **Configuration paths:**
-```go
-func (c *Config) SetAdminPath(input string) error {
-    safe, err := SafePath(input)
-    if err != nil {
-        return fmt.Errorf("invalid admin_path: %w", err)
-    }
-    c.AdminPath = safe
-    return nil
-}
-```
 
 **CLI flags:**
 ```go
@@ -7594,7 +7500,7 @@ func PathSecurityMiddleware(next http.Handler) http.Handler {
 
 | Request | Result | Status |
 |---------|--------|--------|
-| `GET /server/admin//config//settings` | `/server/{admin_path}/config/settings` | 200 |
+| `GET /server/admin//config//settings` | `/server/admin/config/settings` | 200 |
 | `GET //api///v1//users` | `/api/{api_version}/users` | 200 |
 | `GET ///` | `/` | 200 |
 | `GET /static/../server/admin` | Blocked | 400 |
@@ -7852,11 +7758,11 @@ Self-Healing Successful?                        │
             Show fix instructions in admin UI
 ```
 
-### Admin Panel in Maintenance Mode
+### Admin API in Maintenance Mode
 
-**The admin panel remains accessible and provides guidance for fixing issues.**
+**The admin API remains accessible and provides guidance for fixing issues.**
 
-#### Maintenance Dashboard (`/server/{admin_path}`)
+#### Maintenance Status
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -9114,9 +9020,9 @@ server:
   port: 64580
 ```
 
-### Admin Panel
+### Admin API (Port Configuration)
 
-Port can be changed via `/server/{admin_path}/config/settings`, but **requires server restart** (with warning shown to user).
+Port can be changed via the config file, but **requires server restart**.
 
 ### Example Structure
 
@@ -9134,8 +9040,6 @@ server:
   address: "[::]"
   # production or development
   mode: production
-  # Admin panel path (default: admin) - see PART 17
-  admin_path: admin
   # API version prefix (default: v1) - used in /api/{api_version}/ routes
   api_version: v1
   healthz:
@@ -9163,7 +9067,7 @@ server:
   # Default: false (modern service managers prefer foreground)
   daemonize: false
 
-  # Admin Panel
+  # Admin Account (stored in database)
   admin:
     email: admin@{fqdn}
     # Note: username, password, and token are stored in database (admins table)
@@ -9916,7 +9820,6 @@ func FromEnv() {
 | Signals | Proper handling (SIGTERM, SIGINT, SIGHUP) |
 | PID file | Enabled by default |
 
-**See PART 17 "First Run & Setup Wizard" for server first-run experience.**
 **See PART 32 "First-Run / Double-Click Behavior" for CLI setup wizard (CLI is the only binary with a setup wizard).**
 
 ## Embedded Assets
@@ -11853,9 +11756,7 @@ The app automatically watches config files and hot-reloads what it can. Settings
 
 | Setting | Why |
 |---------|-----|
-| `server.admin_path` | Routes must be re-registered |
-
-**Requires Restart (admin UI shows notification):**
+**Requires Restart:**
 
 | Setting | Why |
 |---------|-----|
@@ -12784,7 +12685,7 @@ func categorizeChanges(changes []string) (hotReload, needsRestart []string) {
 **Admin UI Restart Notification:**
 
 ```go
-// GET /server/{admin_path}/api/status returns pending restart info
+// GET /api/{api_version}/server/status returns pending restart info
 func adminStatusHandler(w http.ResponseWriter, r *http.Request) {
     status := map[string]interface{}{
         "running":         true,
@@ -13203,7 +13104,7 @@ volumes:
 | WRONG | RIGHT |
 |-------|-------|
 | `GET /api/{api_version}/resource/random` | `https://api.example.com/api/{api_version}/resource/random` |
-| `POST /api/{api_version}/server/{admin_path}/config/settings` | `https://api.example.com/api/{api_version}/server/{admin_path}/config/settings` |
+| `POST /api/{api_version}/server/healthz` | `https://api.example.com/api/{api_version}/server/healthz` |
 | `http://localhost:8080/api` | `http://192.168.1.100:64580/api` |
 | `http://0.0.0.0:80/server/healthz` | `https://myserver.example.com/server/healthz` |
 
@@ -14288,7 +14189,7 @@ if err != nil && !isColumnExistsError(err) {
 - All nodes share same database and cache
 - Config changes propagate automatically
 
-**Cluster join + secret distribution:** new nodes join via the flow defined in **PART 34 → "Join Cluster Flow (Technical)"**. The bootstrap response from the existing node carries every `app_secrets` row (PART 11 → "Cryptographic Keys") inside the encrypted payload — `installation_secret`, `cookie_signing_key`, `csrf_token_secret` are NOT regenerated per node. The pre-existing `server.security.encryption_key` (`server.yml`) is also distributed in the same encrypted payload. All replicas share one set.
+**Cluster join + secret distribution:** new nodes join via the cluster join flow defined in PART 10 → "Cluster". The bootstrap response from the existing node carries every `app_secrets` row (PART 11 → "Cryptographic Keys") inside the encrypted payload — `installation_secret`, `cookie_signing_key`, `csrf_token_secret` are NOT regenerated per node. The pre-existing `server.security.encryption_key` (`server.yml`) is also distributed in the same encrypted payload. All replicas share one set.
 
 **Cluster nodes vs agents (do NOT confuse):**
 
@@ -14337,8 +14238,7 @@ If now - last_seen > 5 minutes:
    Mark as "offline", exclude from cluster operations
          │
          ▼
-Admin manually removes dead nodes via:
-   /server/{admin_path}/config/cluster → Remove Node
+Admin manually removes dead nodes via CLI command or config file.
 ```
 
 **Heartbeat Payload (every 30s, written to `nodes` table):**
@@ -14375,15 +14275,15 @@ Admin manually removes dead nodes via:
 
 ### Removed-Node Local Cleanup
 
-**When a node is manually removed via `/server/{admin_path}/config/cluster → Remove Node`, the database record is deleted, but the node's local on-disk state may still contain valid copies of `app_secrets` (it had them while it was in the cluster). The removal flow MUST handle both sides:**
+**When a node is manually removed via CLI command or config file, the database record is deleted, but the node's local on-disk state may still contain valid copies of `app_secrets` (it had them while it was in the cluster). The removal flow MUST handle both sides:**
 
 | Side | Action |
 |------|--------|
 | **Server-side** (from the removing node) | Delete the row from `nodes` table. Mark `app_secrets` versions valid for that node as `revoked_for_node = node_id` so audit can see the removal happened mid-rotation if applicable. Emit `cluster.node_removed` audit event. |
 | **Removed-node-side** (when the removed node next attempts to heartbeat) | Heartbeat returns `403 NODE_REMOVED`. The binary on the removed node MUST: (1) wipe `{config_dir}/security/pgp.priv.asc.enc` if present (PGP keys are cluster-shared and the removed node has lost permission to participate); (2) wipe its `app_secrets` cache; (3) leave `server.yml` minus the cluster section; (4) log `cluster.removed_self_cleanup` to local `audit.log`; (5) refuse to serve requests until re-joined. The binary does NOT delete logs, data files, or user content — those stay on the removed host for forensic / audit purposes. |
-| **If the removed node is offline at removal time** | The cleanup happens whenever the removed node next attempts to communicate. Until then, it's running with stale secrets — but per the secret-version-mismatch flow above, its requests would already fail because `installation_secret` may have rotated. Operators removing a node SHOULD power down or `systemctl stop {internal_name}` first, then remove. The admin panel surfaces this guidance. |
+| **If the removed node is offline at removal time** | The cleanup happens whenever the removed node next attempts to communicate. Until then, it's running with stale secrets — but per the secret-version-mismatch flow above, its requests would already fail because `installation_secret` may have rotated. Operators removing a node SHOULD power down or `systemctl stop {internal_name}` first, then remove. The API surfaces this guidance via the cluster status endpoint. |
 
-**Caveat:** removed-node cleanup is best-effort. A truly compromised host that's been removed cannot be trusted to wipe its own secrets — assume the secrets it had ARE in attacker hands. Always rotate `installation_secret`, `cookie_signing_key`, `csrf_token_secret`, `server.security.encryption_key`, and the project PGP keypair after removing a compromised node. The admin panel offers a "Rotate everything" button on the Remove Node confirmation dialog.
+**Caveat:** removed-node cleanup is best-effort. A truly compromised host that's been removed cannot be trusted to wipe its own secrets — assume the secrets it had ARE in attacker hands. Always rotate `installation_secret`, `cookie_signing_key`, `csrf_token_secret`, `server.security.encryption_key`, and the project PGP keypair after removing a compromised node. The API offers a "Rotate everything" endpoint on the cluster remove flow.
 
 **Primary Election:**
 
@@ -14933,9 +14833,9 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 |----------|--------|
 | Length | 32 bytes (256 bits) of `crypto/rand` |
 | Generated | First start, before the setup token is shown. Stored in `server.db` row `app_secrets.installation_secret`, base64-encoded. |
-| Scope | Cluster-wide. The first node generates it; subsequent nodes joining the cluster receive it via the secure cluster join protocol (PART 34 → "Join Cluster Flow (Technical)" — the join token is HMAC-derived and the `installation_secret` is delivered as part of the same handshake payload). NEVER appears in a request, response, log, or admin UI. |
+| Scope | Cluster-wide. The first node generates it; subsequent nodes joining the cluster receive it via the secure cluster join protocol (PART 10 → "Cluster" — the join token is HMAC-derived and the `installation_secret` is delivered as part of the same handshake payload). NEVER appears in a request, response, log, or admin UI. |
 | Used by | `{security_id}` HMAC (PART 11 → "Security Reports"); PGP private-key KDF (PART 11 → "GPG Keypair Management"); future derived material (cluster-internal request signing, cookie signing salts). |
-| Rotation | Manual via admin panel (`/server/{admin_path}/config/security/keypair` → "Rotate Installation Secret"). Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt admin password, log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and re-bases all live HMACs. The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
+| Rotation | Manual via CLI command or config file. Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt admin password, log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and re-bases all live HMACs. The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
 | Backup | Always — see PART 21 → "Backup Contents". Required for any restore: without it, the PGP private key in the backup is undecryptable. |
 | Loss = catastrophic | Lost = cannot decrypt PGP private key (and therefore cannot decrypt in-flight encrypted security reports); cannot validate `{security_id}` URLs on existing security.txt copies until the file regenerates. Recovery requires admin to: regenerate keypair, regenerate `installation_secret`, accept that all in-flight encrypted reports are unreadable. |
 
@@ -14950,13 +14850,13 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 
 | Key | Length | Storage | Purpose | Rotation |
 |-----|--------|---------|---------|----------|
-| `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run) | At-rest encryption for ALL sensitive server data: 2FA secrets, security report bodies (used as the AES fallback when no PGP keypair exists or when an admin has no personal pubkey, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via admin panel (sensitive-op flow). 30-day grace for in-flight encrypted data. |
+| `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run) | At-rest encryption for ALL sensitive server data: 2FA secrets, security report bodies (used as the AES fallback when no PGP keypair exists or when an admin has no personal pubkey, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via API (sensitive-op flow). 30-day grace for in-flight encrypted data. |
 
 **Note on consolidation:** `server.security.encryption_key` is the canonical at-rest AES key — every place the spec talks about "encrypt this sensitive data at rest" resolves to this one key, including security report bodies. It is NOT duplicated in `app_secrets`. The four `app_secrets` rows above are HMAC keys (not AES) and a root-secret for HMAC derivation; they are stored in the DB rather than `server.yml` because they have independent rotation lifecycles and need to be visible to cluster replicas via shared DB read.
 
 **All secrets above:**
 - Generated on first start, before any user-visible operation.
-- NEVER returned in any API response — even to admins. The admin panel shows "configured" / "rotated 12 days ago" / fingerprint hashes only.
+- NEVER returned in any API response — even to admins. The API returns "configured" / "rotated 12 days ago" / fingerprint hashes only.
 - NEVER logged. The Output Sanitization Pipeline (PART 11 → above) treats any field whose name contains `secret`, `key`, `password`, `token` as redacted at the log layer too.
 - Always included in backups (PART 21 → "Backup Contents").
 - Restored verbatim from a backup. Restoring partially (e.g., DB without these secrets) is rejected by the restore flow — the manifest verifies all secrets are present.
@@ -15356,8 +15256,8 @@ Agent tokens (scoped to owner):
 | Prefix | Type | Required | Description |
 |--------|------|----------|-------------|
 | `adm_` | Admin token | **YES - all projects** | Server admin API access |
-| `usr_` | User token | If multi-user (PART 34) | Regular user API access |
-| `org_` | Organization token | If orgs (PART 35) | Organization-level API access |
+| `usr_` | User token | If multi-user (project-specific) | Regular user API access |
+| `org_` | Organization token | If orgs (project-specific) | Organization-level API access |
 
 ### Token Properties
 
@@ -15390,7 +15290,7 @@ adm_ghi789...  "monitoring"   read       1 year
 
 | Prefix | Scope | Route | Description |
 |--------|-------|-------|-------------|
-| `adm_agt_` | Admin | `/api/{api_version}/server/{admin_path}/config/agents/*` | Server infrastructure agents |
+| `adm_agt_` | Admin | `/api/{api_version}/server/config/agents/*` | Server infrastructure agents |
 | `usr_agt_` | User | `/api/{api_version}/users/agents/*` | User's personal agents (SaaS) |
 | `org_agt_` | Org | `/api/{api_version}/orgs/{slug}/agents/*` | Organization agents |
 
@@ -15512,11 +15412,10 @@ func validateAgentToken(token string, scope TokenScope) (*TokenInfo, error) {
 
 | Token Type | Allowed Routes | Description |
 |------------|----------------|-------------|
-| `adm_` | `/api/{api_version}/server/{admin_path}/*` | Server admin panel |
-| `adm_` | `/api/{api_version}/server/{admin_path}/config/*` | Server settings (within admin) |
+| `adm_` | `/api/{api_version}/server/*` | Server administration (config file managed) |
 | `usr_` | `/api/{api_version}/users/*`, `/api/{api_version}/orgs/{allowed}/*` | User + orgs they belong to |
 | `org_` | `/api/{api_version}/orgs/{specific}/*` | Single org only |
-| `adm_agt_` | `/api/{api_version}/server/{admin_path}/config/agents/*` | Admin infrastructure agent |
+| `adm_agt_` | `/api/{api_version}/server/config/agents/*` | Admin infrastructure agent |
 | `usr_agt_` | `/api/{api_version}/users/agents/*` | User's personal agent |
 | `org_agt_` | `/api/{api_version}/orgs/{slug}/agents/*` | Organization agent |
 | (no token) | `/api/{api_version}/`, `/api/{api_version}/server/*`, `/api/{api_version}/{resource}/*` | Public routes (no auth) |
@@ -15534,8 +15433,7 @@ const (
     TargetCurrentUser                     // Current user from token (/users/*, /api/{api_version}/users/*)
     TargetUser                            // Specific user (/users/{username}/*, /api/{api_version}/users/{username}/*)
     TargetOrg                             // Organization (/orgs/{slug}/*, /api/{api_version}/orgs/{slug}/*)
-    TargetAdmin                           // Server admin panel (/server/{admin_path}/*, /api/{api_version}/server/{admin_path}/*)
-    TargetAdminServer                     // Server settings within admin (/server/{admin_path}/config/*, /api/{api_version}/server/{admin_path}/config/*)
+    TargetAdmin                           // Server administration (config file managed)
 )
 ```
 
@@ -15578,8 +15476,6 @@ func extractContextFromPath(path string) (*Context, error) {
     // /api/{api_version}/server/auth/* → Auth flows
     // /api/{api_version}/users/* → User context (current user or {username})
     // /api/{api_version}/orgs/{slug}/* → Org context
-    // /api/{api_version}/server/{admin_path}/* → Server Admin
-    // /api/{api_version}/server/{admin_path}/config/* → Server Settings (within admin)
     // /api/{api_version}/{resource}/* → Public routes (project-specific: jokes, weather, ip, etc.)
 
     apiBase := APIBasePath() + "/" // e.g., "/api/{api_version}/"
@@ -15610,14 +15506,6 @@ func extractContextFromPath(path string) (*Context, error) {
         }
         // /api/{api_version}/orgs/{slug}/*
         return &Context{Name: parts[1], Type: TargetOrg}, nil
-    case cfg.AdminPath: // Configurable admin path
-        // Check for server settings within admin
-        if len(parts) > 1 && parts[1] == "server" {
-            // /api/{api_version}/server/{admin_path}/config/* - server settings
-            return &Context{Type: TargetAdminServer}, nil
-        }
-        // /api/{api_version}/server/{admin_path}/* - admin panel
-        return &Context{Type: TargetAdmin}, nil
     default:
         // Project-specific public routes (e.g., /api/{api_version}/jokes, /weather, /ip)
         return &Context{Type: TargetPublic}, nil
@@ -15667,7 +15555,7 @@ func extractContextFromPath(path string) (*Context, error) {
 | `/server/auth/ldap/{provider}` | GET/POST | LDAP login flow for the selected LDAP provider |
 | `/server/auth/external/username` | GET/POST | First-login username confirmation/selection step after successful OIDC/LDAP auth for new user/admin accounts |
 
-**Additional routes if multi-user (PART 34):**
+**Additional routes if multi-user (project-specific):**
 
 | Route | Method | Purpose |
 |-------|--------|---------|
@@ -15683,7 +15571,7 @@ func extractContextFromPath(path string) (*Context, error) {
 
 | Account Type | Stored In | After Login Redirect |
 |--------------|-----------|---------------------|
-| **Server Admin** | `admins` table | `/server/{admin_path}` (default: `/server/admin`) |
+| **Server Admin** | `admins` table | `/server/` (admin landing page) |
 | **Regular User** | `users` table | `/users` or `?redirect=` param |
 
 **Login Flow:**
@@ -15702,7 +15590,7 @@ Set admin_session    Check `users` table (if multi-user)
     │                    │
     ↓               ┌─── Match found? ───┐
 Redirect to         │                    │
-/server/{admin_path}      YES                   NO
+/server/                  YES                   NO
                     │                    │
                     ↓                    ↓
                Set user_session    Return error:
@@ -15802,7 +15690,6 @@ Files can be served from:
 User-agent: *
 Allow: /
 Allow: /api
-Disallow: /server/{admin_path}
 Sitemap: {app_url}/sitemap.xml
 ```
 
@@ -15813,8 +15700,7 @@ web:
     allow:
       - /
       - /api
-    deny:
-      - /server/{admin_path}
+    deny: []
 ```
 
 ### security.txt (RFC 9116)
@@ -15854,23 +15740,9 @@ web:
 | `Contact` | YES | Email for reporting vulnerabilities (mailto: prefix added automatically) |
 | `Expires` | YES | Expiration date (auto-renewed yearly by default) |
 
-### Admin Panel (/server/{admin_path}/config/web)
+### Web Configuration (config file)
 
-**robots.txt Settings:**
-
-| Element | Type | Description |
-|---------|------|-------------|
-| Allow paths | Tag input / List | Paths to allow crawling (e.g., `/`, `/api`) |
-| Deny paths | Tag input / List | Paths to deny crawling (e.g., `/server/{admin_path}`) |
-| Preview | Read-only textarea | Shows generated robots.txt content |
-
-**security.txt Settings:**
-
-| Element | Type | Description |
-|---------|------|-------------|
-| Security contact | Text input | Email for vulnerability reports |
-| Expires | Date picker | Expiration date (default: 1 year from now, auto-renews) |
-| Preview | Read-only textarea | Shows generated security.txt content |
+**robots.txt and security.txt are configured via config file (see `web.robots` and `web.security` sections above).**
 
 **Well-Known Settings:**
 
@@ -15945,31 +15817,23 @@ web:
 |----------|--------|------|---------|
 | `/.well-known/security.txt` | GET | None | RFC 9116 file — see above |
 | `/.well-known/pgp-key.asc` | GET | None | Project's PGP public key (ASCII-armored). 404 if no keypair generated yet. |
-| `/server/security/policy` | GET | None | Disclosure policy page (HTML). Default content provided; editable from admin panel. Lists the coordinated-disclosure window, in-scope domains, out-of-scope behaviors, safe-harbor language. |
+| `/server/security/policy` | GET | None | Disclosure policy page (HTML). Default content provided; editable via API. Lists the coordinated-disclosure window, in-scope domains, out-of-scope behaviors, safe-harbor language. |
 | `/server/security/thanks` | GET | None | Acknowledgments page. Lists researchers who opted in (real name, handle, or anonymized "Anonymous Researcher #n") with the year and short credit. |
 | `/server/security/report/{tracking_id}` | GET | One-shot token in URL | Researcher status page — shows triage state (Received / Triaged / Confirmed / Patching / Disclosed / Won't Fix), maintainer comments visible to researcher, expected disclosure date. Token is single-use-per-day; expires after the report is closed for 30 days. |
 
-### Admin Panel — `/server/{admin_path}/config/security/`
+### Security Administration (config file)
 
-**Note on the two `security` admin namespaces:**
+**Server security is managed via config file. There are no web routes for server administration.**
 
-| Path | Concern | Cross-link |
-|------|---------|------------|
-| `/server/{admin_path}/config/security/{reports,policy,thanks,keypair}` | **Disclosure feature** — managing the coordinated-disclosure pipeline (reports, policy page, hall of fame, GPG keypair). | This section. |
-| `/server/{admin_path}/config/security/{blocked-ips,allowlist,locked-accounts}` | **Runtime defense** — IP blocks, allow-lists, account lockouts. | PART 11 → "IP Block Management" (already documented). |
-| `/server/{admin_path}/config/web/security` | **`security.txt` content** — the file's `Expires`, languages, keyservers list. Recipient email is in `server.contact.security.email` (PART 12). | Existing — PART 11 → "security.txt". |
+**Security namespaces:**
 
-All three coexist under the admin tree. The admin-panel UI groups them under a single "Security" sidebar entry with sub-tabs so operators see them in one place even though the route paths are slightly different.
+| Concern | Configuration |
+|---------|---------------|
+| **Disclosure feature** — coordinated-disclosure pipeline (reports, policy page, hall of fame, GPG keypair) | Configured via config file; security reports accessible via public `/server/security/*` routes |
+| **Runtime defense** — IP blocks, allow-lists, account lockouts | Configured via config file; see PART 11 → "IP Block Management" |
+| **`security.txt` content** — `Expires`, languages, keyservers list | Configured via `web.security.*` config keys |
 
-| Page | Purpose |
-|------|---------|
-| `/server/{admin_path}/config/security/reports` | List of all security reports with `tracking_id`, summary, severity, state. Sortable/filterable. Click → full report (decrypted on the server, viewed in-browser via authenticated session — never sent to log files). |
-| `/server/{admin_path}/config/security/reports/{tracking_id}` | Full report view: vulnerability details, researcher info, attached PGP-encrypted artifacts, triage notes, state machine controls, "send researcher update" composer (encrypts to researcher pubkey). |
-| `/server/{admin_path}/config/security/policy` | Edit `/server/security/policy` content (Markdown). Default safe-harbor text provided. |
-| `/server/{admin_path}/config/security/thanks` | Manage acknowledgment listings (toggle visibility per researcher, edit handle, sort order). Adding/removing entries follows researcher's stored credit preference. |
-| `/server/{admin_path}/config/security/keypair` | GPG keypair management — see "GPG Keypair Management" below. |
-
-### GPG Keypair Management (Admin Panel)
+### GPG Keypair Management (Admin API)
 
 **One project-level GPG keypair. Used to encrypt incoming security reports at rest, sign outbound notifications, and seed the `Encryption:` line in security.txt.**
 
@@ -15978,7 +15842,7 @@ All three coexist under the admin tree. The admin-panel UI groups them under a s
 | **Generate** | Generates an Ed25519 (signing) + Curve25519 (encryption) keypair. Identity is `{app_name} Security <{security_contact}>`. Expires 2 years from generation. Private key is encrypted with a key derived from `installation_secret` and stored in `{config_dir}/security/pgp.priv.asc.enc`. Public key stored at `{config_dir}/security/pgp.pub.asc` (also served at `/.well-known/pgp-key.asc`). |
 | **Rotate** | Generates a new keypair, signs the new pubkey with the old key, publishes the rotation to configured keyservers. Old key stays valid for 30 days for in-flight reports. |
 | **Publish to keyservers** | POST the public key to each entry in `web.security.keyservers`. Uses the keyserver's HTTP submission endpoint (`https://keys.openpgp.org/vks/v1/upload` for keys.openpgp.org, similar for ubuntu). Triggered automatically on generate/rotate; manually via "Republish" button. Failures are logged + retried with exponential backoff. |
-| **Export public key** | Download `pgp.pub.asc` directly from the admin panel. Or use the public URL `/.well-known/pgp-key.asc`. |
+| **Export public key** | Use the public URL `/.well-known/pgp-key.asc` or copy `{config_dir}/security/pgp.pub.asc` directly. |
 | **Export private key** | **Full export, ASCII-armored, decrypted with the operator's confirmation password.** Triggers a sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt admin password, log to `audit.log` as `security.private_key_exported`, return the file as a single download. **The download is rate-limited to 1 per hour per admin and the audit entry includes admin username, IP, and reason text the admin must type.** |
 | **Import private key** | Upload an existing `pgp.priv.asc` (e.g., restoring from backup, migrating from another instance). Same sensitive-operation gate. Validates the key's identity matches the project's expected identity (warns on mismatch — admin can override). |
 | **Delete** | Sensitive-operation flow. Deletes both keys, sets `web.security.publish_pgp_key: false`, removes `Encryption:` line from security.txt. In-flight encrypted reports become un-decryptable — admin warned and must type confirmation. |
@@ -16549,7 +16413,7 @@ server:
 - Show only first 8 characters: `token_abc12345...`
 - Or use separate ID field that doesn't expose token value
 
-## Admin Panel (`/server/{admin_path}/config/logs/audit`)
+## Audit Log
 
 | Element | Type | Description |
 |---------|------|-------------|
@@ -16862,9 +16726,6 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | `/users/consents` | PATCH | Update consent preferences |
 | `/server/privacy` | GET | Privacy policy |
 | `/server/dpo` | GET | Data Protection Officer contact (GDPR) |
-| `/server/{admin_path}/config/compliance` | GET | Compliance dashboard |
-| `/server/{admin_path}/config/compliance/report` | POST | Generate compliance report |
-| `/server/{admin_path}/config/compliance/breach` | POST | Report data breach |
 
 ### Compliance API Endpoints
 
@@ -16875,15 +16736,10 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | `/api/{api_version}/users/data/delete` | POST | Request deletion |
 | `/api/{api_version}/users/consents` | GET | Get consents |
 | `/api/{api_version}/users/consents` | PATCH | Update consents |
-| `/api/{api_version}/server/{admin_path}/config/compliance` | GET | Compliance status |
-| `/api/{api_version}/server/{admin_path}/config/compliance/standards` | GET | Enabled standards |
-| `/api/{api_version}/server/{admin_path}/config/compliance/report` | POST | Generate report |
-| `/api/{api_version}/server/{admin_path}/config/compliance/breach` | POST | Report breach |
-| `/api/{api_version}/server/{admin_path}/config/compliance/audit` | GET | Compliance audit log |
 
 ### Admin UI: Compliance Dashboard
 
-**Location:** `/server/{admin_path}/config/compliance`
+**Location:** Compliance dashboard is managed via config file.
 
 | Section | Description |
 |---------|-------------|
@@ -17153,45 +17009,19 @@ type IPBlock struct {
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/security/blocked-ips` | GET | List blocked IPs |
-| `/api/{api_version}/server/{admin_path}/config/security/blocked-ips` | POST | Manually block IP/CIDR |
-| `/api/{api_version}/server/{admin_path}/config/security/blocked-ips/{ip}` | GET | Get block details |
-| `/api/{api_version}/server/{admin_path}/config/security/blocked-ips/{ip}` | DELETE | Unblock IP |
-| `/api/{api_version}/server/{admin_path}/config/security/blocked-ips/expired` | DELETE | Purge expired blocks from log |
-| `/api/{api_version}/server/{admin_path}/config/security/allowlist` | GET | List allowlisted IPs/CIDRs (see Allowlist section) |
-| `/api/{api_version}/server/{admin_path}/config/security/allowlist` | POST | Add IP/CIDR to allowlist |
-| `/api/{api_version}/server/{admin_path}/config/security/allowlist/{id}` | DELETE | Remove from allowlist |
-| `/api/{api_version}/server/{admin_path}/config/security/allowlist/check/{ip}` | GET | Check if IP is allowlisted |
+IP blocks and allowlists are managed via config file (`server.security.blocked_ips`, `server.security.allowlist`).
 
 **Account Lockout API:**
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/security/locked-accounts` | GET | List locked accounts |
-| `/api/{api_version}/server/{admin_path}/config/security/locked-accounts/{id}` | DELETE | Unlock account |
+Account lockouts are managed via config file or CLI command.
 
 **Security Settings API:**
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/security/settings` | GET | Get all security settings |
-| `/api/{api_version}/server/{admin_path}/config/security/settings` | PATCH | Update security settings |
-| `/api/{api_version}/server/{admin_path}/config/security/auth` | GET | Get auth settings (password policy, provider summaries, etc.) |
-| `/api/{api_version}/server/{admin_path}/config/security/auth` | PATCH | Update shared auth settings |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers` | GET | List configured OIDC providers |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers` | POST | Create OIDC provider |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers/{provider}` | GET | Get one OIDC provider |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers/{provider}` | PATCH | Update one OIDC provider |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers/{provider}` | DELETE | Remove one OIDC provider |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/oidc/providers/{provider}/test` | POST | Test one OIDC provider |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers` | GET | List configured LDAP providers |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers` | POST | Create LDAP provider |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers/{provider}` | GET | Get one LDAP provider |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers/{provider}` | PATCH | Update one LDAP provider |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers/{provider}` | DELETE | Remove one LDAP provider |
-| `/api/{api_version}/server/{admin_path}/config/security/auth/ldap/providers/{provider}/test` | POST | Test one LDAP provider |
-| `/api/{api_version}/server/{admin_path}/config/security/ratelimit` | GET | Get rate limit settings |
-| `/api/{api_version}/server/{admin_path}/config/security/ratelimit` | PATCH | Update rate limit settings |
+Security settings, auth providers (OIDC/LDAP), and rate limits are all configured via config file.
 
 **Password Policy (Sane Defaults):**
 
@@ -17231,9 +17061,7 @@ When compliance standards are enabled, password policy automatically upgrades:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/security/tokens` | GET | List all API tokens (admin view) |
-| `/api/{api_version}/server/{admin_path}/config/security/tokens/{id}` | DELETE | Revoke token |
-| `/api/{api_version}/server/{admin_path}/config/security/tokens/{id}/rotate` | POST | Force token rotation |
+Token management (revocation, rotation) is performed via CLI command.
 
 **Token Expiry (Sane Defaults):**
 
@@ -17320,10 +17148,7 @@ type AllowlistEntry struct {
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/security/allowlist` | GET | List all allowlisted IPs/CIDRs |
-| `/api/{api_version}/server/{admin_path}/config/security/allowlist` | POST | Add IP/CIDR with optional description |
-| `/api/{api_version}/server/{admin_path}/config/security/allowlist/{id}` | DELETE | Remove from allowlist |
-| `/api/{api_version}/server/{admin_path}/config/security/allowlist/check/{ip}` | GET | Check if IP is allowlisted |
+Allowlist entries are managed via config file (`server.security.allowlist`).
 
 **Middleware:**
 
@@ -17351,9 +17176,9 @@ func IsAllowlisted(ctx context.Context) bool {
 }
 ```
 
-**Admin UI (`/server/{admin_path}/config/security/allowlist`):**
+**Allowlist configuration is managed via config file. Example YAML structure:**
 
-**Note:** Wireframe shows English for documentation. Actual UI renders ALL text via `t()` translation keys (see `admin.allowlist.*` in translation files). User sees their selected language.
+**Note:** Config file entries use `server.security.allowlist` with CIDR and description fields.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -17403,7 +17228,7 @@ func IsAllowlisted(ctx context.Context) bool {
 
 **Admin UI: IP Blocks**
 
-**Location:** `/server/{admin_path}/config/security/blocked-ips`
+**IP blocks are managed via config file (`server.security.blocked_ips`).**
 
 | Section | Description |
 |---------|-------------|
@@ -17470,17 +17295,7 @@ func IsAllowlisted(ctx context.Context) bool {
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/breaches` | GET | List all breaches |
-| `/api/{api_version}/server/{admin_path}/config/breaches` | POST | Report new breach |
-| `/api/{api_version}/server/{admin_path}/config/breaches/{id}` | GET | Get breach details |
-| `/api/{api_version}/server/{admin_path}/config/breaches/{id}` | PATCH | Update breach status |
-| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/investigate` | POST | Start investigation |
-| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/contain` | POST | Mark as contained |
-| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/notify` | POST | Send notifications |
-| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/resolve` | POST | Mark as resolved |
-| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/affected` | GET | List affected users |
-| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/timeline` | GET | Breach timeline/events |
-| `/api/{api_version}/server/{admin_path}/config/breaches/{id}/report` | GET | Generate breach report |
+Breach management is performed via CLI command or direct database operations.
 
 **Breach Data Model:**
 
@@ -17525,7 +17340,7 @@ const (
 
 **Admin UI: Breach Management**
 
-**Location:** `/server/{admin_path}/config/compliance/breaches`
+**Breach management is performed via CLI command or direct database operations.**
 
 | Section | Description |
 |---------|-------------|
@@ -17640,7 +17455,7 @@ labels:
 **Behavior:**
 - All routes prefixed with baseurl (e.g., `/myproject/server/healthz`, `/myproject/api/v1/...`)
 - Static assets served from `{baseurl}/static/`
-- Admin panel at `{baseurl}/server/{admin_path}/`
+- Server administration is via config file (no admin web panel)
 - Generated URLs (redirects, links) use detected baseurl
 - Trailing slash normalized (both `/myproject` and `/myproject/` work)
 - Empty string treated as `/`
@@ -17852,7 +17667,7 @@ Every outbound webhook POST includes these headers so the receiver can verify th
 
 | Header | Value |
 |--------|-------|
-| `X-Webhook-Signature` | `sha256=<hex_hmac>` where `hmac = HMAC-SHA256(per_webhook_secret, request_body_bytes)`. The `per_webhook_secret` is auto-generated when the webhook URL is first saved (random 32 bytes, persisted in `server.yml` next to the URL as `webhooks.<name>_secret`) and shown ONCE in the admin panel for the operator to configure on the receiving end. |
+| `X-Webhook-Signature` | `sha256=<hex_hmac>` where `hmac = HMAC-SHA256(per_webhook_secret, request_body_bytes)`. The `per_webhook_secret` is auto-generated when the webhook URL is first saved (random 32 bytes, persisted in `server.yml` next to the URL as `webhooks.<name>_secret`) and returned ONCE in the API response for the operator to configure on the receiving end. |
 | `X-Webhook-Timestamp` | Unix seconds — receiver SHOULD reject if delta exceeds `±5 min` to prevent replay |
 | `X-Webhook-ID` | UUID v7 (PART 13) — idempotency key the receiver can use to deduplicate retries |
 | `X-Webhook-Event` | The event type (e.g., `security.report_received`, `admin.cluster_failover`) |
@@ -17877,7 +17692,7 @@ if !subtle.ConstantTimeCompare([]byte(got), []byte(want)) {
 
 | Role | When triggered | What is sent |
 |------|----------------|--------------|
-| `admin` | Server-internal events: error rate spike, panic, cluster failover, backup failure, cert renewal, security report received (summary only) | Subject + body + severity + a deep-link to `/server/{admin_path}/config/...`. NEVER includes user content. |
+| `admin` | Server-internal events: error rate spike, panic, cluster failover, backup failure, cert renewal, security report received (summary only) | Subject + body + severity. NEVER includes user content. |
 | `security` | Incoming security report (full content, encrypted), researcher status update, CVE assignment milestone | PGP-encrypted body if a researcher pubkey or admin pubkey is configured (PART 11 → "GPG Keypair Management"). |
 | `general` | `/server/contact` form submission (non-security) | Sender name, sender email, subject, message body. Spam-filtered before dispatch. |
 
@@ -17900,9 +17715,9 @@ Use only the canonical contact keys in all new config, examples, docs, UI, and c
 
 Do NOT introduce flat aliases, duplicate names, or migration shims for contact recipients unless the user explicitly requests a migration feature.
 
-### Admin Panel — `/server/{admin_path}/config/notify`
+### Notification Configuration (config file)
 
-Single page with three tabs (Admin / Security / General). Each tab shows email + webhooks for that role with "test" buttons that send a sample notification through every configured transport.
+Notification channels are configured via config file. Three roles (admin, security, general) each have email and webhook settings.
 
 ## Analytics Tracking
 
@@ -18153,15 +17968,9 @@ func TrackingScript() template.HTML {
 {{ trackingScript }}
 ```
 
-### Admin Panel (/server/{admin_path}/config/tracking)
+### Analytics Tracking Configuration (config file)
 
-| Element | Type | Description |
-|---------|------|-------------|
-| Analytics Type | Dropdown | Select platform (None, Google, Matomo, etc.) |
-| Tracking/Site ID | Text input | ID format depends on type |
-| Analytics URL | Text input | Self-hosted URL (shown only when required) |
-| Test Connection | Button | Verify URL is reachable (for self-hosted) |
-| Preview | Code block | Shows generated tracking script |
+Analytics tracking is configured via `server.tracking` config keys.
 
 **Conditional URL Field:**
 ```
@@ -18635,15 +18444,9 @@ type ConsentState struct {
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Admin Panel (/server/{admin_path}/config/privacy)
+### Privacy Configuration (config file)
 
-| Section | Elements |
-|---------|----------|
-| **Consent Banner** | Message, policy link, button labels, position |
-| **Cookie Descriptions** | Text for each cookie category |
-| **Data Retention** | Retention period text, export/deletion toggles |
-| **Third-Party Services** | Add/remove services with name, purpose, policy URL |
-| **Preview** | Live preview of consent banner |
+Privacy consent, cookie descriptions, data retention, and third-party service settings are configured via `server.privacy` config keys.
 
 ### Implementation
 
@@ -18819,9 +18622,9 @@ server:
 | Pub/Sub events | Yes | Real-time state sync |
 | Distributed locks | Yes | Prevent duplicate task execution |
 
-## Admin Panel (/server/{admin_path}/config/settings)
+## Settings Configuration (config file)
 
-All settings above MUST be configurable via admin panel:
+All settings above are configured via config file:
 
 | Section | Settings |
 |---------|----------|
@@ -18889,7 +18692,7 @@ All settings above MUST be configurable via admin panel:
 
 #### Backend Structure (Go)
 
-**Based on template PARTS: branding (PART 16), modes (PART 6), cluster (PART 10), features (PARTS 20, 32, 34, 35), scheduler (PART 18).**
+**Based on template PARTS: branding (PART 16), modes (PART 6), cluster (PART 10), features (PARTS 20, 32), scheduler (PART 18).**
 
 ```go
 // HealthResponse - canonical field order for /server/healthz
@@ -18917,7 +18720,7 @@ type HealthResponse struct {
     // 5. Cluster info (PART 10: database & cluster)
     Cluster ClusterInfo `json:"cluster"`
 
-    // 6. Features - PUBLIC only (PARTS 20, 32, 34, 35)
+    // 6. Features - PUBLIC only (PARTS 20, 32)
     Features FeaturesInfo `json:"features"`
 
     // 7. Component health checks
@@ -18955,8 +18758,7 @@ type ClusterInfo struct {
 
 // FeaturesInfo - PUBLIC features only (no /metrics - PART 20 is internal)
 // Only shows NON-NEGOTIABLE features.
-// If project uses optional features (PARTS 34, 35, 36), they become
-// non-negotiable FOR THAT PROJECT and show actual enabled/disabled status.
+// For project-specific optional features, add fields here when implemented.
 type FeaturesInfo struct {
     // PART 31: Tor Hidden Service
     Tor TorInfo `json:"tor"`
@@ -18964,13 +18766,6 @@ type FeaturesInfo struct {
     // PART 19: GeoIP
     GeoIP bool `json:"geoip"`  // true = enabled, false = disabled
 
-    // --- PROJECT-SPECIFIC: Add when optional features are used ---
-    // When used, show actual status (admin can enable/disable):
-    //
-    // PART 34: MultiUser bool `json:"multi_user"`           // true/false
-    // PART 35: Organizations bool `json:"organizations"`     // true/false
-    // PART 36: CustomDomains bool `json:"custom_domains"`   // true/false
-    //
     // APP-SPECIFIC: Add your app's features with enabled/disabled status
 }
 
@@ -19021,7 +18816,7 @@ type StatsInfo struct {
 | `cluster.*` | `clusterManager.*` | 10 |
 | `features.tor.*` | `torManager.*` | 32 |
 | `features.geoip` | `cfg.GeoIP.Enabled` (true/false) | 20 |
-| `features.*` (project-specific) | Show actual status when optional PARTS used | 34, 35, 36 |
+| `features.*` (project-specific) | Show actual status when project-specific optional features used | - |
 | `checks.database` | `checkDatabase()` | 10 |
 | `checks.cache` | `checkCache()` | 10 |
 | `checks.scheduler` | `checkScheduler()` | 19 |
@@ -19318,7 +19113,7 @@ type StatsInfo struct {
 
 **Fields in canonical order (see "Field Order & Structure" above). References template PARTS.**
 
-**Note:** Only non-negotiable features shown with actual status (true/false, enabled/disabled). If project uses optional PARTS (34, 35, 36), those become non-negotiable for that project and show their actual enabled/disabled status.
+**Note:** Only non-negotiable features shown with actual status (true/false, enabled/disabled). If project uses project-specific optional features, those become non-negotiable for that project and show their actual enabled/disabled status.
 
 ```json
 {
@@ -19608,8 +19403,7 @@ OS/Arch: {GOOS}/{GOARCH}
 # PART 14: API STRUCTURE
 
 **Note:** This section covers API structure and requirements. For specific route listings, see:
-- Admin Web Routes: PART 17 (Admin Panel)
-- Admin API Routes: PART 17 (Admin Panel → API Routes)
+- Admin API Routes: PART 11 (Security & Logging → Admin token routes)
 - Project-specific Routes: IDEA.md
 
 ## Legacy vs Compatibility Endpoints
@@ -19666,10 +19460,10 @@ OS/Arch: {GOOS}/{GOARCH}
 | API Type | Frontend Required | Example |
 |----------|-------------------|---------|
 | **User-facing features** | Yes | `/api/{api_version}/users` → `/users` page |
-| **Admin features** | Yes | `/api/{api_version}/server/{admin_path}/*` → `/server/{admin_path}/*` pages |
+| **Admin features** | No (config file only) | Server administration is file-only — no web routes |
 | **Health/status** | Yes | `/server/healthz` has HTML frontend (with emojis), `/api/{api_version}/server/healthz` is JSON, `/api/healthz` is direct alias JSON |
 | **Agent endpoints** | No | `/api/{api_version}/*/agents/*` - CLI/agent only |
-| **Cluster nodes** | No | `/api/{api_version}/server/{admin_path}/config/nodes/*` - node-to-node only |
+| **Cluster nodes** | No | Node-to-node cluster communication only |
 
 | Requirement | Description |
 |-------------|-------------|
@@ -19692,8 +19486,8 @@ OS/Arch: {GOOS}/{GOARCH}
 
 | API Endpoint | Why No Frontend |
 |--------------|-----------------|
-| `/api/{api_version}/server/{admin_path}/config/agents/*` | Agent binary uses directly |
-| `/api/{api_version}/server/{admin_path}/config/nodes/*` | Node-to-node cluster communication |
+| `/api/{api_version}/server/config/agents/*` | Agent binary uses directly |
+| `/api/{api_version}/server/config/nodes/*` | Node-to-node cluster communication |
 
 ### Frontend Functionality Requirements
 
@@ -19758,7 +19552,7 @@ Before adding ANY route, verify:
 - [ ] Is it versioned? (`/api/{api_version}/...`)
 - [ ] Is the resource name plural? (`users`, not `user`)
 - [ ] Is it lowercase with hyphens? (`api-keys`, not `API_Keys`)
-- [ ] Does the route follow scope rules? (`/server/`, `/server/auth/`, `/server/{admin_path}/`, `/users/`, `/orgs/`)
+- [ ] Does the route follow scope rules? (`/server/`, `/server/auth/`, `/users/`, `/orgs/`)
 - [ ] If user-facing: does frontend route exist and work?
 - [ ] If system/agent: documented as API-only?
 
@@ -19782,9 +19576,6 @@ Before adding ANY route, verify:
 | **Auth** | `/server/auth/*` | `/api/{api_version}/server/auth/*` | No | Login, register, logout, 2FA, password, invite, verify |
 | **Users** | `/users/*` | `/api/{api_version}/users/*` | **No** | Current user's resources (from session) |
 | **Orgs** | `/orgs/*` | `/api/{api_version}/orgs/*` | **Yes** (`{slug}`) | User can own multiple orgs |
-| **Server Admin** | `/server/{admin_path}/*` | `/api/{api_version}/server/{admin_path}/*` | No | Admin dashboard root, admin self area, config subtree |
-| **Admin Self** | `/server/{admin_path}/{admin_username}/*` | `/api/{api_version}/server/{admin_path}/{admin_username}/*` | **Yes** (`{admin_username}`) | The authenticated admin's own account/profile/preferences/notifications |
-| **Admin Config** | `/server/{admin_path}/config/*` | `/api/{api_version}/server/{admin_path}/config/*` | No | ALL server-wide admin/configuration routes |
 | **Project** | `/*` | `/api/{api_version}/*` | Varies | Project-specific (jokes, pastes, etc.) |
 
 **Note:** Examples throughout this document use `/api/{api_version}/` as the default value. In code, always use `APIBasePath()` or `{api_version}` - never hardcode `v1`.
@@ -19801,13 +19592,7 @@ Before adding ANY route, verify:
 | `GET /api/{api_version}/users/security` | Current user's security settings |
 | `GET /api/{api_version}/users/settings` | Current user's preferences |
 
-**Admin routes for managing OTHER users use `/server/{admin_path}/config/users/{id}`:**
-
-| Route | Description |
-|-------|-------------|
-| `GET /api/{api_version}/server/{admin_path}/config/users` | List all users (admin) |
-| `GET /api/{api_version}/server/{admin_path}/config/users/{id}` | View specific user (admin) |
-| `PATCH /api/{api_version}/server/{admin_path}/config/users/{id}` | Edit specific user (admin) |
+**Admin operations on OTHER users use server-side CLI commands or direct database access.**
 
 ### Org Routes - Slug Required
 
@@ -19844,7 +19629,7 @@ Before adding ANY route, verify:
 
 | Direction | Example | Reason |
 |-----------|---------|--------|
-| **API-only** | `/api/{api_version}/server/{admin_path}/config/agents/*`, `/api/{api_version}/server/{admin_path}/config/nodes/*` | Machine/system use only (see table above) |
+| **API-only** | `/api/{api_version}/server/config/agents/*`, `/api/{api_version}/server/config/nodes/*` | Machine/system use only (see table above) |
 | **Frontend-only** | `/server` → `/server/about` redirect | UX convenience redirects, no API equivalent needed |
 
 ### ID/Slug Consistency
@@ -19885,7 +19670,7 @@ GET /api/{api_version}/jokes?category=prog    ✗ Bad - should be path param
 GET /api/{api_version}/users/repos?page=2&limit=10    ✓ Pagination
 GET /api/{api_version}/jokes?sort=rating&order=desc   ✓ Sorting (project-scoped)
 GET /api/{api_version}/search/golang?safe=true        ✓ Filtering/options
-GET /api/{api_version}/server/{admin_path}/config/users?status=active&role=admin ✓ Admin filters
+GET /api/{api_version}/users?status=active&role=admin ✓ Admin filters (via session auth)
 ```
 
 **Rules:**
@@ -20091,7 +19876,6 @@ tail -c 2 file.txt | od -An -tx1
 | Endpoint | Default | Browser | curl/CLI | API Client |
 |----------|---------|---------|----------|------------|
 | `/` (public pages) | HTML | HTML | Text | HTML |
-| `/server/{admin_path}/*` | HTML | HTML | HTML | HTML |
 | `/api/{api_version}/*` | JSON | JSON | Text | JSON |
 | `/server/healthz` | HTML | HTML | Text | JSON (Accept: application/json) |
 | `*.txt` extension | Text | Text | Text | Text |
@@ -20158,7 +19942,7 @@ func getAPIResponseFormat(r *http.Request) string {
 - ✓ ALL `/api/{api_version}/*` endpoints
 - ✓ Health API endpoints (`/api/{api_version}/server/healthz`)
 - ✓ Project-specific API endpoints
-- ✓ Admin API endpoints (`/api/{api_version}/server/{admin_path}/*`)
+- ✓ Server API endpoints (`/api/{api_version}/server/*`)
 
 **API Routes (JSON default, text via CLI/.txt/Accept header):**
 
@@ -21168,8 +20952,6 @@ Need additional compatible endpoints?"
 | `/server/docs/swagger` | GET | None | Swagger UI (interactive REST explorer; fetches spec from `/api/swagger`) |
 | `/server/docs/graphql` | GET | None | GraphiQL UI (interactive GraphQL explorer; POSTs to `/api/graphql`) |
 | `/metrics` | GET | Optional | Prometheus metrics |
-| `/server/{admin_path}` | GET | Session | Admin panel login |
-| `/server/{admin_path}/*` | ALL | Session | Admin panel pages |
 | `/api/autodiscover` | GET | None | Server settings, config schema, and options for CLI/agent (non-versioned) |
 | `/api/swagger` | GET | None | OpenAPI JSON spec — direct alias for current `{api_version}` |
 | `/api/graphql` | POST | None | GraphQL queries — direct alias for current `{api_version}` |
@@ -21177,7 +20959,7 @@ Need additional compatible endpoints?"
 | `/api/{api_version}/server/swagger` | GET | None | OpenAPI JSON spec (versioned) |
 | `/api/{api_version}/server/graphql` | POST | None | GraphQL queries (versioned; schema may differ across versions) |
 | `/api/{api_version}/server/healthz` | GET | None | Health check (JSON default; text via API rules) |
-| `/api/{api_version}/server/{admin_path}/*` | ALL | Bearer | Admin API |
+| `/api/{api_version}/server/*` | ALL | Bearer | Server API (auth-protected where applicable) |
 
 **NOTE:** OpenAPI is JSON only — no `.yaml` endpoint, no `.json` suffix on the path. The `/api/{api_version}/server/swagger` and `/api/swagger` paths return `Content-Type: application/json`.
 
@@ -21329,7 +21111,7 @@ Before proceeding, confirm you understand:
 - [ ] Project-wide theme system: light/dark/auto (dark is default)
 - [ ] Themes apply to entire project: WebUI, admin, Swagger, GraphQL
 - [ ] All 3 API types required: REST, Swagger, GraphQL (Swagger & GraphQL in sync)
-- [ ] Standard endpoints must exist (`/server/healthz`, `/api/{api_version}/server/swagger`, `/api/{api_version}/server/graphql`, `/api/swagger` alias, `/api/graphql` alias, `/server/docs/swagger`, `/server/docs/graphql`, `/server/{admin_path}`)
+- [ ] Standard endpoints must exist (`/server/healthz`, `/api/{api_version}/server/swagger`, `/api/{api_version}/server/graphql`, `/api/swagger` alias, `/api/graphql` alias, `/server/docs/swagger`, `/server/docs/graphql`)
 - [ ] OpenAPI uses JSON only (no YAML)
 
 ---
@@ -21352,13 +21134,11 @@ Before proceeding, confirm you understand:
 
 **ALL DNS providers are supported.** The admin WebUI provides a dropdown that dynamically shows the appropriate credential fields based on the selected provider.
 
-**Admin WebUI Flow (`/server/{admin_path}/config/ssl`):**
+**DNS-01 Provider Configuration (config file):**
 
-1. Select DNS provider from dropdown (all lego-supported providers available)
-2. Form dynamically shows required credential fields for that provider
-3. Submit credentials → app validates by attempting DNS API connection
-4. On success, credentials are **encrypted** and stored for reuse
-5. Certificate requests use stored encrypted credentials
+1. Set `server.tls.dns_provider` to the desired provider name
+2. Set provider credentials in `server.tls.dns_credentials.*` (encrypted at rest)
+3. Server validates credentials on startup and before certificate requests
 
 **Provider Credential Storage:**
 
@@ -21381,7 +21161,7 @@ Before proceeding, confirm you understand:
 
 **Note:** Full provider list from [lego DNS providers](https://go-acme.github.io/lego/dns/). Fields are determined dynamically at runtime.
 
-**See PART 36: CUSTOM DOMAINS for user/org custom domain support (optional per-project feature).**
+**Custom domain support (user/org branded domains) is an optional per-project feature — implement via IDEA.md if needed.**
 
 ### FQDN Resolution
 
@@ -22103,7 +21883,7 @@ formatURL(host, 8443, true)
 ├───────────────────────────────────────────────────────────┤
 │  Setup Token: {setup_token}                               │
 │                                                           │
-│  Go to {proto}://{fqdn}/server/{admin_path}/config/setup         │
+│  Go to {proto}://{fqdn}/server/setup                             │
 │  and enter this token to complete setup.                  │
 │                                                           │
 │  This token will only be shown ONCE.                      │
@@ -22137,7 +21917,7 @@ formatURL(host, 8443, true)
 
 🔑 SETUP REQUIRED
 Token: {setup_token}
-Go to: {proto}://{fqdn}/server/{admin_path}/config/setup
+Go to: {proto}://{fqdn}/server/setup
 (Token shown ONCE)
 ```
 
@@ -22185,7 +21965,7 @@ Started: {startup_datetime}
 
 SETUP REQUIRED
 Token: {setup_token}
-Setup URL: {proto}://{fqdn}/server/{admin_path}/config/setup
+Setup URL: {proto}://{fqdn}/server/setup
 This token will only be shown ONCE.
 ```
 
@@ -22348,7 +22128,7 @@ Startup (for configured FQDN)
 | `GET /api/{api_version}/orgs/{slug}` | `GET /orgs/{slug}` | Org detail page |
 | `GET /api/{api_version}/server/about` | `GET /server/about` | About page |
 
-### Vanity URLs (OPTIONAL - Requires PART 34/35)
+### Vanity URLs (OPTIONAL - project-specific, requires multi-user support)
 
 **For apps with public user/org profiles, support short vanity URLs at root level.**
 
@@ -22365,8 +22145,7 @@ This is OPTIONAL and only applies to apps where user/org profiles are a core fea
 
 ```
 1. /api/{api_version}/*          → API routes (highest priority)
-2. /server/{admin_path}/*     → Admin panel (configurable path)
-3. /server/healthz           → Health check
+2. /server/healthz           → Health check
 4. /static/*          → Static assets
 5. /users/*           → Explicit user routes
 6. /orgs/*            → Explicit org routes
@@ -22462,7 +22241,7 @@ r.Get("/{slug}/{sub}", vanityHandler)
 r.Get("/{slug}/{sub}/{item}", vanityHandler)
 ```
 
-**Custom Domain + Vanity URL (PART 36):**
+**Custom Domain + Vanity URL (project-specific optional feature):**
 
 When custom domains are enabled, the vanity URL becomes the root:
 
@@ -22471,7 +22250,7 @@ When custom domains are enabled, the vanity URL becomes the root:
 | Default | `example.com/johndoe` | John's profile |
 | Custom domain | `johndoe.example.com` | John's profile (at root `/`) |
 | Custom domain | `johndoe.example.com/links` | John's links page |
-| User's own domain | `john.me` | John's profile (PART 36) |
+| User's own domain | `john.me` | John's profile (custom domains, project-specific) |
 
 **Examples by App Type:**
 
@@ -22662,8 +22441,7 @@ func detectClientType(r *http.Request) string {
    ```bash
    curl -q -LSsf -X POST /api/{api_version}/server/auth/register -d '{"username":"test","email":"test@example.com"}'
    curl -q -LSsf -X PATCH /api/{api_version}/users -d '{"email":"new@test.com"}'  # Current user
-   curl -q -LSsf -X PATCH /api/{api_version}/server/{admin_path}/config/users/123 -d '{"email":"new@test.com"}'  # Admin
-   curl -q -LSsf -X DELETE /api/{api_version}/server/{admin_path}/config/users/123  # Admin
+   # Admin user management is performed via CLI command
    ```
 
 3. **Frontend Direct** (CLI/scripting):
@@ -24464,10 +24242,7 @@ self.addEventListener('notificationclick', event => {
 });
 ```
 
-**Admin Panel Settings (`/server/{admin_path}/config/notifications`):**
-- Enable/disable push notifications
-- VAPID key generation
-- Test push functionality
+**Push notification settings** are configured via `server.notifications` config keys.
 
 ### Background Sync
 
@@ -24867,7 +24642,7 @@ Example:
   start_url: "/app/dashboard"
 
   ✅ Controlled: /app/*, /app/settings, /app/users/123
-  ❌ Not controlled: /server/auth/*, /api/*, /server/{admin_path}/*
+  ❌ Not controlled: /server/auth/*, /api/*
 ```
 
 **Tracking PWA launches:**
@@ -25513,7 +25288,7 @@ See **JavaScript Rules** section below for `app.js` structure.
 src/server/template/
 ├── layout/
 │   ├── public.tmpl         # Public-facing layout (/, /server/auth/*, /server/*)
-│   └── admin.tmpl          # Admin panel layout (/server/{admin_path}/*)
+│   └── admin.tmpl          # Admin layout (reserved for future use)
 ├── partial/
 │   ├── public/
 │   │   ├── header.tmpl     # Public header (logo, nav, login)
@@ -25585,7 +25360,7 @@ src/server/template/
 | Layout | Routes | Design Philosophy |
 |--------|--------|-------------------|
 | `public.tmpl` | `/`, `/server/auth/*`, `/server/*`, `/users/*` | Clean, marketing-friendly, top navigation |
-| `admin.tmpl` | `/server/{admin_path}/*` | Dashboard-style, sidebar navigation, data-dense |
+| `admin.tmpl` | (reserved for future use) | Dashboard-style, sidebar navigation, data-dense |
 
 ### Public Layout (`public.tmpl`)
 
@@ -25618,9 +25393,9 @@ src/server/template/
 | Rule | Description |
 |------|-------------|
 | **App-focused** | Navigation reflects the application's features and purpose |
-| **NO admin links** | NEVER link to `/server/{admin_path}` from public pages |
-| **NO admin hints** | Do not advertise that an admin panel exists |
-| **Direct access only** | Admin panel accessed by navigating directly to `{fqdn}/server/{admin_path}` |
+| **NO admin links** | NEVER link to server administration from public pages |
+| **NO admin hints** | Do not advertise that an admin API exists from public pages |
+| **Direct access only** | Server administration is via the config file or CLI only |
 
 **Public nav contains (project-specific):**
 - Home (`/`)
@@ -25632,7 +25407,7 @@ src/server/template/
 - ❌ Admin link
 - ❌ Dashboard link (unless user dashboard)
 - ❌ Settings link to admin settings
-- ❌ Any hint of `/server/{admin_path}/*` routes
+- ❌ Any hint of server administration routes
 
 ### Admin Layout (`admin.tmpl`)
 
@@ -26335,7 +26110,7 @@ var staticFS embed.FS
 - Security-related data that needs frequent updates is NEVER embedded
 - Downloaded automatically on first run if not present
 - Updated automatically via built-in scheduler (see PART 18: SCHEDULER)
-- All scheduler tasks configurable via admin panel
+- All scheduler tasks configurable via API
 - Graceful degradation if download fails (continues without data)
 - SSL certificates only generated/managed when running on ports `80,443`
 
@@ -26441,7 +26216,7 @@ var staticFS embed.FS
 - **BOTH light AND dark themes MUST be easy to read**
 - **NO color conflicts** - nothing should be invisible or unreadable in either theme
 - **Sufficient contrast ratio** - minimum WCAG AA compliance (4.5:1) in both themes
-- **Theme applies everywhere** - WebUI, admin panel, Swagger, GraphQL, etc.
+- **Theme applies everywhere** - WebUI, Swagger, GraphQL, etc.
 - **Theme switching MUST work seamlessly** without page reload
 - **All interactive elements MUST be clearly visible** in both themes
 - **Syntax highlighting MUST adapt** to theme (use appropriate colors for each theme)
@@ -26690,16 +26465,16 @@ server:
 - Tags with invalid characters (potential XSS)
 - Tags exceeding max length
 
-**Admin Panel (/server/{admin_path}/config/seo):**
+**SEO Configuration (config file):**
 
-| Element | Type | Description |
-|---------|------|-------------|
-| Google Verification | Text input | Google Search Console code |
-| Bing Verification | Text input | Bing Webmaster code |
-| Yandex Verification | Text input | Yandex Webmaster code |
-| Custom Tags | Key-value list | Additional verification tags |
+| Element | Config Key | Description |
+|---------|------------|-------------|
+| Google Verification | `seo.google_verification` | Google Search Console code |
+| Bing Verification | `seo.bing_verification` | Bing Webmaster code |
+| Yandex Verification | `seo.yandex_verification` | Yandex Webmaster code |
+| Custom Tags | `seo.custom_tags` | Additional verification tags |
 
-**Validation on Save:** Admin panel MUST validate codes on save and show errors for invalid formats.
+**Validation:** Server validates codes on startup and logs errors for invalid formats.
 
 ### Static Files
 
@@ -26743,7 +26518,7 @@ server:
 | Public documentation pages (project-defined, if any) | Dynamic | 0.8 | weekly |
 | API docs (`/server/docs/swagger`, `/server/docs/graphql`) | Always | 0.7 | weekly |
 | User profiles (if public) | Dynamic | 0.6 | weekly |
-| Admin pages (`/server/{admin_path}/*`) | **NEVER** | - | - |
+| Admin pages | **NEVER** | - | - |
 | Auth pages (`/server/auth/*`) | **NEVER** | - | - |
 | API endpoints (`/api/*`) | **NEVER** | - | - |
 
@@ -26768,19 +26543,19 @@ server:
 - Split into multiple sitemap files: `/sitemap-1.xml`, `/sitemap-2.xml`, etc.
 - Each sitemap file max 50,000 URLs
 
-### Admin Panel (/server/{admin_path}/config/branding)
+### Branding Configuration (config file)
 
-| Element | Type | Description |
-|---------|------|-------------|
-| Title | Text input | Application display name |
-| Tagline | Text input | Short slogan |
-| Description | Textarea | Longer description for SEO |
-| Keywords | Tag input | SEO keywords (comma-separated) |
-| Author | Text input | Author/organization |
-| OG Image | File upload / URL | Social sharing image |
-| Twitter Handle | Text input | @handle |
-| Favicon | File upload / URL | Custom favicon |
-| Logo | File upload / URL | Custom logo (header) |
+| Element | Config Key | Description |
+|---------|------------|-------------|
+| Title | `branding.title` | Application display name |
+| Tagline | `branding.tagline` | Short slogan |
+| Description | `branding.description` | Longer description for SEO |
+| Keywords | `branding.keywords` | SEO keywords (comma-separated) |
+| Author | `branding.author` | Author/organization |
+| OG Image | `branding.og_image` | Social sharing image |
+| Twitter Handle | `branding.twitter_handle` | @handle |
+| Favicon | `branding.favicon` | Custom favicon |
+| Logo | `branding.logo` | Custom logo (header) |
 
 ### Image Sources
 
@@ -26788,7 +26563,7 @@ server:
 
 | Source | Format | Example |
 |--------|--------|---------|
-| Local file | File upload | Upload via admin panel |
+| Local file | File path | Set `branding.logo_path` in config to an absolute file path |
 | Remote URL | URL input | `https://example.com/logo.png` |
 | Embedded default | - | Built-in fallback |
 
@@ -27037,20 +26812,17 @@ messages:
     # User can dismiss
 ```
 
-### Admin Panel (/server/{admin_path}/config/announcements)
+### Announcements Configuration (config file)
 
-| Element | Type | Description |
-|---------|------|-------------|
-| Enable announcements | Toggle | Turn announcements on/off |
-| Announcement list | Table | All announcements |
-| Add announcement | Button | Create new announcement |
-| Type | Dropdown | warning, info, error, success |
-| Title | Text input | Short title |
-| Message | Textarea | Full message content |
-| Start date | Datetime picker | When to start showing |
-| End date | Datetime picker | When to stop showing |
-| Dismissible | Toggle | Allow users to dismiss |
-| Delete | Button | Remove announcement |
+| Element | Config Key | Description |
+|---------|------------|-------------|
+| Enable announcements | `announcements.enabled` | Turn announcements on/off |
+| Type | `announcements[].type` | warning, info, error, success |
+| Title | `announcements[].title` | Short title |
+| Message | `announcements[].message` | Full message content |
+| Start date | `announcements[].start` | When to start showing (ISO 8601) |
+| End date | `announcements[].end` | When to stop showing (ISO 8601) |
+| Dismissible | `announcements[].dismissible` | Allow users to dismiss |
 
 ## CORS
 
@@ -27095,14 +26867,12 @@ web:
 | Production | `*` | Allow all origins by default (configure if needed) |
 | Development | `*` | Allow all origins |
 
-### Admin Panel (/server/{admin_path}/config/web)
+### Web Configuration (config file)
 
-| Element | Type | Description |
-|---------|------|-------------|
-| CORS Origins | Text input | Comma-separated list of allowed origins |
-| Allow All | Toggle | Quick toggle for `*` (all origins) |
-| Root `/healthz` alias | Toggle | Enables `server.healthz.root.enabled` for compatibility with tools that require `/healthz` |
-| Preview | Read-only | Shows resulting CORS headers |
+| Element | Config Key | Description |
+|---------|------------|-------------|
+| CORS Origins | `web.cors` | Comma-separated list of allowed origins |
+| Root `/healthz` alias | `web.healthz.root.enabled` | Enables `/healthz` alias for compatibility with tools that require it |
 
 ## CSRF Protection
 
@@ -27315,10 +27085,10 @@ func ValidateFooterHTML(html string) (string, error) {
 <form action="/steal"><input type="text"></form>
 ```
 
-### Admin Panel Preview
+### Sanitization Preview (API Response)
 
-When admin edits `custom_html`, show:
-1. **Raw input** - What they typed
+When admin submits `custom_html` via API, the response includes:
+1. **Raw input** - What was submitted
 2. **Sanitized output** - What will actually render
 3. **Warning** - If content was modified by sanitizer
 
@@ -27369,7 +27139,7 @@ When admin edits `custom_html`, show:
 </footer>
 ```
 
-### Default Admin Footer (Admin Panel)
+### Default Admin Footer
 
 **Location:** `partial/admin/footer.tmpl`
 
@@ -27378,7 +27148,7 @@ When admin edits `custom_html`, show:
   <div class="admin-footer-content">
     <!-- Version info -->
     <span class="admin-footer-version">
-      <a href="/server/{admin_path}/config/info">{project_name} {projectversion}</a>
+      <a href="/server/info">{project_name} {projectversion}</a>
     </span>
 
     <span class="admin-footer-separator">•</span>
@@ -27457,7 +27227,7 @@ When admin edits `custom_html`, show:
 
 | Element | Description |
 |---------|-------------|
-| Version | Links to `/server/{admin_path}/config/info` - shows project name and version |
+| Version | Links to `/server/info` - shows project name and version |
 | Docs | External link to ReadTheDocs documentation |
 | Status | Server health indicator (green/yellow/red) with status text |
 
@@ -27470,17 +27240,15 @@ When admin edits `custom_html`, show:
 | **Status indicator** | Real-time server health from `/server/healthz` |
 | **Same position rules** | Bottom of page, scrolls with content, centered |
 
-### Admin Panel (/server/{admin_path}/config/footer)
+### Footer Configuration (config file)
 
-| Element | Type | Description |
-|---------|------|-------------|
-| Custom branding HTML | Textarea | HTML above application footer (sanitized) |
-| Sanitized preview | Code block | Shows sanitized output |
-| Rendered preview | Preview pane | Shows rendered footer |
+| Element | Config Key | Description |
+|---------|------------|-------------|
+| Custom branding HTML | `web.footer.custom_html` | HTML above application footer (sanitized) |
 
-**Related admin pages:**
-- Analytics tracking: `/server/{admin_path}/config/tracking` (PART 12: Analytics Tracking)
-- Privacy & consent: `/server/{admin_path}/config/privacy` (PART 12: Privacy & Consent)
+**Related configuration:**
+- Analytics tracking: `analytics` section (PART 12: Analytics Tracking)
+- Privacy & consent: `privacy` section (PART 12: Privacy & Consent)
 
 ## Cookie Consent Banner
 
@@ -27488,7 +27256,7 @@ When admin edits `custom_html`, show:
 
 **Configuration:** `server.privacy.consent` (see PART 12: Privacy & Consent)
 
-**Admin panel:** `/server/{admin_path}/config/privacy`
+**Configuration:** `server.privacy` section in config file
 
 ### Banner Layout
 
@@ -28267,26 +28035,20 @@ func trackingScript(r *http.Request) template.HTML {
 
 **Note:** The `tracking` and `third_party.services` fields are populated based on `server.tracking` config. If no tracking is configured, they remain empty.
 
-**Admin Panel (`/server/{admin_path}/config/privacy`):**
+**Privacy Configuration (config file):**
 
-| Tab | Fields |
-|-----|--------|
-| **Data Policies** | **`data.sold` toggle** (default: off), stored_on_server (read-only: true), sharing conditions |
-| **Consent Banner** | Message (not-sold), message_if_sold (sold), policy link, button labels, position |
-| **Cookie Descriptions** | Essential, Preferences, Analytics (base + suffix for both sold/not-sold) |
-| **Data Collection** | Markdown editor for data collection section |
-| **Data Usage** | Markdown editor for `data_usage` (not-sold), `data_usage_if_sold` (sold) |
-| **Data Security** | Markdown editor for data security section |
-| **Data Retention** | Retention period text, export toggle, deletion toggle |
-| **Third Parties** | Add/edit/remove services (name, purpose, policy URL) |
-| **Preview** | Live preview of privacy page (toggle to see sold/not-sold versions) |
+| Section | Config Keys |
+|---------|-------------|
+| **Data Policies** | `privacy.data.sold` (default: false), `privacy.data.stored_on_server` |
+| **Consent Banner** | `privacy.consent.message`, `privacy.consent.message_if_sold`, `privacy.consent.policy_link` |
+| **Cookie Descriptions** | `privacy.cookies.essential`, `privacy.cookies.preferences`, `privacy.cookies.analytics` |
+| **Data Collection** | `privacy.data_collection` (Markdown) |
+| **Data Usage** | `privacy.data_usage`, `privacy.data_usage_if_sold` (Markdown) |
+| **Data Security** | `privacy.data_security` (Markdown) |
+| **Data Retention** | `privacy.retention.period`, `privacy.retention.export`, `privacy.retention.deletion` |
+| **Third Parties** | `privacy.third_parties[]` (name, purpose, policy_url) |
 
-**Important Admin UI Note:**
-- When `data.sold` is toggled ON, show a **warning** explaining CCPA implications
-- The `message_if_sold` and `data_usage_if_sold` fields are only editable when `data.sold = true`
-- Preview tab should allow toggling between "Data NOT Sold" and "Data Sold" views
-
-**Default content provided, fully customizable via admin panel.**
+**Default content provided, fully customizable via config file.**
 
 ### /server/contact
 
@@ -28449,7 +28211,7 @@ curl -H "Accept: application/xml" https://jokes.example.com/api/v1/joke</code></
 | Changes | How terms may be updated |
 | Governing law | Jurisdiction |
 
-**Default template provided, customizable via admin panel.**
+**Default template provided, customizable via API.**
 
 ### Configuration
 
@@ -28490,30 +28252,15 @@ server:
       content: ""
 ```
 
-### Admin Panel (/server/{admin_path}/config/pages)
+### Pages Configuration (config file)
 
-| Element | Type | Description |
-|---------|------|-------------|
-| **About Page** | | |
-| Content | Markdown editor | Additional about page content |
-| Preview | Button | Preview about page |
-| **Privacy Policy** | | |
-| Content | Markdown editor | Privacy policy content |
-| Reset to default | Button | Restore default template |
-| Preview | Button | Preview privacy page |
-| **Contact Page** | | |
-| Enable contact form | Toggle | Enable/disable contact form |
-| Recipient email | Text input | Email to receive messages |
-| Captcha type | Dropdown | recaptcha, hcaptcha, simple |
-| Success message | Textarea | Message shown after submission |
-| Test form | Button | Send test message |
-| **Help Page** | | |
-| Content | Markdown editor | Help/documentation content |
-| Preview | Button | Preview help page |
-| **Terms of Service** | | |
-| Content | Markdown editor | Terms of service content |
-| Reset to default | Button | Restore default template |
-| Preview | Button | Preview terms page |
+| Page | Config Keys |
+|------|-------------|
+| **About Page** | `pages.about.content` (Markdown) |
+| **Privacy Policy** | `pages.privacy.content` (Markdown) |
+| **Contact Page** | `pages.contact.enabled`, `pages.contact.recipient_email`, `pages.contact.captcha_type`, `pages.contact.success_message` |
+| **Help Page** | `pages.help.content` (Markdown) |
+| **Terms of Service** | `pages.terms.content` (Markdown) |
 
 ### /server/ API Endpoints
 
@@ -28569,7 +28316,7 @@ server:
 Email templates allow Server Admins to customize ALL notification messages, including account-related emails (password reset, email verification, login alerts, etc.). Default templates with sane defaults are embedded in the binary; custom templates are stored in `{config_dir}/template/email/`.
 
 **Key Points:**
-- ALL email templates are fully customizable via the admin panel
+- ALL email templates are fully customizable via API
 - Account emails (password reset, verification, security alerts) follow the same customization pattern as server notification emails
 - Each template has sensible defaults that work out-of-the-box
 - Changes take effect immediately (live reload)
@@ -28686,10 +28433,10 @@ server:
 - ✓ Hide email-dependent UI elements when SMTP unavailable
 - ✓ Show clear message: "Email features require SMTP configuration"
 
-**Admin Panel:**
-- If SMTP not configured, show banner: "⚠️ SMTP not configured. Email features disabled. [Configure SMTP](/server/{admin_path}/config/email)"
-- Email-dependent features (password reset link, etc.) hidden until SMTP configured
-- Test email button validates SMTP actually works before enabling email features
+**API Behavior:**
+- If SMTP not configured, `GET /api/{api_version}/server/config/settings` returns `email.configured: false`
+- Email-dependent features disabled until SMTP configured
+- `POST /api/{api_version}/server/config/email/test` validates SMTP actually works before enabling email features
 
 ## Default Templates
 
@@ -28893,13 +28640,13 @@ From: {app_name} ({fqdn})
 
 Congratulations! Your {app_name} instance is now configured.
 
-Admin Panel: {admin_url}
+Admin API: {admin_url}
 Username: {admin_username}
 
 ────────────────────────────────────────────────────────────────────────
 IMPORTANT NEXT STEPS
 
-1. Log in to the admin panel and review your settings
+1. Authenticate with the admin API and review your settings
 2. Configure SMTP for email notifications
 3. Enable SSL/TLS for secure connections
 4. Set up regular backups
@@ -29445,19 +29192,9 @@ Do not reply to this email.
 | `{notify_deadline}` | Deadline for user notification (based on strictest standard) |
 | `{admin_url}` | Admin panel URL |
 
-## Admin Panel (/server/{admin_path}/config/email/templates)
+## Email Template Configuration
 
-| Element | Type | Description |
-|---------|------|-------------|
-| Template list | Table | All templates with status (default/custom) |
-| Edit button | Button | Open template editor |
-| Subject field | Text input | Editable subject line |
-| Body editor | Textarea | Template body with syntax highlighting |
-| Variable reference | Sidebar | Available variables for selected template |
-| Preview button | Button | Render template with sample data |
-| Send Test | Button | Send test email to specific address |
-| Save button | Button | Save custom template |
-| Reset to default | Button | Delete custom, restore embedded (confirmation required) |
+Templates are stored as files on disk. Override any built-in template by placing a file in the configured template directory. Use `POST /api/{api_version}/server/config/email/test` to send a test email and verify configuration.
 
 **Editor Features:**
 - Syntax highlighting for `{variables}`
@@ -29594,7 +29331,7 @@ Do not reply to this email.
 
 ## Server Admin Notifications
 
-**Notifications shown to Server Admins in `/server/{admin_path}/*` routes.**
+**Notifications shown to Server Admins.**
 
 | Event | Toast | Banner | Center | Description |
 |-------|:-----:|:------:|:------:|-------------|
@@ -29706,7 +29443,7 @@ Do not reply to this email.
   "type": "warning",
   "title": "SSL Certificate Expiring",
   "message": "Certificate expires in 3 days",
-  "link": "/server/{admin_path}/config/ssl",
+  "link": "/server/config/ssl",
   "read": false,
   "created_at": "2025-01-15T10:30:00Z"
 }
@@ -29727,7 +29464,7 @@ Do not reply to this email.
 
 **Both Server Admins and users can configure their notification preferences.**
 
-### Admin Notification Preferences (`/server/{admin_path}/{admin_username}/notifications`)
+### Admin Notification Preferences
 
 | Category | Events | Default | Can Disable? |
 |----------|--------|---------|--------------|
@@ -29740,7 +29477,7 @@ Do not reply to this email.
 **Security notifications cannot be disabled** - these are critical for account security.
 
 ```
-Admin Notification Preferences (/server/{admin_path}/{admin_username}/notifications)
+Admin Notification Preferences
 ┌─────────────────────────────────────────────────────────────┐
 │  Notification Preferences                                   │
 ├─────────────────────────────────────────────────────────────┤
@@ -29917,7 +29654,7 @@ server:
 
 | Reason | Explanation |
 |--------|-------------|
-| **Single source of truth** | All schedules visible in admin panel |
+| **Single source of truth** | All schedules visible via API |
 | **Cluster aware** | External cron doesn't know about cluster nodes |
 | **State tracking** | Tracks last run, next run, success/failure |
 | **Catch-up logic** | Runs missed tasks on restart |
@@ -29934,9 +29671,8 @@ server:
 The application has a built-in scheduler that handles backups.
 
 To configure backup schedule:
-1. Go to Admin Panel → Server → Backup
-2. Set schedule to your preferred time
-3. The built-in scheduler will run it automatically
+1. Set `backup.schedule` in the config file
+2. The built-in scheduler will run it automatically
 
 External schedulers (cron, Task Scheduler, etc.) are not supported
 because the built-in scheduler provides:
@@ -30212,15 +29948,9 @@ Execute task
 | `retry_delay` | 5m | Delay between retries |
 | `backoff` | exponential | Delay multiplier (5m, 10m, 20m) |
 
-### Admin Panel (/server/{admin_path}/config/scheduler)
+### Scheduler Status
 
-| Section | Contents |
-|---------|----------|
-| **Task List** | All tasks with status, next run, last run |
-| **Task Detail** | Full history, logs, configuration |
-| **Run Now** | Button to trigger immediate execution |
-| **Enable/Disable** | Toggle for tasks (admin can enable/disable backup) |
-| **History** | Last 100 executions per task |
+The scheduler status is available via the server status API. Task execution can be triggered or toggled via CLI commands.
 
 **Admin UI - Scheduler Overview:**
 
@@ -30319,13 +30049,13 @@ Execute task
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/scheduler` | GET | List all tasks |
-| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}` | GET | Get task details |
-| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}` | PATCH | Update task settings |
-| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/run` | POST | Run task immediately |
-| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/enable` | POST | Enable task |
-| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/disable` | POST | Disable task |
-| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/history` | GET | Get execution history |
+| `/api/{api_version}/server/config/scheduler` | GET | List all tasks |
+| `/api/{api_version}/server/config/scheduler/{id}` | GET | Get task details |
+| `/api/{api_version}/server/config/scheduler/{id}` | PATCH | Update task settings |
+| `/api/{api_version}/server/config/scheduler/{id}/run` | POST | Run task immediately |
+| `/api/{api_version}/server/config/scheduler/{id}/enable` | POST | Enable task |
+| `/api/{api_version}/server/config/scheduler/{id}/disable` | POST | Disable task |
+| `/api/{api_version}/server/config/scheduler/{id}/history` | GET | Get execution history |
 
 ### Shutdown Behavior
 
@@ -30431,20 +30161,18 @@ All databases from [sapics/ip-location-db](https://github.com/sapics/ip-location
 | City | `city`, `region`, `postal_code`, `latitude`, `longitude`, `timezone` |
 | WHOIS | `registrant_org`, `asn`, `country_code` (combined lookup) |
 
-## Admin Panel (/server/{admin_path}/config/network/geoip)
+## GeoIP Configuration (config file)
 
-| Element | Type | Description |
-|---------|------|-------------|
-| Enable GeoIP | Toggle | Turn GeoIP on/off |
-| Country mode | Dropdown | `none`, `deny` (blocklist), `allow` (allowlist-only) |
-| Deny countries | Tag input | ISO 3166-1 alpha-2 codes to block (when mode=deny) |
-| Allow countries | Tag input | ISO 3166-1 alpha-2 codes to allow exclusively (when mode=allow) |
-| ASN database | Toggle | Enable ASN lookups |
-| Country database | Toggle | Enable country lookups |
-| City database | Toggle | Enable city lookups |
-| WHOIS database | Toggle | Enable WHOIS lookups |
-| Last update | Read-only | When databases were last updated |
-| Update now | Button | Force immediate update |
+| Element | Config Key | Description |
+|---------|------------|-------------|
+| Enable GeoIP | `geoip.enabled` | Turn GeoIP on/off |
+| Country mode | `geoip.country_mode` | `none`, `deny` (blocklist), `allow` (allowlist-only) |
+| Deny countries | `geoip.deny_countries` | ISO 3166-1 alpha-2 codes to block (when mode=deny) |
+| Allow countries | `geoip.allow_countries` | ISO 3166-1 alpha-2 codes to allow exclusively (when mode=allow) |
+| ASN database | `geoip.databases.asn` | Enable ASN lookups |
+| Country database | `geoip.databases.country` | Enable country lookups |
+| City database | `geoip.databases.city` | Enable city lookups |
+| WHOIS database | `geoip.databases.whois` | Enable WHOIS lookups |
 
 **Country Blocking Behavior:**
 
@@ -30741,7 +30469,7 @@ server:
 | `method` | `password`, `api_token`, `oidc`, `ldap`, `2fa` | Auth method used |
 | `status` | `success`, `failed`, `blocked` | Attempt result |
 
-### Business Metrics (if using PART 34 multi-user)
+### Business Metrics (if multi-user is implemented)
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
@@ -31896,16 +31624,15 @@ groups:
 }
 ```
 
-## Admin Panel (/server/{admin_path}/config/metrics)
+## Metrics Configuration (config file)
 
-| Element | Type | Description |
-|---------|------|-------------|
-| Enable metrics | Toggle | Turn metrics on/off |
-| Endpoint | Text input | Metrics endpoint path (default: /metrics) |
-| Include system metrics | Toggle | Include CPU/memory/disk |
-| Include runtime metrics | Toggle | Include Go runtime stats |
-| Authentication token | Text input | Bearer token (empty = no auth) |
-| Prometheus URL | Info | Display scrape URL for Prometheus config |
+| Element | Config Key | Description |
+|---------|------------|-------------|
+| Enable metrics | `metrics.enabled` | Turn metrics on/off |
+| Endpoint | `metrics.path` | Metrics endpoint path (default: /metrics) |
+| Include system metrics | `metrics.system` | Include CPU/memory/disk |
+| Include runtime metrics | `metrics.runtime` | Include Go runtime stats |
+| Authentication token | `metrics.token` | Bearer token (empty = no auth) |
 
 ---
 
@@ -32037,8 +31764,8 @@ When `server.compliance.enabled: true`:
 | Action | Location | Notes |
 |--------|----------|-------|
 | Set during setup | Setup wizard Step 4 | Optional (unless compliance) |
-| Set later | `/server/{admin_path}/config/backup` | Click "Set Encryption Password" |
-| Change password | `/server/{admin_path}/config/backup` | New backups use new password |
+| Set later | `backup.encryption_password` in config file | Restart server to apply |
+| Change password | `backup.encryption_password` in config file | New backups use new password |
 | Remove encryption | Only if compliance disabled | Cannot remove if compliance enabled |
 
 **Important:**
@@ -32064,7 +31791,7 @@ When `server.compliance.enabled: true`:
 **API Backup with Encryption:**
 
 ```
-POST /api/{api_version}/server/{admin_path}/config/backup
+POST /api/{api_version}/server/config/backup
 Content-Type: application/json
 
 {
@@ -32089,7 +31816,7 @@ Content-Type: application/json
 
 Shown on:
 - First backup if encryption not configured
-- `/server/{admin_path}/config/backup` page (dismissable)
+- Server log on startup (dismissable after encryption is configured)
 
 ### Backup Retention
 
@@ -32439,14 +32166,14 @@ Restoring...
 
 ```bash
 # Encrypted backup - password required
-POST /api/{api_version}/server/{admin_path}/config/backup/restore
+POST /api/{api_version}/server/config/backup/restore
 {
   "backup_file": "backup_2025-01-15.tar.gz.enc",
   "password": "backup-encryption-password"
 }
 
 # Unencrypted backup - no password
-POST /api/{api_version}/server/{admin_path}/config/backup/restore
+POST /api/{api_version}/server/config/backup/restore
 {
   "backup_file": "backup_2025-01-15.tar.gz"
 }
@@ -32486,7 +32213,7 @@ POST /api/{api_version}/server/{admin_path}/config/backup/restore
 ├─────────────────────────────────────────────────────────────┤
 │  Setup Token: a1b2c3d4e5f67890abcdef1234567890              │
 │                                                             │
-│  Go to {proto}://{fqdn}/server/{admin_path} and enter this token   │
+│  Run: {project_name} --maintenance verify-token {token}     │
 │  to verify you are the server administrator.                │
 │                                                             │
 │  Your existing password and settings will be preserved.     │
@@ -32575,9 +32302,9 @@ POST /api/{api_version}/server/{admin_path}/config/backup/restore
 # │  Setup Token: a1b2c3d4e5f67890abcdef1234567890              │
 # │                                                             │
 # │  1. Start the service: {project_name} --service start        │
-# │  2. Go to: {proto}://{fqdn}/server/{admin_path}                    │
-# │  3. Enter the setup token above                             │
-# │  4. Create new admin account via setup wizard               │
+# │  2. Run: {project_name} --maintenance setup --token <token> │
+# │  3. Follow the setup wizard prompts                         │
+# │  4. Create new admin account                                │
 # │                                                             │
 # │  This token will only be shown ONCE.                        │
 # └─────────────────────────────────────────────────────────────┘
@@ -32606,7 +32333,7 @@ POST /api/{api_version}/server/{admin_path}/config/backup/restore
 | Admin locked out of 2FA | ✓ Yes (only if no recovery keys) |
 | User forgot password | ✗ No (use password reset) |
 | User locked out | ✗ No (admin can help via UI) |
-| Routine password change | ✗ No (use /server/{admin_path}/{admin_username}/profile) |
+| Routine password change | ✗ No (use `{project_name} --maintenance change-password`) |
 
 ### Recovery Flow
 
@@ -32624,7 +32351,7 @@ POST /api/{api_version}/server/{admin_path}/config/backup/restore
 │  Admin credentials cleared, new setup token generated           │
 │                           │                                     │
 │                           ▼                                     │
-│  Admin visits /server/{admin_path} and enters setup token       │
+│  Admin runs: {project_name} --maintenance setup --token <token>  │
 │                           │                                     │
 │                           ▼                                     │
 │  Setup wizard: Create new admin account                         │
@@ -36593,7 +36320,7 @@ networks:
 
 | When in Container | Behavior |
 |-------------------|----------|
-| Show setup token | On first run - one-time setup token displayed in console for `/server/{admin_path}` access |
+| Show setup token | On first run - one-time setup token displayed in console for CLI setup |
 | Defaults | Use container-appropriate defaults |
 | Logging | Log to stdout/stderr (captured by container runtime) |
 | Tor | Application manages Tor process internally |
@@ -40058,10 +39785,10 @@ GET    /api/{api_version}/users/{username}     # Read public profile (API JSON)
 GET    /api/{api_version}/users/{username}.txt # Read public profile (API plain text)
 
 # API - Admin managing users (by ID)
-GET    /api/{api_version}/server/{admin_path}/config/users        # List all users (admin)
-GET    /api/{api_version}/server/{admin_path}/config/users/1      # Read specific user (admin)
-PATCH  /api/{api_version}/server/{admin_path}/config/users/1      # Update specific user (admin)
-DELETE /api/{api_version}/server/{admin_path}/config/users/1      # Delete specific user (admin)
+GET    /api/{api_version}/server/config/users        # List all users (admin)
+GET    /api/{api_version}/server/config/users/1      # Read specific user (admin)
+PATCH  /api/{api_version}/server/config/users/1      # Update specific user (admin)
+DELETE /api/{api_version}/server/config/users/1      # Delete specific user (admin)
 
 # Frontend routes (smart detection) - CLI gets beautiful formatted text via HTML2TextConverter
 curl -q -LSsf /users                              # CLI → formatted text (current user)
@@ -40182,8 +39909,7 @@ make test
 |--------------|-----------|
 | **Public API** | All `/api/{api_version}/*` endpoints |
 | **Public Web** | All frontend routes |
-| **Admin API** | All `/api/{api_version}/server/{admin_path}/*` endpoints |
-| **Admin Web** | All `/server/{admin_path}/*` routes |
+| **Server API** | All `/api/{api_version}/server/*` endpoints |
 | **Error cases** | 400, 401, 403, 404, 500 responses |
 | **Edge cases** | Empty data, invalid input, rate limits |
 
@@ -40303,10 +40029,10 @@ test_endpoint GET "/api/{api_version}/jokes/random"
 test_endpoint GET "/api/{api_version}/jokes/categories"
 test_endpoint GET "/api/{api_version}/jokes/{id}"
 
-# ADMIN API (with auth)
-test_endpoint GET "/api/{api_version}/server/{admin_path}/config/settings"
-test_endpoint PUT "/api/{api_version}/server/{admin_path}/config/settings"
-test_endpoint GET "/api/{api_version}/server/{admin_path}/config/logs"
+# SERVER API (with auth)
+test_endpoint GET "/api/{api_version}/server/config/settings"
+test_endpoint PUT "/api/{api_version}/server/config/settings"
+test_endpoint GET "/api/{api_version}/server/config/logs"
 
 # At end: verify ALL endpoints were tested
 verify_all_endpoints_tested
@@ -40558,10 +40284,10 @@ docker run --rm \
     #   # API - Public profile (by username)
     #   curl -q -LSsf http://localhost:64580/api/{api_version}/users/testuser || echo 'FAILED: READ public profile API JSON'
     #   curl -q -LSsf http://localhost:64580/api/{api_version}/users/testuser.txt || echo 'FAILED: READ public profile API .txt'
-    #   # API - Admin routes (by ID)
-    #   curl -q -LSsf http://localhost:64580/api/{api_version}/server/{admin_path}/config/users || echo 'FAILED: LIST users admin API'
-    #   curl -q -LSsf http://localhost:64580/api/{api_version}/server/{admin_path}/config/users/1 || echo 'FAILED: READ user admin API'
-    #   curl -q -LSsf -X DELETE http://localhost:64580/api/{api_version}/server/{admin_path}/config/users/1 || echo 'FAILED: DELETE user admin API'
+    #   # API - Server admin routes (by ID)
+    #   curl -q -LSsf http://localhost:64580/api/{api_version}/server/config/users || echo 'FAILED: LIST users server API'
+    #   curl -q -LSsf http://localhost:64580/api/{api_version}/server/config/users/1 || echo 'FAILED: READ user server API'
+    #   curl -q -LSsf -X DELETE http://localhost:64580/api/{api_version}/server/config/users/1 || echo 'FAILED: DELETE user server API'
     #   # Frontend (smart detection - test with text for simplicity)
     #   USERS=\$(curl -q -LSsf http://localhost:64580/users)  # CLI auto-detects text (current user)
     #   USER=\$(curl -q -LSsf http://localhost:64580/testuser)  # CLI auto-detects text (public profile)
@@ -40580,13 +40306,13 @@ docker run --rm \
             -H \"X-Setup-Token: \$SETUP_TOKEN\" \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:64580/api/{api_version}/server/{admin_path}/setup || echo 'Admin setup failed (may already exist)'
+            http://localhost:64580/api/{api_version}/server/setup || echo 'Admin setup failed (may already exist)'
 
         # Login and get session
         SESSION=\$(curl -q -LSsf -X POST \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:64580/api/{api_version}/server/{admin_path}/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
+            http://localhost:64580/api/{api_version}/server/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
 
         if [ -n \"\$SESSION\" ]; then
             echo '✓ Admin login successful'
@@ -40594,7 +40320,7 @@ docker run --rm \
             # Generate API token for CLI/Agent testing
             API_TOKEN=\$(curl -q -LSsf -X POST \\
                 -H \"Authorization: Bearer \$SESSION\" \\
-                http://localhost:64580/api/{api_version}/server/{admin_path}/{admin_username}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
+                http://localhost:64580/api/{api_version}/server/{admin_username}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
 
             if [ -n \"\$API_TOKEN\" ]; then
                 echo \"✓ API token created: \${API_TOKEN:0:12}...\"
@@ -40825,10 +40551,10 @@ incus exec "$CONTAINER_NAME" -- bash -c "
     #   # API - Public profile (by username)
     #   curl -q -LSsf http://localhost:80/api/{api_version}/users/testuser || echo 'FAILED: READ public profile API JSON'
     #   curl -q -LSsf http://localhost:80/api/{api_version}/users/testuser.txt || echo 'FAILED: READ public profile API .txt'
-    #   # API - Admin routes (by ID)
-    #   curl -q -LSsf http://localhost:80/api/{api_version}/server/{admin_path}/config/users || echo 'FAILED: LIST users admin API'
-    #   curl -q -LSsf http://localhost:80/api/{api_version}/server/{admin_path}/config/users/1 || echo 'FAILED: READ user admin API'
-    #   curl -q -LSsf -X DELETE http://localhost:80/api/{api_version}/server/{admin_path}/config/users/1 || echo 'FAILED: DELETE user admin API'
+    #   # API - Server admin routes (by ID)
+    #   curl -q -LSsf http://localhost:80/api/{api_version}/server/config/users || echo 'FAILED: LIST users server API'
+    #   curl -q -LSsf http://localhost:80/api/{api_version}/server/config/users/1 || echo 'FAILED: READ user server API'
+    #   curl -q -LSsf -X DELETE http://localhost:80/api/{api_version}/server/config/users/1 || echo 'FAILED: DELETE user server API'
     #   # Frontend (smart detection - test with text for simplicity)
     #   USERS=\$(curl -q -LSsf http://localhost:80/users)  # CLI auto-detects text (current user)
     #   USER=\$(curl -q -LSsf http://localhost:80/testuser)  # CLI auto-detects text (public profile)
@@ -40847,13 +40573,13 @@ incus exec "$CONTAINER_NAME" -- bash -c "
             -H \"X-Setup-Token: \$SETUP_TOKEN\" \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:80/api/{api_version}/server/{admin_path}/setup || echo 'Admin setup failed (may already exist)'
+            http://localhost:80/api/{api_version}/server/setup || echo 'Admin setup failed (may already exist)'
 
         # Login and get session
         SESSION=\$(curl -q -LSsf -X POST \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:80/api/{api_version}/server/{admin_path}/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
+            http://localhost:80/api/{api_version}/server/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
 
         if [ -n \"\$SESSION\" ]; then
             echo '✓ Admin login successful'
@@ -40861,7 +40587,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "
             # Generate API token for CLI/Agent testing
             API_TOKEN=\$(curl -q -LSsf -X POST \\
                 -H \"Authorization: Bearer \$SESSION\" \\
-                http://localhost:80/api/{api_version}/server/{admin_path}/{admin_username}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
+                http://localhost:80/api/{api_version}/server/{admin_username}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
 
             if [ -n \"\$API_TOKEN\" ]; then
                 echo \"✓ API token created: \${API_TOKEN:0:12}...\"
@@ -41023,13 +40749,13 @@ eval "$({project_name}-agent --shell init)"
 | **Rename-friendly** | Works even if user renames binary |
 | **No sync issues** | Can't have outdated completion files |
 
-## Testing Admin Routes
+## Testing Server Authentication Routes
 
-**Admin routes (`/server/{admin_path}/**`) require authentication. Tests MUST verify authentication works.**
+**Server API routes require authentication. Tests MUST verify authentication works.**
 
 **CRITICAL: Do NOT bypass authentication in tests - TEST that it works!**
 
-### Proper Admin Testing Approach
+### Proper Server Auth Testing Approach
 
 **Tests should verify the authentication system, not skip it:**
 
@@ -41037,7 +40763,7 @@ eval "$({project_name}-agent --shell init)"
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo '=== Admin Authentication Tests ==='
+echo '=== Server Authentication Tests ==='
 
 # Start server normally (authentication required)
 /app/${PROJECT_NAME} --port 64580 &
@@ -41047,11 +40773,11 @@ sleep 3
 # 1. Test that unauthenticated access is REJECTED
 echo "Testing unauthenticated access is blocked..."
 # Note: Use -q -LSs (no -f) when capturing HTTP status codes, since -f exits on 4xx/5xx
-HTTP_CODE=$(curl -q -LSs -o /dev/null -w "%{http_code}" http://localhost:64580/server/{admin_path})
-if [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "401" ]; then
+HTTP_CODE=$(curl -q -LSs -o /dev/null -w "%{http_code}" http://localhost:64580/api/{api_version}/server/config/settings)
+if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
     echo "✓ Unauthenticated access properly rejected"
 else
-    echo "✗ FAILED: Admin routes not protected (got HTTP $HTTP_CODE)"
+    echo "✗ FAILED: Server routes not protected (got HTTP $HTTP_CODE)"
     kill $SERVER_PID
     exit 1
 fi
@@ -41067,34 +40793,20 @@ fi
 
 echo "✓ Setup token found: ${SETUP_TOKEN:0:8}..."
 
-# 3. Test admin routes WITH authentication (setup token)
-echo "Testing admin access with setup token..."
-HTTP_CODE=$(curl -q -LSs -o /dev/null -w "%{http_code}" \
-    -H "X-Setup-Token: $SETUP_TOKEN" \
-    http://localhost:64580/server/{admin_path})
-
-if [ "$HTTP_CODE" = "200" ]; then
-    echo "✓ Admin access works with setup token"
-else
-    echo "✗ FAILED: Admin access with token returned HTTP $HTTP_CODE"
-    kill $SERVER_PID
-    exit 1
-fi
-
-# 4. Complete setup wizard (create admin account)
+# 3. Complete setup wizard (create admin account)
 echo "Creating admin account via API..."
 curl -q -LSsf -X POST \
     -H "X-Setup-Token: $SETUP_TOKEN" \
     -H "Content-Type: application/json" \
     -d '{"username":"testadmin","password":"TestPass123!"}' \
-    http://localhost:64580/api/{api_version}/server/{admin_path}/setup
+    http://localhost:64580/api/{api_version}/server/setup
 
-# 5. Test login with created admin
+# 4. Test login with created admin
 echo "Testing admin login..."
 SESSION=$(curl -q -LSsf -X POST \
     -H "Content-Type: application/json" \
     -d '{"username":"testadmin","password":"TestPass123!"}' \
-    http://localhost:64580/api/{api_version}/server/{admin_path}/login | jq -r '.session_token')
+    http://localhost:64580/api/{api_version}/server/login | jq -r '.session_token')
 
 if [ -z "$SESSION" ] || [ "$SESSION" = "null" ]; then
     echo "✗ FAILED: Admin login failed"
@@ -41104,21 +40816,21 @@ fi
 
 echo "✓ Admin login successful"
 
-# 6. Test admin routes with valid session
-echo "Testing admin routes with session..."
+# 5. Test server API routes with valid session
+echo "Testing server routes with session..."
 curl -q -LSsf -H "Authorization: Bearer $SESSION" \
-    http://localhost:64580/api/{api_version}/server/{admin_path}/config/users > /dev/null
+    http://localhost:64580/api/{api_version}/server/config/settings > /dev/null
 
-echo "✓ Admin routes work with authentication"
+echo "✓ Server routes work with authentication"
 
-# 7. Test that invalid credentials are rejected
+# 6. Test that invalid credentials are rejected
 echo "Testing invalid credentials are rejected..."
 # Use -q -LSs (no -f) when checking for expected 4xx response
 INVALID=$(curl -q -LSs -X POST \
     -H "Content-Type: application/json" \
     -d '{"username":"testadmin","password":"wrongpassword"}' \
     -w "%{http_code}" \
-    http://localhost:64580/api/{api_version}/server/{admin_path}/login)
+    http://localhost:64580/api/{api_version}/server/login)
 
 if echo "$INVALID" | grep -q "401\|403"; then
     echo "✓ Invalid credentials properly rejected"
@@ -41132,7 +40844,7 @@ fi
 kill $SERVER_PID
 wait $SERVER_PID 2>/dev/null || true
 
-echo '=== All admin authentication tests passed ==='
+echo '=== All server authentication tests passed ==='
 ```
 
 ### Debug Mode - ONLY for Manual Development
@@ -41165,7 +40877,7 @@ func AdminAuthMiddleware(next http.Handler) http.Handler {
 
 **Debug bypass is for:**
 - ✓ Quick manual UI testing during development
-- ✓ Exploring admin panel while coding
+- ✓ Exploring admin API routes while coding
 - ✓ Debugging admin routes interactively
 
 **Debug bypass is NOT for:**
@@ -41667,7 +41379,7 @@ nav:
   - Usage:
     - API Reference: api.md
     - CLI Reference: cli.md         # Remove if project has no CLI surface
-    - Admin Panel: admin.md
+    - Admin API: admin.md
     - Security: security.md
     - Integrations: integrations.md
   - Development:
@@ -42017,7 +41729,7 @@ docker run -p 64580:80 {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_nam
 - [Installation](installation.md) - How to install and run
 - [Configuration](configuration.md) - All configuration options
 - [API Reference](api.md) - REST API, Swagger, GraphQL
-- [Admin Panel](admin.md) - WebUI administration
+- [Admin API](admin.md) - Server administration API
 - [Security](security.md) - Auth, public endpoints, reporting, and hardening behavior
 - [Integrations](integrations.md) - External identity, discovery, and platform integrations
 - [Development](development.md) - Contributing guide
@@ -42105,9 +41817,9 @@ All settings can be overridden via environment:
 {PROJECT_NAME}_DATABASE_TYPE=postgres
 ```
 
-## Admin Panel
+## Server Administration
 
-All settings are configurable via the WebUI at `/server/{admin_path}`.
+All settings are configurable via the server config file or CLI. Server API is available at `/api/{api_version}/server/config/`.
 
 Document:
 - external auth provider settings (OIDC/LDAP) if enabled
@@ -42154,17 +41866,17 @@ GraphQL playground: [/server/docs/graphql](/server/docs/graphql)
 ### docs/admin.md
 
 ```markdown
-# Admin Panel
+# Admin API
 
 ## Access
 
-- URL: `/server/{admin_path}`
-- First-run setup wizard creates admin account
-- Session-based authentication
+- Base URL: `/api/{api_version}/server/`
+- First-run setup creates admin account via CLI
+- Token-based authentication (Bearer)
 
 ## Features
 
-- Server configuration
+- Server configuration (via config file)
 - User management
 - Database management
 - Backup/restore
@@ -42172,13 +41884,13 @@ GraphQL playground: [/server/docs/graphql](/server/docs/graphql)
 - Monitoring & logs
 
 Document:
-- `/server/{admin_path}/config/security/auth/*` for OIDC/LDAP provider management
-- `/server/{admin_path}/config/web/*` for robots/security/well-known management
-- any security-reporting or public-endpoint admin pages enabled by the project
+- external auth provider settings (OIDC/LDAP) via config file
+- web/robots/security.txt settings via config file
+- any security-reporting or public-endpoint settings enabled by the project
 
-## Admin API
+## Server API
 
-Programmatic access via `/api/{api_version}/server/{admin_path}/` with bearer token authentication.
+Programmatic access via `/api/{api_version}/server/` with bearer token authentication.
 ```
 
 ### docs/security.md
@@ -42320,7 +42032,7 @@ make test
 | Layer | What Gets Translated |
 |-------|---------------------|
 | **Web Frontend** | All UI text: navigation, headings, labels, buttons, tooltips, placeholders, footers, legal pages |
-| **Admin Panel** | All admin UI: dashboard, settings forms, labels, tooltips, wizard steps, notifications |
+| **Admin API** | All admin API: error messages, status descriptions, notifications |
 | **API Responses** | Error messages, validation messages, status descriptions |
 | **Swagger/OpenAPI** | Endpoint descriptions, parameter descriptions, schema descriptions, error examples |
 | **GraphQL** | Type descriptions, field descriptions, query/mutation descriptions |
@@ -44482,9 +44194,9 @@ When `use_network` or `allow_user_preference` is enabled, the torrc includes `So
 
 **See full `getTorConfig()` implementation in the Implementation section below.**
 
-### Admin Panel UI
+### Admin API (Tor Settings)
 
-**Server Settings → Tor → Network Usage:**
+**`GET /api/{api_version}/server/config/settings` → `tor` section:**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -44773,7 +44485,7 @@ func startDedicatedTor(ctx context.Context, serverPort int, cfg *TorConfig) (*To
     torrcContent := getTorConfig(cfg)
 
     // Create torrc only if it doesn't exist (persistent)
-    // torrc is preserved across restarts - only admin panel can update it
+    // torrc is preserved across restarts - only admin API can update it
     created, err := ensureTorrc(torrcPath, []byte(torrcContent))
     if err != nil {
         return nil, fmt.Errorf("failed to ensure torrc: %w", err)
@@ -45202,7 +44914,7 @@ func (tm *TorManager) Restart() error {
 }
 
 // UpdateConfig updates the configuration, regenerates torrc, and restarts Tor
-// This is called when admin saves new Tor settings via the admin panel
+// This is called when admin saves new Tor settings via the admin API
 func (tm *TorManager) UpdateConfig(config *TorConfig) error {
     tm.mu.Lock()
     defer tm.mu.Unlock()
@@ -45588,9 +45300,9 @@ func ensureTorFile(path string, content []byte) error {
 | PID file | `{data_dir}/tor/tor.pid` | `0600` | app user | |
 | Log file | `{log_dir}/tor.log` | `0600` | app user | |
 
-## Admin Panel
+## Server API (Tor Configuration)
 
-### /server/{admin_path}/config/tor (WebUI)
+### /api/{api_version}/server/config/tor
 
 **Hidden service is ALWAYS enabled if Tor binary is found.** No enable/disable toggle.
 
@@ -45824,7 +45536,7 @@ func ValidateTorConfig(config *TorConfig) []ValidationError {
 
 ### External Vanity Generation (7+ characters)
 
-For prefixes longer than 6 characters, use external tools with GPU acceleration. The admin panel includes documentation (expandable help section):
+For prefixes longer than 6 characters, use external tools with GPU acceleration. The API documentation includes guidance:
 
 **Using mkp224o (Linux/macOS/BSD):**
 ```bash
@@ -45854,11 +45566,11 @@ make
 **Windows users:**
 - Use WSL (Windows Subsystem for Linux) to run mkp224o
 - Or use pre-built Windows binaries if available from trusted sources
-- Generated keys are portable - generate on any platform, import via admin panel
+- Generated keys are portable - generate on any platform, import via CLI or API
 
 **Importing keys:**
 1. Generate keys using mkp224o or similar tool
-2. In admin panel, click "Import Keys"
+2. Use `POST /api/{api_version}/server/config/tor/import-keys`
 3. Upload `hs_ed25519_secret_key` file (or zip containing both key files)
 4. Confirm to replace current address
 5. Tor restarts with imported keys
@@ -45882,20 +45594,20 @@ make
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/tor` | GET | Get Tor status, config, and .onion address |
-| `/api/{api_version}/server/{admin_path}/config/tor` | PATCH | Update Tor settings (validates before saving) |
-| `/api/{api_version}/server/{admin_path}/config/tor/validate` | POST | Validate config without saving |
-| `/api/{api_version}/server/{admin_path}/config/tor/regenerate` | POST | Regenerate .onion address |
-| `/api/{api_version}/server/{admin_path}/config/tor/restart` | POST | Restart Tor process |
-| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | GET | Get vanity generation status |
-| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | POST | Start vanity generation |
-| `/api/{api_version}/server/{admin_path}/config/tor/vanity` | DELETE | Cancel vanity generation |
-| `/api/{api_version}/server/{admin_path}/config/tor/vanity/apply` | POST | Apply vanity address |
-| `/api/{api_version}/server/{admin_path}/config/tor/import` | POST | Import external keys |
+| `/api/{api_version}/server/config/tor` | GET | Get Tor status, config, and .onion address |
+| `/api/{api_version}/server/config/tor` | PATCH | Update Tor settings (validates before saving) |
+| `/api/{api_version}/server/config/tor/validate` | POST | Validate config without saving |
+| `/api/{api_version}/server/config/tor/regenerate` | POST | Regenerate .onion address |
+| `/api/{api_version}/server/config/tor/restart` | POST | Restart Tor process |
+| `/api/{api_version}/server/config/tor/vanity` | GET | Get vanity generation status |
+| `/api/{api_version}/server/config/tor/vanity` | POST | Start vanity generation |
+| `/api/{api_version}/server/config/tor/vanity` | DELETE | Cancel vanity generation |
+| `/api/{api_version}/server/config/tor/vanity/apply` | POST | Apply vanity address |
+| `/api/{api_version}/server/config/tor/import` | POST | Import external keys |
 
 ### Response Format
 
-**GET `/api/{api_version}/server/{admin_path}/config/tor`**
+**GET `/api/{api_version}/server/config/tor`**
 
 ```json
 {
@@ -45924,7 +45636,7 @@ make
 }
 ```
 
-**POST `/api/{api_version}/server/{admin_path}/config/tor/validate`** (or PATCH with invalid config)
+**POST `/api/{api_version}/server/config/tor/validate`** (or PATCH with invalid config)
 
 ```json
 {
@@ -45942,7 +45654,7 @@ make
 }
 ```
 
-**PATCH `/api/{api_version}/server/{admin_path}/config/tor`** (success)
+**PATCH `/api/{api_version}/server/config/tor`** (success)
 
 ```json
 {
@@ -46069,7 +45781,7 @@ userAgent := fmt.Sprintf("%s-cli/%s", projectName, version)
 
 ## API Token Authentication (Multi-User Mode)
 
-**If project uses PART 34 (Multi-User) or PART 35 (Organizations), client MUST support `--token` for API authentication.**
+**If project implements multi-user or organizations, client MUST support `--token` for API authentication.**
 
 | Flag | Description |
 |------|-------------|
@@ -46211,7 +45923,7 @@ update:
 
 ## User/Org Context (Smart Detection, NON-NEGOTIABLE)
 
-**If project uses PART 34/35, client MUST support `--user` flag for user/org context. Server auto-detects type.**
+**If project implements multi-user/orgs, client MUST support `--user` flag for user/org context. Server auto-detects type.**
 
 ### --user Flag
 
@@ -46667,7 +46379,7 @@ if env.IsAutoDetectDisplayModeGUI() {
 
 | Binary | First Run | Configuration Method |
 |--------|-----------|---------------------|
-| **Server** | Start with defaults, show status banner | WebUI at `/server/{admin_path}` |
+| **Server** | Start with defaults, show status banner | Config file or CLI |
 | **CLI** | Setup wizard (GUI/TUI) | Setup wizard (no WebUI for CLI) |
 | **Agent** | Start with connection string, show status banner | Server provides connection string |
 
@@ -46684,16 +46396,16 @@ if env.IsAutoDetectDisplayModeGUI() {
 | **Headless/daemon** | Log to file |
 
 **No built-in TUI/GUI wizard for Server or Agent binaries.** They just run:
-- **Server**: Has web-based setup at `/server/{admin_path}/config/setup` (accessed via browser, see PART 17)
-- **Agent**: Configured via connection string from server admin panel
+- **Server**: Has web-based setup at `/server/setup` (accessed via browser on first run)
+- **Agent**: Configured via connection string provided by the server admin API
 
 **Note:** "Setup wizard" has two meanings:
-1. **Server's web-based setup** - HTML pages served by server, accessed in browser at `/server/{admin_path}/config/setup`
+1. **Server's web-based setup** - HTML pages served by server, accessed in browser at `/server/setup`
 2. **CLI's built-in TUI/GUI wizard** - interactive wizard built into CLI binary itself
 
 Only CLI has a built-in wizard. Server serves web pages for setup.
 
-**Agent connection string example (provided by server admin panel):**
+**Agent connection string example (obtained from server admin API):**
 ```
 {project_name}-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
 ```
@@ -48069,12 +47781,11 @@ server:
   primary: ""                      # Server URL (empty = use {official_site} or prompt)
   cluster: []                      # Auto-discovered cluster nodes
   api_version: v1                  # API version prefix (default: v1, must match server)
-  admin_path: admin                # Admin path (default: admin, must match server)
   timeout: 30s                     # Request timeout (match server default)
   retry: 3                         # Retry attempts on failure
   retry_delay: 1s                  # Delay between retries
 
-# Authentication (required for multi-user, see PART 34/35)
+# Authentication (required for multi-user projects)
 auth:
   token: ""                        # API token (usr_xxx, see PART 11)
   token_file: ""                   # Read token from file instead
@@ -49986,7 +49697,7 @@ Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
 
 ### Agent Setup Process
 
-**Agent setup is initiated from the SERVER admin panel, NOT via setup token:**
+**Agent setup is initiated via the SERVER admin API, NOT via setup token:**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -50024,7 +49735,7 @@ func GenerateAgentCommand(serverURL, token string) string {
 
 | Scope | Token Prefix | Issued By | Route |
 |-------|--------------|-----------|-------|
-| Admin | `adm_agt_` | Admin panel | `/api/{api_version}/server/{admin_path}/config/agents/*` |
+| Admin | `adm_agt_` | Server CLI or API | `/api/{api_version}/server/config/agents/*` |
 | User | `usr_agt_` | User settings | `/api/{api_version}/users/agents/*` |
 | Org | `org_agt_` | Org settings | `/api/{api_version}/orgs/{slug}/agents/*` |
 
@@ -50051,7 +49762,7 @@ func GenerateAgentToken(scope AgentScope) string {
 
 | Scope | Endpoint |
 |-------|----------|
-| Admin | `POST /api/{api_version}/server/{admin_path}/config/agents/register` |
+| Admin | `POST /api/{api_version}/server/config/agents/register` |
 | User | `POST /api/{api_version}/users/agents/register` |
 | Org | `POST /api/{api_version}/orgs/{slug}/agents/register` |
 
@@ -50108,7 +49819,6 @@ server:
   primary: ""                      # Server URL (required, set during registration)
   cluster: []                      # Auto-discovered cluster nodes
   api_version: v1                  # API version prefix (default: v1, must match server)
-  admin_path: admin                # Admin path (default: admin, must match server)
   timeout: 30s                     # Request timeout (match server default)
   retry: 3                         # Retry attempts on failure
   retry_delay: 5s                  # Delay between retries
@@ -50371,7 +50081,7 @@ The Agent is essentially the Server's "little sibling" - same professional struc
 |--------|--------|-------|
 | **Listens for connections** | ✅ Yes (`--port`, `--address`) | ❌ No |
 | **Connects to parent server** | ❌ No (IS the server) | ✅ Yes (`--server`, `--token`) |
-| **Setup** | ✅ Web-based (token entered at `/server/{admin_path}/config/setup`) | ❌ No (registers with server via connection string) |
+| **Setup** | ✅ CLI-based (`{project_name} --maintenance setup`) | ❌ No (registers with server via connection string) |
 | **Admin operations** | N/A (IS the server) | ❌ No (Client's job) |
 | **WebUI** | ✅ Yes | ❌ No (headless) |
 | **Database** | ✅ `server.db` | ✅ `agent.db` (if needed) |
@@ -50529,47 +50239,6 @@ binaries/
 **See PART 25 (Makefile) for full build details.**
 
 ---
-
-# OPTIONAL → REQUIRED FLIP MECHANISM (PARTS 34-36)
-
-**PARTS 34, 35, and 36 are the ONLY parts of TEMPLATE.md / AI.md that may be edited per-project. Everything else is read-only spec.**
-
-PARTS 34-36 ship marked `OPTIONAL - NON-NEGOTIABLE WHEN IMPLEMENTED`. A project that adopts the feature (Multi-user / Organizations / Custom Domains) MUST flip the marker to `REQUIRED - NON-NEGOTIABLE` and MUST do so consistently in both files.
-
-## When to Flip
-
-| Trigger | Flip |
-|---------|------|
-| Project adds end-user accounts (registration, profiles, API tokens) | PART 34 |
-| Project adds team/group ownership of resources (requires PART 34 flipped first) | PART 35 |
-| Project lets users/orgs bring their own domain names | PART 36 |
-
-## How to Flip (TWO files, in this order)
-
-1. **IDEA.md `## Project variables`** — add the corresponding variable, lower_snake_case, value `true`:
-
-       multi_user:     true   # PART 34 flipped
-       organizations:  true   # PART 35 flipped (requires multi_user: true)
-       custom_domains: true   # PART 36 flipped
-
-2. **The per-project AI.md** (the file generated from TEMPLATE.md for THIS project — NOT TEMPLATE.md itself) — change the heading marker:
-
-       # PART 34: MULTI-USER (OPTIONAL - NON-NEGOTIABLE WHEN IMPLEMENTED)
-       →
-       # PART 34: MULTI-USER (REQUIRED - NON-NEGOTIABLE)
-
-   Apply the same substitution to PART 35 and PART 36 if those are also flipped.
-
-## Rules
-
-- TEMPLATE.md (the master) NEVER changes from `OPTIONAL`. Flips happen only in the project's AI.md after generation.
-- Both files (IDEA.md variable AND AI.md heading) MUST agree. A flip recorded in only one place is a bug.
-- Once flipped to REQUIRED, the entire PART becomes mandatory: every requirement, every table, every rule applies in full.
-- Flipping is one-way for the lifetime of the project. Once a project ships multi-user / orgs / custom domains, you cannot un-flip without a data migration.
-
----
-
-
 
 # PART 33: IDEA.md REFERENCE
 
@@ -50812,7 +50481,7 @@ maintainer_email: jane@example.com
 
 ### Document Rules
 
-- [ ] **AI.md is SOURCE OF TRUTH** - PARTS 0-33 define HOW, PART 33 is reference-only, only flip PARTS 34-36 from OPTIONAL→REQUIRED
+- [ ] **AI.md is SOURCE OF TRUTH** - PARTS 0-33 define HOW, PART 33 is reference-only — READ-ONLY, do not modify
 - [ ] **IDEA.md is the project PLAN** - WHAT (update when features change)
 - [ ] **IDEA.md must be SPEC compliant** - AI.md always wins conflicts
 - [ ] **IDEA.md examples are illustrative only** - SPEC defines actual patterns
@@ -50824,7 +50493,7 @@ maintainer_email: jane@example.com
 
 ### Rule Files (.claude/rules/)
 
-- [ ] **All 14 rule files exist** - ai-rules, project-rules, config-rules, binary-rules, backend-rules, api-rules, frontend-rules, features-rules, service-rules, makefile-rules, docker-rules, cicd-rules, testing-rules, optional-rules
+- [ ] **All 13 rule files exist** - ai-rules, project-rules, config-rules, binary-rules, backend-rules, api-rules, frontend-rules, features-rules, service-rules, makefile-rules, docker-rules, cicd-rules, testing-rules
 - [ ] **Correct PART assignments** - each file covers PARTs specified in PART 0 table
 - [ ] **Required header format** - `# {Topic} Rules (PART X, Y, Z)`
 - [ ] **Required warning line** - `⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️`
@@ -50850,7 +50519,7 @@ maintainer_email: jane@example.com
 - [ ] No external runtime dependencies - everything embedded
 - [ ] Use ONLY approved libraries (see PART 5)
 - [ ] Follow exact config paths: `server.xxx`, not variations
-- [ ] Follow exact route patterns: `/api/{api_version}/server/{admin_path}/config/xxx`
+- [ ] Follow exact route patterns: `/api/{api_version}/server/config/xxx`
 - [ ] Token prefixes: `adm_` (admin), `usr_` (user), `org_` (org)
 - [ ] Setup token: 32 hex chars, no dashes
 
@@ -50939,12 +50608,12 @@ cd "$TEMP_DIR" && docker compose up -d
 | `config/`, `data/`, `logs/`, `cache/` | Runtime dirs go to temp/OS paths |
 | `server.yml`, `cli.yml` | Generated at runtime, not in repo |
 | `volumes/` in project root | Runtime mount data belongs in temp/deployment dirs, not the source repo |
-| `.env` with secrets | Use environment variables or admin panel |
+| `.env` with secrets | Use environment variables or API-managed config |
 
 **Config Files:**
 - NEVER in repository - generated at RUNTIME
 - Binary creates on first run with sane defaults
-- User edits generated file or uses admin panel
+- User edits generated file or uses admin API
 
 **Testing:**
 | Type | Container | Purpose |
@@ -51170,22 +50839,10 @@ make docker # Build Docker image
 - [ ] Long strings have `word-break: break-all` CSS (IPv6, .onion, tokens, hashes)
 - [ ] Touch targets minimum 44x44px on mobile
 
-### Phase 6: Admin & Email (PARTS 17-18)
-
-**PART 17: Admin Panel**
-- [ ] Admin UI at `/server/{admin_path}`
-- [ ] Admin API at `/api/{api_version}/server/{admin_path}/`
-- [ ] First-run setup wizard
-- [ ] All settings configurable via UI
-- [ ] Settings organized by category
-- [ ] Real-time validation feedback
-- [ ] Confirmation for destructive actions
-- [ ] Same theme system as main UI
-- [ ] Activity/audit log viewer
-- [ ] System status dashboard
+### Phase 6: Email & Scheduler (PARTS 17-18)
 
 **PART 17: Email & Notifications**
-- [ ] SMTP configuration in admin
+- [ ] SMTP configuration in config file and API
 - [ ] Email disabled gracefully if no SMTP
 - [ ] Customizable email templates
 - [ ] WebUI notifications always available
@@ -51201,7 +50858,7 @@ make docker # Build Docker image
 - [ ] GeoIP update: 03:00 Sunday
 - [ ] Session cleanup: hourly
 - [ ] Cluster-aware task locking
-- [ ] Scheduler status in admin panel
+- [ ] Scheduler status in admin API
 - [ ] Manual task trigger option
 
 **PART 19: GeoIP**
@@ -51330,16 +50987,16 @@ make docker # Build Docker image
 - [ ] WCAG 2.1 AA compliance
 - [ ] Accessibility testing performed
 
-### Phase 11: Conditional & Project-Specific Features (PARTS 32-36)
+### Phase 11: Conditional & Project-Specific Features (PARTS 31-32)
 
-**Interpretation:** PART 31 is conditional on Tor availability, PART 32 is required for all projects, and PARTS 34-36 are optional per project.
+**Interpretation:** PART 31 is conditional on Tor availability, PART 32 is required for all projects.
 
 **PART 31: Tor Hidden Service**
 - [ ] Auto-enabled when tor binary found
 - [ ] Dedicated tor process (not system tor)
 - [ ] .onion address generation
 - [ ] Vanity address generation option
-- [ ] Tor status in admin panel
+- [ ] Tor status in healthz API
 - [ ] Tor config in `{config_dir}/tor/torrc`
 - [ ] Tor data in `{data_dir}/tor/`
 - [ ] Tor fields in `/api/{api_version}/server/healthz`:
@@ -51373,26 +51030,7 @@ make docker # Build Docker image
 - [ ] Same version as server
 - [ ] Systemd/launchd/Windows service support
 
-**PART 34: Multi-User** (if applicable)
-- [ ] User registration flow
-- [ ] User authentication (session-based for UI)
-- [ ] API authentication (bearer token)
-- [ ] Token prefixes: `usr_` (user) with properties (name, scope, expiration)
-- [ ] Session management implemented
-- [ ] 2FA support: TOTP and WebAuthn
-- [ ] Password requirements enforced
-
-**PART 35: Organizations** (if applicable)
-- [ ] Org creation and management
-- [ ] Member roles and permissions
-- [ ] Org-level settings
-- [ ] Org API tokens
-
-**PART 36: Custom Domains** (if applicable)
-- [ ] Custom domain configuration
-- [ ] SSL for custom domains
-- [ ] DNS verification
-- [ ] Domain management in admin
+*Agent (only for monitoring/remote management projects, agent-specific config):*
 - [ ] Config: `/etc/{project_org}/{internal_name}/agent.yml`
 - [ ] Connects to central server
 - [ ] Same flags as server EXCEPT no `--port`/`--address` (agents don't serve HTTP)
@@ -51497,7 +51135,7 @@ make docker # Build Docker image
 - [ ] Server admins in separate table (`admins`)
 - [ ] Regular users in separate table (`users`)
 - [ ] Separate session tables (`admin_sessions`, `user_sessions`)
-- [ ] Admin routes protected (`/server/{admin_path}/*`)
+- [ ] Server API routes protected (`/api/{api_version}/server/*`)
 - [ ] No privilege escalation path from user to admin
 
 ---
@@ -51563,7 +51201,7 @@ make docker # Build Docker image
 - [ ] Frontend is fully functional (not just display)
 - [ ] All CRUD operations work from both frontend and API
 - [ ] No orphan routes (frontend-only or API-only)
-- [ ] Routes follow scope rules (`/server/`, `/server/auth/`, `/users/`, `/orgs/`, `/server/{admin_path}/`)
+- [ ] Routes follow scope rules (`/server/`, `/server/auth/`, `/users/`, `/orgs/`)
 
 ### REST API (`/api/{api_version}/`)
 
@@ -51657,7 +51295,7 @@ make docker # Build Docker image
 - [ ] Documentation pages included
 - [ ] API docs (`/server/docs/swagger`, `/server/docs/graphql`) included
 - [ ] User profiles included ONLY if public
-- [ ] Admin pages (`/server/{admin_path}/*`) NEVER included
+- [ ] Admin/server-internal pages NEVER included in sitemap
 - [ ] Auth pages (`/server/auth/*`) NEVER included
 - [ ] API endpoints (`/api/*`) NEVER included
 - [ ] `lastmod` dates accurate
@@ -51877,7 +51515,7 @@ make docker # Build Docker image
 - [ ] Stored as SHA-256 hash in `{config_dir}/setup_token.txt`
 - [ ] Plaintext token shown ONCE in console banner
 - [ ] File deleted after successful setup completion
-- [ ] Setup URL displayed: `{proto}://{fqdn}/server/{admin_path}/config/setup`
+- [ ] Setup instructions displayed: run `{project_name} --maintenance setup --token <token>`
 - [ ] Token section only appears on first run (never again after setup)
 
 ### CLI Flag Syntax (ALL Binaries)
@@ -52433,15 +52071,15 @@ When bootstrapping a new project from this specification:
 
 **Test:** Homepage loads with working theme toggle
 
-#### Step 5: Admin Panel (PART 17)
+#### Step 5: Email & Notifications (PART 17)
 
-1. **Create src/admin/admin.go** - Admin package
-2. **Create admin templates** - UI pages
-3. **Create admin handlers** - Routes and logic
-4. **Implement first-run setup wizard**
-5. **Add all admin configuration pages**
+1. **Create src/email/email.go** - Email package
+2. **Create email templates** - HTML/text templates
+3. **Create email handlers** - Send and queue logic
+4. **Implement SMTP configuration**
+5. **Add all notification configuration pages**
 
-**Test:** Admin panel accessible at `/server/{admin_path}`
+**Test:** Email sending works via server API at `/api/{api_version}/server/config/email`
 
 #### Step 6: API Layer (PART 14)
 
@@ -52476,14 +52114,12 @@ Implement remaining required parts:
 
 **Test after each part:** Verify the feature works before moving to next
 
-#### Step 8: Client + Project-Specific Features (PART 32, PARTS 34-36)
+#### Step 8: Client + Project-Specific Features (PART 32)
 
 Implement the required client, then any project-specific optional features:
 1. **PART 32:** Client (required for all projects)
 2. **PART 32:** Agent (only if project manages or monitors external nodes)
-3. **PART 34:** Multi-User (if project needs Regular User accounts)
-4. **PART 35:** Organizations (requires PART 34)
-5. **PART 36:** Custom Domains (if users/orgs need branded domains)
+3. **Project-specific:** Multi-User, Organizations, Custom Domains (if defined in IDEA.md)
 
 #### Step 9: Documentation (PART 29)
 
@@ -52585,8 +52221,8 @@ Implement the required client, then any project-specific optional features:
 
 | Mistake | Why It's Wrong | Correct Approach |
 |---------|----------------|------------------|
-| Starting with project-specific features | Wastes time if foundation is wrong | Build foundation first (config, server, admin) |
-| Skipping admin panel | Hard to configure without UI | Build admin panel early |
+| Starting with project-specific features | Wastes time if foundation is wrong | Build foundation first (config, server, API) |
+| Skipping settings API | Hard to configure without API access | Build settings API endpoints early |
 | Implementing all APIs at once | Easy to get out of sync | Start with REST, then add Swagger, then GraphQL |
 | Not testing incrementally | Find bugs too late | Test after each major component |
 | Hardcoding values | Makes project inflexible | Use configuration from day 1 |
@@ -52625,7 +52261,7 @@ A successfully bootstrapped project should:
 ✅ Compile to a single static binary for all 8 platforms
 ✅ Run in Docker with proper configuration
 ✅ Have working WebUI with theme support (light/dark/auto)
-✅ Have working admin panel with all config options
+✅ Have working admin API with all settings endpoints
 ✅ Expose REST, Swagger, AND GraphQL APIs (all in sync)
 ✅ Have comprehensive documentation on ReadTheDocs
 ✅ Pass all CI/CD workflows

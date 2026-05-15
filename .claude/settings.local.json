@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "WebFetch(domain:share.google)",
-      "WebFetch(domain:towardsdatascience.com)"
+      "WebFetch(domain:towardsdatascience.com)",
+      "Bash(grep -n \"admin_path\" /root/Projects/github/claudemgr/go/API.md)",
+      "Read(//tmp/**)"
     ]
   }
 }

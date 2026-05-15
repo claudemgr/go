@@ -301,7 +301,7 @@ The single binary contains **everything the app needs to function**. The user is
 - Embed assets at build time using `//go:embed` (standard library `embed` package)
 - Fonts, icons, theme data, default config, JSON/YAML schemas, SQL migrations, web assets (if any), localization catalogs, default templates, and licenses-to-display all live inside the binary
 - The `assets/` directory in the repo is a **build-time source tree** for embedding — it is not a runtime install target
-- The app may **read** user-provided config and data from per-user paths (PART 4 path table), and may **write** cache/state there, but it must run with full default functionality when those paths are empty
+- The app may **read** user-provided config and data from per-user paths (PART 4 → "Path Rule"), and may **write** cache/state there, but it must run with full default functionality when those paths are empty
 - Network/CDN fetches at first run to "download missing assets" are forbidden
 - A new install on an air-gapped machine MUST work end-to-end with only the binary present
 
@@ -799,7 +799,7 @@ var (
 )
 ```
 
-**Full release build command:**
+**Full release build command (logical form — run inside the Docker container, not on the host):**
 ```bash
 go build \
   -ldflags="-s -w \
@@ -1588,7 +1588,7 @@ maintainer_email: {maintainer@example.com}
 - No implementation details — describe behavior, not algorithms or libraries. AI.md PARTs 0–11 define HOW; PART 12 verifies compliance.
 - This template targets GUI / TUI / CLI applications (PART 0 → "One Coherent Product").
 - Cross-reference AI.md PARTs by number for any pattern that already exists there (Docker → PART 5, security → PART 9, license exceptions → PART 11, etc.).
-- `internal_name` and `internal_org` are immutable after first set (PART 0 → "Auto-Detecting Project Values").
+- `internal_name` and `internal_org` are immutable after first set (FIRST-TIME PROJECT SETUP → "Auto-Detecting Project Values").
 
 ---
 
