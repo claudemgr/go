@@ -688,35 +688,40 @@ Dependabot covers `github-actions` ecosystem updates automatically when `.github
   - force-push and branch-deletion protection
 - Direct pushes to the default branch are forbidden except explicit maintainer emergency action; emergency bypasses MUST be followed by an audit/fix pass
 
-### Public Repository Workflow Requirements
+### Multi-Provider CI/CD Requirements
 
-All three workflows are required on every public repo regardless of language:
+Every project ships workflow files for all five CI/CD providers. Same gates, different syntax — no vendor lock-in.
 
-- `.github/workflows/build.yml` - build, test, coverage, and repo validation
-- `.github/workflows/release.yml` - tagged/manual release build and publish
-- `.github/workflows/security.yml` - secret scanning, dependency/security checks, and workflow policy checks
+| Provider | Workflow location | Syntax |
+|----------|------------------|--------|
+| GitHub | `.github/workflows/build.yml` / `release.yml` / `security.yml` | GitHub Actions |
+| GitLab | `.gitlab-ci.yml` | GitLab CI (stages: build, test, security, release) |
+| Gitea | `.gitea/workflows/build.yml` / `release.yml` / `security.yml` | GitHub Actions (act runner) |
+| Forgejo | `.forgejo/workflows/build.yml` / `release.yml` / `security.yml` | GitHub Actions (act runner) |
+| Jenkins | `Jenkinsfile` | Declarative Pipeline |
 
-**`security.yml` job conditionality:**
-- `secret-scan` (truffleHog) — always runs; `fetch-depth: 0` required for full history scan
-- `workflow-policy` — always runs; checks all `uses:` lines are pinned to a 40-char SHA and blocks `pull_request_target`
-- `vuln-scan` (govulncheck) — runs only when `go.sum` is present in the repo
-- `image-scan` (Trivy) — runs only when a Dockerfile is present; must run after the image is built
+**`security` job conditionality (applies to all providers):**
+- Secret scan (truffleHog) — always runs; full git history required
+- Workflow policy (SHA/digest pinning check) — always runs
+- `vuln-scan` (govulncheck) — conditional on `go.sum` present
+- `image-scan` (Trivy) — conditional on Dockerfile present; runs after image build
 
-**Workflow job ordering (`needs:`):** GitHub Actions runs all jobs in parallel by default. Use `needs:` to enforce ordering:
-- `build.yml`: `lint` and `test` run in parallel → `build` needs: test (never produce artifacts from untested code) → `upload-artifacts` needs: build
-- `release.yml`: `build` → `release` (needs: build); release job re-runs its own build inline, never relies on artifacts from a prior workflow run
-- `security.yml`: all jobs run in parallel — no `needs:` between them
-- Cross-workflow ordering uses branch protection (both `build.yml` and `security.yml` must pass before merge); never use `workflow_run` to chain workflows
+**GitHub Actions job ordering (`needs:`):**
+- `build.yml`: `lint` and `test` run in parallel → `build` needs: test → `upload-artifacts` needs: build
+- `release.yml`: `build` → `release` (needs: build); release job always re-runs its own build inline
+- `security.yml`: all jobs parallel — no `needs:` between them
+- Cross-workflow ordering via branch protection; never `workflow_run`
 
-If the project also supports Gitea/Forgejo or Jenkins, the equivalent workflows/pipelines MUST enforce the same gates — not a weaker subset. CI MUST fail when required tests, coverage gates, secret scans, dependency checks, or release validation fail.
+**GitLab CI**: security jobs run in the `security` stage (parallel by default in the same stage). Release stage has `rules: - if: $CI_COMMIT_TAG`.
+
+**Jenkins**: `Security` stage uses `parallel {}` block. `Release` stage uses `when { tag 'v*' }`.
+
+CI MUST fail on all providers when tests, coverage gates, secret scans, dependency checks, or release validation fail. Never accept a weaker gate on one provider than another.
 
 ### Dependency Update Policy
 
-- Public repos MUST define `.github/dependabot.yml`
-- Dependabot MUST cover, when used by the repo:
-  - Go modules
-  - GitHub Actions
-  - Docker / container base images
+- **Renovate** (`renovate.json` at repo root) is the recommended tool — works on GitHub, GitLab, Gitea, and Forgejo in one config. Configure `pinDigests: true` for GitHub Actions entries
+- **Dependabot** (`.github/dependabot.yml`) is acceptable for GitHub-only repos but must not be the sole mechanism on multi-provider projects
 - Security updates are high priority and MUST go through the same test/security gates as manual changes
 - AI MUST NOT silently change dependency strategy, ignore failing update PRs, or disable update automation to "get green"
 
