@@ -733,19 +733,16 @@ Always write messages so a developer reading only the step name + message unders
 
 ### Release Pre-flight Validation
 
-The GitHub Releases API returns HTTP 422 `"tag_name is not a valid tag"` when:
-- The tag does not exist in the repository at the time of the API call
-- The workflow was triggered on a branch or manual dispatch and `tag_name` resolved to empty or a non-tag ref
-- The tag name contains whitespace or control characters
+The GitHub Releases API returns HTTP 422 `"tag_name is not a valid tag"` when the tag does not exist at API call time or is malformed. The correct fix is for the **release job to own the tag** — delete it if it exists, then recreate it at the current HEAD. This ensures the tag always exists and points to the right commit, and makes the workflow idempotent.
 
-Add this as the **first step of the `release` job**, before any build or publish action. Also requires `fetch-depth: 0` on checkout so `git tag -l` sees the full tag list:
+The `release` job already has `contents: write` to push assets — this covers tag push as well.
 
 ```yaml
 - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
   with:
-    fetch-depth: 0   # required: git tag -l needs full tag history
+    fetch-depth: 0   # required: full history needed to inspect and push tags
 
-- name: Validate release tag
+- name: Ensure release tag
   run: |
     ref="${{ github.ref }}"
     if [[ "$ref" != refs/tags/* ]]; then
@@ -753,15 +750,16 @@ Add this as the **first step of the `release` job**, before any build or publish
       exit 1
     fi
     tag="${ref#refs/tags/}"
-    if ! git tag -l | grep -qxF "$tag"; then
-      echo "::error::Tag '$tag' does not exist in this repository. Push the tag before the release workflow runs."
-      exit 1
-    fi
     if printf '%s' "$tag" | grep -qP '[[:space:][:cntrl:]]'; then
       echo "::error::Tag '$tag' contains whitespace or control characters and is not a valid GitHub tag name."
       exit 1
     fi
-    echo "Release tag '$tag' validated"
+    # Delete existing tag (local + remote) then recreate at current HEAD
+    git tag -d "$tag" 2>/dev/null || true
+    git push origin ":refs/tags/$tag" 2>/dev/null || true
+    git tag "$tag"
+    git push origin "refs/tags/$tag"
+    echo "Tag '$tag' ensured at $(git rev-parse HEAD)"
 ```
 
 ### Release Integrity
