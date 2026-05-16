@@ -720,6 +720,50 @@ If the project also supports Gitea/Forgejo or Jenkins, the equivalent workflows/
 - Security updates are high priority and MUST go through the same test/security gates as manual changes
 - AI MUST NOT silently change dependency strategy, ignore failing update PRs, or disable update automation to "get green"
 
+### Workflow Error Messaging
+
+Use `::error::` workflow commands for validation failures — they appear as red annotations on the Actions summary page, not just buried in logs:
+
+```bash
+echo "::error::Tag 'foo' does not exist in this repository"
+echo "::error file=.github/workflows/release.yml,line=12::message tied to a source location"
+```
+
+Always write messages so a developer reading only the step name + message understands what failed and what to do next.
+
+### Release Pre-flight Validation
+
+The GitHub Releases API returns HTTP 422 `"tag_name is not a valid tag"` when:
+- The tag does not exist in the repository at the time of the API call
+- The workflow was triggered on a branch or manual dispatch and `tag_name` resolved to empty or a non-tag ref
+- The tag name contains whitespace or control characters
+
+Add this as the **first step of the `release` job**, before any build or publish action. Also requires `fetch-depth: 0` on checkout so `git tag -l` sees the full tag list:
+
+```yaml
+- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+  with:
+    fetch-depth: 0   # required: git tag -l needs full tag history
+
+- name: Validate release tag
+  run: |
+    ref="${{ github.ref }}"
+    if [[ "$ref" != refs/tags/* ]]; then
+      echo "::error::release.yml triggered on non-tag ref '$ref'. Releases require a tag push (refs/tags/v...)."
+      exit 1
+    fi
+    tag="${ref#refs/tags/}"
+    if ! git tag -l | grep -qxF "$tag"; then
+      echo "::error::Tag '$tag' does not exist in this repository. Push the tag before the release workflow runs."
+      exit 1
+    fi
+    if printf '%s' "$tag" | grep -qP '[[:space:][:cntrl:]]'; then
+      echo "::error::Tag '$tag' contains whitespace or control characters and is not a valid GitHub tag name."
+      exit 1
+    fi
+    echo "Release tag '$tag' validated"
+```
+
 ### Release Integrity
 
 - Tagged releases MUST publish a machine-readable checksum file for all release artifacts (SHA-256)
