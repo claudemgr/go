@@ -359,10 +359,10 @@ AI should be autonomous by default.
 | When | Action | Purpose |
 |------|--------|---------|
 | Session start | Read AI.md completely | Understand full context |
-| Before each task | Re-read relevant part(s) | Prevent drift |
+| Before each task | Read only the spec parts relevant to what you are about to implement — do not pre-load speculatively | Prevent token waste |
 | Every 3-5 changes | Stop and verify against spec | Catch drift early |
 | Before task completion | Full compliance check | Ensure correctness |
-| When uncertain | Re-read spec first | Never guess needlessly |
+| When uncertain about a spec requirement | Read that specific section — never guess, never rely on prior-session memory | Accuracy without waste |
 
 ## Self-Validation Loop
 

@@ -2375,7 +2375,7 @@ grep -n "^|" AI.md | head -50
 |---------|-------------|------------------|
 | Reading sequentially from start | Context window exhausted | Use index, read specific PARTs |
 | Reading only part of a PART | Missing critical details | Read complete PART sections |
-| Not re-reading before implementing | Drift from spec | Always re-read relevant PART |
+| Not reading relevant spec before implementing | Drift from spec | Read the PART(s) relevant to the current task |
 | Guessing instead of searching | Wrong implementation | Use grep to find answers |
 | Skipping PART 0 and 1 | Missing critical rules | ALWAYS read these first |
 | Adding content without searching first | Duplicate rules/content | Search for existing content before adding |
@@ -2565,7 +2565,7 @@ Before I proceed, can you confirm [specific question]?
 | Rule | Description |
 |------|-------------|
 | **AI.md is source of truth** | ALWAYS read relevant PART before implementing. NEVER guess. |
-| **Re-read before every task** | Spec drift is #1 cause of violations. Combat it actively. |
+| **Read relevant spec before each task** | Spec drift is #1 cause of violations. Read only the PARTs relevant to the current task — do not pre-load speculatively. |
 | **IDEA.md = WHAT** | Business logic, data models, features |
 | **AI.md (PARTS 0-33 = HOW; PART 33 = reference)** | Implementation patterns, standards |
 | **No report files** | Fix issues directly. No AUDIT.md, COMPLIANCE.md, SUMMARY.md, etc. Temporary `AUDIT.AI.md` is allowed only for explicit audits and must be deleted when resolved |
@@ -2649,7 +2649,7 @@ Before I proceed, can you confirm [specific question]?
 - "Improve" or "optimize" the spec
 - Create patterns not in spec
 - Create report/analysis files (fix directly instead)
-- Rely on memory (ALWAYS re-read)
+- Rely on memory — read the spec sections relevant to the current task instead of guessing
 - Add unrequested features
 - Edit TEMPLATE.md or AI.md content (READ-ONLY). Project changes belong in IDEA.md.
 - Read an image larger than 1000×1000 directly. Always check dimensions and resize to ≤1000×1000 first (see "Large Image Handling").
@@ -3060,27 +3060,27 @@ See IDEA.md for the full project breakdown.
 
 | When | Action | Purpose |
 |------|--------|---------|
-| **Session start** | Read AI.md completely | Understand full context |
-| **Before EACH task** | Re-read relevant PART(s) | Prevent drift |
-| **Every 3-5 changes** | Stop, verify against spec | Catch drift early |
+| **Session start** | Read the PART(s) relevant to the first task | Understand the context you need |
+| **Before EACH task** | Read the relevant PART(s) for that task | Prevent drift; do not pre-load speculatively |
+| **Every 3-5 changes** | Stop, verify against what you already read | Catch drift early |
 | **Before task completion** | Full compliance check | Ensure correctness |
-| **When uncertain** | Re-read spec or ASK | Never guess |
+| **When uncertain** | Read the relevant spec section or ASK | Never guess |
 
-**You MUST re-read the spec before implementing. Do NOT rely on memory.**
+**Read the spec sections relevant to the current task before implementing. Do NOT rely on memory; do NOT pre-load the whole spec speculatively.**
 
 ## Before Starting Work
 
-1. **Read AI.md COMPLETELY** - not just parts you think are relevant
+1. **Read the AI.md PART(s) relevant to the first task** - do not load the entire file speculatively
 2. **Check TODO.AI.md and TODO.md** - read both if present; see pending tasks and their priority
 3. **Verify understanding** - if ANYTHING is unclear, ASK first
 4. **Never assume** - when in doubt, ask the user
 
 ## During Work
 
-1. **Re-read spec before EACH implementation** - every single time
+1. **Read the relevant spec PART(s) before each implementation** - read what the task requires, not the whole spec
 2. **Follow spec EXACTLY** - no "improvements" without explicit permission
 3. **Check yourself every 3-5 changes** - am I drifting?
-4. **Update TODO.AI.md and TODO.md** as tasks are completed (mark items done in whichever file lists them)
+4. **Update TODO.AI.md and TODO.md** as tasks are completed — remove items from TODO.AI.md when fully resolved and committed; mark items done in TODO.md in place (never delete from TODO.md)
 5. **Test your changes** - don't commit untested code
 6. **Keep changes focused** - one feature/fix per task
 7. **If uncertain** - STOP, re-read spec, or ASK
@@ -3369,7 +3369,7 @@ The wrapper exists to be used. Treat each logically-complete change as its own c
 - **The message file is the contract.** Whatever is in `.git/COMMIT_MESS` becomes the public commit message and lands on the remote. Wrong message → wrong public history. Always re-read `.git/COMMIT_MESS` after writing it and BEFORE running `gitcommit <command>`.
 - One logical change per commit. If `git diff --stat` spans unrelated subsystems, split it.
 - Refresh `.git/COMMIT_MESS` for EVERY commit. A message left over from the previous commit is stale and must be rewritten — see "Detecting Stale COMMIT_MESS" above.
-- Do not wait for the end of a task to commit. If the work has natural checkpoints (added a function, added its test, fixed a bug), commit at each checkpoint.
+- Do not wait for the end of a task to commit. A valid commit checkpoint is a complete, working unit: a full function plus its test, a complete feature, a complete fix. Never commit partially implemented code — every committed line must work as written. Half a function, a stub, or files in an inconsistent state are not valid checkpoints.
 - Do not over-split either. A typo fix and the test that catches it belong in the same commit.
 - After the commit step succeeds, the wrapper removes `.git/COMMIT_MESS` (and `.git/COMMIT_MSG`) **even if the push step fails afterwards**. The next commit needs a fresh file. If the push failed (offline / no remote / repo doesn't exist yet), running `gitcommit push` later picks up the existing local commit — do NOT recreate COMMIT_MESS.
 - If the user asks for a single combined commit ("just commit everything as one"), follow that — but the default cadence is small and frequent.
@@ -3381,7 +3381,7 @@ The wrapper exists to be used. Treat each logically-complete change as its own c
 
 **When ALL items in TODO.AI.md are completed:**
 
-1. **Empty the TODO.AI.md file** - truncate to empty (keep the file, remove all content)
+1. **Remove all completed items from TODO.AI.md** - delete each item only after it is fully resolved and committed; never truncate the whole file at once
 2. **Write COMMIT_MESS** with the following format:
 
 **Title Format:**
@@ -3418,8 +3418,8 @@ Implemented core server functionality and API.
 - The ✅ emoji MUST be used for todo completion commits
 - Title is EXACTLY: `✅ all todo items have been completed ✅`
 - Body MUST summarize what was accomplished
-- Empty TODO.AI.md BEFORE writing COMMIT_MESS
-- File stays empty until new tasks are added
+- Remove completed items from TODO.AI.md as each one is fully resolved and committed — do not empty the file before writing COMMIT_MESS
+- The file should be empty only after every item has been individually removed
 
 **Format Rules:**
 - Title line: max 64 characters (including emojis)
@@ -4129,7 +4129,7 @@ logging:
 **After EVERY file change, AI MUST verify:**
 
 ```
-□ Does the result match SPEC examples exactly?
+□ Does the result match SPEC examples exactly? (compare against what you already read for this task — do not re-read the spec file after each edit)
 □ Did I accidentally add anything not in SPEC?
 □ Did I accidentally change anything the SPEC doesn't require?
 □ Would this diff surprise someone who only read the SPEC?
@@ -4640,7 +4640,7 @@ When working on this project, the following roles are assumed based on the task:
 
 ### The Golden Rules
 
-1. **Re-read this spec periodically** during work to ensure accuracy and no deviation
+1. **Read only the spec sections relevant to the current task** — do not pre-load the spec speculatively; read on demand when a section directly applies
 2. **When in doubt, check the spec** - the spec is the source of truth
 3. **Never assume or guess** - ask questions if unclear
 4. **Every NON-NEGOTIABLE section MUST be implemented exactly as specified**
@@ -50557,9 +50557,9 @@ maintainer_email: jane@example.com
 6. Ask clarifying questions BEFORE implementing
 7. Implement exactly as specified
 8. Verify consistency with related sections
-9. Update TODO.AI.md (and mark items done in TODO.md if listed there) when tasks complete
+9. Remove completed items from TODO.AI.md when each task is fully resolved and committed; mark items done in TODO.md in place
 
-**After context compaction:** Re-read PART 0, 1 and relevant rules files before continuing.
+**After context compaction:** Read the PART(s) required by the current task — not the whole spec. Do not pre-load PART 0 or 1 speculatively; read them only if the current task requires them.
 
 ### Quick Reference - Critical Rules
 
