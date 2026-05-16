@@ -1198,7 +1198,6 @@ paths:
 - ❌ Guess or assume - READ THE SPEC or ASK
 - ❌ Implement without reading relevant PART first
 - ❌ Modify AI.md PART content (read-only spec)
-- ❌ Skip reading PART 0 and 1 at conversation start
 - ❌ Add features not in spec without asking
 - ❌ Use "I think" or "probably" - KNOW from spec or ASK
 - ❌ Ask multiple plain-text questions in separate messages - use AskUserQuestion wizard instead
@@ -1210,7 +1209,6 @@ paths:
 - ❌ "I'll come back to this later" - there is no later, do it NOW
 
 ## CRITICAL - ALWAYS DO
-- ✅ Read AI.md PART 0, 1 at start of EVERY conversation
 - ✅ Read relevant PART before implementing ANY feature
 - ✅ Search AI.md before asking questions (answer is likely there)
 - ✅ Follow spec EXACTLY - no "improvements" without approval
@@ -1428,11 +1426,8 @@ Purpose:
 ## FIRST TURN - MANDATORY
 
 On EVERY new conversation or after "context compacted" message:
-1. **READ** `AI.md` PART 0 and PART 1 before doing ANYTHING
-2. **READ** the relevant `.claude/rules/*.md` for your current task
-3. **NEVER** assume or guess - verify against AI.md before implementing
-
-**If you haven't read AI.md this session → STOP → Read it NOW.**
+1. **READ** the relevant `.claude/rules/*.md` for your current task
+2. **NEVER** assume or guess - verify against AI.md before implementing
 
 ## Asking Questions
 
@@ -1515,7 +1510,7 @@ On EVERY new conversation or after "context compacted" message:
 6. Built-in scheduler, GeoIP, metrics, email, backup, update
 7. Full admin panel with ALL settings
 8. Client binary for ALL projects
-9. Commit often via `gitcommit <command>` — small, focused commits, each with a fresh accurate `.git/COMMIT_MESS`. See "gitcommit Script" → "Commit Cadence". Do NOT hoard unrelated changes into one big commit
+9. Commit often — small, focused commits. Do NOT hoard unrelated changes into one big commit
 
 ## File Locations
 - Config: `{config_dir}/server.yml`
@@ -1554,11 +1549,8 @@ CLAUDE.md and rules files are loaded at every conversation start, but AI may sti
 ## FIRST TURN - READ THIS
 
 On EVERY new conversation or after context compaction:
-1. Read `AI.md` PART 0 and PART 1 (critical rules)
-2. Read the relevant `.claude/rules/*.md` files for current task
-3. NEVER assume - always verify against spec before implementing
-
-If you haven't read AI.md this session, STOP and read it now.
+1. Read the relevant `.claude/rules/*.md` files for current task
+2. NEVER assume - always verify against spec before implementing
 ```
 
 **2. Rules File Content Template:**
@@ -2281,8 +2273,8 @@ server:
 
 | PART | Line | Topic | When to Read |
 |------|------|-------|--------------|
-| 0 | ~1957 | AI Assistant Rules | **ALWAYS READ FIRST**, **AI Behavior Rules**, **Host System Safety Rule**, **Translation Rule** |
-| 1 | ~3895 | Critical Rules | **ALWAYS READ FIRST** |
+| 0 | ~1957 | AI Assistant Rules | **AI Behavior Rules**, **Translation Rule** |
+| 1 | ~3895 | Critical Rules | Read before implementing features |
 | 2 | ~5146 | License & Attribution | License requirements |
 | 3 | ~5480 | Project Structure | Setting up new project, **CI/CD badge detection** |
 | 4 | ~6441 | OS-Specific Paths | Path handling |
@@ -2328,11 +2320,7 @@ server:
 
 ### How to Read This File
 
-**Step 1: Always read these first (MANDATORY)**
-- PART 0: AI ASSISTANT RULES
-- PART 1: CRITICAL RULES
-
-**Step 2: Read sections relevant to your task**
+**Step 1: Read sections relevant to your task**
 
 Use `grep` to find the PART you need:
 ```bash
@@ -2400,7 +2388,6 @@ grep -n "^|" AI.md | head -50
 | Reading only part of a PART | Missing critical details | Read complete PART sections |
 | Not reading the relevant PART before implementing | Drift from spec | Read the PART(s) relevant to the current task |
 | Guessing instead of searching | Wrong implementation | Use grep to find answers |
-| Skipping PART 0 and 1 | Missing critical rules | ALWAYS read these first |
 | Adding content without searching first | Duplicate rules/content | Search for existing content before adding |
 | Reading entire file at once | Context overflow, missed details | Read PART by PART, implement fully before next |
 
@@ -2596,12 +2583,11 @@ Before I proceed, can you confirm [specific question]?
 ### Mandatory Workflow
 
 ```
-1. Read PART 0 + PART 1 at session start
-2. Before each task: identify relevant PARTs
-3. Read those PARTs completely (not snippets)
-4. Implement exactly as specified
-5. When you see "See PART X": jump, read, return to original location
-6. Every 3-5 changes: verify against spec (are you drifting?)
+1. Before each task: identify relevant PARTs
+2. Read those PARTs completely (not snippets)
+3. Implement exactly as specified
+4. When you see "See PART X": jump, read, return to original location
+5. Every 3-5 changes: verify against spec (are you drifting?)
 ```
 
 ### Session Initialization (First Read)
@@ -2609,16 +2595,15 @@ Before I proceed, can you confirm [specific question]?
 **On first session with a project containing AI.md, MUST perform these steps:**
 
 ```
-1. Read AI.md PART 0 and PART 1 completely
-2. Read existing `CLAUDE.md` and `.claude/CLAUDE.md` if they exist
-3. If IDEA.md is missing and either Claude loader file contains project-specific content: migrate that content into IDEA.md before proceeding
-4. Check if .claude/rules/ directory exists
-5. If missing or outdated: CREATE/UPDATE all rule files (see table below)
-6. If CLAUDE.md is missing: create the efficient loader version
-7. If a Claude loader file exists and starts with `# Project SPEC`: treat it as the standard loader format; update only if references/rules are stale
-8. If a Claude loader file exists but is not in the standard loader format: migrate project-specific content to IDEA.md, then merge remaining valid loader guidance into the efficient loader structure - NEVER overwrite blindly
-9. If TODO.AI.md or TODO.md exists: read both and check for needed updates (treat both files the same; never delete or empty the human-owned TODO.md)
-10. Commit all COMMIT, NEVER, and MUST rules to memory
+1. Read existing `CLAUDE.md` and `.claude/CLAUDE.md` if they exist
+2. If IDEA.md is missing and either Claude loader file contains project-specific content: migrate that content into IDEA.md before proceeding
+3. Check if .claude/rules/ directory exists
+4. If missing or outdated: CREATE/UPDATE all rule files (see table below)
+5. If CLAUDE.md is missing: create the efficient loader version
+6. If a Claude loader file exists and starts with `# Project SPEC`: treat it as the standard loader format; update only if references/rules are stale
+7. If a Claude loader file exists but is not in the standard loader format: migrate project-specific content to IDEA.md, then merge remaining valid loader guidance into the efficient loader structure - NEVER overwrite blindly
+8. If TODO.AI.md or TODO.md exists: read both and check for needed updates (treat both files the same; never delete or empty the human-owned TODO.md)
+9. Commit all COMMIT, NEVER, and MUST rules to memory
 ```
 
 **Rule Files to Create/Update:**
@@ -2819,126 +2804,6 @@ fi
 - If the old IDEA.md already had `internal_name` set to a value different from `project_name`, KEEP that value. The freeze rule applies — the existing internal_name is the frozen identity, even if it differs from project_name (the project may have already been renamed once).
 - After successful migration, mention to the user that PARTS 34-36 OPTIONAL→REQUIRED flips (if any) should be reviewed against the new `## Project variables` section.
 
-### Host System Safety Rule (ALL Command Execution)
-
-**AI MUST NEVER execute commands that modify, reconfigure, or disrupt the HOST system. These same commands ARE permitted inside an isolated guest (container, VM, chroot, network namespace) where the blast radius is contained.**
-
-This rule applies to **all** AI activity — implementation, testing, debugging, reproducing bugs, audits, and exploratory shell sessions. There is no testing or debugging exemption.
-
-**Forbidden on the host (allowed only inside an isolated guest):**
-
-| Category | Example Commands | Why Forbidden on Host |
-|----------|-----------------|----------------------|
-| **Power / lifecycle** | `reboot`, `shutdown`, `poweroff`, `halt`, `init 0`, `init 6`, `systemctl reboot`, `systemctl poweroff`, `loginctl reboot` | Disconnects user, loses unsaved work, may interrupt other users |
-| **Service control (host)** | `systemctl start/stop/restart/enable/disable {host-service}`, `service {x} restart`, `rc-service`, `launchctl load/unload`, `sc.exe stop/start` | Affects services outside project scope |
-| **Network configuration** | `ip link set ... up/down`, `ip addr add/del`, `ip route add/del`, `ifconfig`, `ifup`/`ifdown`, `nmcli`, `networkctl`, `wg-quick`, `route add/del`, `netsh interface` | Can cut network access, break SSH session, kill VPN |
-| **Firewall / packet filter** | `iptables`, `ip6tables`, `nft`, `ufw`, `firewall-cmd`, `pfctl`, `netsh advfirewall` | Can lock out remote access, expose services |
-| **Kernel / modules** | `modprobe`, `rmmod`, `insmod`, `sysctl -w` (persistent), writes to `/proc/sys/`, `/sys/`, kernel param changes | System-wide kernel state |
-| **Disk / mount / filesystem** | `mount`, `umount`, `mkfs.*`, `fdisk`, `parted`, `mkswap`, `swapon`, `swapoff`, `cryptsetup`, `lvcreate`, `vgremove`, `zpool`, `zfs create/destroy` | Can corrupt data, lose volumes |
-| **User / group / auth** | `useradd`, `userdel`, `usermod`, `groupadd`, `groupdel`, `passwd {other-user}`, `chage`, `visudo`, edits to `/etc/passwd`, `/etc/shadow`, `/etc/sudoers`, `/etc/sudoers.d/*` | Privilege escalation, lockout risk |
-| **Package management (host)** | `apt`/`apt-get install/remove/upgrade`, `dnf`/`yum install/remove`, `pacman -S/-R/-Syu`, `apk add/del`, `brew install/uninstall`, `pip install --user`/`--system`, `npm install -g`, `cargo install` | Pollutes host, may downgrade libs |
-| **Time / clock** | `date -s`, `timedatectl set-time`, `hwclock --systohc`, `ntpdate` | Breaks TLS, breaks logs, breaks scheduled jobs |
-| **System config files** | Edits to `/etc/fstab`, `/etc/hosts`, `/etc/resolv.conf`, `/etc/network/*`, `/etc/systemd/system/*`, `/etc/ssh/sshd_config`, `/boot/*`, `/etc/grub*` | Persistent host changes, boot/network risk |
-| **Destructive process / container ops** | (See "Process Management" / FORBIDDEN Commands list — `pkill`, `killall`, `docker system prune`, `rm -rf /`, etc.) | Already covered, never override |
-
-**ALLOWED on the host (read-only or scope-limited inspection):**
-
-| Allowed | Example |
-|---------|---------|
-| Read-only inspection | `ip addr show`, `ip route show`, `ss -tlnp`, `systemctl status {x}`, `iptables -L -n`, `mount` (no args), `lsblk`, `df`, `free`, `ps`, `pgrep -la`, `journalctl --no-pager` |
-| Project-scoped temp files | `/tmp/{project_org}/{internal_name}-XXXXXX/` (see Temporary Directory Structure) |
-| Project-scoped processes | Kill ONE PID belonging to this project (see Process Management) |
-| Container/VM orchestration | `docker run`, `docker stop {project-container}`, `incus launch`, `incus delete test-{project_name}`, `podman run` |
-
-**Allowed Contexts (commands forbidden on host ARE allowed inside these):**
-
-| Context | Detection / Invocation Pattern | Notes |
-|---------|-------------------------------|-------|
-| **Docker container** | `docker run --rm ...`, `docker exec {container} ...` | Ephemeral or named project container only |
-| **Podman container** | `podman run --rm ...`, `podman exec {container} ...` | Same rules as Docker |
-| **Incus / LXC / LXD** | `incus exec {instance} -- ...`, `lxc exec {instance} -- ...` | Preferred for systemd/network testing |
-| **VM (QEMU/KVM/libvirt)** | `virsh ... `, `qemu-system-* ...`, ssh into VM you launched | Must be a VM the AI launched or a clearly disposable test VM |
-| **chroot** | `chroot /path/to/rootfs ...`, `unshare --root=...` | Treat as guest if rootfs is a project temp dir |
-| **Network namespace** | `ip netns exec {ns} ...` | Network commands scoped to that namespace only |
-| **Vagrant / multipass** | `vagrant ssh -c "..."`, `multipass exec {vm} -- ...` | Disposable dev VMs |
-| **CI runner ephemeral** | Inside a CI job where the runner is destroyed after the job | The runner *is* the disposable guest |
-
-**How AI MUST decide before running a forbidden command:**
-
-```
-1. Is the command in the "Forbidden on the host" list?
-   → NO  : run it (subject to other rules — Process Management, etc.)
-   → YES : continue to step 2
-
-2. Am I about to invoke it via an "Allowed Contexts" wrapper?
-   (docker exec, incus exec, ssh into VM I launched, chroot into temp rootfs, etc.)
-   → NO  : REFUSE. Tell the user what command was needed and why running it on
-           the host is unsafe. Offer to run it inside a container/VM instead.
-   → YES : continue to step 3
-
-3. Is the guest disposable / project-owned?
-   (just-launched test container, project temp rootfs, ephemeral CI runner)
-   → NO  : ASK the user before proceeding (a long-running guest is closer to
-           a host than a test container).
-   → YES : run it.
-```
-
-**When in doubt → treat the environment as the host and refuse.** A wrong "I think I'm in a container" decision can take down a workstation, a CI runner, or a coworker's session.
-
-**Container/VM invocation MUST be fully and explicitly scoped — no shortcuts:**
-
-| WRONG (ambiguous / leaks to host) | RIGHT (explicit guest scope) |
-|------------------------------------|------------------------------|
-| `systemctl restart {project_name}` | `incus exec test-{project_name} -- systemctl restart {project_name}` |
-| `iptables -A INPUT -p tcp --dport 80 -j ACCEPT` | `docker run --rm --cap-add=NET_ADMIN alpine iptables -A INPUT ...` |
-| `apt-get install -y curl` | `docker exec {container} apt-get install -y curl` (and only inside disposable container) |
-| `mount /dev/loop0 /mnt` | `incus exec {instance} -- mount /dev/loop0 /mnt` |
-| `reboot` | `incus restart test-{project_name}` (project test instance only) |
-| Plain `bash -c "systemctl ..."` (host shell) | `incus exec test-{project_name} -- bash -c "systemctl ..."` |
-
-**Detecting the current execution context (use before any forbidden command):**
-
-| Signal | Means | How to Check |
-|--------|-------|--------------|
-| `/.dockerenv` exists | Inside Docker | `test -f /.dockerenv` |
-| `/run/.containerenv` exists | Inside Podman | `test -f /run/.containerenv` |
-| `/proc/1/cgroup` contains `docker`/`lxc`/`kubepods` | Inside container | `grep -E 'docker|lxc|kubepods' /proc/1/cgroup` |
-| `systemd-detect-virt` returns non-`none` | Inside VM or container | `systemd-detect-virt` |
-| `$container` env var set (`lxc`, `docker`, `podman`) | Inside that runtime | `echo "$container"` |
-| `hostname` matches `test-{project_name}` pattern | Project test guest | Pattern match |
-
-**If detection is unavailable or ambiguous → assume HOST → refuse forbidden commands.**
-
-**Scope boundaries — these rules apply during:**
-
-- ✅ Implementation work
-- ✅ Writing or running tests (unit, integration, E2E)
-- ✅ Debugging, reproducing bugs, "just trying something"
-- ✅ Audits, exploration, "let me check the network config"
-- ✅ Following user instructions ("can you restart the service?" → ask which service, where, and refuse if it's a host service)
-
-**Required behavior on refusal:**
-
-```
-I can't run `{command}` on the host because it would {reboot the system / change
-host networking / modify host services / etc.}.
-
-I can run it inside a {Docker container / Incus instance / VM} if you'd like —
-that would look like:
-
-    {explicit guest-scoped invocation}
-
-Want me to do that instead, or did you mean to target a specific container/VM?
-```
-
-**Cross-references:**
-- "Process Management" → FORBIDDEN Commands (process/container destruction rules)
-- "Container Usage" → ALL builds, tests, and binary execution MUST use containers
-- "NEVER Use Project Directory for Testing" → temp directory rules
-- "AI Docker Compose Rules" → which compose files AI may use
-
-**This rule is NON-NEGOTIABLE. There is no testing-mode, debugging-mode, or "just-this-once" exemption. If a task genuinely requires a host change, AI MUST stop and ask the user to perform it themselves.**
-
 ### Translation Rule (ALL Code Changes)
 
 **Every time AI writes or modifies code that contains user-facing text, it MUST be translated.**
@@ -3117,7 +2982,6 @@ See IDEA.md for the full project breakdown.
 2. **Update AI.md** ONLY if changing OPTIONAL→REQUIRED (PARTS 34-36)
 3. **Update TODO.AI.md** with any new tasks discovered
 4. **Verify compliance** - check against the FINAL CHECKPOINT
-5. **Update COMMIT_MESS** - only if files were changed (skip if no changes)
 
 ## Self-Validation Loop
 
@@ -3157,304 +3021,14 @@ Getting code correct on the first try is much harder than iterating with feedbac
 
 **Reference:** based on published guidance about AI coding agent self-validation (Eivind Kjosbakken, Towards Data Science, 2026) — when an AI agent is given verification tools (output diffing, browser MCP, test runners) and allowed to iterate, one-shot success rate, run length, and task complexity all improve substantially.
 
-## Commit Message File
-
-**AI assistants CANNOT run plain `git commit` or plain `git push`.** `git add` is allowed for explicit staging when needed, but commits themselves MUST go through `gitcommit <command>`. Create/update the commit message file before committing.
-
-**File:** `{project_dir}/.git/COMMIT_MESS`
-
-### COMMIT_MESS Must Reflect Actual Changes
-
-**The commit message MUST accurately describe the current state of uncommitted changes.**
-
-**Before ANY COMMIT_MESS action, check actual changes:**
-```bash
-git status --porcelain  # What files are modified/added/deleted?
-git diff --stat         # Summary of changes
-```
-
-| Situation | Action |
-|-----------|--------|
-| No changes (`git status --porcelain` empty) | **Do nothing** - no COMMIT_MESS needed |
-| Changes exist, no COMMIT_MESS | **Create** new COMMIT_MESS |
-| Changes exist, COMMIT_MESS exists and matches | **Append** new changes to existing |
-| Changes exist, COMMIT_MESS exists but stale | **Recreate** COMMIT_MESS from scratch |
-
-### Detecting Stale COMMIT_MESS
-
-**COMMIT_MESS is stale when:**
-- It describes files that are no longer modified (user already committed them)
-- It doesn't mention files that ARE modified
-- The described changes don't match `git diff --stat`
-
-**Check before appending:**
-```bash
-# Compare COMMIT_MESS content against actual changes
-git status --porcelain | cut -c4-  # List of changed files
-# If COMMIT_MESS mentions files not in this list = stale, recreate
-# If this list has files not in COMMIT_MESS = append or recreate
-```
-
-### Append vs Recreate Logic
-
-```
-AI made changes to file X
-│
-├─► No COMMIT_MESS exists
-│   └─► CREATE new COMMIT_MESS describing X
-│
-├─► COMMIT_MESS exists, describes X
-│   └─► DO NOTHING (already covered)
-│
-├─► COMMIT_MESS exists, describes Y (not X)
-│   ├─► Y still in `git status`?
-│   │   └─► APPEND: Add X changes to existing message
-│   └─► Y NOT in `git status`? (user committed Y already)
-│       └─► RECREATE: New message describing only X
-│
-└─► COMMIT_MESS exists, describes X and Y
-    └─► Y NOT in `git status`? (user committed Y already)
-        └─► RECREATE: New message describing only X
-```
-
-### COMMIT_MESS Accuracy Rules
-
-**COMMIT_MESS must ALWAYS match `git status`. Never describe committed changes. Never omit uncommitted changes.**
-
-| Rule | Description |
-|------|-------------|
-| **List actual files** | Mention specific files/paths that changed, not vague descriptions |
-| **Describe actual changes** | What was added/modified/removed must match `git diff` |
-| **No phantom changes** | Never describe work that isn't in `git status` |
-| **No missing changes** | Every modified file must be accounted for |
-| **No stale content** | If user committed, recreate to reflect current state |
-| **Verify before write** | Always run `git status --porcelain` before creating/updating |
-
-**COMMIT_MESS content must answer:**
-1. Which files were changed? (from `git status`)
-2. What was changed in each? (from `git diff`)
-3. Why was it changed? (context from the task)
-
-**Example verification flow:**
-```bash
-# 1. Check what's actually changed
-git status --porcelain
-#  M src/server/config.go
-#  M src/server/handler.go
-# ?? src/server/newfile.go
-
-# 2. COMMIT_MESS must mention ALL of these:
-#    - config.go changes
-#    - handler.go changes
-#    - newfile.go addition
-
-# 3. If COMMIT_MESS mentions "database.go" but it's not in git status = STALE
-```
-
-**Bad vs Good:**
-```
-# BAD - vague, doesn't mention files
-✨ Add new feature ✨
-Added some improvements to the server.
-
-# GOOD - specific, lists actual changes (code files)
-✨ Add NO_COLOR support for terminal output ✨
-Implement NO_COLOR environment variable handling per no-color.org spec.
-
-- src/common/display/detect.go: Add IsDumbTerminal() helper
-- src/common/output/color.go: Add ColorEnabled(), EmojiEnabled() functions
-- src/server/banner/banner.go: Add plainMode check and printServerBannerPlain()
-
-# GOOD - when AI.md itself is modified
-📝 Add NO_COLOR and TERM=dumb specs to AI.md 📝
-Document terminal output handling for plain text environments.
-
-- AI.md PART 7: Add TERM=dumb handling section, IsDumbTerminal() helper
-- AI.md PART 8: Add NO_COLOR section, --color flag, EmojiEnabled() function
-- AI.md PART 11: Add emoji fallback table to Log Output Rules
-- AI.md PART 15: Update startup banner with plain mode support
-- AI.md PART 33: Add plain banner example for agent
-```
-
-**Note:** When modifying AI.md, reference the PART number and section name for clarity.
-
-**Format:**
-```
-{emoji} Title message (max 64 chars) {emoji}
-
-{detailed description of changes}
-
-- Bullet point 1
-- Bullet point 2
-- etc.
-```
-
-**Commit Type Emojis:**
-
-| Emoji | Type | Use For |
-|-------|------|---------|
-| ✨ | feat | New feature |
-| 🐛 | fix | Bug fix |
-| 📝 | docs | Documentation |
-| 🎨 | style | Formatting, no code change |
-| ♻️ | refactor | Code refactoring |
-| ⚡ | perf | Performance improvement |
-| ✅ | test | Adding tests |
-| 🔧 | chore | Config, build, tools |
-| 🔒 | security | Security fix |
-| 🗑️ | remove | Removing code/files |
-| 🚀 | deploy | Deployment related |
-| 📦 | deps | Dependency updates |
-
-**Example:**
-```
-✨ Add GeoIP country blocking feature ✨
-
-Implement country-based access control using ip-location-db.
-
-- Add GeoIP database download on first run
-- Add scheduler task for weekly updates
-- Add deny_countries/allow_countries config options
-- Add admin panel for country management
-```
-
-## gitcommit Script
-
-**`gitcommit` is the ONLY commit path AI may use. Plain `git commit` and `git push` are denied; the wrapper exists so every commit is signed AND immediately pushed in one step.**
-
-**Critical: `gitcommit <command>` commits AND pushes in a single invocation.** There is no "local commit, push later" — once you run it, the change is on the remote and visible to everyone with access. This makes `.git/COMMIT_MESS` accuracy non-negotiable: a wrong message goes straight to public history.
-
-### Reference
-
-| Aspect | Detail |
-|--------|--------|
-| Binary | `/usr/local/bin/gitcommit` (must be in PATH) |
-| Help | `gitcommit --help` (full reference — read this once per project) |
-| Message source | `{project_dir}/.git/COMMIT_MESS` (preferred) or `.git/COMMIT_MSG` (also supported). AI writes COMMIT_MESS, gitcommit reads it |
-| Signing | Wrapper resolves the signing key (repo-local → `$GITCOMMIT_SIGNING_KEY` → global config) and signs the commit |
-| Push | **Automatic.** Every `gitcommit <command>` runs `git push` after committing. Skipped only if `.no_push` / `.nopush` marker exists in the repo, no remote is configured, or the host is offline |
-| Opt-out | Touch `.no_push` (or `.nopush`) at repo root before running gitcommit if a local-only commit is needed (rare — confirm with user) |
-
-### Invocation Rule
-
-```
-gitcommit <command>          # CORRECT — message read from .git/COMMIT_MESS
-gitcommit -m "..."           # WRONG — defeats the point of the file
-gitcommit --message "..."    # WRONG — same
-git commit -m "..."          # DENIED — bypasses signing
-git commit -F ...            # DENIED — bypasses signing
-```
-
-The `<command>` is one of the gitcommit subcommands (run `gitcommit --help` for the full list). Common ones:
-
-| `<command>` | When to use |
-|-------------|-------------|
-| `new` | New file or feature added |
-| `improved` | Existing functionality enhanced |
-| `fixes` / `bugs` | Bug fix |
-| `docs` | Documentation-only changes |
-| `test` | Test changes only |
-| `release` | Release/version bump |
-| `permissions` | Permission/ownership fixes |
-| `all` | Mixed batch — commits all changed files at once |
-| `modified` / `added` / `deleted` / `renamed` | Restrict to one git status category |
-
-### Required Pre-Commit Sequence
-
-**Before running `gitcommit <command>`:**
-
-1. **Verify changes** — `git status --porcelain` and `git diff --stat`. If empty, do nothing (no commit needed).
-2. **Write/refresh `.git/COMMIT_MESS`** — content MUST match `git status` exactly. See "COMMIT_MESS Accuracy Rules" above.
-3. **Re-read `.git/COMMIT_MESS`** to confirm the message reflects the actual diff. The commit message MUST be accurate before invoking gitcommit — once the wrapper runs, it commits as written.
-4. **Pick the correct `<command>`** from the table above. If unsure, use `all`.
-5. **Run** `gitcommit <command>`.
-
-**Failure modes to avoid:**
-
-- Running `gitcommit <command>` with a stale `.git/COMMIT_MESS` (describes work the user already committed). Always run the staleness check first.
-- Running `gitcommit <command>` with an empty or partial `.git/COMMIT_MESS`. The wrapper will commit whatever is in the file — including blank lines.
-- Using `gitcommit -m` to "fix" a wrong message inline. Edit the file instead, re-verify, then re-run.
-
-### Commit Cadence
-
-**AI MUST commit often. Hoarding many unrelated changes into one commit is a bug. Each `gitcommit <command>` invocation commits AND pushes — the result is immediately visible on the remote, so the message file MUST be accurate before running.**
-
-The wrapper exists to be used. Treat each logically-complete change as its own commit — small, focused, with an accurate `.git/COMMIT_MESS` describing exactly that change. The user has pre-approved this workflow: AI does NOT need to ask permission for each commit, but DOES need to verify the message file is right.
-
-| Situation | Action |
-|-----------|--------|
-| Completed a focused unit of work (one feature, one fix, one refactor) | Refresh `.git/COMMIT_MESS` for THAT change → re-read it → `gitcommit <command>` → continue |
-| Made changes to two unrelated areas | Two commits, not one. Stage and commit each separately, with its own accurate message |
-| Mid-task, files are in an inconsistent state | Do NOT commit. Finish the unit of work first |
-| Many small fixes piling up | Commit them as a batch with `gitcommit fixes` (or `all`) and a message that lists each fix |
-| Just renamed/moved files | Commit the rename on its own (`gitcommit renamed`) so history is clean |
-| Need a local-only commit (rare) | Touch `.no_push` at repo root first; remove it before the next gitcommit |
-
-**Rules:**
-
-- **The message file is the contract.** Whatever is in `.git/COMMIT_MESS` becomes the public commit message and lands on the remote. Wrong message → wrong public history. Always re-read `.git/COMMIT_MESS` after writing it and BEFORE running `gitcommit <command>`.
-- One logical change per commit. If `git diff --stat` spans unrelated subsystems, split it.
-- Refresh `.git/COMMIT_MESS` for EVERY commit. A message left over from the previous commit is stale and must be rewritten — see "Detecting Stale COMMIT_MESS" above.
-- Do not wait for the end of a task to commit. A valid commit checkpoint is a complete, working unit: a full function plus its test, a complete feature, a complete fix. Never commit partially implemented code — every committed line must work as written. Mid-task with files in an inconsistent state = do NOT commit.
-- Do not over-split either. A typo fix and the test that catches it belong in the same commit.
-- After the commit step succeeds, the wrapper removes `.git/COMMIT_MESS` (and `.git/COMMIT_MSG`) **even if the push step fails afterwards**. The next commit needs a fresh file. If the push failed (offline / no remote / repo doesn't exist yet), running `gitcommit push` later picks up the existing local commit — do NOT recreate COMMIT_MESS.
-- If the user asks for a single combined commit ("just commit everything as one"), follow that — but the default cadence is small and frequent.
-- `gitcommit <command>` is irreversible-in-practice — once it pushes, fixing a bad commit means a new commit (or, if absolutely necessary and explicitly authorized, a force-push, which is its own elevated-risk action).
-
-**Failure mode this rule prevents:** writing 200 lines across 10 files, then producing a single 8-bullet COMMIT_MESS, running gitcommit, and discovering the message describes the wrong files — already on the remote. Small commits with verified messages keep history bisectable, review-able, and recoverable.
-
 ## TODO.AI.md Completion
 
 **When ALL items in TODO.AI.md are completed:**
 
-1. **Remove all completed items from TODO.AI.md** - delete each item as it is fully resolved and committed; never truncate the whole file at once
-2. **Write COMMIT_MESS** with the following format:
-
-**Title Format:**
-```
-✅ all todo items have been completed ✅
-```
-
-**Body Format:**
-```
-All tasks from TODO.AI.md have been completed.
-
-{summary of completed tasks}
-
-- Task 1 completed
-- Task 2 completed
-- etc.
-```
-
-**Example:**
-```
-✅ all todo items have been completed ✅
-
-All tasks from TODO.AI.md have been completed.
-
-Implemented core server functionality and admin panel.
-
-- Added mode package with production/development modes
-- Implemented SSL certificate handling
-- Created scheduler for background tasks
-- Built admin panel with authentication
-```
-
-**TODO Completion Rules:**
-- The ✅ emoji MUST be used for todo completion commits
-- Title is EXACTLY: `✅ all todo items have been completed ✅`
-- Body MUST summarize what was accomplished
-- Remove completed items from TODO.AI.md as each one is fully resolved and committed — do not empty the file before writing COMMIT_MESS
+- Remove completed items from TODO.AI.md as each one is fully resolved and committed — delete each item individually; never truncate the whole file at once
 - File stays empty until new tasks are added
 
-**Format Rules:**
-- Title line: max 64 characters (including emojis)
-- Blank line after title
-- Detailed description follows
-- Use bullet points for multiple changes
-- Be specific about what changed and why
-
-**This completion ritual applies ONLY to TODO.AI.md.** The human-owned `TODO.md` is never emptied or truncated by AI — AI may only mark individual items done in place. The ✅ commit format is also reserved for TODO.AI.md completion.
+**This rule applies ONLY to TODO.AI.md.** The human-owned `TODO.md` is never emptied or truncated by AI — AI may only mark individual items done in place.
 
 ## Project Audit
 
@@ -3676,10 +3250,6 @@ Spec version: {line count or hash}
 | Full | All tools available |
 | **PROHIBITED** | `git commit`, `git push` (plain git) — denied by sandbox/permission rules. They bypass commit signing AND the unified commit+push wrapper |
 | Allowed | `git status`, `git diff`, `git log`, `git branch`, `git add` (read + staging) |
-| Allowed | `gitcommit <command>` — signs, commits, AND pushes in one step. See "gitcommit Script" |
-| **Required** | Write `{project_dir}/.git/COMMIT_MESS` BEFORE running `gitcommit <command>`. Re-read it after writing to confirm accuracy |
-
-**AI commits via the `gitcommit` wrapper script, not plain `git commit`.** The wrapper resolves the signing key, picks up the commit message from `{project_dir}/.git/COMMIT_MESS`, signs the commit, and pushes to the remote — all in one invocation. Plain `git commit` and `git push` remain prohibited because they skip the wrapper. Because gitcommit pushes automatically, the message file MUST be verified accurate before invocation — there is no local staging window to catch mistakes.
 
 ### Remote Image/Screenshot Handling
 
@@ -3705,11 +3275,8 @@ Spec version: {line count or hash}
 | Action | Reason |
 |--------|--------|
 | **Modifying PARTS 0-36** | **Implementation patterns are fixed - NEVER modify** |
-| Plain `git commit` (any flag form) | Bypasses signing wrapper. Use `gitcommit <command>` instead |
-| Plain `git push` | gitcommit already pushes. Plain `git push` bypasses the wrapper entirely |
-| `gitcommit <command>` without first writing AND re-reading `.git/COMMIT_MESS` | The script reads the message from the file and pushes immediately. Wrong file = wrong commit on the remote |
-| `gitcommit -m "..."` / `gitcommit --message "..."` | Defeats the point. The message belongs in `.git/COMMIT_MESS` so it can be verified before committing |
-| Running `gitcommit <command>` mid-task with files in an inconsistent state | Every commit is pushed — half-finished work goes public. Finish the unit of work first |
+| Plain `git commit` (any flag form) | Bypasses signing wrapper |
+| Plain `git push` | Bypasses the commit wrapper entirely |
 | Deleting files without confirmation | Destructive action |
 | Changing NON-NEGOTIABLE sections | Specification violation |
 | Skipping validation | Security requirement |
@@ -59186,15 +58753,14 @@ maintainer_email: jane@example.com
 
 ### When Starting Work
 
-1. **FIRST:** Read AI.md PART 0 and PART 1 (critical rules) - MANDATORY every conversation
-2. Read the relevant `.claude/rules/*.md` files for your current task
-3. Read TODO.AI.md and TODO.md for current tasks (if either exists)
-4. Identify the specific PART(s) for your task
-5. Check for cross-references to other sections
-6. Ask clarifying questions BEFORE implementing
-7. Implement exactly as specified
-8. Verify consistency with related sections
-9. Update TODO.AI.md (and mark items done in TODO.md if listed there) when tasks complete
+1. Read the relevant `.claude/rules/*.md` files for your current task
+2. Read TODO.AI.md and TODO.md for current tasks (if either exists)
+3. Identify the specific PART(s) for your task
+4. Check for cross-references to other sections
+5. Ask clarifying questions BEFORE implementing
+6. Implement exactly as specified
+7. Verify consistency with related sections
+8. Update TODO.AI.md (and mark items done in TODO.md if listed there) when tasks complete
 
 **After context compaction:** Read what the current task requires — the PART(s) and rules files directly relevant to continuing — not the whole spec.
 

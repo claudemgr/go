@@ -8,113 +8,6 @@
 
 ---
 
-# 🆕 FIRST-TIME PROJECT SETUP
-
-**`AI.md` is a read-only specification. Project-specific values live in `IDEA.md ## Project variables`, and the placeholders in this file are resolved from there.**
-
-## Detecting Unconfigured Project Setup
-
-```bash
-# Project is not configured until IDEA.md exists and has required variables
-[ ! -f IDEA.md ] && echo "SETUP NEEDED - IDEA.md missing"
-
-have_name=$(grep -cE '^project_name:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
-have_org=$(grep -cE '^project_org:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
-have_internal_name=$(grep -cE '^internal_name:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
-have_internal_org=$(grep -cE '^internal_org:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
-
-[ "$have_name" -eq 0 ] || [ "$have_org" -eq 0 ] || [ "$have_internal_name" -eq 0 ] || [ "$have_internal_org" -eq 0 ] && \
-  echo "SETUP NEEDED - IDEA.md project variables incomplete"
-```
-
-## Auto-Detecting Project Values
-
-**Project name and org can be inferred automatically:**
-
-| Value | Primary Source | Fallback |
-|-------|----------------|----------|
-| `{project_name}` | IDEA.md `## Project variables` | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then `basename "$PWD"` |
-| `{project_org}` | IDEA.md `## Project variables` | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then `basename "$(dirname "$PWD")"` |
-| `{internal_name}` | IDEA.md `## Project variables` (always — set once at first run, never edited after) | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then first-time setup: copy from `{project_name}` |
-| `{internal_org}` | IDEA.md `## Project variables` (always — set once at first run, never edited after) | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then first-time setup: copy from `{project_org}` |
-| `{plist_name}` | **Derived (not stored)**: `io.github.{internal_org}.{internal_name}` | — |
-
-**Detection commands (use commands — never guess):**
-```bash
-# Project name: current directory name
-project_name=$(basename "$PWD")
-
-# Project org: parent directory name (assumes ~/org/project structure)
-project_org=$(basename "$(dirname "$PWD")")
-
-# Internal name: same as project_name on first run, frozen forever after
-internal_name="$project_name"
-
-# Internal org: same as project_org on first run, frozen forever after
-internal_org="$project_org"
-
-# Plist name: derived from frozen internal_org + internal_name (Bundle ID convention)
-plist_name="io.github.${internal_org}.${internal_name}"
-```
-
-**Why separate `{internal_name}` and `{internal_org}`:** if a project or its org renames itself later, the new names apply to user-visible places (app title, docs, packaging names, store listing, website). But the frozen pair stays stable forever, keeping config/data/cache paths, desktop bundle identifiers, package IDs, keychain entries, and updater channels stable.
-
-**Rule:** `{internal_name}` and `{internal_org}` are set ONCE at first-time setup and are immutable for the life of the project. Editing either later is a migration, not a routine rename. **Anything written to disk on the user's machine (config dirs, data dirs, Bundle IDs, package identifiers) MUST use the frozen pair, never `{project_name}` or `{project_org}`.**
-
-## First-Time Setup Flow
-
-```
-AI reads AI.md for the first time
-│
-├─► Check: Does IDEA.md exist with required `## Project variables` entries?
-│   │
-│   ├─► NO (setup needed)
-│   │   │
-│   │   ├─► 1. Check if IDEA.md exists
-│   │   │   ├─► YES: Read `## Project variables`; if incomplete, fill only the missing required values
-│   │   │   └─► NO: Check existing `CLAUDE.md` and `.claude/CLAUDE.md` for valid project-specific details, then fall back to directory structure commands — never guess
-│   │   │
-│   │   ├─► 2. Create IDEA.md if it doesn't exist
-│   │   │   - If a long-form/project-specific `CLAUDE.md` or `.claude/CLAUDE.md` already exists, MIGRATE its valid project description, project variables, and business logic into IDEA.md first
-│   │   │   - Do NOT copy loader-only instructions, duplicated AI.md rules, or stale implementation text into IDEA.md
-│   │   │   - On creation, write `internal_name: <project_name>` and `internal_org: <project_org>` to `## Project variables` and warn that both are frozen forever
-│   │   │
-│   │   ├─► 3. Create or update IDEA.md `## Project variables`
-│   │   │   - project_name  → actual project name (lowercase)
-│   │   │   - project_org   → actual org name (lowercase)
-│   │   │   - internal_name → on first run = project_name; afterwards read from IDEA.md, IMMUTABLE
-│   │   │   - internal_org  → on first run = project_org;  afterwards read from IDEA.md, IMMUTABLE
-│   │   │   - Derived UPPERCASE placeholders are computed from these values when referenced
-│   │   │   - {plist_name} is derived as io.github.{internal_org}.{internal_name} and is NOT stored
-│   │   │
-│   │   └─► 4. Proceed with normal operation once IDEA.md is valid
-│   │
-│   └─► YES (already configured)
-│       └─► Proceed with normal operation - read PART 0 first and resolve placeholders from IDEA.md as needed
-```
-
-## Placeholder Reference
-
-**These placeholders are reference tokens used by the spec. They are resolved from `IDEA.md ## Project variables` and are not meant to be manually rewritten throughout `AI.md` during project setup.**
-
-| Placeholder | Case | Mutability | Example |
-|-------------|------|------------|---------|
-| `{project_name}` | lowercase | Mutable (project may rename) | `myapp` |
-| `{PROJECT_NAME}` | UPPERCASE | Mutable | `MYAPP` |
-| `{project_org}` | lowercase | Mutable | `myorg` |
-| `{PROJECT_ORG}` | UPPERCASE | Mutable | `MYORG` |
-| `{internal_name}` | lowercase | **Frozen** at first-time setup | `myapp` |
-| `{INTERNAL_NAME}` | UPPERCASE | **Frozen** | `MYAPP` |
-| `{internal_org}` | lowercase | **Frozen** at first-time setup | `myorg` |
-| `{INTERNAL_ORG}` | UPPERCASE | **Frozen** | `MYORG` |
-| `{plist_name}` | derived | Derived from `{internal_org}` + `{internal_name}` (both frozen) | `io.github.myorg.myapp` |
-
-**Use the frozen pair (`{internal_org}`, `{internal_name}`) for anything stored on disk, registered with the OS, or used as a stable identifier (Bundle IDs, package IDs, keychain entries, dbus names, updater channels). Use the mutable pair (`{project_org}`, `{project_name}`) only for user-visible cosmetic surfaces (app title, README, store listing, website).**
-
-**After setup, this section remains reference-only. The placeholders above are resolved from `IDEA.md ## Project variables`; `AI.md` itself stays read-only.**
-
----
-
 # PROJECT DESCRIPTION
 
 **See `IDEA.md` for project-specific details.**
@@ -322,19 +215,6 @@ The single binary contains **everything the app needs to function**. The user is
 - telemetry-based licensing enforcement
 - artificial limits used for monetization
 
-## Reduced Stop-and-Ask Behavior
-
-AI should be autonomous by default.
-
-**Ask only when one of these is true:**
-1. a required project variable cannot be proven from files/commands
-2. the requested change is destructive or irreversible and intent is ambiguous
-3. a legal, licensing, or security policy conflict cannot be resolved from the spec
-4. privileged/system-wide changes are needed but the user did not explicitly request them
-5. a migration would discard meaningful existing project-specific content
-
-**Do not stop just because there are multiple reasonable implementation details.** Pick the most spec-compliant option and continue.
-
 ---
 
 # PART 1: PROJECT FILES & GOVERNANCE
@@ -358,7 +238,6 @@ AI should be autonomous by default.
 
 | When | Action | Purpose |
 |------|--------|---------|
-| Session start | Read AI.md completely | Understand full context |
 | Before each task | Read only the spec parts relevant to what you are about to implement — do not pre-load speculatively | Prevent token waste |
 | Every 3-5 changes | Stop and verify against spec | Catch drift early |
 | Before task completion | Full compliance check | Ensure correctness |
@@ -398,16 +277,6 @@ Getting code correct on the first try is much harder than iterating with feedbac
 - When verification is genuinely impossible in this environment (no display, no DB, no network): say so explicitly. List what was checked and what could not be, so the user knows where to look
 
 **Reference:** based on published guidance about AI coding agent self-validation (Eivind Kjosbakken, Towards Data Science, 2026) — when an AI agent is given verification tools (output diffing, browser/display, test runners) and allowed to iterate, one-shot success rate, run length, and task complexity all improve substantially.
-
-## Commit Message File
-
-If changes were made, update `.git/COMMIT_MESS` to reflect the actual current uncommitted changes.
-
-**Rules:**
-- Create/update it only when files changed
-- It must match `git status --porcelain` and `git diff --stat`
-- Recreate it if stale
-- Never describe changes that are no longer present
 
 ## Loader Files
 
@@ -1652,7 +1521,7 @@ maintainer_email: {maintainer@example.com}
 - No implementation details — describe behavior, not algorithms or libraries. AI.md PARTs 0–11 define HOW; PART 12 verifies compliance.
 - This template targets GUI / TUI / CLI applications (PART 0 → "One Coherent Product").
 - Cross-reference AI.md PARTs by number for any pattern that already exists there (Docker → PART 5, security → PART 9, license exceptions → PART 11, etc.).
-- `internal_name` and `internal_org` are immutable after first set (FIRST-TIME PROJECT SETUP → "Auto-Detecting Project Values").
+- `internal_name` and `internal_org` are immutable after first set (see "IDEA.md Required Layout" → Project variables rules).
 
 ---
 
