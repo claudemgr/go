@@ -125,10 +125,12 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 | File | Role | Update When |
 |------|------|-------------|
-| **AI.md** | SOURCE OF TRUTH - implementation rules | OPTIONAL→REQUIRED only (see PARTS 34-36) |
+| **AI.md** | SOURCE OF TRUTH - implementation rules (readonly template copy) | No — use SPEC.md for project-specific rule overrides |
+| **SPEC.md** | Project-specific rule overrides — created only when a rule must contradict the template or global. May be empty. SPEC.md wins over AI.md. | When a project rule must differ from the template or global |
 | **IDEA.md** | PROJECT PLAN - must follow AI.md | Features change, project variables change |
 
-**Rule:** If IDEA.md conflicts with AI.md, AI.md wins. Fix IDEA.md.
+**Rule hierarchy:** SPEC.md > AI.md > global CLAUDE.md. If SPEC.md and AI.md conflict, SPEC.md wins — that is its purpose.
+**Rule:** If AI.md and IDEA.md conflict, AI.md wins. Fix IDEA.md.
 
 ## IDEA.md Required Layout
 
@@ -1496,7 +1498,7 @@ On EVERY new conversation or after "context compacted" message:
 13. Let long strings break mobile → Use word-break CSS
 14. Skip validation → Server validates EVERYTHING
 15. Implement without reading spec → Read relevant PART first
-16. Modify TEMPLATE.md or AI.md PART 0-33 content → READ-ONLY SPEC. Project changes go in IDEA.md. The ONLY edits permitted to TEMPLATE.md/AI.md are flipping PARTS 34-36 OPTIONAL→REQUIRED for projects that adopt those features (see PARTS 34-36 flip mechanism)
+16. Modify TEMPLATE.md or AI.md content → READ-ONLY. Project changes go in IDEA.md. To activate optional PARTS 34-36 for this project, declare them in SPEC.md (see "SPEC.md — Optional Part Activation" below)
 17. Edit `## Project variables` in IDEA.md without confirming with the user → Variables drive placeholder resolution used by AI.md; wrong values silently corrupt every reference
 18. Read an image larger than 1000×1000 directly into context → Resize to ≤1000×1000 first via the fallback chain (`magick` → `convert` → `gm convert` → `vipsthumbnail` → `sips` → `ffmpeg`). If none are available, do NOT read the image — tell the user which tool to install. See "Large Image Handling" below.
 19. Use a non-conforming IDEA.md without migration → If IDEA.md exists but lacks the three required sections (`## Project description`, `## Project variables`, `## Business logic`), STOP and migrate it before doing anything else. See "IDEA.md Migration" below.
@@ -2662,7 +2664,7 @@ Before I proceed, can you confirm [specific question]?
 - Create report/analysis files (fix directly instead)
 - Rely on memory — read the relevant PART when you need it; do not load speculatively
 - Add unrequested features
-- Edit TEMPLATE.md or AI.md PART 0-33 content (READ-ONLY). Project changes belong in IDEA.md. PARTS 34-36 OPTIONAL→REQUIRED is the only sanctioned edit, and it must be applied to BOTH IDEA.md and the per-project AI.md.
+- Edit TEMPLATE.md or AI.md content (READ-ONLY). Project changes belong in IDEA.md. To activate optional PARTS 34-36 for this project, declare them in SPEC.md instead.
 - Read an image larger than 1000×1000 directly. Always check dimensions and resize to ≤1000×1000 first (see "Large Image Handling").
 - Treat a non-conforming IDEA.md as authoritative without migration (see "IDEA.md Migration").
 
@@ -2802,7 +2804,7 @@ fi
 - Migration is a one-time operation per project. Once IDEA.md is in the three-section format, do NOT re-run migration on subsequent reads (the detection step above is the gate).
 - If old content does not fit cleanly into one of the three sections, ASK the user — do not invent a fourth section, do not silently drop content.
 - If the old IDEA.md already had `internal_name` set to a value different from `project_name`, KEEP that value. The freeze rule applies — the existing internal_name is the frozen identity, even if it differs from project_name (the project may have already been renamed once).
-- After successful migration, mention to the user that PARTS 34-36 OPTIONAL→REQUIRED flips (if any) should be reviewed against the new `## Project variables` section.
+- After successful migration, mention to the user that any optional PART activations (PARTS 34-36) should be declared in SPEC.md if not already present.
 
 ### Translation Rule (ALL Code Changes)
 
@@ -2934,7 +2936,8 @@ See IDEA.md for the full project breakdown.
 
 | File | Purpose | Update When |
 |------|---------|-------------|
-| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH | OPTIONAL→REQUIRED only |
+| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH, readonly template copy | No — use SPEC.md for project-specific rule overrides |
+| **SPEC.md** | Project-specific rule overrides (optional, may be empty) | When a project rule must contradict the template or global; also used to activate optional PARTS 34-36 |
 | **IDEA.md** | Project plan (WHAT) - must follow AI.md | Features change |
 | **TODO.AI.md** | Task tracking (AI-owned) | Tasks added/completed |
 | **TODO.md** | Task tracking (human-owned) | AI may mark items done; never delete/empty |
@@ -2942,10 +2945,11 @@ See IDEA.md for the full project breakdown.
 | **PLAN.md** | Implementation plan (human-owned) | AI may mark items done; never rewrite |
 | **README.md** | User documentation | Usage changes |
 
-**Hierarchy:**
-- AI.md is ALWAYS the source of truth
-- IDEA.md is just the PLAN - must be 100% SPEC compliant
-- If IDEA.md conflicts with AI.md, AI.md wins - fix IDEA.md
+**Hierarchy:** SPEC.md > AI.md > global CLAUDE.md. If SPEC.md and AI.md conflict, SPEC.md wins — that is its purpose.
+- AI.md is ALWAYS the source of truth for the template baseline
+- SPEC.md overrides AI.md for project-specific rules only
+- IDEA.md is the project PLAN — must be SPEC compliant
+- If IDEA.md conflicts with AI.md, AI.md wins — fix IDEA.md
 
 ## Mandatory Compliance Schedule
 
@@ -2979,7 +2983,7 @@ See IDEA.md for the full project breakdown.
 ## After Work
 
 1. **Update IDEA.md** if features changed
-2. **Update AI.md** ONLY if changing OPTIONAL→REQUIRED (PARTS 34-36)
+2. **Update SPEC.md** if activating optional PARTS 34-36 or adding project-specific rule overrides
 3. **Update TODO.AI.md** with any new tasks discovered
 4. **Verify compliance** - check against the FINAL CHECKPOINT
 
@@ -4755,7 +4759,7 @@ func gUBE(e string) (*U, error) {
 
 | Rule | Description |
 |------|-------------|
-| **AI.md is SOURCE OF TRUTH** | Only modify for OPTIONAL→REQUIRED (PARTS 34-36) |
+| **AI.md is SOURCE OF TRUTH** | Read-only — use SPEC.md for project-specific overrides or optional PART activation |
 | **IDEA.md is the project PLAN** | Update when features change, must follow AI.md |
 | **Keep documentation current** | Update when project state changes |
 | **TODO.AI.md for 3+ tasks** | Required when doing 3 or more tasks |
@@ -58679,7 +58683,7 @@ maintainer_email: jane@example.com
 
 ### Document Rules
 
-- [ ] **AI.md is SOURCE OF TRUTH** - PARTS 0-36 define HOW, PART 37 is reference-only, only flip PARTS 34-36 from OPTIONAL→REQUIRED
+- [ ] **AI.md is SOURCE OF TRUTH** - PARTS 0-36 define HOW, PART 37 is reference-only — read-only; optional PART activation goes in SPEC.md
 - [ ] **IDEA.md is the project PLAN** - WHAT (update when features change)
 - [ ] **IDEA.md must be SPEC compliant** - AI.md always wins conflicts
 - [ ] **IDEA.md examples are illustrative only** - SPEC defines actual patterns

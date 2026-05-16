@@ -22,10 +22,12 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 | File | Role | Update When |
 |------|------|-------------|
-| **AI.md** | SOURCE OF TRUTH - implementation rules | Optional→required policy changes only |
+| **AI.md** | SOURCE OF TRUTH - implementation rules (readonly template copy) | No — use SPEC.md for project-specific rule overrides |
+| **SPEC.md** | Project-specific rule overrides — created only when a rule must contradict the template or global. May be empty. SPEC.md wins over AI.md. | When a project rule must differ from the template or global |
 | **IDEA.md** | PROJECT PLAN - must follow AI.md | Features change, project variables change |
 
-**Rule:** If IDEA.md conflicts with AI.md, AI.md wins. Fix IDEA.md.
+**Rule hierarchy:** SPEC.md > AI.md > global CLAUDE.md. If SPEC.md and AI.md conflict, SPEC.md wins — that is its purpose.
+**Rule:** If AI.md and IDEA.md conflict, AI.md wins. Fix IDEA.md.
 
 ## IDEA.md Required Layout
 
@@ -223,7 +225,8 @@ The single binary contains **everything the app needs to function**. The user is
 
 | File | Purpose | Update When |
 |------|---------|-------------|
-| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH | Optional→required rule changes only |
+| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH, readonly template copy | No — use SPEC.md for project-specific rule overrides |
+| **SPEC.md** | Project-specific rule overrides (optional, may be empty) | When a project rule must contradict the template or global |
 | **IDEA.md** | Project plan (WHAT) | Features or variables change |
 | **TODO.AI.md** | Task tracking (AI-owned) | Tasks added/completed |
 | **TODO.md** | Task tracking (human-owned) | AI may mark done; never delete/empty |
