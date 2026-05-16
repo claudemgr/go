@@ -676,7 +676,16 @@ Every external action (`uses: owner/action@...`) MUST be pinned to a full commit
 2. **Runtime is still supported** — open the action's `action.yml` at the new SHA and check `runs.using`; if it names a runtime that GitHub has deprecated or scheduled for removal, the action will silently fail after that date. Example: `node20` is removed from GitHub-hosted runners on **2026-09-16** — any action still on `node20` must be updated to a SHA where it has migrated to `node24` — all common `actions/*` and `docker/*` actions have already done so
 3. **No supply-chain change** — skim the diff between the old and new SHA; unexpected new dependencies, changed entrypoints, or network calls added to setup steps are red flags
 
-Dependabot covers `github-actions` ecosystem updates automatically when `.github/dependabot.yml` is configured — but it only updates the SHA, not the runtime verification. The runtime check is always manual.
+Renovate covers `github-actions` SHA updates automatically via `pinDigests: true` — but it only updates the SHA, not the runtime verification. The runtime check is always manual.
+
+### Provider CLIs and Local Runner
+
+**Provider CLIs** (prefer over raw `curl` when installed):
+- `gh` — GitHub (Apache-2.0)
+- `glab` — GitLab (MIT)
+- `tea` — Gitea and Forgejo (MIT, compatible API)
+
+**`act`** (nektos/act, MIT) — run GitHub Actions locally with `act -j {job}` to verify before pushing. Not a CI replacement — always let real CI run.
 
 ### Public Repository Governance
 
@@ -720,8 +729,7 @@ CI MUST fail on all providers when tests, coverage gates, secret scans, dependen
 
 ### Dependency Update Policy
 
-- **Renovate** (`renovate.json` at repo root) is the recommended tool — works on GitHub, GitLab, Gitea, and Forgejo in one config. Configure `pinDigests: true` for GitHub Actions entries
-- **Dependabot** (`.github/dependabot.yml`) is acceptable for GitHub-only repos but must not be the sole mechanism on multi-provider projects
+- **Renovate** — `renovate.json` at repo root — Renovate is the only supported dependency update tool (see `cicd_conventions.md`). Configure `pinDigests: true` for GitHub Actions entries
 - Security updates are high priority and MUST go through the same test/security gates as manual changes
 - AI MUST NOT silently change dependency strategy, ignore failing update PRs, or disable update automation to "get green"
 
@@ -1916,7 +1924,6 @@ Instructions for how this agent should behave...
 | `CODE_OF_CONDUCT.md` | `.github/CODE_OF_CONDUCT.md` |
 | `SECURITY.md` | `.github/SECURITY.md` |
 | `CODEOWNERS` | `.github/CODEOWNERS` |
-| `dependabot.yml` | `.github/dependabot.yml` |
 | `FUNDING.yml` | `.github/FUNDING.yml` |
 | `ISSUE_TEMPLATE/` | `.github/ISSUE_TEMPLATE/` |
 | `PULL_REQUEST_TEMPLATE.md` | `.github/PULL_REQUEST_TEMPLATE.md` |
@@ -1929,7 +1936,7 @@ Instructions for how this agent should behave...
   - `.github/CODE_OF_CONDUCT.md`
   - `.github/SECURITY.md`
   - `.github/CODEOWNERS`
-  - `renovate.json` at repo root (universal primary per `cicd_conventions.md`); `.github/dependabot.yml` is an acceptable GitHub-only supplement
+  - `renovate.json` at repo root — Renovate is the only supported dependency update tool (see `cicd_conventions.md`)
   - `.github/ISSUE_TEMPLATE/bug_report.md`
   - `.github/ISSUE_TEMPLATE/feature_request.md`
   - `.github/ISSUE_TEMPLATE/config.yml`
@@ -1960,10 +1967,6 @@ Instructions for how this agent should behave...
 - `.github/CODEOWNERS` MUST define:
   - a catch-all owner for the repo
   - explicit owners for security-sensitive areas such as workflows, Docker/release files, and auth/crypto/update code paths
-- `.github/dependabot.yml` MUST define:
-  - update schedules for every ecosystem actually used by the repo
-  - labels/assignees/reviewers if the project uses them
-  - sane open-PR limits and grouping rules
 - `.github/ISSUE_TEMPLATE/bug_report.md` MUST collect:
   - version/commit
   - environment/platform
@@ -3517,7 +3520,6 @@ Implemented core server functionality and admin panel.
 | **docker/docker-compose.dev.yml** | PART 27 | Dev workflow correct |
 | **docker/rootfs/** | Actual container overlay needs | Entrypoint and overlay files match what the image expects |
 | **.github/CODEOWNERS** | Actual repo layout | Catch-all owner exists and sensitive paths are covered |
-| **.github/dependabot.yml** | Actual ecosystems | Go modules, Actions, and Docker are covered when used |
 | **.github/SECURITY.md** | security.txt/contact/reporting flow | Reporting instructions and support window are accurate |
 | **.github/ISSUE_TEMPLATE/*** | Actual support/reporting model | Bug, feature, support, and vulnerability routing are correct |
 | **.github/workflows/*.yml** | PART 28, actual build | CI/CD builds what exists, tests what exists |
@@ -4624,7 +4626,7 @@ If blocked on current feature:
 ```
 □ Public repo `.github/` files present and project-specific
 □ CODEOWNERS covers repo root and security-sensitive paths
-□ Dependabot configured for all ecosystems actually used
+□ Renovate configured (`renovate.json` at repo root) covering all ecosystems used
 □ Issue/PR/security templates route users correctly
 □ Default-branch protection requirements are defined
 ```

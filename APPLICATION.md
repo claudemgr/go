@@ -1212,7 +1212,16 @@ Every external action (`uses: owner/action@...`) MUST be pinned to a full commit
 2. **Runtime is still supported** — open the action's `action.yml` at the new SHA and check `runs.using`; if it names a runtime that GitHub has deprecated or scheduled for removal, the action will silently fail after that date. Example: `node20` is removed from GitHub-hosted runners on **2026-09-16** — any action still on `node20` must be updated to a SHA where it has migrated to `node24` — all common `actions/*` and `docker/*` actions have already done so
 3. **No supply-chain change** — skim the diff between the old and new SHA; unexpected new dependencies, changed entrypoints, or network calls added to setup steps are red flags
 
-Dependabot covers `github-actions` ecosystem updates automatically when `.github/dependabot.yml` is configured — but it only updates the SHA, not the runtime verification. The runtime check is always manual.
+Renovate covers `github-actions` SHA updates automatically via `pinDigests: true` — but it only updates the SHA, not the runtime verification. The runtime check is always manual.
+
+### Provider CLIs and Local Runner
+
+**Provider CLIs** (prefer over raw `curl` when installed):
+- `gh` — GitHub (Apache-2.0)
+- `glab` — GitLab (MIT)
+- `tea` — Gitea and Forgejo (MIT, compatible API)
+
+**`act`** (nektos/act, MIT) — run GitHub Actions locally with `act -j {job}` to verify before pushing. Not a CI replacement — always let real CI run.
 
 ## Minimum Public Repo Workflows
 
