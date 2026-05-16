@@ -1114,7 +1114,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | `.gitignore` | ✓ | Git ignore rules |
 | `.dockerignore` | ✓ | Docker ignore rules |
 | `.gitattributes` | Optional | Git attributes |
-| `Jenkinsfile` | Optional | Jenkins CI (if used) |
+| `Jenkinsfile` | ✓ | Jenkins pipeline — required on every project per `cicd_conventions.md` |
 | `mkdocs.yml` | ✓ | MkDocs configuration |
 | `.readthedocs.yaml` | ✓ | ReadTheDocs configuration |
 
@@ -1166,7 +1166,7 @@ Rules can be limited to specific file paths using YAML frontmatter:
 ---
 paths:
   - "src/api/**/*.go"
-  - "src/handlers/**/*.go"
+  - "src/handler/**/*.go"
 ---
 
 # API Handler Rules
@@ -1925,7 +1925,7 @@ Instructions for how this agent should behave...
   - `.github/CODE_OF_CONDUCT.md`
   - `.github/SECURITY.md`
   - `.github/CODEOWNERS`
-  - `.github/dependabot.yml`
+  - `renovate.json` at repo root (universal primary per `cicd_conventions.md`); `.github/dependabot.yml` is an acceptable GitHub-only supplement
   - `.github/ISSUE_TEMPLATE/bug_report.md`
   - `.github/ISSUE_TEMPLATE/feature_request.md`
   - `.github/ISSUE_TEMPLATE/config.yml`
@@ -34573,7 +34573,7 @@ Every binary MUST have these values embedded at build time:
 |----------|---------|-------------|
 | `Version` | `1.2.3` | Semantic version from release.txt |
 | `CommitID` | `a1b2c3d` | Git short commit hash |
-| `BuildDate` | `December 4, 2025 at 13:05:13` | Build timestamp |
+| `BuildDate` | `2025-12-04T13:05:13Z` | Build timestamp (ISO 8601 / RFC 3339 UTC per `version_conventions.md`) |
 | `OfficialSite` | `https://api.example.com` | Default server URL (empty if self-hosted) |
 
 **Go code requirement** (in `main.go` or `version.go`):
