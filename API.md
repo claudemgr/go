@@ -690,12 +690,25 @@ Dependabot covers `github-actions` ecosystem updates automatically when `.github
 
 ### Public Repository Workflow Requirements
 
-- Public repos MUST provide at minimum:
-  - `.github/workflows/build.yml` - build, test, coverage, and repo validation
-  - `.github/workflows/release.yml` - tagged/manual release build and publish
-  - `.github/workflows/security.yml` - secret scanning, dependency/security checks, and workflow policy checks
-- If the project also supports Gitea/Forgejo or Jenkins, the equivalent workflows/pipelines MUST enforce the same gates - not a weaker subset
-- CI MUST fail when required tests, coverage gates, secret scans, dependency checks, or release validation fail
+All three workflows are required on every public repo regardless of language:
+
+- `.github/workflows/build.yml` - build, test, coverage, and repo validation
+- `.github/workflows/release.yml` - tagged/manual release build and publish
+- `.github/workflows/security.yml` - secret scanning, dependency/security checks, and workflow policy checks
+
+**`security.yml` job conditionality:**
+- `secret-scan` (truffleHog) — always runs; `fetch-depth: 0` required for full history scan
+- `workflow-policy` — always runs; checks all `uses:` lines are pinned to a 40-char SHA and blocks `pull_request_target`
+- `vuln-scan` (govulncheck) — runs only when `go.sum` is present in the repo
+- `image-scan` (Trivy) — runs only when a Dockerfile is present; must run after the image is built
+
+**Workflow job ordering (`needs:`):** GitHub Actions runs all jobs in parallel by default. Use `needs:` to enforce ordering:
+- `build.yml`: `lint` and `test` run in parallel → `build` needs: test (never produce artifacts from untested code) → `upload-artifacts` needs: build
+- `release.yml`: `build` → `release` (needs: build); release job re-runs its own build inline, never relies on artifacts from a prior workflow run
+- `security.yml`: all jobs run in parallel — no `needs:` between them
+- Cross-workflow ordering uses branch protection (both `build.yml` and `security.yml` must pass before merge); never use `workflow_run` to chain workflows
+
+If the project also supports Gitea/Forgejo or Jenkins, the equivalent workflows/pipelines MUST enforce the same gates — not a weaker subset. CI MUST fail when required tests, coverage gates, secret scans, dependency checks, or release validation fail.
 
 ### Dependency Update Policy
 
