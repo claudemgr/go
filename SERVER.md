@@ -4434,16 +4434,23 @@ db.Query("SELECT * FROM users WHERE email = '" + email + "'")
 
 **These are sensible defaults - all limits are configurable via admin panel and config file.**
 
+**General endpoint defaults:**
+
+| Endpoint class | Default limit | Window | Notes |
+|----------------|---------------|--------|-------|
+| **Read (GET, HEAD)** | **120 req/min** | 60s | Per IP, sliding window |
+| **Write (POST, PUT, PATCH, DELETE)** | **10 req/min** | 60s | Per IP, sliding window |
+| **Health / status** | **120 req/min** | 60s | `/healthz`, `/readyz`, `/livez` |
+| **Global burst** | **240 req/min** | 60s | Absolute ceiling across all types |
+
+**Auth endpoint defaults (stricter — applied regardless of general limits above):**
+
 | Endpoint Type | Default Limit | Default Window | Response |
 |---------------|---------------|----------------|----------|
 | **Login attempts** | 5 | 15 minutes | 429 + lockout |
 | **Password reset** | 3 | 1 hour | 429 + silent (no email hint) |
-| **API (authenticated)** | Configurable | 1 minute | 429 + Retry-After header |
-| **API (unauthenticated)** | Configurable | 1 minute | 429 + Retry-After header |
 | **Registration** | 5 | 1 hour | 429 |
 | **File upload** | 10 | 1 hour | 429 |
-
-**Project-specific defaults:** Each project defines its own default rate limits based on expected usage patterns. High-traffic APIs may need higher limits; sensitive operations may need lower limits. Define project-appropriate defaults in IDEA.md.
 
 ### Error Message Rules
 
@@ -17436,17 +17443,48 @@ server:
 
 ## Rate Limiting
 
+Rate limiting is the primary abuse defense. All limits are per-IP using a sliding window counter stored in `server.db`.
+
 ```yaml
 server:
   rate_limit:
     enabled: true
-    # Requests allowed per window (0 = use project default from IDEA.md)
-    requests: 0
-    # Window size in seconds
-    window: 60
+    read:
+      requests: 120    # per minute per IP
+      window: 60
+    write:
+      requests: 10     # per minute per IP
+      window: 60
+    health:
+      requests: 120    # per minute per IP (health/status endpoints)
+      window: 60
+    global_burst: 240  # per minute per IP (absolute ceiling across all endpoint types)
+    # Auth endpoints — stricter limits, applied independently of the general limits above
+    auth:
+      login:
+        requests: 5
+        window: 900    # 15 minutes
+      password_reset:
+        requests: 3
+        window: 3600   # 1 hour
+      registration:
+        requests: 5
+        window: 3600   # 1 hour
 ```
 
-**Note:** Each project defines its own default rate limit in IDEA.md based on expected usage patterns.
+| Endpoint class | Default limit | Window | Notes |
+|----------------|---------------|--------|-------|
+| Read (GET, HEAD) | 120 req/min | 60s | Per IP, sliding window |
+| Write (POST, PUT, PATCH, DELETE) | 10 req/min | 60s | Per IP, sliding window |
+| Health / status | 120 req/min | 60s | `/healthz`, `/readyz`, `/livez` |
+| Global burst | 240 req/min | 60s | Absolute ceiling across all types |
+| Login | 5 req / 15 min | 900s | Per IP + per identifier |
+| Password reset | 3 req / 1 hr | 3600s | Per IP, no email hint on exceed |
+| Registration | 5 req / 1 hr | 3600s | Per IP |
+
+**Response when limited:** `429 Too Many Requests` with `Retry-After` header set to seconds until the window resets. Body: `{"ok":false,"error":"RATE_LIMITED","message":"Too many requests","retry_after":N}`.
+
+**Note:** All limits are configurable under `server.rate_limit.*` in `server.yml` and via the admin panel.
 
 ## Internationalization (i18n)
 
