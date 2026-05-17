@@ -606,7 +606,7 @@ This list is not exhaustive; treat it as the starting point. When introducing a 
 
 ## Go Commands
 
-**All Go invocations execute inside the project Docker container — never on the host.** The table below shows the *logical* command; the **actual** invocation is wrapped (e.g., `docker compose run --rm dev <cmd>` or `docker run --rm -v "$PWD":/work -w /work <image> <cmd>`). See "Docker Rule" below.
+**All Go invocations execute inside the project Docker container — never on the host.** The table below shows the *logical* command; the **actual** invocation is wrapped (e.g., `docker compose run --rm dev <cmd>` or `docker run --rm -it --name "{project_name}-XXXX" -v "$PWD":/work -w /work <image> <cmd>`). See "Docker Rule" below.
 
 | Logical Command | Purpose |
 |-----------------|---------|
@@ -771,7 +771,8 @@ GUI and display-aware test runs use the `gui` compose service (or equivalent `do
 ```bash
 xhost +SI:localuser:$(id -un)        # grant access to current user only; revoke when done
 
-docker run --rm \
+docker run --rm -it \
+  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
   -e DISPLAY="$DISPLAY" \
   -e XAUTHORITY=/tmp/.docker.xauth \
   -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
@@ -786,7 +787,8 @@ xhost -SI:localuser:$(id -un)        # revoke after the session
 **Wayland forwarding (host running a Wayland compositor):**
 
 ```bash
-docker run --rm \
+docker run --rm -it \
+  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
   -e WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
   -e XDG_RUNTIME_DIR=/tmp/xdg \
   -v "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY":"/tmp/xdg/$WAYLAND_DISPLAY" \
@@ -1115,15 +1117,15 @@ mkdir -p dist
 docker build -t "$PROJECT_IMAGE" -f docker/Dockerfile .
 
 # Run quality gates inside the image
-docker run --rm -v "$PWD":/work -w /work "$PROJECT_IMAGE" gofmt -l .
-docker run --rm -v "$PWD":/work -w /work "$PROJECT_IMAGE" golangci-lint run ./...
-docker run --rm -v "$PWD":/work -w /work "$PROJECT_IMAGE" go test ./...
-docker run --rm -v "$PWD":/work -w /work "$PROJECT_IMAGE" go vet ./...
-docker run --rm -v "$PWD":/work -w /work "$PROJECT_IMAGE" govulncheck ./...
+docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" gofmt -l .
+docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" golangci-lint run ./...
+docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" go test ./...
+docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" go vet ./...
+docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" govulncheck ./...
 
 # License enumeration and attribution-drift check:
 # Regenerate the GENERATED region and compare to committed.
-docker run --rm -v "$PWD":/work -w /work "$PROJECT_IMAGE" \
+docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" \
   go-licenses report ./... > LICENSE.generated.md
 sed -n '/<!-- GENERATED:/,$p' LICENSE.md > LICENSE.committed-generated.md
 diff LICENSE.committed-generated.md LICENSE.generated.md
@@ -1148,7 +1150,9 @@ for TARGET in "linux/amd64" "linux/arm64" "windows/amd64" "windows/arm64" "darwi
 
   ARTIFACT="{project_name}-${PLATFORM}-${ARCH}${EXT}"
 
-  docker run --rm -v "$PWD":/work -w /work \
+  docker run --rm -it \
+    --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+    -v "$PWD":/work -w /work \
     -e CGO_ENABLED=0 -e GOOS="$GOOS" -e GOARCH="$GOARCH" \
     "$PROJECT_IMAGE" \
     go build \
@@ -1159,13 +1163,13 @@ for TARGET in "linux/amd64" "linux/arm64" "windows/amd64" "windows/arm64" "darwi
 
   # Verify static linkage on Linux
   if [ "$GOOS" = "linux" ]; then
-    docker run --rm -v "$PWD":/work -w /work "$PROJECT_IMAGE" \
+    docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" \
       sh -c "ldd dist/$ARTIFACT 2>&1 | grep -qE 'not a dynamic executable|statically linked'"
   fi
 done
 
 # Generate the SBOM (CycloneDX JSON) — published alongside the release artifacts.
-docker run --rm -v "$PWD":/work -w /work "$PROJECT_IMAGE" \
+docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" \
   cyclonedx-gomod app -json -output "dist/{project_name}-bom.json"
 ```
 
