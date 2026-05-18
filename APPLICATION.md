@@ -742,8 +742,9 @@ Place Docker assets under `docker/`:
 
 ```text
 docker/
-├── Dockerfile              # builds the dev/build/test image using golang:alpine (rolling)
-├── Dockerfile.runtime      # optional: minimal runtime image for produced binaries
+├── Dockerfile              # two-stage runtime image (builder stage + minimal Alpine runtime)
+├── Dockerfile.build        # toolchain image — golang:alpine + all build/test/lint/scan tools; built monthly
+├── Dockerfile.dev          # development variant — same base as Dockerfile.build + hot-reload setup
 ├── compose.yaml            # services: dev (build/test/run), gui (X11/Wayland forwarding), runtime
 ├── entrypoint.sh           # sets non-root UID/GID, prepares cache dirs
 └── README.md               # how to build the image, run tests, run GUI with display forwarding
@@ -753,6 +754,8 @@ A top-level `compose.yaml` symlink or shim is allowed for ergonomics, but the so
 
 ### Mandatory Image Properties
 
+These properties apply to `docker/Dockerfile.build` — the toolchain image built monthly and pulled by all CI/CD workflows:
+
 - Base image: `golang:alpine` (rolling — never pinned to a specific version tag)
 - Go version matching `.go-version` is provided by the base image or set via `GOTOOLCHAIN` in the Dockerfile
 - `gofmt` and `go vet` are included in the Go toolchain (no extra install needed)
@@ -761,6 +764,8 @@ A top-level `compose.yaml` symlink or shim is allowed for ergonomics, but the so
 - Go module cache and build cache mounted as named volumes for build speed
 - `CGO_ENABLED=0` set as a default environment variable in the image
 - The image requires no C dev libraries — `CGO_ENABLED=0` Go builds need no C toolchain at all
+
+CI/CD workflows pull this image via the `ensure-build-image` pre-flight job — they never install tools inline. See `cicd_conventions.md` for the full workflow pattern.
 
 ### X11 and Wayland Forwarding (Mandatory for GUI/Display Testing)
 
@@ -1345,8 +1350,8 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] `CLAUDE.md` / `.claude/CLAUDE.md` are short loaders, not duplicate specs
 - [ ] `release.txt` exists if the project is using explicit release versioning
 - [ ] `site.txt` exists only if there is a real official site URL
-- [ ] `docker/Dockerfile`, `docker/compose.yaml`, and `docker/entrypoint.sh` exist and build a working dev/test image
-- [ ] Image is based on `golang:alpine` (rolling); `golangci-lint`, `govulncheck`, `go-licenses`, and `cyclonedx-gomod` are pre-installed
+- [ ] `docker/Dockerfile`, `docker/Dockerfile.build`, `docker/compose.yaml`, and `docker/entrypoint.sh` exist; `Dockerfile.build` builds the toolchain image; `Dockerfile` is the runtime image
+- [ ] `docker/Dockerfile.build` is based on `golang:alpine` (rolling); `golangci-lint`, `govulncheck`, `go-licenses`, and `cyclonedx-gomod` are pre-installed
 - [ ] `CGO_ENABLED=0` is set as default in the Docker image environment
 - [ ] X11 forwarding sample command is documented and works against a real Xorg/XWayland session
 - [ ] Wayland forwarding sample command is documented and works against a real Wayland compositor

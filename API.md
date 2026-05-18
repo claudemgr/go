@@ -5619,18 +5619,47 @@ name: License Check
 on: [push, pull_request]
 
 jobs:
-  check-licenses:
+  ensure-build-image:
     runs-on: ubuntu-latest
-    container: golang:alpine
+    permissions:
+      packages: write
+    outputs:
+      image: ${{ steps.check.outputs.image }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      - id: check
+        name: Ensure build image exists
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+          if ! docker pull "$IMAGE" 2>/dev/null; then
+            echo "::notice::Build image not found — building from docker/Dockerfile.build"
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              -f docker/Dockerfile.build \
+              --push \
+              -t "$IMAGE" \
+              .
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
-      - name: Install go-licenses
-        run: go install github.com/google/go-licenses@latest
+  check-licenses:
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Check licenses
         run: |
-          # Verify no GPL/AGPL/LGPL licenses
+          # Verify no GPL/AGPL/LGPL licenses (go-licenses pre-installed in build image)
           if go-licenses csv ./... | grep -iE 'GPL|AGPL|LGPL'; then
             echo "ERROR: Copyleft license detected!"
             exit 1
@@ -5691,15 +5720,13 @@ echo "3. Commit the changes"
 
 This badge should appear in the badges section near the top of README.md.
 
-## Docker Labels (REQUIRED)
+## Docker Annotations (REQUIRED)
 
-**Dockerfile MUST include license label:**
+**License metadata is applied as an OCI annotation at build time — no LABEL in Dockerfile:**
 
-```dockerfile
-LABEL org.opencontainers.image.licenses="MIT"
-```
+Pass `--annotation "org.opencontainers.image.licenses=MIT"` to `docker buildx build`.
 
-See PART 26: DOCKER for complete label requirements.
+See PART 26: DOCKER for complete annotation requirements.
 
 ## Go Module License Field
 
@@ -32179,28 +32206,36 @@ All Dockerfiles MUST include these labels:
 | `org.opencontainers.image.vcs-type` | `Git` |
 | `com.github.containers.toolbox` | `false` |
 
-### Multi-Arch Manifest Annotations
+### Multi-Arch Image Annotations
 
-**For multi-arch images, OCI labels MUST also be set as manifest annotations.**
+**All image metadata is applied as OCI annotations — no LABEL blocks in the Dockerfile.**
 
-Container registries (GHCR, Docker Hub, etc.) read metadata from the manifest index for multi-arch images, not from individual image configs. Without manifest annotations, registry pages show no description.
+Container registries (GHCR, Docker Hub, etc.) read metadata from the manifest index for multi-arch images, not from individual image configs. `LABEL` applies only to per-platform image layers and is not visible on multiarch pulls. Only annotations are used.
 
 | Where | How | What For |
 |-------|-----|----------|
-| Dockerfile `LABEL` | Image config | Single-arch images, `docker inspect` |
-| Workflow `labels:` | Image config | Per-architecture metadata |
-| Workflow `annotations:` | Manifest index | Registry display, multi-arch images |
+| Workflow `annotations:` | Manifest index | All image metadata — registry display, multiarch |
 
-**The `manifest:` prefix tells buildx to apply annotations to the manifest list:**
+**Apply annotations via `docker/metadata-action` in GitHub Actions:**
 
 ```yaml
-annotations: |
-  manifest:org.opencontainers.image.description=My app description
-  manifest:org.opencontainers.image.title=myapp
-  manifest:org.opencontainers.image.version=1.0.0
+- uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0
+  id: meta
+  with:
+    images: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+    annotations: |
+      org.opencontainers.image.description={project_name} description
+      org.opencontainers.image.title={project_name}
+      org.opencontainers.image.licenses=MIT
+
+- uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0
+  with:
+    annotations: ${{ steps.meta.outputs.annotations }}
+    labels: ""
+    tags: ${{ steps.meta.outputs.tags }}
 ```
 
-See the docker.yml workflow for the complete list of required annotations.
+See dockerfile_conventions.md → OCI Annotations for the complete list of required annotation keys.
 
 ### Dockerfile Rules
 
@@ -32254,25 +32289,11 @@ ARG BUILD_DATE
 ARG COMMIT_ID
 ARG LICENSE=MIT
 
-# Static Labels
-LABEL maintainer="{maintainer_name} <{maintainer_email}>" \
-      org.opencontainers.image.vendor="{project_org}" \
-      org.opencontainers.image.authors="{project_org}" \
-      org.opencontainers.image.title="{project_name}" \
-      org.opencontainers.image.base.name="{project_name}" \
-      org.opencontainers.image.description="{project_name} - standard image (alpine)" \
-      org.opencontainers.image.url="{PLATFORM_REPO_URL}" \
-      org.opencontainers.image.source="{PLATFORM_REPO_URL}" \
-      org.opencontainers.image.documentation="{PLATFORM_REPO_URL}" \
-      org.opencontainers.image.vcs-type="Git" \
-      com.github.containers.toolbox="false"
-
-# Dynamic Labels (from ARGs)
-LABEL org.opencontainers.image.licenses="${LICENSE}" \
-      org.opencontainers.image.created="${BUILD_DATE}" \
-      org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.schema-version="${VERSION}" \
-      org.opencontainers.image.revision="${COMMIT_ID}"
+# No LABEL blocks — all image metadata is applied as OCI annotations at build time.
+# Pass --annotation flags to docker buildx build (or use docker/metadata-action
+# annotations: output in GitHub Actions). Annotations attach to the manifest index
+# and are visible on multiarch pulls. LABEL applies only to per-platform layers.
+# See dockerfile_conventions.md → OCI Annotations.
 
 # Install required packages
 # NOTE: Tor binary installed but NOT configured here - binary handles all Tor setup (see PART 31)
@@ -32793,9 +32814,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # =============================================================================
 FROM debian:latest
 
-LABEL org.opencontainers.image.source="{PLATFORM_REPO_URL}"
-LABEL org.opencontainers.image.description="{project_name} - all-in-one (debian + postgresql + valkey + tor)"
-LABEL org.opencontainers.image.licenses="MIT"
+# No LABEL blocks — image metadata applied as OCI annotations at build time.
 
 # Install dependencies (PostgreSQL + Valkey + Tor + Supervisor)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -33617,9 +33636,41 @@ env:
   PROJECTNAME: {project_name}
 
 jobs:
-  build:
+  ensure-build-image:
     runs-on: ubuntu-latest
-    container: golang:alpine
+    permissions:
+      packages: write
+    outputs:
+      image: ${{ steps.check.outputs.image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      - id: check
+        name: Ensure build image exists
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+          if ! docker pull "$IMAGE" 2>/dev/null; then
+            echo "::notice::Build image not found — building from docker/Dockerfile.build"
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              -f docker/Dockerfile.build \
+              --push \
+              -t "$IMAGE" \
+              .
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
     strategy:
       matrix:
         include:
@@ -33783,9 +33834,41 @@ env:
   PROJECTNAME: {project_name}
 
 jobs:
-  build:
+  ensure-build-image:
     runs-on: ubuntu-latest
-    container: golang:alpine
+    permissions:
+      packages: write
+    outputs:
+      image: ${{ steps.check.outputs.image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      - id: check
+        name: Ensure build image exists
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+          if ! docker pull "$IMAGE" 2>/dev/null; then
+            echo "::notice::Build image not found — building from docker/Dockerfile.build"
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              -f docker/Dockerfile.build \
+              --push \
+              -t "$IMAGE" \
+              .
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
     strategy:
       matrix:
         include:
@@ -33941,9 +34024,41 @@ env:
   PROJECTNAME: {project_name}
 
 jobs:
-  build:
+  ensure-build-image:
     runs-on: ubuntu-latest
-    container: golang:alpine
+    permissions:
+      packages: write
+    outputs:
+      image: ${{ steps.check.outputs.image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      - id: check
+        name: Ensure build image exists
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+          if ! docker pull "$IMAGE" 2>/dev/null; then
+            echo "::notice::Build image not found — building from docker/Dockerfile.build"
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              -f docker/Dockerfile.build \
+              --push \
+              -t "$IMAGE" \
+              .
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
     strategy:
       matrix:
         include:
@@ -34402,9 +34517,41 @@ env:
   PROJECTNAME: {project_name}
 
 jobs:
-  build:
+  ensure-build-image:
     runs-on: ubuntu-latest
-    container: golang:alpine
+    permissions:
+      packages: write
+    outputs:
+      image: ${{ steps.check.outputs.image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      - id: check
+        name: Ensure build image exists
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+          if ! docker pull "$IMAGE" 2>/dev/null; then
+            echo "::notice::Build image not found — building from docker/Dockerfile.build"
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              -f docker/Dockerfile.build \
+              --push \
+              -t "$IMAGE" \
+              .
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
     strategy:
       matrix:
         include:
@@ -34568,9 +34715,41 @@ env:
   PROJECTNAME: {project_name}
 
 jobs:
-  build:
+  ensure-build-image:
     runs-on: ubuntu-latest
-    container: golang:alpine
+    permissions:
+      packages: write
+    outputs:
+      image: ${{ steps.check.outputs.image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      - id: check
+        name: Ensure build image exists
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+          if ! docker pull "$IMAGE" 2>/dev/null; then
+            echo "::notice::Build image not found — building from docker/Dockerfile.build"
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              -f docker/Dockerfile.build \
+              --push \
+              -t "$IMAGE" \
+              .
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
     strategy:
       matrix:
         include:
@@ -34712,9 +34891,41 @@ env:
   PROJECTNAME: {project_name}
 
 jobs:
-  build:
+  ensure-build-image:
     runs-on: ubuntu-latest
-    container: golang:alpine
+    permissions:
+      packages: write
+    outputs:
+      image: ${{ steps.check.outputs.image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      - id: check
+        name: Ensure build image exists
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+          if ! docker pull "$IMAGE" 2>/dev/null; then
+            echo "::notice::Build image not found — building from docker/Dockerfile.build"
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              -f docker/Dockerfile.build \
+              --push \
+              -t "$IMAGE" \
+              .
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
     strategy:
       matrix:
         include:
