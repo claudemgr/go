@@ -742,9 +742,10 @@ Place Docker assets under `docker/`:
 
 ```text
 docker/
-├── Dockerfile              # two-stage runtime image (builder stage + minimal Alpine runtime)
-├── Dockerfile.build        # toolchain image — golang:alpine + all build/test/lint/scan tools; built monthly
-├── Dockerfile.dev          # development variant — same base as Dockerfile.build + hot-reload setup
+├── Dockerfile              # production runtime image — two-stage (builder + minimal Alpine); tagged :latest
+├── Dockerfile.build        # toolchain image — golang:alpine + all build/test/lint/scan tools; built monthly; tagged :build   (project-specific)
+├── Dockerfile.dev          # devel image — same as release but binary runs in debug mode; tagged :devel   (project-specific)
+├── rootfs/                 # build-time filesystem overlay copied into image at /   (project-specific)
 ├── compose.yaml            # services: dev (build/test/run), gui (X11/Wayland forwarding), runtime
 ├── entrypoint.sh           # sets non-root UID/GID, prepares cache dirs
 └── README.md               # how to build the image, run tests, run GUI with display forwarding

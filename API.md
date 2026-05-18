@@ -6002,7 +6002,7 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 │   └── incus.sh            # Beta testing with Incus (REQUIRED)
 ├── docker/                 # Docker files
 │   ├── Dockerfile          # Production Dockerfile
-│   ├── Dockerfile.dev      # Development Dockerfile (optional)
+│   ├── Dockerfile.dev      # devel image — same as release but binary runs in debug mode; tagged :devel (project-specific)
 │   ├── docker-compose.yml  # Production compose (NO debug)
 │   ├── docker-compose.dev.yml  # Development compose
 │   ├── docker-compose.test.yml # Test compose (DEBUG=true)
@@ -32055,7 +32055,7 @@ Docker build/runtime definitions are split between `docker/` and runtime `./volu
 ```
 docker/
 ├── Dockerfile              # Production Dockerfile
-├── Dockerfile.dev          # Development Dockerfile (optional)
+├── Dockerfile.dev          # devel image — same as release but binary runs in debug mode; tagged :devel (project-specific)
 ├── docker-compose.yml      # Production compose - HUMAN USE ONLY
 ├── docker-compose.dev.yml  # Development compose - HUMAN USE ONLY
 ├── docker-compose.test.yml # Test compose - AI/AUTOMATED TESTING ONLY
