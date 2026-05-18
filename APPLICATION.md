@@ -746,12 +746,14 @@ docker/
 ├── Dockerfile.build        # toolchain image — golang:alpine + all build/test/lint/scan tools; built monthly; tagged :build   (project-specific)
 ├── Dockerfile.dev          # devel image — same as release but binary runs in debug mode; tagged :devel   (project-specific)
 ├── rootfs/                 # build-time filesystem overlay copied into image at /   (project-specific)
-├── compose.yaml            # services: dev (build/test/run), gui (X11/Wayland forwarding), runtime
+├── docker-compose.yml      # production compose — HUMAN USE ONLY
+├── docker-compose.dev.yml  # development compose — runs `:devel` image in debug mode; HUMAN USE ONLY
+├── docker-compose.test.yml # automated test compose — the only compose AI may run
 ├── entrypoint.sh           # sets non-root UID/GID, prepares cache dirs
 └── README.md               # how to build the image, run tests, run GUI with display forwarding
 ```
 
-A top-level `compose.yaml` symlink or shim is allowed for ergonomics, but the source of truth lives under `docker/`.
+`docker-compose.yml` always lives under `docker/` — never at the repo root. See `dockerfile_conventions.md` → "Docker Compose" for the canonical layout and the rule that `docker-compose.test.yml` is the only compose file AI is allowed to run directly.
 
 ### Mandatory Image Properties
 
@@ -767,6 +769,43 @@ These properties apply to `docker/Dockerfile.build` — the toolchain image buil
 - The image requires no C dev libraries — `CGO_ENABLED=0` Go builds need no C toolchain at all
 
 CI/CD workflows pull this image via the `ensure-build-image` pre-flight job — they never install tools inline. See `cicd_conventions.md` for the full workflow pattern.
+
+### OCI Annotations
+
+Image metadata is applied as OCI annotations on the manifest index — never as Dockerfile `LABEL` blocks. `LABEL` attaches only to the per-platform layer and is invisible on multiarch pulls; annotations attach to the index and are visible on every platform.
+
+- No `LABEL` blocks anywhere in `docker/Dockerfile*`.
+- All metadata is passed at build time via `--annotation` flags on `docker buildx build` (or via `docker/metadata-action` → `annotations:` output in GitHub Actions / Gitea / Forgejo).
+- See `dockerfile_conventions.md` → "OCI Annotations" for the full required annotation set (static + dynamic) and the canonical `docker/metadata-action` snippet.
+
+### CI/CD Workflow Pattern (ensure-build-image)
+
+Every CI workflow that needs build tools MUST pull the project toolchain image — never `apk add` / `go install` inline. The canonical pattern is the `ensure-build-image` pre-flight job; see `cicd_conventions.md` → "Toolchain Image (build-toolchain.yml)" for the full template.
+
+Minimum requirement for every downstream job in `build.yml` / `release.yml` / `security.yml`:
+
+```yaml
+jobs:
+  ensure-build-image:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    outputs:
+      image: ${{ steps.check.outputs.image }}
+    # ... pull or build docker/Dockerfile.build, then export the image tag
+    # See cicd_conventions.md for the full step list.
+
+  build:
+    needs: ensure-build-image
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.ensure-build-image.outputs.image }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - run: go build ./...
+```
+
+If `ensure-build-image` is missing, the workflow is non-conforming.
 
 ### X11 and Wayland Forwarding (Mandatory for GUI/Display Testing)
 
@@ -1351,7 +1390,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] `CLAUDE.md` / `.claude/CLAUDE.md` are short loaders, not duplicate specs
 - [ ] `release.txt` exists if the project is using explicit release versioning
 - [ ] `site.txt` exists only if there is a real official site URL
-- [ ] `docker/Dockerfile`, `docker/Dockerfile.build`, `docker/compose.yaml`, and `docker/entrypoint.sh` exist; `Dockerfile.build` builds the toolchain image; `Dockerfile` is the runtime image
+- [ ] `docker/Dockerfile`, `docker/Dockerfile.build`, `docker/docker-compose.yml`, `docker/docker-compose.dev.yml`, `docker/docker-compose.test.yml`, and `docker/entrypoint.sh` exist; `Dockerfile.build` builds the toolchain image; `Dockerfile` is the runtime image
 - [ ] `docker/Dockerfile.build` is based on `golang:alpine` (rolling); `golangci-lint`, `govulncheck`, `go-licenses`, and `cyclonedx-gomod` are pre-installed
 - [ ] `CGO_ENABLED=0` is set as default in the Docker image environment
 - [ ] X11 forwarding sample command is documented and works against a real Xorg/XWayland session
