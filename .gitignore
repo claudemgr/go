@@ -102,3 +102,51 @@ $RECYCLE.BIN/
 **/*.rewrite.sh
 **/*.refactor.sh
 
+# ignore dotenv files
+.env
+app.env
+default.env
+
+# ignore log and temp files
+*.log
+*.tmp
+*.temp
+
+# AI tool — Claude Code (personal/secret only)
+.claude/settings.local.json
+# Claude Code runtime files — session data, edit history, backups, cache
+.claude/backups/
+.claude/cache/
+.claude/file-history/
+.claude/history.jsonl
+.claude/.credentials.json
+.claude/projects/
+.claude/statsFile
+.claude/*.lock
+
+# AI tool — Cursor (personal/secret only)
+.cursor/settings.json
+
+# AI tool — Windsurf (personal/secret only)
+.windsurf/settings.json
+
+# AI tool — Aider (history and cache; conf and ignore are committed)
+.aider.chat.history.md
+.aider.input.history
+.aider.llm.history
+.aider.tags.cache.v3/
+
+# AI tool — Continue (personal data; config.json is committed)
+.continue/dev_data/
+.continue/session.json
+.continue/index/
+
+# AI tool — Codeium / Windsurf cache
+.codeium/
+
+# AI tool — Cline / Roo (cache only; rules files are committed)
+.cline/cache/
+
+# AI tool — generic catch-all for personal/secret AI directories
+.ai/
+
