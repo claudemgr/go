@@ -782,7 +782,7 @@ Image metadata is applied as OCI annotations on the manifest index — never as 
 
 Every CI workflow that needs build tools MUST pull the project toolchain image — never `apk add` / `go install` inline. The canonical pattern is the `ensure-build-image` pre-flight job; see `cicd_conventions.md` → "Toolchain Image (build-toolchain.yml)" for the full template.
 
-Minimum requirement for every downstream job in `build.yml` / `release.yml` / `security.yml`:
+Minimum requirement for every downstream job in `ci.yml` / `release.yml` / `build-toolchain.yml`:
 
 ```yaml
 jobs:

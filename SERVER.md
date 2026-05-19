@@ -622,7 +622,7 @@ if cacheSize > 1024*1024*1024 {
 | **Unsafe PR triggers forbidden by default** | Do NOT use `pull_request_target` for untrusted code execution, build, test, or artifact upload paths |
 | **Secrets never exposed to forks** | Fork PR workflows run without repo secrets, write tokens, publish steps, or deployment credentials |
 | **Dependency updates are automated** | Public repos include dependency update automation for every ecosystem in use |
-| **Secret scanning is mandatory** | Public repos run `truffleHog` (`trufflesecurity/trufflehog`, Apache-2.0, no license key) on push/PR via `security.yml`; findings are blockers. Never use `gitleaks` — requires a commercial license for org repos |
+| **Secret scanning is mandatory** | Public repos run `truffleHog` (`trufflesecurity/trufflehog`, Apache-2.0, no license key) on push/PR via `ci.yml`; findings are blockers. Never use `gitleaks` — requires a commercial license for org repos |
 | **Release outputs are verifiable** | Releases publish checksums, SBOM, release notes, and provenance/attestation when the host platform supports it |
 
 ### Workflow Permissions
@@ -705,10 +705,10 @@ Every project ships workflow files for all five CI/CD providers. Same gates, dif
 
 | Provider | Workflow location | Syntax |
 |----------|------------------|--------|
-| GitHub | `.github/workflows/build.yml` / `release.yml` / `security.yml` | GitHub Actions |
+| GitHub  | `.github/workflows/ci.yml` / `release.yml` / `build-toolchain.yml` | GitHub Actions |
 | GitLab | `.gitlab-ci.yml` | GitLab CI (stages: build, test, security, release) |
-| Gitea | `.gitea/workflows/build.yml` / `release.yml` / `security.yml` | GitHub Actions (act runner) |
-| Forgejo | `.forgejo/workflows/build.yml` / `release.yml` / `security.yml` | GitHub Actions (act runner) |
+| Gitea   | `.gitea/workflows/ci.yml` / `release.yml` / `build-toolchain.yml` | GitHub Actions (act runner) |
+| Forgejo | `.forgejo/workflows/ci.yml` / `release.yml` / `build-toolchain.yml` | GitHub Actions (act runner) |
 | Jenkins | `Jenkinsfile` | Declarative Pipeline |
 
 **`security` job conditionality (applies to all providers):**
@@ -718,9 +718,8 @@ Every project ships workflow files for all five CI/CD providers. Same gates, dif
 - `image-scan` (Trivy) — conditional on Dockerfile present; runs after image build
 
 **GitHub Actions job ordering (`needs:`):**
-- `build.yml`: `lint` and `test` run in parallel → `build` needs: test → `upload-artifacts` needs: build
+- `ci.yml`: `ensure-build-image` first → `lint`, `test`, `secret-scan`, `workflow-policy`, `vuln-scan` in parallel (all need ensure-build-image) → `build` (needs lint + test) → `coverage`, `image-scan`, `upload-artifacts` (need build); security jobs also run on weekly schedule via `if:` conditions
 - `release.yml`: `build` → `release` (needs: build); release job always re-runs its own build inline
-- `security.yml`: all jobs parallel — no `needs:` between them
 - Cross-workflow ordering via branch protection; never `workflow_run`
 
 **GitLab CI**: security jobs run in the `security` stage (parallel by default in the same stage). Release stage has `rules: - if: $CI_COMMIT_TAG`.
@@ -1935,9 +1934,8 @@ Instructions for how this agent should behave...
   - `.github/ISSUE_TEMPLATE/feature_request.md`
   - `.github/ISSUE_TEMPLATE/config.yml`
   - `.github/PULL_REQUEST_TEMPLATE.md`
-  - `.github/workflows/build.yml`
+  - `.github/workflows/ci.yml`
   - `.github/workflows/release.yml`
-  - `.github/workflows/security.yml`
 - These files are templates/project policy files: define them once in the template, then update them to match the actual project
 - `FUNDING.yml` remains optional
 
@@ -1987,9 +1985,8 @@ Instructions for how this agent should behave...
   - breaking-change note
   - security/privacy impact note
   - checklist confirming no placeholder/stub/TODO behavior was introduced
-- `.github/workflows/build.yml` MUST verify real build/test/lint/coverage rules from the repo
+- `.github/workflows/ci.yml` MUST verify build/test/lint/coverage AND enforce secret scanning, dependency/security validation, and workflow hardening checks
 - `.github/workflows/release.yml` MUST produce the real release artifacts, checksums, release notes, and any required publish steps
-- `.github/workflows/security.yml` MUST enforce secret scanning, dependency/security validation, and workflow hardening checks
 
 **Code of Conduct Rule:**
 - For **public/community-facing repositories**, `.github/CODE_OF_CONDUCT.md` MUST exist
@@ -4817,10 +4814,10 @@ Detect platform by checking for workflow files in this order:
 
 ```markdown
 # GitHub Actions
-[![Build](https://github.com/{project_org}/{project_name}/actions/workflows/build.yml/badge.svg)](https://github.com/{project_org}/{project_name}/actions/workflows/build.yml)
+[![CI](https://github.com/{project_org}/{project_name}/actions/workflows/ci.yml/badge.svg)](https://github.com/{project_org}/{project_name}/actions/workflows/ci.yml)
 
 # Gitea/Forgejo Actions
-[![Build](https://git.example.com/{project_org}/{project_name}/actions/workflows/build.yml/badge.svg)](https://git.example.com/{project_org}/{project_name}/actions)
+[![CI](https://git.example.com/{project_org}/{project_name}/actions/workflows/ci.yml/badge.svg)](https://git.example.com/{project_org}/{project_name}/actions)
 
 # GitLab CI
 [![Build](https://gitlab.com/{project_org}/{project_name}/badges/main/pipeline.svg)](https://gitlab.com/{project_org}/{project_name}/-/pipelines)
@@ -38871,8 +38868,7 @@ networks:
 
 | File | Trigger | Purpose |
 |------|---------|---------|
-| `build.yml` | Push, PR to default branch | Build + test + lint + coverage + vuln-check |
-| `security.yml` | Push, PR, weekly cron | Secret scanning + image scanning + workflow-policy |
+| `ci.yml` | Push, PR to default branch; security jobs also run on weekly cron | Build + test + lint + coverage + secret scanning + image scanning + workflow-policy |
 | `release.yml` | Tag push (`v*`, `*.*.*`) | Production releases |
 | `beta.yml` | Push to `beta` branch | Beta releases |
 | `daily.yml` | Daily at 3am UTC + push to main/master | Daily builds |
@@ -38896,14 +38892,14 @@ All workflows MUST set these environment variables:
 #   LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
 ```
 
-## Build Workflow (GitHub Actions)
+## CI Workflow (GitHub Actions)
 
-**File:** `.github/workflows/build.yml`
+**File:** `.github/workflows/ci.yml`
 
-Runs on push and pull requests. Uses the project's toolchain image (`docker/Dockerfile.build`) — never installs tools inline. The `ensure-build-image` job is the gate: every downstream job `needs: ensure-build-image` and runs inside `${{ needs.ensure-build-image.outputs.image }}`.
+Runs on push and pull requests; security jobs (`secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan`) also run on the weekly schedule. Uses the project's toolchain image (`docker/Dockerfile.build`) — never installs tools inline. The `ensure-build-image` job is the gate: every downstream job `needs: ensure-build-image` and runs inside `${{ needs.ensure-build-image.outputs.image }}`.
 
 ```yaml
-name: Build
+name: CI
 
 on:
   push:
@@ -39004,85 +39000,7 @@ jobs:
       - run: govulncheck ./...
 ```
 
-## Security Workflow (GitHub Actions)
-
-**File:** `.github/workflows/security.yml`
-
-Runs on push, PR, and weekly cron. Secret scanning is mandatory on every public repo via truffleHog (Apache-2.0). Use `github.event.before` / `github.event.after` for the scan range — never `default_branch`, which after a push resolves to the same commit as HEAD and silently skips the scan.
-
-```yaml
-name: Security
-
-on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
-  schedule:
-    - cron: '0 6 * * 1'  # Mondays at 06:00 UTC
-
-permissions:
-  contents: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  secret-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          fetch-depth: 0
-
-      - name: truffleHog secret scan
-        uses: trufflesecurity/trufflehog@b634fb72d9901a4f942e5b8e4ef5f7ec59c97e7c  # v3.88.2
-        with:
-          base: ${{ github.event.before }}
-          head: ${{ github.sha }}
-          extra_args: --only-verified
-
-  workflow-policy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-      - name: Verify all third-party actions pinned to SHA
-        run: |
-          # All "uses:" lines that are not local (./...) must be pinned to a 40-char SHA
-          ! grep -rEn '^\s*-?\s*uses:\s+[^./][^@]+@(v[0-9]|main|master)' .github/workflows/ || {
-            echo "::error::Unpinned action reference detected — pin to a 40-char SHA"
-            exit 1
-          }
-      - name: Block pull_request_target with untrusted code paths
-        run: |
-          ! grep -rEn 'pull_request_target' .github/workflows/ || {
-            echo "::error::pull_request_target is forbidden — use pull_request with restricted permissions"
-            exit 1
-          }
-
-  vuln-scan:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-      - run: govulncheck ./...
-
-  image-scan:
-    runs-on: ubuntu-latest
-    needs: [secret-scan]
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-      - name: Build image for scanning
-        run: docker build -t scan-target:local -f docker/Dockerfile .
-      - name: Trivy scan
-        run: |
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasecurity/trivy:0.70.0 image \
-            --exit-code 1 --severity CRITICAL,HIGH scan-target:local
-```
+> **Note:** Security jobs (`secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan`) are defined within `ci.yml` with `needs: ensure-build-image`. They run on push, PR, and weekly schedule (`cron: '0 6 * * 1'`). Add `if: github.event_name != 'schedule'` to build/test/coverage/artifact jobs to skip non-security work on scheduled runs. Secret scanning is mandatory on every public repo via truffleHog (Apache-2.0). Use `github.event.before` / `github.event.after` for the scan range — never `default_branch`, which after a push resolves to the same commit as HEAD and silently skips the scan.
 
 ## Build Toolchain Workflow (GitHub Actions)
 
