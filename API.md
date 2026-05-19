@@ -719,7 +719,7 @@ Every project ships workflow files for all five CI/CD providers. Same gates, dif
 
 **GitHub Actions job ordering (`needs:`):**
 - `ci.yml`: `ensure-build-image` first → `lint`, `test`, `secret-scan`, `workflow-policy`, `vuln-scan` in parallel (all need ensure-build-image) → `build` (needs lint + test) → `coverage`, `image-scan`, `upload-artifacts` (need build); security jobs also run on weekly schedule via `if:` conditions
-- `release.yml`: `build` → `release` (needs: build); release job always re-runs its own build inline
+- `release.yml`: `ensure-build-image` → `build` → `release` (needs: build)
 - Cross-workflow ordering via branch protection; never `workflow_run`
 
 **GitLab CI**: security jobs run in the `security` stage (parallel by default in the same stage). Release stage has `rules: - if: $CI_COMMIT_TAG`.
@@ -5619,30 +5619,24 @@ jobs:
   ensure-build-image:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
+      packages: read
     outputs:
-      image: ${{ steps.check.outputs.image }}
+      image: ${{ steps.pull.outputs.image }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
-      - id: check
-        name: Ensure build image exists
+      - id: pull
+        name: Pull build image (fail fast if missing)
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
-          if ! docker pull "$IMAGE" 2>/dev/null; then
-            echo "::notice::Build image not found — building from docker/Dockerfile.build"
-            docker buildx build \
-              --platform linux/amd64,linux/arm64 \
-              -f docker/Dockerfile.build \
-              --push \
-              -t "$IMAGE" \
-              .
+          if ! docker pull "$IMAGE"; then
+            echo "::error::Build image $IMAGE not found."
+            echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+            echo "::error::Never commit ci.yml or release.yml before the build image exists in the registry."
+            exit 1
           fi
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
@@ -33640,34 +33634,25 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      packages: read
     outputs:
-      image: ${{ steps.check.outputs.image }}
+      image: ${{ steps.pull.outputs.image }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-
       - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
-
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
-
-      - id: check
-        name: Ensure build image exists
+      - id: pull
+        name: Pull build image (fail fast if missing)
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
-          if ! docker pull "$IMAGE" 2>/dev/null; then
-            echo "::notice::Build image not found — building from docker/Dockerfile.build"
-            docker buildx build \
-              --platform linux/amd64,linux/arm64 \
-              -f docker/Dockerfile.build \
-              --push \
-              -t "$IMAGE" \
-              .
+          if ! docker pull "$IMAGE"; then
+            echo "::error::Build image $IMAGE not found."
+            echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+            echo "::error::Never commit ci.yml or release.yml before the build image exists in the registry."
+            exit 1
           fi
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
@@ -33797,30 +33782,24 @@ jobs:
   ensure-build-image:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
+      packages: read
     outputs:
-      image: ${{ steps.check.outputs.image }}
+      image: ${{ steps.pull.outputs.image }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
-      - id: check
-        name: Ensure build image exists
+      - id: pull
+        name: Pull build image (fail fast if missing)
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
-          if ! docker pull "$IMAGE" 2>/dev/null; then
-            echo "::notice::Build image not found — building from docker/Dockerfile.build"
-            docker buildx build \
-              --platform linux/amd64,linux/arm64 \
-              -f docker/Dockerfile.build \
-              --push \
-              -t "$IMAGE" \
-              .
+          if ! docker pull "$IMAGE"; then
+            echo "::error::Build image $IMAGE not found."
+            echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+            echo "::error::Never commit ci.yml or release.yml before the build image exists in the registry."
+            exit 1
           fi
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
@@ -33995,30 +33974,24 @@ jobs:
   ensure-build-image:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
+      packages: read
     outputs:
-      image: ${{ steps.check.outputs.image }}
+      image: ${{ steps.pull.outputs.image }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
-      - id: check
-        name: Ensure build image exists
+      - id: pull
+        name: Pull build image (fail fast if missing)
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
-          if ! docker pull "$IMAGE" 2>/dev/null; then
-            echo "::notice::Build image not found — building from docker/Dockerfile.build"
-            docker buildx build \
-              --platform linux/amd64,linux/arm64 \
-              -f docker/Dockerfile.build \
-              --push \
-              -t "$IMAGE" \
-              .
+          if ! docker pull "$IMAGE"; then
+            echo "::error::Build image $IMAGE not found."
+            echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+            echo "::error::Never commit ci.yml or release.yml before the build image exists in the registry."
+            exit 1
           fi
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
@@ -34185,30 +34158,24 @@ jobs:
   ensure-build-image:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
+      packages: read
     outputs:
-      image: ${{ steps.check.outputs.image }}
+      image: ${{ steps.pull.outputs.image }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
-      - id: check
-        name: Ensure build image exists
+      - id: pull
+        name: Pull build image (fail fast if missing)
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
-          if ! docker pull "$IMAGE" 2>/dev/null; then
-            echo "::notice::Build image not found — building from docker/Dockerfile.build"
-            docker buildx build \
-              --platform linux/amd64,linux/arm64 \
-              -f docker/Dockerfile.build \
-              --push \
-              -t "$IMAGE" \
-              .
+          if ! docker pull "$IMAGE"; then
+            echo "::error::Build image $IMAGE not found."
+            echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+            echo "::error::Never commit ci.yml or release.yml before the build image exists in the registry."
+            exit 1
           fi
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
@@ -34678,30 +34645,24 @@ jobs:
   ensure-build-image:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
+      packages: read
     outputs:
-      image: ${{ steps.check.outputs.image }}
+      image: ${{ steps.pull.outputs.image }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
           registry: ${{ vars.REGISTRY }}
           username: ${{ gitea.actor }}
           password: ${{ secrets.GITEA_TOKEN }}
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
-      - id: check
-        name: Ensure build image exists
+      - id: pull
+        name: Pull build image (fail fast if missing)
         run: |
           IMAGE="${{ vars.REGISTRY }}/${{ gitea.repository_owner }}/${{ gitea.event.repository.name }}:build"
-          if ! docker pull "$IMAGE" 2>/dev/null; then
-            echo "::notice::Build image not found — building from docker/Dockerfile.build"
-            docker buildx build \
-              --platform linux/amd64,linux/arm64 \
-              -f docker/Dockerfile.build \
-              --push \
-              -t "$IMAGE" \
-              .
+          if ! docker pull "$IMAGE"; then
+            echo "::error::Build image $IMAGE not found."
+            echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+            echo "::error::Never commit ci.yml or release.yml before the build image exists in the registry."
+            exit 1
           fi
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
@@ -34876,30 +34837,24 @@ jobs:
   ensure-build-image:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
+      packages: read
     outputs:
-      image: ${{ steps.check.outputs.image }}
+      image: ${{ steps.pull.outputs.image }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
           registry: ${{ vars.REGISTRY }}
           username: ${{ gitea.actor }}
           password: ${{ secrets.GITEA_TOKEN }}
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
-      - id: check
-        name: Ensure build image exists
+      - id: pull
+        name: Pull build image (fail fast if missing)
         run: |
           IMAGE="${{ vars.REGISTRY }}/${{ gitea.repository_owner }}/${{ gitea.event.repository.name }}:build"
-          if ! docker pull "$IMAGE" 2>/dev/null; then
-            echo "::notice::Build image not found — building from docker/Dockerfile.build"
-            docker buildx build \
-              --platform linux/amd64,linux/arm64 \
-              -f docker/Dockerfile.build \
-              --push \
-              -t "$IMAGE" \
-              .
+          if ! docker pull "$IMAGE"; then
+            echo "::error::Build image $IMAGE not found."
+            echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+            echo "::error::Never commit ci.yml or release.yml before the build image exists in the registry."
+            exit 1
           fi
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
@@ -35052,30 +35007,24 @@ jobs:
   ensure-build-image:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
+      packages: read
     outputs:
-      image: ${{ steps.check.outputs.image }}
+      image: ${{ steps.pull.outputs.image }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
           registry: ${{ vars.REGISTRY }}
           username: ${{ gitea.actor }}
           password: ${{ secrets.GITEA_TOKEN }}
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
-      - id: check
-        name: Ensure build image exists
+      - id: pull
+        name: Pull build image (fail fast if missing)
         run: |
           IMAGE="${{ vars.REGISTRY }}/${{ gitea.repository_owner }}/${{ gitea.event.repository.name }}:build"
-          if ! docker pull "$IMAGE" 2>/dev/null; then
-            echo "::notice::Build image not found — building from docker/Dockerfile.build"
-            docker buildx build \
-              --platform linux/amd64,linux/arm64 \
-              -f docker/Dockerfile.build \
-              --push \
-              -t "$IMAGE" \
-              .
+          if ! docker pull "$IMAGE"; then
+            echo "::error::Build image $IMAGE not found."
+            echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+            echo "::error::Never commit ci.yml or release.yml before the build image exists in the registry."
+            exit 1
           fi
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
@@ -49319,6 +49268,8 @@ Implement the required client, then any project-specific optional features:
 
 - [ ] Docker builds successfully
 - [ ] Docker Compose files work (prod, dev, test)
+- [ ] `docker/Dockerfile.build` base is the official toolchain image (`golang:alpine`); committed first before any CI workflow
+- [ ] `build-toolchain.yml` triggered via `workflow_dispatch`; build image verified in registry before committing `ci.yml`/`release.yml`
 - [ ] CI/CD workflows configured
 - [ ] Automated builds work
 - [ ] Multi-platform builds work (8 platforms)
