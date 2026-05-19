@@ -1500,7 +1500,7 @@ Purpose:
 6. Built-in scheduler, GeoIP, metrics, email, backup, update
 7. All settings configurable via API and config file
 8. Client binary for ALL projects
-9. Commit often via `gitcommit <command>` — small, focused commits, each with a fresh accurate `.git/COMMIT_MESS`. See "gitcommit Script" → "Commit Cadence". Do NOT hoard unrelated changes into one big commit
+9. Commit often via `gitcommit <command>` — small, focused commits, each with a fresh accurate `.git/COMMIT_MESS`. See "gitcommit Script" → "Commit Cadence". Do NOT hoard unrelated changes into one big commit. **Subagents do not commit** — complete edits and report back to the parent instance; the parent reviews the diff and owns the commit.
 
 ## File Locations
 - Config: `{config_dir}/server.yml`
@@ -2964,6 +2964,8 @@ Getting code correct on the first try is much harder than iterating with feedbac
 
 **When ALL items in TODO.AI.md are completed:**
 
+**Subagents:** do not write COMMIT_MESS or call gitcommit — complete your edits and report back to the parent instance to handle the commit.
+
 1. **Remove all completed items from TODO.AI.md** - delete each item only after it is fully resolved and committed; never truncate the whole file at once
 2. **Write COMMIT_MESS** with the following format:
 
@@ -3234,8 +3236,9 @@ Spec version: {line count or hash}
 | Allowed | `git status`, `git diff`, `git log`, `git branch`, `git add` (read + staging) |
 | Allowed | `gitcommit <command>` — signs, commits, AND pushes in one step. See "gitcommit Script" |
 | **Required** | Write `{project_dir}/.git/COMMIT_MESS` BEFORE running `gitcommit <command>`. Re-read it after writing to confirm accuracy |
+| **PROHIBITED (subagents)** | Writing `.git/COMMIT_MESS` or calling `gitcommit` — subagents complete edits and report back; the parent (main) instance reviews the diff and owns the commit |
 
-**AI commits via the `gitcommit` wrapper script, not plain `git commit`.** The wrapper resolves the signing key, picks up the commit message from `{project_dir}/.git/COMMIT_MESS`, signs the commit, and pushes to the remote — all in one invocation. Plain `git commit` and `git push` remain prohibited because they skip the wrapper. Because gitcommit pushes automatically, the message file MUST be verified accurate before invocation — there is no local staging window to catch mistakes.
+**AI commits via the `gitcommit` wrapper script, not plain `git commit`.** The wrapper resolves the signing key, picks up the commit message from `{project_dir}/.git/COMMIT_MESS`, signs the commit, and pushes to the remote — all in one invocation. Plain `git commit` and `git push` remain prohibited because they skip the wrapper. Because gitcommit pushes automatically, the message file MUST be verified accurate before invocation — there is no local staging window to catch mistakes. **Subagents (spawned via the Agent tool) are exempt from the commit workflow entirely — they make edits and return; the parent instance handles diff review, COMMIT_MESS, and gitcommit.**
 
 ### Remote Image/Screenshot Handling
 
@@ -3266,6 +3269,8 @@ Spec version: {line count or hash}
 | `gitcommit <command>` without first writing AND re-reading `.git/COMMIT_MESS` | The script reads the message from the file and pushes immediately. Wrong file = wrong commit on the remote |
 | `gitcommit -m "..."` / `gitcommit --message "..."` | Defeats the point. The message belongs in `.git/COMMIT_MESS` so it can be verified before committing |
 | Running `gitcommit <command>` mid-task with files in an inconsistent state | Every commit is pushed — half-finished work goes public. Finish the unit of work first |
+| Subagent writing `.git/COMMIT_MESS` | Commit message must be written by the parent instance after reviewing the actual diff |
+| Subagent calling `gitcommit` | Only the parent (main) instance runs gitcommit — subagents complete edits and report back |
 | Deleting files without confirmation | Destructive action |
 | Changing NON-NEGOTIABLE sections | Specification violation |
 | Skipping validation | Security requirement |

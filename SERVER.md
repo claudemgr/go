@@ -1511,7 +1511,7 @@ On EVERY new conversation or after "context compacted" message:
 6. Built-in scheduler, GeoIP, metrics, email, backup, update
 7. Full admin panel with ALL settings
 8. Client binary for ALL projects
-9. Commit often — small, focused commits. Do NOT hoard unrelated changes into one big commit
+9. Commit often — small, focused commits. Do NOT hoard unrelated changes into one big commit. **Subagents do not commit** — complete edits and report back to the parent instance; the parent reviews the diff and owns the commit.
 
 ## File Locations
 - Config: `{config_dir}/server.yml`
@@ -3028,6 +3028,7 @@ Getting code correct on the first try is much harder than iterating with feedbac
 
 - Remove completed items from TODO.AI.md as each one is fully resolved and committed — delete each item individually; never truncate the whole file at once
 - File stays empty until new tasks are added
+- **Subagents:** do not write COMMIT_MESS or call gitcommit — complete your edits and report back to the parent instance to handle the commit.
 
 **This rule applies ONLY to TODO.AI.md.** The human-owned `TODO.md` is never emptied or truncated by AI — AI may only mark individual items done in place.
 
@@ -3251,6 +3252,7 @@ Spec version: {line count or hash}
 | Full | All tools available |
 | **PROHIBITED** | `git commit`, `git push` (plain git) — denied by sandbox/permission rules. They bypass commit signing AND the unified commit+push wrapper |
 | Allowed | `git status`, `git diff`, `git log`, `git branch`, `git add` (read + staging) |
+| **PROHIBITED (subagents)** | Writing `.git/COMMIT_MESS` or calling `gitcommit` — subagents complete edits and report back; the parent (main) instance reviews the diff and owns the commit |
 
 ### Remote Image/Screenshot Handling
 
@@ -3278,6 +3280,8 @@ Spec version: {line count or hash}
 | **Modifying PARTS 0-36** | **Implementation patterns are fixed - NEVER modify** |
 | Plain `git commit` (any flag form) | Bypasses signing wrapper |
 | Plain `git push` | Bypasses the commit wrapper entirely |
+| Subagent writing `.git/COMMIT_MESS` | Commit message must be written by the parent instance after reviewing the actual diff |
+| Subagent calling `gitcommit` | Only the parent (main) instance runs gitcommit — subagents complete edits and report back |
 | Deleting files without confirmation | Destructive action |
 | Changing NON-NEGOTIABLE sections | Specification violation |
 | Skipping validation | Security requirement |
