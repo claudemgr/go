@@ -789,11 +789,27 @@ jobs:
   ensure-build-image:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
+      packages: read
     outputs:
-      image: ${{ steps.check.outputs.image }}
-    # ... pull or build docker/Dockerfile.build, then export the image tag
-    # See cicd_conventions.md for the full step list.
+      image: ${{ steps.pull.outputs.image }}
+    steps:
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: pull
+        name: Pull build image (fail fast if missing)
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:build"
+          if ! docker pull "$IMAGE"; then
+            echo "::error::Build image $IMAGE not found."
+            echo "::error::Trigger the 'Build Toolchain Image' workflow (workflow_dispatch) to create it."
+            echo "::error::Never commit ci.yml or release.yml before the build image exists in the registry."
+            exit 1
+          fi
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
   build:
     needs: ensure-build-image
@@ -806,6 +822,13 @@ jobs:
 ```
 
 If `ensure-build-image` is missing, the workflow is non-conforming.
+
+**Bootstrap order** — when adding `docker/Dockerfile.build` to a project for the first time:
+1. Commit only `docker/Dockerfile.build` (no CI workflows yet)
+2. Trigger `build-toolchain.yml` via `workflow_dispatch` and verify the image appears in the registry
+3. Only then commit `ci.yml` and `release.yml`
+
+CI workflows pull the toolchain image — they never build it inline. If the image is absent, `ensure-build-image` fails immediately with an actionable error.
 
 ### X11 and Wayland Forwarding (Mandatory for GUI/Display Testing)
 
@@ -1144,9 +1167,11 @@ Renovate covers `github-actions` SHA updates automatically via `pinDigests: true
 
 ## Minimum Public Repo Workflows
 
-- build/test workflow
-- release workflow
-- security/dependency workflow
+- `ci.yml` — build, test, lint, coverage, and security jobs (push + PR + weekly schedule)
+- `release.yml` — tagged/manual release build and publish
+- `build-toolchain.yml` — monthly rebuild of the `:build` toolchain image
+
+All three files are mandatory. A project without `build-toolchain.yml` has no mechanism to publish the toolchain image that `ci.yml` and `release.yml` require.
 
 Equivalent Gitea/Forgejo/GitLab/Jenkins pipelines must enforce the same gates, not a weaker subset.
 
@@ -1406,6 +1431,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 
 ## Implementation Checklist
 
+- [ ] Bootstrap order followed: `docker/Dockerfile.build` committed first → `build-toolchain.yml` triggered via `workflow_dispatch` → image verified in registry → then `ci.yml`/`release.yml` committed
 - [ ] Core logic is shared across GUI/TUI/CLI
 - [ ] Runtime mode auto-detect follows GUI → TUI → CLI priority
 - [ ] GUI is not auto-selected in SSH/MOSH/remote-shell contexts

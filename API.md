@@ -1915,6 +1915,7 @@ Instructions for how this agent should behave...
   - `.github/PULL_REQUEST_TEMPLATE.md`
   - `.github/workflows/ci.yml`
   - `.github/workflows/release.yml`
+  - `.github/workflows/build-toolchain.yml`
 - These files are templates/project policy files: define them once in the template, then update them to match the actual project
 - `FUNDING.yml` remains optional
 
@@ -33595,6 +33596,8 @@ networks:
 | `docker.yml` | Version tag, push to main/master/beta | Docker images |
 | `build-toolchain.yml` | Monthly cron (1st @ 04:00 UTC) + `workflow_dispatch` | Rebuild and push `docker/Dockerfile.build` as `:build` |
 
+> **Note:** `ci.yml`, `release.yml`, and `build-toolchain.yml` are required on every project. `beta.yml`, `daily.yml`, and `docker.yml` are project-specific optional workflows — include only when the project requires them.
+
 **Branch push auto-cancel policy:** Any workflow triggered by pushes to `main`, `master`, `devel`, `dev`, or `beta` MUST use workflow concurrency to cancel older in-progress runs for the same ref. This applies to branch-based CI (for example `beta.yml`, `daily.yml`, `docker.yml`, and any project-specific branch-push workflow).
 
 **Tag release auto-cancel policy:** Tag-only release workflows like `release.yml` MUST also use workflow concurrency, but only per exact tag ref. A newer run for `refs/tags/v1.2.3` should cancel the older `refs/tags/v1.2.3` run. A run for `v1.2.4` must NOT cancel `v1.2.3`.
@@ -33618,6 +33621,10 @@ All workflows MUST set these environment variables:
 
 Runs on push and pull requests; security jobs (`secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan`) also run on the weekly schedule. Uses the project's toolchain image (`docker/Dockerfile.build`) — never installs tools inline. The `ensure-build-image` job is the gate: every downstream job `needs: ensure-build-image` and runs inside `${{ needs.ensure-build-image.outputs.image }}`.
 
+CI workflows pull the toolchain image — they never build it inline. If the image is absent, `ensure-build-image` fails immediately with an actionable error pointing the operator to `build-toolchain.yml`.
+
+**Bootstrap order** — when adding `docker/Dockerfile.build` for the first time: commit only `docker/Dockerfile.build` → trigger `build-toolchain.yml` via `workflow_dispatch` → verify image in registry → then commit `ci.yml` and `release.yml`.
+
 ```yaml
 name: CI
 
@@ -33638,7 +33645,6 @@ jobs:
   ensure-build-image:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       packages: read
     outputs:
       image: ${{ steps.pull.outputs.image }}
@@ -37974,12 +37980,12 @@ incus exec "$CONTAINER_NAME" -- bash -c "
     ${PROJECT_NAME} --service --install
 
     echo '=== Service Status ==='
-    systemctl status ${PROJECT_NAME} || true
+    systemctl status ${PROJECT_NAME} || true  # inside VM — not a host-service mutation
 
     echo '=== Service Start Test ==='
-    systemctl start ${PROJECT_NAME}
+    systemctl start ${PROJECT_NAME}  # inside VM — not a host-service mutation
     sleep 2
-    systemctl status ${PROJECT_NAME}
+    systemctl status ${PROJECT_NAME}  # inside VM — not a host-service mutation
 
     echo '=== API Endpoint Tests ==='
     # Test JSON response (default)
@@ -38088,7 +38094,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "
     fi
 
     echo '=== Service Stop Test ==='
-    systemctl stop ${PROJECT_NAME}
+    systemctl stop ${PROJECT_NAME}  # inside VM — not a host-service mutation
 
     echo '=== All tests passed ==='
 "
@@ -39109,8 +39115,8 @@ chmod +x {project_name}-linux-amd64
 
 ```bash
 sudo ./{project_name} --service install
-sudo systemctl start {project_name}
-sudo systemctl enable {project_name}
+sudo systemctl start {project_name}   # operator action on target host — not an AI-executed command during development
+sudo systemctl enable {project_name}  # operator action on target host — not an AI-executed command during development
 ```
 
 ## Configuration

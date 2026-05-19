@@ -3111,7 +3111,7 @@ Getting code correct on the first try is much harder than iterating with feedbac
 - no unsafe `pull_request_target` build/test/publish path
 - third-party actions pinned to full SHA
 - no secrets/write tokens exposed to fork PRs
-- security workflow exists and blocks on secret/dependency/workflow-policy failures
+- ci.yml security jobs (secret-scan, vuln-scan, workflow-policy) exist and block on failures
 
 ### Step 4: AI Tool Configuration (Rule Files)
 **Do AI rule files exist and follow the required format?**
@@ -6038,12 +6038,16 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 ./                          # Root project directory (git top-level)
 ├── .github/                # GitHub Actions (if using GitHub)
 │   └── workflows/
+│       ├── ci.yml          # Build, test, lint, coverage, security jobs
+│       ├── build-toolchain.yml  # Monthly :build toolchain image rebuild
 │       ├── release.yml     # Stable releases
 │       ├── beta.yml        # Beta releases
 │       ├── daily.yml       # Daily builds
 │       └── docker.yml      # Docker images
 ├── .gitea/                 # Gitea Actions (if using Gitea)
 │   └── workflows/
+│       ├── ci.yml          # Build, test, lint, coverage, security jobs
+│       ├── build-toolchain.yml  # Monthly :build toolchain image rebuild
 │       ├── release.yml     # Stable releases
 │       ├── beta.yml        # Beta releases
 │       ├── daily.yml       # Daily builds
@@ -38896,6 +38900,10 @@ All workflows MUST set these environment variables:
 
 Runs on push and pull requests; security jobs (`secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan`) also run on the weekly schedule. Uses the project's toolchain image (`docker/Dockerfile.build`) — never installs tools inline. The `ensure-build-image` job is the gate: every downstream job `needs: ensure-build-image` and runs inside `${{ needs.ensure-build-image.outputs.image }}`.
 
+CI workflows pull the toolchain image — they never build it inline. If the image is absent, `ensure-build-image` fails immediately with an actionable error pointing the operator to `build-toolchain.yml`.
+
+**Bootstrap order** — when adding `docker/Dockerfile.build` for the first time: commit only `docker/Dockerfile.build` → trigger `build-toolchain.yml` via `workflow_dispatch` → verify image in registry → then commit `ci.yml` and `release.yml`.
+
 ```yaml
 name: CI
 
@@ -38916,7 +38924,6 @@ jobs:
   ensure-build-image:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
       packages: read
     outputs:
       image: ${{ steps.pull.outputs.image }}
@@ -38969,7 +38976,7 @@ jobs:
           fi
 
   build:
-    needs: [ensure-build-image, test]
+    needs: [ensure-build-image, lint, test]
     runs-on: ubuntu-latest
     container:
       image: ${{ needs.ensure-build-image.outputs.image }}
@@ -38987,6 +38994,9 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
       - run: govulncheck ./...
+
+  # Additional jobs (same pattern — needs: ensure-build-image):
+  # secret-scan, workflow-policy, image-scan (needs: build), coverage (needs: test), upload-artifacts (needs: build)
 ```
 
 > **Note:** Security jobs (`secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan`) are defined within `ci.yml` with `needs: ensure-build-image`. They run on push, PR, and weekly schedule (`cron: '0 6 * * 1'`). Add `if: github.event_name != 'schedule'` to build/test/coverage/artifact jobs to skip non-security work on scheduled runs. Secret scanning is mandatory on every public repo via truffleHog (Apache-2.0). Use `github.event.before` / `github.event.after` for the scan range — never `default_branch`, which after a push resolves to the same commit as HEAD and silently skips the scan.
@@ -39896,6 +39906,8 @@ For self-hosted runners, change `runs-on: ubuntu-latest` to your runner label.
 
 | File | Trigger | Purpose |
 |------|---------|---------|
+| `ci.yml` | Push and pull requests; weekly schedule for security jobs | Build, test, lint, coverage, security jobs |
+| `build-toolchain.yml` | Monthly schedule + `workflow_dispatch` | `:build` toolchain image rebuild |
 | `release.yml` | Tag push (`v*`, `*.*.*`) | Production releases |
 | `beta.yml` | Push to `beta` branch | Beta releases |
 | `daily.yml` | Daily at 3am UTC + push to main/master | Daily builds |
@@ -59553,6 +59565,8 @@ make docker # Build Docker image
 - [ ] Volume mounts for config/data
 
 **PART 28: CI/CD Workflows**
+- [ ] `.github/workflows/ci.yml` — build, test, lint, coverage, and all security jobs
+- [ ] `.github/workflows/build-toolchain.yml` — monthly `:build` toolchain image rebuild
 - [ ] release.yml - Stable releases
 - [ ] beta.yml - Beta releases
 - [ ] daily.yml - Nightly builds
@@ -60040,6 +60054,8 @@ make docker # Build Docker image
 
 ### Workflow Files
 
+- [ ] `ci.yml` — build, test, lint, coverage, and all security jobs
+- [ ] `build-toolchain.yml` — monthly `:build` toolchain image rebuild
 - [ ] `release.yml` - Stable releases (tag trigger)
 - [ ] `beta.yml` - Beta releases (branch trigger)
 - [ ] `daily.yml` - Nightly builds (cron + push)
