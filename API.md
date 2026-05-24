@@ -1021,7 +1021,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 
 | NEVER | Instead |
 |-------|---------|
-| Use bcrypt for passwords | Use Argon2id |
+| Use bcrypt for config/backup passwords | Use Argon2id |
 | Put Dockerfile in project root | Put in `docker/Dockerfile` |
 | Use .env files | Hardcode sane defaults in docker-compose |
 | Run docker-compose in project dir | Use temp directory workflow |
@@ -1034,7 +1034,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | Use external cron for scheduling | Use internal scheduler (PART 18) |
 | Add comments to JSON files | JSON has no comment syntax |
 | Use `-musl` suffix in binary names | Alpine builds are not musl-specific |
-| Store tokens/passwords in plaintext | Passwords: Argon2id; Tokens: SHA-256 hash |
+| Store config/backup passwords or tokens in plaintext | Passwords: Argon2id; Tokens: SHA-256 hash |
 | Implement usage limits/quotas | Rate limits protect servers; usage limits extract money |
 | Create enterprise/premium tiers | All features free for all users, always |
 | Use plural directory names | Use singular: `handler/`, `model/`, not `handlers/` |
@@ -1214,7 +1214,7 @@ paths:
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
 |----------|--------|-----------|
-| What password hash? | Argon2id (NEVER bcrypt) | PART 11 |
+| Config/backup password hash? | Argon2id (NEVER bcrypt) | PART 11 |
 | Where is Dockerfile? | `docker/Dockerfile` (NEVER root) | PART 26 |
 | CGO enabled? | NEVER (CGO_ENABLED=0 always) | PART 7 |
 | Premium features? | NEVER (all features free) | PART 1 |
@@ -1456,12 +1456,12 @@ Purpose:
 - Most apps only have cluster nodes
 
 ## NEVER Do (Top 19) - VIOLATIONS ARE BUGS
-1. Use bcrypt → Use Argon2id
+1. Use bcrypt for config/backup passwords → Use Argon2id
 2. Put Dockerfile in root → `docker/Dockerfile`
 3. Use CGO → CGO_ENABLED=0 always
 4. Hardcode dev values → Detect at runtime
 5. Use external cron → Internal scheduler (PART 18)
-6. Store passwords plaintext → Argon2id (tokens use SHA-256)
+6. Store config/backup passwords plaintext → Argon2id (API tokens use SHA-256)
 7. Create premium tiers → All features free, no paywalls
 8. Use Makefile in CI/CD → Explicit commands only
 9. Guess or assume values that a command can produce → Run the command (`date`, `basename "$PWD"`, `git config user.email`, `git rev-parse --short HEAD`, `uname -m`, etc.) — when no command applies, read spec or ask user
@@ -11657,6 +11657,28 @@ CREATE TABLE IF NOT EXISTS backups (
 
 CREATE INDEX IF NOT EXISTS idx_backups_created ON backups(created_at);
 
+-- ----------------------------------------------------------------------------
+-- API Tokens (operator-provisioned bearer tokens)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_hash   TEXT NOT NULL UNIQUE,             -- SHA-256 of raw token; NEVER store plaintext
+    token_prefix TEXT NOT NULL,                    -- First 12 chars of raw token for log identification (tok_xxxxxxxx)
+    name         TEXT NOT NULL,                    -- Human label: "pastebin-owner", "ci-bot", "high-rate-client"
+    capabilities TEXT NOT NULL DEFAULT '[]',       -- JSON array: ["write","delete","rate:500"]
+    rate_limit   INTEGER,                          -- Requests/minute override (NULL = server default)
+    created_at   INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    expires_at   INTEGER,                          -- NULL = never expires
+    last_used_at INTEGER,
+    created_by   TEXT NOT NULL DEFAULT 'config',   -- "config" (from server.yml) or "operator" (CLI)
+    revoked_at   INTEGER,                          -- NULL = active
+    revoked_reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_tokens_hash   ON api_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_prefix ON api_tokens(token_prefix);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_active ON api_tokens(revoked_at) WHERE revoked_at IS NULL;
+
 ```
 
 **Example Config Data:**
@@ -11674,6 +11696,57 @@ INSERT INTO config (key, value, type) VALUES
     ('ratelimit.requests_per_minute', '0', 'number'),  -- 0 = use project default from IDEA.md
     ('branding.site_name', '"My App"', 'string');
 ```
+
+### API Token Model
+
+**Tokens are the only auth mechanism for API consumers. No passwords, no sessions, no user accounts.**
+
+Tokens are operator-provisioned — created via CLI or declared in `server.yml`. Clients send them as:
+
+```
+Authorization: Bearer tok_xxxxxxxxxxxxxxxxxxxx
+```
+
+**Token format:** `tok_` prefix + 32 URL-safe random base62 chars. The server stores only the SHA-256 hash; the raw token is shown to the operator exactly once on creation and never retrievable again.
+
+**Token capabilities** (JSON array in `api_tokens.capabilities`):
+
+| Capability | Effect |
+|------------|--------|
+| `"write"` | Allows POST/PUT/PATCH on project resources (e.g., create a paste) |
+| `"delete"` | Allows DELETE on resources the token owns |
+| `"rate:N"` | Overrides per-minute rate limit to N requests (e.g., `"rate:500"`) |
+| `"admin"` | Full operator access — use only for operator CLI/tooling tokens |
+
+**Operator creates tokens via CLI:**
+```
+{project_name} token create --name "ci-bot" --capabilities write,rate:500
+{project_name} token create --name "pastebin-owner" --capabilities write,delete
+{project_name} token list
+{project_name} token revoke <prefix>
+```
+
+**Or declare in `server.yml`** (tokens seeded on startup, hash stored in DB):
+```yaml
+security:
+  tokens:
+    - name: ci-bot
+      token: tok_xxxxxxxxxxxxxxxxxxxx  # Set once; server hashes and deletes from memory
+      capabilities: [write, "rate:500"]
+    - name: pastebin-owner
+      capabilities: [write, delete]
+      # token omitted → auto-generated on first run; printed to stdout once
+```
+
+**Token validation (every authenticated request):**
+1. Extract `Authorization: Bearer tok_...` header
+2. SHA-256 hash the raw token
+3. Lookup by prefix (fast index), verify hash matches
+4. Check `revoked_at IS NULL` and `expires_at > now()`
+5. Update `last_used_at`
+6. Attach capabilities to request context
+
+**Anonymous access** (no `Authorization` header): allowed for all public GET endpoints, subject to default rate limits.
 
 **Config Load/Save Helpers:**
 
@@ -13179,22 +13252,22 @@ func isColumnExistsError(err error) bool {
 **Never rename columns. Add new, migrate, deprecate:**
 
 ```go
-// v1.4.0 - Rename "name" to "display_name" (3-step process)
+// v1.4.0 - Rename "name" to "slug" (3-step process)
 
 // Step 1: Add new column (v1.4.0)
-`ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT ''`,
+`ALTER TABLE pastes ADD COLUMN slug TEXT DEFAULT ''`,
 
 // Step 2: App code reads from new, writes to both (v1.4.0)
-func (u *User) GetDisplayName() string {
-    if u.DisplayName != "" {
-        return u.DisplayName
+func (p *Paste) GetSlug() string {
+    if p.Slug != "" {
+        return p.Slug
     }
-    return u.Name  // Fallback to old column
+    return p.Name  // Fallback to old column
 }
 
-func (u *User) SetDisplayName(name string) {
-    u.DisplayName = name
-    u.Name = name  // Keep old column in sync
+func (p *Paste) SetSlug(slug string) {
+    p.Slug = slug
+    p.Name = slug  // Keep old column in sync
 }
 
 // Step 3: After all nodes upgraded, old column ignored (v1.5.0+)
@@ -13213,13 +13286,13 @@ func (u *User) SetDisplayName(name string) {
 
 **PostgreSQL-specific (v9.6+):**
 ```sql
-ALTER TABLE users ADD COLUMN IF NOT EXISTS org_visibility INTEGER DEFAULT 1;
+ALTER TABLE pastes ADD COLUMN IF NOT EXISTS slug TEXT DEFAULT '';
 ```
 
 **Cross-database compatible:**
 ```go
 // Try ALTER, ignore "already exists" errors
-_, err := db.Exec(`ALTER TABLE users ADD COLUMN org_visibility INTEGER DEFAULT 1`)
+_, err := db.Exec(`ALTER TABLE pastes ADD COLUMN slug TEXT DEFAULT ''`)
 if err != nil && !isColumnExistsError(err) {
     return err
 }
@@ -13804,7 +13877,7 @@ When `DEBUG=true` is active and an error occurs, the canonical error body (PART 
 | XSS | Reject control chars / null bytes at input | n/a | HTML-escape on render (templates auto-escape; raw output requires explicit `template.HTML` cast and review) | CSP `'self' + 'unsafe-inline'` blocks cross-origin script loads (PART 11 → CSP) |
 | Enumeration (account existence, valid IDs, valid tokens) | Rate limit per IP + per identifier + global | Constant-time comparison for tokens / passwords | Identical response shape and timing for "not found" vs "no access" | n/a |
 | Timing oracles | n/a | `subtle.ConstantTimeCompare` for all secret comparisons | Identical response time for success/fail by adding artificial sleep when faster than threshold | n/a |
-| Credential stuffing | Rate limit per IP + per identifier + global | Argon2id on every auth attempt (no "fast path" for unknown tokens) | Generic "invalid credentials" message | Account lockout after N failures |
+| Credential stuffing | Rate limit per IP + per token-prefix + global | Constant-time SHA-256 comparison (no "fast path" for invalid prefixes) | Generic "invalid token" message | Token auto-revoked after N consecutive failures |
 | Path traversal | Validate paths, reject `..` / null bytes | `filepath.Clean()` + base-dir confinement | n/a | OS-level read perms restrict reachable files |
 | Token / credential leakage | n/a | Never `slog.Info("token=", t)` — log token ID hash only | Sanitization layer strips known sensitive query params from URL fields in reports / logs / error contexts (see PART 14 → "Public Reports Scope") | TLS in transit (PART 15) |
 | CSRF | Validate Origin + same-origin check | n/a | CSRF token on cookie-authenticated state-changing requests (PART 16 → CSRF) | `SameSite=Strict` cookies (browser-level enforcement) |
@@ -13969,7 +14042,7 @@ X-Request-ID: <per-request UUID — also echoed back in JSON error envelopes>
 Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
 ```
 
-**On logout / account-delete / consent-withdrawal responses (and on any response that revokes a session), also include:**
+**On token-revocation and consent-withdrawal responses, also include:**
 
 ```
 Clear-Site-Data: "cache", "cookies", "storage"
@@ -14078,10 +14151,9 @@ web:
     sec_fetch_validation: true         # reject cross-site state-changers (CSRF defense layer)
     server_timing_in_debug_only: true  # never emit Server-Timing in production
     clear_site_data:
-      on_logout: true
-      on_account_delete: true
+      on_token_revocation: true
       on_consent_withdrawal: true
-      execution_contexts: false        # set true to also reload SPA tabs on logout
+      execution_contexts: false        # set true to also reload SPA tabs on token revocation
     nel:
       enabled: true
       max_age_seconds: 2592000         # 30 days
@@ -14111,7 +14183,7 @@ web:
 |--------|-----------|---------|----------|
 | `Sec-GPC: 1` (Global Privacy Control) | inbound | honored | When received, treat the request as opt-out of "sale or sharing of personal data" (CCPA/CPRA), opt-out of behavioral profiling (GDPR Art. 21), and skip non-essential cookies. Logged to audit (`compliance.gpc_honored`). |
 | `DNT: 1` (Do Not Track) | inbound | NOT honored by default | DNT was de-facto removed from Firefox/Chrome — honoring it now penalizes users on browsers that still emit it for legacy reasons. Operators with EU-only audiences can opt in via `web.headers.honor_dnt: true`. |
-| `Clear-Site-Data` | outbound | emitted on session-revoke | Sent on logout, account-delete, password-change, and consent-withdrawal responses. Default value `"cache", "cookies", "storage"`. `"executionContexts"` opt-in only. |
+| `Clear-Site-Data` | outbound | emitted on token-revocation | Sent on token-revocation and consent-withdrawal responses. Default value `"cache", "cookies", "storage"`. `"executionContexts"` opt-in only. |
 
 **`Sec-GPC` is the load-bearing one.** When received, the binary MUST:
 1. Set the request's `gpc_opt_out=true` flag throughout the request lifecycle.
@@ -14577,7 +14649,7 @@ web:
 | Concern | Configuration |
 |---------|---------------|
 | **Disclosure feature** — coordinated-disclosure pipeline (reports, policy page, hall of fame, GPG keypair) | Configured via config file; security reports accessible via public `/server/security/*` routes |
-| **Runtime defense** — IP blocks, allow-lists, account lockouts | Configured via config file; see PART 11 → "IP Block Management" |
+| **Runtime defense** — IP blocks, allow-lists, token revocation | Configured via config file; see PART 11 → "IP Block Management" |
 | **`security.txt` content** — `Expires`, languages, keyservers list | Configured via `web.security.*` config keys |
 
 ### GPG Keypair Management (Admin API)
@@ -22436,49 +22508,70 @@ async function checkLocationPermission() {
 
 | Storage | Use Case | Cleared |
 |---------|----------|---------|
-| **localStorage** | API token, preferences | Manual/logout |
-| **IndexedDB** | Offline data, cached responses | Manual/logout |
-| **Cookies** | Server-side token (fallback) | Expiry/logout |
+| **localStorage** | API token (optional), UI preferences | Manual/revocation |
+| **IndexedDB** | Offline data, cached responses | Manual/revocation |
+| **Cookies** | Bearer token (httpOnly fallback) | Expiry/revocation |
 
 **Token persists when:**
 - App is closed and reopened
 - Device is restarted
 - Switching between browser and installed PWA
 
-**Logout clears all:** localStorage, IndexedDB, service worker cache of user data.
+**Token revocation clears credentials** (UI preferences are kept — they are not sensitive):
 
 ```javascript
-// Complete logout - clear all user data
-async function logout() {
-  // Clear localStorage
-  localStorage.removeItem('auth_token');
-  localStorage.removeItem('user_prefs');
+// Revoke local token — keeps UI preferences (theme, lang) intact
+async function revokeLocalToken() {
+  // Remove stored API token
+  localStorage.removeItem('api_token');
 
-  // Clear IndexedDB
+  // Clear any cached private/token-scoped data from IndexedDB
   const databases = await indexedDB.databases();
   for (const db of databases) {
-    indexedDB.deleteDatabase(db.name);
-  }
-
-  // Clear service worker cache (user data only)
-  const cacheKeys = await caches.keys();
-  for (const key of cacheKeys) {
-    if (key.includes('user-data')) {
-      await caches.delete(key);
+    if (db.name.includes('private') || db.name.includes('token')) {
+      indexedDB.deleteDatabase(db.name);
     }
   }
 
-  // Unsubscribe from push
+  // Unsubscribe from push (was associated with token)
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.getSubscription();
   if (subscription) {
     await subscription.unsubscribe();
   }
 
-  // Redirect to home
-  window.location.href = '/';
+  // Reload page — public content still accessible
+  window.location.reload();
 }
 ```
+
+### Client-Side Preferences (localStorage)
+
+**User preferences are stored in localStorage — zero server persistence, zero user account needed.**
+
+| Key | Values | Default |
+|-----|--------|---------|
+| `theme` | `"dark"` \| `"light"` \| `"auto"` | `"dark"` |
+| `lang` | BCP 47 tag: `"en"`, `"es"`, `"fr"`, … | Browser `navigator.language` |
+| `cookieConsent` | `"accepted"` \| `"declined"` | unset (banner shown) |
+| `ccpaDoNotSell` | `"true"` | unset |
+
+**Preference reads/writes:**
+```javascript
+// Read with default fallback
+const theme = localStorage.getItem('theme') ?? 'dark';
+const lang  = localStorage.getItem('lang')  ?? navigator.language.split('-')[0] ?? 'en';
+
+// Write
+localStorage.setItem('theme', 'light');
+localStorage.setItem('lang', 'fr');
+```
+
+**Rules:**
+- Preferences survive token revocation — they are UI state, not account data
+- Never sync preferences to the server — they live entirely on the client
+- Never store PII in localStorage
+- Always read with a safe default fallback
 
 ### Offline Behavior
 
@@ -24903,7 +24996,7 @@ web:
 | Token in cookie + matching value in form/header | Double-submit cookie pattern. Token cookie is `SameSite=Strict`, `HttpOnly=false` (the form needs to read it), `Secure` per `csrf.secure`. |
 | Forms include hidden `<input name="csrf_token" value="…">` | Server-rendered HTML inserts the token automatically — no manual work in templates. |
 | Non-GET requests under cookie-session auth check the token | Per the "When CSRF Validation Runs" table above — Bearer/public/read-only paths skip the check. |
-| Token regenerated on login, logout, and privilege change | Prevents fixation. |
+| Token regenerated on session init and token revocation | Prevents fixation. |
 | Validation failure → `403 FORBIDDEN` with canonical error body | `{"ok": false, "error": "CSRF_FAILED", "message": "CSRF token validation failed"}` (PART 14 → "Error Response"). |
 | Reject if cookie present and header/form missing, or if values mismatch | No silent fallback. |
 | Log to `security.log` as `security.csrf_failure` | IP, endpoint, reason — see PART 11. |
@@ -39280,8 +39373,8 @@ var localeFS embed.FS
 
     "header": {
       "search_placeholder": "Buscar...",
-      "logout": "Cerrar sesión",
-      "admins_online": "Administradores en línea"
+      "revoke_token": "Revocar token",
+      "operators_online": "Operadores en línea"
     },
 
     "dashboard": {
@@ -47274,7 +47367,7 @@ make docker # Build Docker image
 ### Authentication & Authorization
 
 - [ ] No hardcoded credentials in code
-- [ ] Passwords hashed with Argon2id (NEVER bcrypt)
+- [ ] Config/backup passwords hashed with Argon2id (NEVER bcrypt); API tokens hashed with SHA-256
 - [ ] Session tokens are cryptographically random
 - [ ] Session expiration enforced
 - [ ] CSRF protection on all forms
