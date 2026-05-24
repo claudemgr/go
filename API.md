@@ -11658,26 +11658,27 @@ CREATE TABLE IF NOT EXISTS backups (
 CREATE INDEX IF NOT EXISTS idx_backups_created ON backups(created_at);
 
 -- ----------------------------------------------------------------------------
--- API Tokens (operator-provisioned bearer tokens)
+-- API Tokens (server-generated resource owner tokens)
+-- The server.token (server.yml) is NOT stored here — it is validated
+-- directly from config via constant-time SHA-256 comparison.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS api_tokens (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    token_hash   TEXT NOT NULL UNIQUE,             -- SHA-256 of raw token; NEVER store plaintext
-    token_prefix TEXT NOT NULL,                    -- First 12 chars of raw token for log identification (tok_xxxxxxxx)
-    name         TEXT NOT NULL,                    -- Human label: "pastebin-owner", "ci-bot", "high-rate-client"
-    capabilities TEXT NOT NULL DEFAULT '[]',       -- JSON array: ["write","delete","rate:500"]
-    rate_limit   INTEGER,                          -- Requests/minute override (NULL = server default)
-    created_at   INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-    expires_at   INTEGER,                          -- NULL = never expires
-    last_used_at INTEGER,
-    created_by   TEXT NOT NULL DEFAULT 'config',   -- "config" (from server.yml) or "operator" (CLI)
-    revoked_at   INTEGER,                          -- NULL = active
-    revoked_reason TEXT
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_hash    TEXT NOT NULL UNIQUE,            -- SHA-256 of raw token; NEVER store plaintext
+    token_prefix  TEXT NOT NULL,                   -- First 12 chars for log identification (tok_xxxxxxxx)
+    resource_type TEXT NOT NULL,                   -- Project-defined type: "paste", "upload", "link", etc.
+    resource_id   TEXT NOT NULL,                   -- ID of the resource this token owns
+    created_at    INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    expires_at    INTEGER,                         -- NULL = never expires
+    last_used_at  INTEGER,
+    revoked_at    INTEGER,                         -- NULL = active
+    revoked_reason TEXT                            -- e.g., "tos_violation", "operator_action"
 );
 
-CREATE INDEX IF NOT EXISTS idx_api_tokens_hash   ON api_tokens(token_hash);
-CREATE INDEX IF NOT EXISTS idx_api_tokens_prefix ON api_tokens(token_prefix);
-CREATE INDEX IF NOT EXISTS idx_api_tokens_active ON api_tokens(revoked_at) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_api_tokens_hash     ON api_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_prefix   ON api_tokens(token_prefix);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_resource ON api_tokens(resource_type, resource_id);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_active   ON api_tokens(revoked_at) WHERE revoked_at IS NULL;
 
 ```
 
@@ -11694,59 +11695,81 @@ INSERT INTO config (key, value, type) VALUES
     ('ssl.min_version', '"TLS1.2"', 'string'),
     ('cors.allowed_origins', '["https://example.com","https://api.example.com"]', 'array'),
     ('ratelimit.requests_per_minute', '0', 'number'),  -- 0 = use project default from IDEA.md
-    ('branding.site_name', '"My App"', 'string');
+    ('branding.site_name', '"My App"', 'string'),
+    ('server.token', '"tok_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"', 'string');  -- auto-generated if blank
 ```
 
 ### API Token Model
 
-**Tokens are the only auth mechanism for API consumers. No passwords, no sessions, no user accounts.**
+**Two-tier auth. No passwords, no sessions, no user accounts.**
 
-Tokens are operator-provisioned — created via CLI or declared in `server.yml`. Clients send them as:
+| Tier | Source | Scope | Purpose |
+|------|--------|-------|---------|
+| **`server.token`** | `server.yml` (auto-generated on first run) | Global — all resources | Operator actions: delete any resource, enforce TOS, revoke tokens |
+| **Resource owner token** | Server-generated on resource creation | One resource only | Owner edits/deletes their own resource |
 
+Clients send either as:
 ```
 Authorization: Bearer tok_xxxxxxxxxxxxxxxxxxxx
 ```
 
-**Token format:** `tok_` prefix + 32 URL-safe random base62 chars. The server stores only the SHA-256 hash; the raw token is shown to the operator exactly once on creation and never retrievable again.
+**Token format:** `tok_` prefix + 32 URL-safe random base62 chars. The server stores only the SHA-256 hash; the raw token is shown once (creation response or startup log) and never retrievable again.
 
-**Token capabilities** (JSON array in `api_tokens.capabilities`):
+---
 
-| Capability | Effect |
-|------------|--------|
-| `"write"` | Allows POST/PUT/PATCH on project resources (e.g., create a paste) |
-| `"delete"` | Allows DELETE on resources the token owns |
-| `"rate:N"` | Overrides per-minute rate limit to N requests (e.g., `"rate:500"`) |
-| `"admin"` | Full operator access — use only for operator CLI/tooling tokens |
+#### `server.token` — Global Operator Token
 
-**Operator creates tokens via CLI:**
-```
-{project_name} token create --name "ci-bot" --capabilities write,rate:500
-{project_name} token create --name "pastebin-owner" --capabilities write,delete
-{project_name} token list
-{project_name} token revoke <prefix>
-```
+Declared in `server.yml` under `server.token`. Auto-generated and written back to `server.yml` on first run if absent or empty. Grants full access to every resource and every server management endpoint.
 
-**Or declare in `server.yml`** (tokens seeded on startup, hash stored in DB):
 ```yaml
-security:
-  tokens:
-    - name: ci-bot
-      token: tok_xxxxxxxxxxxxxxxxxxxx  # Set once; server hashes and deletes from memory
-      capabilities: [write, "rate:500"]
-    - name: pastebin-owner
-      capabilities: [write, delete]
-      # token omitted → auto-generated on first run; printed to stdout once
+server:
+  token: tok_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  # auto-generated if blank
 ```
 
-**Token validation (every authenticated request):**
+**Not stored in `api_tokens` DB table.** Validated by SHA-256-hashing the inbound token and comparing against `SHA-256(server.token)` with `subtle.ConstantTimeCompare`. The hash is cached in memory at startup — never written to the DB.
+
+**Use cases:**
+- Delete a paste that violates TOS or breaks a law
+- Revoke a resource owner token
+- Any moderation or emergency operation
+
+---
+
+#### Resource Owner Tokens — Project-Dependent
+
+Whether resources have owner tokens depends on the project (defined in IDEA.md). A pastebin generates one; a read-only stats API generates none.
+
+**Creation flow (example: pastebin):**
+```
+POST /pastes
+→ 201 Created
+  {
+    "ok": true,
+    "data": {
+      "id": "abc123",
+      "url": "/pastes/abc123",
+      "owner_token": "tok_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  }
+```
+The server generates the token, stores `SHA-256(token)` in `api_tokens` with `resource_type="paste"` and `resource_id="abc123"`, then returns the raw token **once**. It is never retrievable again. The client stores it in `localStorage`.
+
+**Ownership check (every write/delete on a resource):**
 1. Extract `Authorization: Bearer tok_...` header
-2. SHA-256 hash the raw token
-3. Lookup by prefix (fast index), verify hash matches
-4. Check `revoked_at IS NULL` and `expires_at > now()`
-5. Update `last_used_at`
-6. Attach capabilities to request context
+2. If matches `server.token` hash → **operator access, allow unconditionally**
+3. Otherwise: SHA-256 hash, lookup by prefix in `api_tokens`
+4. Verify hash matches, `revoked_at IS NULL`, `expires_at > now()` or NULL
+5. Verify `resource_type` + `resource_id` match the target resource
+6. Update `last_used_at`
 
 **Anonymous access** (no `Authorization` header): allowed for all public GET endpoints, subject to default rate limits.
+
+**Operator revocation:**
+```
+{project_name} token revoke <prefix>   # revoke a specific resource token
+{project_name} token list              # list active tokens (prefix + resource)
+```
+Or call `DELETE /api/{api_version}/server/tokens/{prefix}` with `server.token`.
 
 **Config Load/Save Helpers:**
 
