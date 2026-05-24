@@ -957,10 +957,10 @@ src/
 
 | Split When | Into | Example |
 |------------|------|---------|
-| Multiple unrelated features | Feature-specific files | `user.go` → `user_model.go`, `user_service.go`, `user_handler.go` |
-| Multiple handlers | Handler per domain | `handler.go` → `handler/user.go`, `handler/admin.go` |
-| Multiple services | Service per domain | `service.go` → `service/user.go`, `service/email.go` |
-| Test file covers many features | Test per feature | `server_test.go` → `auth_test.go`, `user_test.go` |
+| Multiple unrelated features | Feature-specific files | `item.go` → `item_model.go`, `item_service.go`, `item_handler.go` |
+| Multiple handlers | Handler per domain | `handler.go` → `handler/item.go`, `handler/server.go` |
+| Multiple services | Service per domain | `service.go` → `service/item.go`, `service/email.go` |
+| Test file covers many features | Test per feature | `server_test.go` → `api_test.go`, `item_test.go` |
 | File hard to navigate | Logical groupings | Split when you can't find things quickly |
 
 **Signs a file needs splitting:**
@@ -4257,7 +4257,7 @@ go build -o binary/{project_name} ./src
 | **Fail Secure** | On error, deny access rather than grant it |
 | **Secure by Default** | Safe defaults, user opts-in to less secure options |
 | **Internet-Facing Baseline** | Server apps are assumed exposed to hostile public networks unless the user explicitly defines a private/internal deployment |
-| **Suggest, Don't Block** | Recommend security features (MFA), never force them |
+| **Suggest, Don't Block** | Recommend security features (token rotation), never force them |
 | **Friction-Free Security** | Security should enhance, not impede, the user experience |
 | **Usability Through Safe Automation** | Reduce operator effort by automating secure behavior, not by weakening controls |
 
@@ -4331,10 +4331,8 @@ db.Query("SELECT * FROM users WHERE email = '" + email + "'")
 | Endpoint Type | Default Limit | Default Window | Response |
 |---------------|---------------|----------------|----------|
 | **Login attempts** | 5 | 15 minutes | 429 + lockout |
-| **Password reset** | 3 | 1 hour | 429 + silent (no email hint) |
 | **API (authenticated)** | Configurable | 1 minute | 429 + Retry-After header |
 | **API (unauthenticated)** | Configurable | 1 minute | 429 + Retry-After header |
-| **Registration** | 5 | 1 hour | 429 |
 | **File upload** | 10 | 1 hour | 429 |
 
 **Project-specific defaults:** Each project defines its own default rate limits based on expected usage patterns. High-traffic APIs may need higher limits; sensitive operations may need lower limits. Define project-appropriate defaults in IDEA.md.
@@ -4408,11 +4406,9 @@ Content-Type: application/json
 
 | Scenario | Security Need | Usability Solution |
 |----------|---------------|-------------------|
-| Strong passwords | Prevent weak passwords | Show strength meter, suggest improvements |
-| Session timeout | Limit exposure | Warn before timeout, extend on activity |
+| Token rotation | Prevent stale credentials | Warn before expiry, provide renewal flow |
 | Rate limiting | Prevent abuse | Clear error message with retry time |
 | CAPTCHA | Prevent bots | Only after failed attempts, not first try |
-| 2FA | Account security | Remember device option (30 days) |
 
 **Rule:** solve usability problems by improving workflow, defaults, messaging, and automation - not by weakening protections that guard an internet-facing server.
 
@@ -4892,13 +4888,13 @@ If `{official_site}` is defined, ALL documentation examples MUST use the full UR
 ```markdown
 # ❌ WRONG - Relative paths when officialsite exists
 GET /server/healthz
-GET /api/v1/users
+GET /api/v1/items
 GET /api/autoconfig
 curl http://localhost:8080/api/v1/data
 
 # ✅ CORRECT - Full URLs using officialsite
 GET https://api.example.com/server/healthz
-GET https://api.example.com/api/v1/users
+GET https://api.example.com/api/v1/items
 GET https://api.example.com/api/autoconfig
 curl -q -LSsf https://api.example.com/api/v1/data
 ```
@@ -4907,7 +4903,7 @@ curl -q -LSsf https://api.example.com/api/v1/data
 1. **API examples**: Always use `{official_site}` as base URL
 2. **curl commands**: Use `{official_site}`, not `localhost` or relative paths
 3. **Client examples**: Show connecting to `{official_site}` by default
-4. **Endpoint tables**: Show full URLs: `GET {official_site}/api/v1/users`
+4. **Endpoint tables**: Show full URLs: `GET {official_site}/api/v1/items`
 5. **Docker examples**: OK to use localhost for local deployment instructions
 6. **Development section**: OK to use localhost (it's for local dev)
 
@@ -4918,8 +4914,8 @@ curl -q -LSsf https://api.example.com/api/v1/data
 | Endpoint | Description |
 |----------|-------------|
 | `GET {official_site}/server/healthz` | Health check |
-| `GET {official_site}/api/v1/users` | List users |
-| `POST {official_site}/api/v1/users` | Create user |
+| `GET {official_site}/api/v1/items` | List resources |
+| `POST {official_site}/api/v1/items` | Create resource |
 | `GET {official_site}/api/autoconfig` | Auto-configuration |
 
 ### Examples
@@ -4928,8 +4924,8 @@ curl -q -LSsf https://api.example.com/api/v1/data
 # Get server status
 curl -q -LSsf {official_site}/server/healthz
 
-# List all users (requires auth)
-curl -q -LSsf -H "Authorization: Bearer TOKEN" {official_site}/api/v1/users
+# List all resources (requires auth)
+curl -q -LSsf -H "Authorization: Bearer TOKEN" {official_site}/api/v1/items
 
 # Auto-config for clients
 curl -q -LSsf {official_site}/api/autoconfig
@@ -4937,7 +4933,7 @@ curl -q -LSsf {official_site}/api/autoconfig
 ```
 
 **If {official_site} is not defined:**
-- Use relative paths: `GET /server/healthz`, `GET /api/v1/users`
+- Use relative paths: `GET /server/healthz`, `GET /api/v1/items`
 - Use placeholder in curl: `curl -q -LSsf http://YOUR_SERVER/server/healthz`
 - Document that user must specify their server URL
 
@@ -4949,11 +4945,11 @@ For code that runs in the application, NEVER use bare `/path`. Always use `{fqdn
 
 | Context | ❌ Wrong | ✅ Correct |
 |---------|----------|------------|
-| **Go code** | `"/api/v1/users"` | `fmt.Sprintf("https://%s/api/v1/users", cfg.FQDN)` |
-| **JavaScript** | `fetch('/api/v1/users')` | `fetch(\`${window.location.origin}/api/v1/users\`)` |
+| **Go code** | `"/api/v1/items"` | `fmt.Sprintf("https://%s/api/v1/items", cfg.FQDN)` |
+| **JavaScript** | `fetch('/api/v1/items')` | `fetch(\`${window.location.origin}/api/v1/items\`)` |
 | **HTML templates** | `href="/api/docs"` | `href="https://{{.FQDN}}/api/docs"` |
 | **Config files** | `url: /callback` | `url: https://{fqdn}/callback` |
-| **Email templates** | `<a href="/verify">` | `<a href="https://{{.FQDN}}/verify">` |
+| **Email templates** | `<a href="/server/alert">` | `<a href="https://{{.FQDN}}/server/alert">` |
 
 **Why:** Bare paths break when:
 - Behind reverse proxy with different base path
@@ -4982,29 +4978,29 @@ link := BuildURL("/api/v1/items/" + itemID)
 
 ```javascript
 // ❌ WRONG - Bare path (breaks with base paths)
-fetch('/api/v1/users')
+fetch('/api/v1/items')
 
 // ✅ CORRECT - Full URL
-fetch(`${window.location.origin}/api/v1/users`)
+fetch(`${window.location.origin}/api/v1/items`)
 
 // ✅ CORRECT - From config
-fetch(`${config.apiBaseUrl}/api/v1/users`)
+fetch(`${config.apiBaseUrl}/api/v1/items`)
 ```
 
 **HTML template examples:**
 
 ```html
 <!-- ❌ WRONG - Bare path (breaks in emails, notifications) -->
-<a href="/verify?token={{.Token}}">Verify Email</a>
+<a href="/server/security/report/{{.Token}}">View Report</a>
 
 <!-- ✅ CORRECT - Full URL using FQDN -->
-<a href="https://{{.FQDN}}/verify?token={{.Token}}">Verify Email</a>
+<a href="https://{{.FQDN}}/server/security/report/{{.Token}}">View Report</a>
 ```
 
 **Exception - Internal routing only:**
 ```go
 // OK to use bare paths for internal router registration
-router.GET("/api/v1/users", handleUsers)
+router.GET("/api/v1/items", handleItems)
 router.GET("/server/healthz", handleHealth)
 if cfg.Server.Healthz.Root.Enabled {
     router.GET("/healthz", handleHealth) // same handler, no redirect
@@ -5016,11 +5012,11 @@ if cfg.Server.Healthz.Root.Enabled {
 | Location | Format | Example |
 |----------|--------|---------|
 | README.md | `{official_site}/path` | `GET https://api.example.com/server/healthz` |
-| docs/*.md | `{official_site}/path` | `curl -q -LSsf https://api.example.com/api/v1/users` |
+| docs/*.md | `{official_site}/path` | `curl -q -LSsf https://api.example.com/api/v1/items` |
 | Go code | `{fqdn}/path` | `fmt.Sprintf("https://%s/path", cfg.FQDN)` |
 | JS code | `origin/path` | `${window.location.origin}/path` |
-| Email templates | `{fqdn}/path` | `https://{{.FQDN}}/verify` |
-| Router registration | `/path` | `router.GET("/api/v1/users", ...)` (internal only) |
+| Email templates | `{fqdn}/path` | `https://{{.FQDN}}/server/security/report/{{.Token}}` |
+| Router registration | `/path` | `router.GET("/api/v1/items", ...)` (internal only) |
 
 **Platform-Specific URLs:**
 
@@ -7038,7 +7034,7 @@ func PathSecurityMiddleware(next http.Handler) http.Handler {
 | Request | Result | Status |
 |---------|--------|--------|
 | `GET /server/admin//config//settings` | `/server/admin/config/settings` | 200 |
-| `GET //api///v1//users` | `/api/{api_version}/users` | 200 |
+| `GET //api///v1//items` | `/api/{api_version}/items` | 200 |
 | `GET ///` | `/` | 200 |
 | `GET /static/../server/admin` | Blocked | 400 |
 | `GET /api/{api_version}/files/..%2F..%2Fetc/passwd` | Blocked | 400 |
@@ -7292,7 +7288,7 @@ Self-Healing Successful?                        │
     │
     └─► NO: Continue in Maintenance Mode
             Retry every 30 seconds
-            Show fix instructions in admin UI
+            Log fix instructions to server log
 ```
 
 ### Admin API in Maintenance Mode
@@ -7492,8 +7488,6 @@ server:
 | Server settings | server.yml | Remote DB | Cached in server.yml |
 | Branding/SEO | server.yml | Remote DB | Cached in server.yml |
 | SSL settings | server.yml | Remote DB | Cached in server.yml |
-| User accounts | Local SQLite | Remote DB | ❌ Unavailable |
-| Sessions | Local SQLite | Remote DB | ❌ Unavailable |
 | API tokens | Local SQLite | Remote DB | ❌ Unavailable |
 
 ### server.yml Structure (Cluster Mode with Cache)
@@ -8237,13 +8231,13 @@ Binary checks:
 ├─ Is user root?
 │   └─ YES → Allow restore (with confirmation prompt)
 ├─ Is user the service user ({project_name})?
-│   └─ YES → Require admin credentials:
-│            "This will OVERWRITE all data. Enter admin credentials to confirm."
-│            └─ Valid credentials → Allow restore
+│   └─ YES → Require operator password:
+│            "This will OVERWRITE all data. Enter operator password to confirm."
+│            └─ Valid password → Allow restore
 │            └─ Invalid → Reject
 └─ Random user → Reject with:
    "Restore requires administrator authorization.
-    Run as root or provide admin credentials."
+    Run as root or provide operator password."
 ```
 
 **Mode change authorization flow:**
@@ -8255,7 +8249,7 @@ Binary checks:
 ├─ Is user root?
 │   └─ YES → Allow (with warning about security implications)
 ├─ Is user the service user ({project_name})?
-│   └─ YES → Require admin credentials
+│   └─ YES → Require operator password
 └─ Random user → Reject
 ```
 
@@ -8263,7 +8257,7 @@ Binary checks:
 
 | Attack | Without Auth | With Auth |
 |--------|-------------|-----------|
-| Malicious user runs setup | Creates rogue admin account | ❌ Blocked (setup already done) |
+| Malicious user runs setup | Corrupts server configuration | ❌ Blocked (setup already done) |
 | Malicious user restores bad backup | Overwrites database, takes over | ❌ Blocked (needs admin creds) |
 | Malicious user enables dev mode | Exposes debug endpoints | ❌ Blocked (needs admin creds) |
 
@@ -8341,7 +8335,7 @@ func canRestore() (bool, string) {
     if isElevated() {
         return true, "elevated"
     }
-    // Service user: requires admin credentials (prompted)
+    // Service user: requires operator password (prompted)
     if isServiceUser() {
         return false, "need-creds" // Caller must prompt for creds
     }
@@ -8456,7 +8450,7 @@ chmod 755 /var/log/{project_org}/{internal_name}/
 
 | Aspect | System Service | User Service |
 |--------|---------------|--------------|
-| **Installed by** | root/admin | Regular user |
+| **Installed by** | root/admin | Unprivileged OS user |
 | **Runs as** | root → drops to `{project_name}` | Calling user |
 | **Ports** | Any | >1024 only |
 | **Paths** | `/etc/`, `/var/` | `~/.config/`, `~/.local/` |
@@ -8626,10 +8620,10 @@ server:
         schedule: "0 0 * * *"
         max_age: 30d
         max_size: 100MB
-      session_cleanup:
+      token_cleanup:
         enabled: true
-        # Hourly
-        schedule: "@hourly"
+        # Every 15 minutes
+        schedule: "*/15 * * * *"
       backup:
         enabled: true
         # Daily: 2:00 AM
@@ -10442,7 +10436,7 @@ PHASE 3: Handle maintenance commands (NO startup)
    ├─ --maintenance restore → restore data, exit
    ├─ --maintenance update  → update binary, exit
    ├─ --maintenance mode    → set mode, exit
-   └─ --maintenance setup   → reset admin credentials, exit
+   └─ --maintenance setup   → reset server configuration, exit
 
 PHASE 4: Handle update commands (NO startup)
 ────────────────────────────────────────────
@@ -10551,7 +10545,7 @@ PHASE 5: Server startup (actual server start)
     ├─ Register built-in tasks (key tasks):
     │   ├─ backup_daily (02:00 daily)
     │   ├─ ssl_renewal (03:00 daily)
-    │   ├─ session_cleanup (every 15m)
+    │   ├─ token_cleanup (every 15m)
     │   ├─ geoip_update (03:00 Sunday)
     │   ├─ public_ip_refresh (startup + every 12h, hardcoded)
     │   └─ ... and others (see PART 18)
@@ -11237,7 +11231,7 @@ func stopChildProcesses(timeout time.Duration) {
 
 **Smart Config Reload :**
 
-The app automatically watches config files and hot-reloads what it can. Settings that require restart trigger admin UI notification.
+The app automatically watches config files and hot-reloads what it can. Settings that require restart are logged as a warning.
 
 **Hot-Reloadable (auto-applied on file change):**
 
@@ -11876,8 +11870,6 @@ func buildHealthResponse() *HealthResponse {
 
         // Features (PUBLIC only - do NOT include /metrics)
         Features: FeaturesInfo{
-            MultiUser:     cfg.Features.MultiUser,
-            Organizations: cfg.Features.Organizations,
             GeoIP:         cfg.Features.GeoIP.Enabled,
             Tor: TorInfo{
                 Enabled:  cfg.Features.Tor.Enabled,
@@ -12426,7 +12418,7 @@ func GetWildcardDomain() string
 | HTML templates | `BuildURL(r, "/path")` |
 | Swagger/OpenAPI | `servers[0].url` = `BuildURL(r, "")` |
 | GraphQL | `BuildURL(r, "/api/{api_version}/server/graphql")` (or `/api/graphql` alias for the latest version) |
-| Email links | `BuildURL(r, "/verify")` |
+| Email links | `BuildURL(r, "/server/security/report/{id}")` |
 | CORS origins | Auto-include `GetWildcardDomain()` if detected |
 
 ### FQDN Validation Rules
@@ -12783,8 +12775,6 @@ Error with structured context (validation, etc.):
 | `UNAUTHORIZED` | 401 | "Authentication required" |
 | `TOKEN_EXPIRED` | 401 | "Token has expired" |
 | `TOKEN_INVALID` | 401 | "Invalid token" |
-| `2FA_REQUIRED` | 401 | "Two-factor authentication required" |
-| `2FA_INVALID` | 401 | "Invalid 2FA code" |
 | `FORBIDDEN` | 403 | "Permission denied" |
 | `ACCOUNT_LOCKED` | 403 | "Account locked" |
 | `NOT_FOUND` | 404 | "Resource not found" |
@@ -12824,7 +12814,7 @@ func mapAPIErrorCodeToHTTPStatus(code string) int {
     switch code {
     case "BAD_REQUEST", "VALIDATION_FAILED":
         return 400
-    case "UNAUTHORIZED", "TOKEN_EXPIRED", "TOKEN_INVALID", "2FA_REQUIRED", "2FA_INVALID":
+    case "UNAUTHORIZED", "TOKEN_EXPIRED", "TOKEN_INVALID":
         return 401
     case "FORBIDDEN", "ACCOUNT_LOCKED":
         return 403
@@ -12882,7 +12872,7 @@ func logError(ctx context.Context, err *AppError) {
   "request_id": "req_abc123",
   "http_status": 500,
   "internal": "pq: connection refused",
-  "path": "/api/{api_version}/users",
+  "path": "/api/{api_version}/items",
   "method": "GET",
   "ip": "192.168.1.100"
 }
@@ -13723,11 +13713,11 @@ func isSerializationError(err error) bool {
 | Database credentials (password, full DSN, connection string) | Direct credential exposure. |
 | Specific internal IPs / hostnames (`db.internal.lan`, `10.0.0.5`, `192.168.1.5`) | Network topology + lateral-movement aid. |
 | API tokens, session tokens, CSRF tokens of any user | Direct credential exposure. |
-| Recovery keys, MFA secrets, passkey private material | Direct credential exposure. |
+| PGP private keys, signing material | Direct credential exposure. |
 | Other users' email addresses, real names, phone numbers | PII / GDPR. The user's own profile follows `privacy.profile_*_public` config. |
 | Other users' session activity, IP, last-seen | PII / privacy. |
 | Filesystem paths from build output, log paths, config paths | Source-tree disclosure. |
-| Account-existence signals — "username vs password" / "user found vs not" / signup with existing email | Enumeration. |
+| Account-existence signals — "token valid vs not" / "resource found vs not" | Enumeration. |
 | Specific rate-limit thresholds (return generic 429, not "limit X reached") | Helps attacker tune their pace. |
 | Per-user resource counts when not the user's own resources | Enumeration. |
 | Any field tagged `private`, `internal`, or `sensitive` in the data model | Explicit author intent. |
@@ -13814,7 +13804,7 @@ When `DEBUG=true` is active and an error occurs, the canonical error body (PART 
 | XSS | Reject control chars / null bytes at input | n/a | HTML-escape on render (templates auto-escape; raw output requires explicit `template.HTML` cast and review) | CSP `'self' + 'unsafe-inline'` blocks cross-origin script loads (PART 11 → CSP) |
 | Enumeration (account existence, valid IDs, valid tokens) | Rate limit per IP + per identifier + global | Constant-time comparison for tokens / passwords | Identical response shape and timing for "not found" vs "no access" | n/a |
 | Timing oracles | n/a | `subtle.ConstantTimeCompare` for all secret comparisons | Identical response time for success/fail by adding artificial sleep when faster than threshold | n/a |
-| Credential stuffing | Rate limit per IP + per username + global | Argon2id on every login attempt (no "fast path" for unknown users) | Generic "invalid credentials" message | Account lockout after N failures |
+| Credential stuffing | Rate limit per IP + per identifier + global | Argon2id on every auth attempt (no "fast path" for unknown tokens) | Generic "invalid credentials" message | Account lockout after N failures |
 | Path traversal | Validate paths, reject `..` / null bytes | `filepath.Clean()` + base-dir confinement | n/a | OS-level read perms restrict reachable files |
 | Token / credential leakage | n/a | Never `slog.Info("token=", t)` — log token ID hash only | Sanitization layer strips known sensitive query params from URL fields in reports / logs / error contexts (see PART 14 → "Public Reports Scope") | TLS in transit (PART 15) |
 | CSRF | Validate Origin + same-origin check | n/a | CSRF token on cookie-authenticated state-changing requests (PART 16 → CSRF) | `SameSite=Strict` cookies (browser-level enforcement) |
@@ -13923,9 +13913,9 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 |----------|--------|
 | Length | 32 bytes (256 bits) of `crypto/rand` |
 | Generated | First start. Stored in `server.db` row `app_secrets.installation_secret`, base64-encoded. |
-| Scope | Cluster-wide. The first node generates it; subsequent nodes joining the cluster receive it via the secure cluster join protocol (PART 10 → "Cluster" — the join token is HMAC-derived and the `installation_secret` is delivered as part of the same handshake payload). NEVER appears in a request, response, log, or admin UI. |
+| Scope | Cluster-wide. The first node generates it; subsequent nodes joining the cluster receive it via the secure cluster join protocol (PART 10 → "Cluster" — the join token is HMAC-derived and the `installation_secret` is delivered as part of the same handshake payload). NEVER appears in a request, response, or log. |
 | Used by | `{security_id}` HMAC (PART 11 → "Security Reports"); PGP private-key KDF (PART 11 → "GPG Keypair Management"); future derived material (cluster-internal request signing, cookie signing salts). |
-| Rotation | Manual via CLI command or config file. Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt admin password, log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and re-bases all live HMACs. The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
+| Rotation | Manual via CLI command or config file. Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt operator password, log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and re-bases all live HMACs. The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
 | Backup | Always — see PART 21 → "Backup Contents". Required for any restore: without it, the PGP private key in the backup is undecryptable. |
 | Loss = catastrophic | Lost = cannot decrypt PGP private key (and therefore cannot decrypt in-flight encrypted security reports); cannot validate `{security_id}` URLs on existing security.txt copies until the file regenerates. Recovery requires admin to: regenerate keypair, regenerate `installation_secret`, accept that all in-flight encrypted reports are unreadable. |
 
@@ -13934,13 +13924,13 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 | Secret | Length | Storage | Purpose | Rotation |
 |--------|--------|---------|---------|----------|
 | `cookie_signing_key` | 32 bytes (HMAC-SHA256) | `server.db` row `app_secrets.cookie_signing_key` | Signs session cookies to detect tampering. | Auto-rotated every 90 days; previous key valid for 7 days. |
-| `csrf_token_secret` | 32 bytes | `server.db` row `app_secrets.csrf_token_secret` | HMAC base for CSRF tokens (double-submit pattern, PART 16 → CSRF). | Auto-rotated on every admin password change + every 180 days. |
+| `csrf_token_secret` | 32 bytes | `server.db` row `app_secrets.csrf_token_secret` | HMAC base for CSRF tokens (double-submit pattern, PART 16 → CSRF). | Auto-rotated on API key regeneration + every 180 days. |
 
 **Pre-existing key (defined in PART 11 → "Server Encryption Key"):**
 
 | Key | Length | Storage | Purpose | Rotation |
 |-----|--------|---------|---------|----------|
-| `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run) | At-rest encryption for ALL sensitive server data: 2FA secrets, security report bodies (used as the AES fallback when no PGP keypair exists or when an admin has no personal pubkey, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via API (sensitive-op flow). 30-day grace for in-flight encrypted data. |
+| `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run) | At-rest encryption for ALL sensitive server data: API token hashes, security report bodies (used as the AES fallback when no PGP keypair exists, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via API (sensitive-op flow). 30-day grace for in-flight encrypted data. |
 
 **Note on consolidation:** `server.security.encryption_key` is the canonical at-rest AES key — every place the spec talks about "encrypt this sensitive data at rest" resolves to this one key, including security report bodies. It is NOT duplicated in `app_secrets`. The four `app_secrets` rows above are HMAC keys (not AES) and a root-secret for HMAC derivation; they are stored in the DB rather than `server.yml` because they have independent rotation lifecycles and need to be visible to cluster replicas via shared DB read.
 
@@ -14334,7 +14324,7 @@ const (
     TargetUnknown       TargetType = iota // Unknown/invalid target
     TargetPublic                          // Public routes (/, /api/{api_version}/, project-specific like /jokes, /weather, /ip)
     TargetServerPages                     // Server pages - about, help, contact, privacy (/server/*, /api/{api_version}/server/*)
-    TargetAdmin                           // Server administration routes (/api/{api_version}/server/*)
+    TargetServer                          // Server administration routes (/api/{api_version}/server/*)
 )
 ```
 
@@ -14600,9 +14590,9 @@ web:
 | **Rotate** | Generates a new keypair, signs the new pubkey with the old key, publishes the rotation to configured keyservers. Old key stays valid for 30 days for in-flight reports. |
 | **Publish to keyservers** | POST the public key to each entry in `web.security.keyservers`. Uses the keyserver's HTTP submission endpoint (`https://keys.openpgp.org/vks/v1/upload` for keys.openpgp.org, similar for ubuntu). Triggered automatically on generate/rotate; manually via "Republish" button. Failures are logged + retried with exponential backoff. |
 | **Export public key** | Use the public URL `/.well-known/pgp-key.asc` or copy `{config_dir}/security/pgp.pub.asc` directly. |
-| **Export private key** | **Full export, ASCII-armored, decrypted with the operator's confirmation password.** Triggers a sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt admin password, log to `audit.log` as `security.private_key_exported`, return the file as a single download. **The download is rate-limited to 1 per hour per admin and the audit entry includes admin username, IP, and reason text the admin must type.** |
-| **Import private key** | Upload an existing `pgp.priv.asc` (e.g., restoring from backup, migrating from another instance). Same sensitive-operation gate. Validates the key's identity matches the project's expected identity (warns on mismatch — admin can override). |
-| **Delete** | Sensitive-operation flow. Deletes both keys, sets `web.security.publish_pgp_key: false`, removes `Encryption:` line from security.txt. In-flight encrypted reports become un-decryptable — admin warned and must type confirmation. |
+| **Export private key** | **Full export, ASCII-armored, decrypted with the operator's confirmation password.** Triggers a sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt operator password, log to `audit.log` as `security.private_key_exported`, return the file as a single download. **The download is rate-limited to 1 per hour per operator and the audit entry includes operator IP and reason text the operator must type.** |
+| **Import private key** | Upload an existing `pgp.priv.asc` (e.g., restoring from backup, migrating from another instance). Same sensitive-operation gate. Validates the key's identity matches the project's expected identity (warns on mismatch — operator can override). |
+| **Delete** | Sensitive-operation flow. Deletes both keys, sets `web.security.publish_pgp_key: false`, removes `Encryption:` line from security.txt. In-flight encrypted reports become un-decryptable — operator warned and must type confirmation. |
 
 **Keypair properties stored in DB (NOT the keys themselves — those are on disk):**
 
@@ -14675,7 +14665,7 @@ web:
 
 **Fail2ban Format:**
 ```
-2024-10-10 13:55:36 [security] Failed login attempt from 192.168.1.100 for user admin
+2024-10-10 13:55:36 [security] Failed authentication attempt from 192.168.1.100
 2024-10-10 13:55:40 [security] Rate limit exceeded from 192.168.1.100
 ```
 
@@ -15144,8 +15134,8 @@ server:
 | Access logging | ✓ | - | ✓ | ✓ | ✓ | ✓ |
 | Breach notification | 72hr | - | 60days | ✓ | ✓ | ✓ |
 | Data residency | ✓ | - | - | - | - | - |
-| MFA requirement | - | - | ✓ | ✓ | ✓ | - |
-| Password policy | ✓ | - | ✓ | ✓ | ✓ | ✓ |
+| Strong auth requirement | - | - | ✓ | ✓ | ✓ | - |
+| Token policy | ✓ | - | ✓ | ✓ | ✓ | ✓ |
 | Session timeout | - | - | ✓ | ✓ | ✓ | - |
 | Vulnerability scanning | - | - | - | ✓ | ✓ | ✓ |
 
@@ -15158,9 +15148,8 @@ server:
 | **Retention period** | Use longest | HIPAA (6yr) beats GDPR (1yr) |
 | **Encryption strength** | Use strongest | AES-256 over AES-128 |
 | **Breach notification** | Use shortest | GDPR (72hr) beats HIPAA (60days) |
-| **Password requirements** | Use strictest | Longest min length, most complexity |
+| **Token requirements** | Use strictest | Longest expiry, strongest entropy |
 | **Session timeout** | Use shortest | 15min beats 30min |
-| **MFA requirement** | Required if ANY standard requires it | |
 | **Right to erasure vs retention** | See below | |
 
 **Special Case: Right to Erasure vs Retention Requirements**
@@ -15179,8 +15168,8 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | Feature | Behavior |
 |---------|----------|
 | Cookie consent | Required popup before any tracking |
-| Data export | `/users/data/export` endpoint enabled |
-| Data deletion | `/users/data/delete` endpoint enabled |
+| Data export | `/api/{api_version}/server/data/export` endpoint enabled |
+| Data deletion | `/api/{api_version}/server/data/delete` endpoint enabled |
 | Consent tracking | All consents logged with timestamp |
 | Data residency | Configurable allowed regions |
 | Privacy policy | Required, must specify data processing |
@@ -15195,7 +15184,7 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | Audit trail | 6-year minimum retention, tamper-evident |
 | Access controls | Role-based with minimum necessary access |
 | Session timeout | 15 minutes maximum idle |
-| MFA | Required for all users |
+| Token auth | Required for all API access |
 | BAA tracking | Business Associate Agreements logged |
 | Breach notification | 60-day notification system |
 
@@ -15226,9 +15215,9 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 
 | Feature | Behavior |
 |---------|----------|
-| Data disclosure | `/users/data/export` - what data is collected (we do not sell data) |
+| Data disclosure | `/api/{api_version}/server/data/export` - what data is collected (we do not sell data) |
 | Opt-out of sale | Dynamic: if `data.sold=false` shows notice; if `data.sold=true` shows opt-out toggle |
-| Right to delete | `/users/data/delete` endpoint enabled |
+| Right to delete | `/api/{api_version}/server/data/delete` endpoint enabled |
 | Non-discrimination | Cannot deny service for exercising rights |
 | Privacy notice | Dynamic based on `server.privacy.data.sold` setting |
 | Verification | Identity verification before data requests |
@@ -15329,11 +15318,11 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/users/data/export` | GET | Request personal data export (GDPR/CCPA) |
-| `/users/data/export/{id}` | GET | Download data export |
-| `/users/data/delete` | POST | Request account deletion (GDPR/CCPA) |
-| `/users/consents` | GET | View consent history |
-| `/users/consents` | PATCH | Update consent preferences |
+| `/server/data/export` | GET | Request server data export (GDPR/CCPA) |
+| `/server/data/export/{id}` | GET | Download data export |
+| `/server/data/delete` | POST | Request data deletion (GDPR/CCPA) |
+| `/server/consents` | GET | View consent history |
+| `/server/consents` | PATCH | Update consent preferences |
 | `/server/privacy` | GET | Privacy policy |
 | `/server/dpo` | GET | Data Protection Officer contact (GDPR) |
 
@@ -15341,11 +15330,11 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/users/data/export` | POST | Request data export |
-| `/api/{api_version}/users/data/export/{export_id}` | GET | Download export |
-| `/api/{api_version}/users/data/delete` | POST | Request deletion |
-| `/api/{api_version}/users/consents` | GET | Get consents |
-| `/api/{api_version}/users/consents` | PATCH | Update consents |
+| `/api/{api_version}/server/data/export` | POST | Request data export |
+| `/api/{api_version}/server/data/export/{export_id}` | GET | Download export |
+| `/api/{api_version}/server/data/delete` | POST | Request deletion |
+| `/api/{api_version}/server/consents` | GET | Get consents |
+| `/api/{api_version}/server/consents` | PATCH | Update consents |
 
 ### Admin UI: Compliance Dashboard
 
@@ -15385,11 +15374,9 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 
 | Data Type | Protection | Method |
 |-----------|------------|--------|
-| Passwords | Always hashed | Argon2id |
+| Config passwords (backup, etc.) | Always hashed | Argon2id |
 | API tokens | Always hashed | SHA-256 |
-| 2FA secrets | Always encrypted | AES-256-GCM (server key) |
-| Recovery keys | Always hashed | SHA-256 |
-| Backups | Encrypted if password set | AES-256-GCM (user password) |
+| Backups | Encrypted if password set | AES-256-GCM (derived key) |
 | Database at rest | OS responsibility | Use encrypted filesystem |
 | Data in transit | Always TLS | TLS 1.2+ required |
 
@@ -15537,7 +15524,7 @@ type AllowlistEntry struct {
     // Human-readable label (required for clarity)
     Description string    `yaml:"description" json:"description"`
     AddedAt     time.Time `json:"added_at"`
-    AddedBy     string    `json:"added_by"`  // admin username or "config" if from YAML
+    AddedBy     string    `json:"added_by"`  // "operator" or "config" if from YAML
 }
 ```
 
@@ -15852,7 +15839,7 @@ server:
 
 | Role | Resolution |
 |------|------------|
-| `admin` | Required. Empty → startup warning. The very first server admin's profile email is auto-populated here on first install if unset. |
+| `admin` | Required. Empty → startup warning. Auto-populated from the operator's email on first install if unset. |
 | `security` | `server.contact.security.email` (default `security@{fqdn}` per RFC 2142). If explicitly set to `""`, falls back to `server.contact.admin.email`. Same fallback for each webhook transport (security.webhooks.telegram → admin.webhooks.telegram). |
 | `general` | `server.contact.general.email` if set → else `server.contact.admin.email`. Same fallback for webhooks. |
 
@@ -16404,11 +16391,6 @@ server:
       data_collection: |
         **We collect only what is necessary to provide our service:**
 
-        **Account Information:**
-        - Email address (for account recovery and notifications)
-        - Username (for identification)
-        - Password (stored securely hashed, never in plain text)
-
         **Usage Information (with consent):**
         - Pages visited and features used
         - Browser type and device information
@@ -16416,7 +16398,7 @@ server:
 
         **Technical Information:**
         - IP address (for security and abuse prevention)
-        - Session data (for keeping you logged in)
+        - API token identifiers (hashed, never stored in plain text)
 
         **We do NOT collect:**
         - Payment information (unless explicitly required by the service)
@@ -16427,7 +16409,7 @@ server:
       data_usage: |
         **Your data is used solely to:**
 
-        - **Provide the service:** Account management, authentication, core functionality
+        - **Provide the service:** Authentication, core functionality
         - **Improve the experience:** Performance optimization, bug fixes, feature improvements
         - **Ensure security:** Prevent abuse, detect fraud, protect your account
         - **Communicate:** Service updates, security alerts, and (with consent) product news
@@ -16441,7 +16423,7 @@ server:
       data_usage_if_sold: |
         **Your data may be used to:**
 
-        - **Provide the service:** Account management, authentication, core functionality
+        - **Provide the service:** Authentication, core functionality
         - **Improve the experience:** Performance optimization, bug fixes, feature improvements
         - **Ensure security:** Prevent abuse, detect fraud, protect your account
         - **Communicate:** Service updates, security alerts, and (with consent) product news
@@ -16457,7 +16439,7 @@ server:
         **How we protect your data:**
 
         - All data is stored on our servers (not third-party cloud services unless specified)
-        - Passwords are hashed using Argon2id (industry-standard, memory-hard algorithm)
+        - API tokens are stored as SHA-256 hashes (never in plain text)
         - All connections are encrypted (HTTPS/TLS)
         - Regular security audits and updates
         - Access controls and audit logging for admin actions
@@ -17223,11 +17205,7 @@ type StatsInfo struct {
           </div>
         </li>
         <li class="feature-enabled">🌍 GeoIP</li>
-        <!-- PROJECT-SPECIFIC: If using optional PARTS, show actual status -->
-        <!-- <li class="feature-enabled">👥 Multi-User</li> -->           <!-- if enabled -->
-        <!-- <li class="feature-disabled">👥 Multi-User</li> -->          <!-- if disabled by admin -->
-        <!-- <li class="feature-enabled">🏢 Organizations</li> -->
-        <!-- <li class="feature-disabled">🏢 Organizations</li> -->       <!-- if disabled by admin -->
+        <!-- PROJECT-SPECIFIC: Add project-specific feature flags here if applicable -->
       </ul>
     </section>
 
@@ -17653,12 +17631,12 @@ OS/Arch: {GOOS}/{GOARCH}
 
 | Rule | Requirement | Wrong | Correct |
 |------|-------------|-------|---------|
-| **Versioning** | All API routes MUST be versioned | `/api/users` | `/api/{api_version}/users` |
-| **Plural nouns** | All resource names MUST be plural | `/api/{api_version}/user` | `/api/{api_version}/users` |
-| **Lowercase** | All routes MUST be lowercase | `/api/{api_version}/Users` | `/api/{api_version}/users` |
+| **Versioning** | All API routes MUST be versioned | `/api/items` | `/api/{api_version}/items` |
+| **Plural nouns** | All resource names MUST be plural | `/api/{api_version}/item` | `/api/{api_version}/items` |
+| **Lowercase** | All routes MUST be lowercase | `/api/{api_version}/Items` | `/api/{api_version}/items` |
 | **Hyphens** | Multi-word routes use hyphens | `/api/{api_version}/api_keys` | `/api/{api_version}/api-keys` |
-| **No trailing slash** | Routes MUST NOT end with `/` (see PART 16 URL Normalization) | `/api/{api_version}/users/` | `/api/{api_version}/users` |
-| **No verbs** | Routes are nouns, not actions | `/api/{api_version}/getUsers` | `GET /api/{api_version}/users` |
+| **No trailing slash** | Routes MUST NOT end with `/` (see PART 16 URL Normalization) | `/api/{api_version}/items/` | `/api/{api_version}/items` |
+| **No verbs** | Routes are nouns, not actions | `/api/{api_version}/getItems` | `GET /api/{api_version}/items` |
 
 ### Frontend-Backend Integration
 
@@ -17666,7 +17644,7 @@ OS/Arch: {GOOS}/{GOARCH}
 
 | API Type | Frontend Required | Example |
 |----------|-------------------|---------|
-| **User-facing features** | Yes | `/api/{api_version}/users` → `/users` page |
+| **Project-specific features** | Yes | `/api/{api_version}/items` → `/items` page |
 | **Admin features** | No (config file only) | Server administration is file-only — no web routes |
 | **Health/status** | Yes | `/server/healthz` has HTML frontend (with emojis), `/api/{api_version}/server/healthz` is JSON, `/api/healthz` is direct alias JSON |
 | **Agent endpoints** | No | `/api/{api_version}/*/agents/*` - CLI/agent only |
@@ -17679,15 +17657,15 @@ OS/Arch: {GOOS}/{GOARCH}
 | **Full functionality** | User-facing features work completely in browser |
 | **CRUD parity** | If user can do it in API, they can do it in frontend |
 
-**Example - User Features:**
+**Example - Project-Specific API Features:**
 
 | Backend API | Frontend | Purpose |
 |-------------|----------|---------|
-| `GET /api/{api_version}/users` | `GET /users` | View user profile |
-| `PATCH /api/{api_version}/users` | `POST /users` (form) | Update user profile |
-| `GET /api/{api_version}/users/tokens` | `GET /users/tokens` | List tokens |
-| `POST /api/{api_version}/users/tokens` | `POST /users/tokens` (form) | Create token |
-| `DELETE /api/{api_version}/users/tokens/{id}` | `POST /users/tokens/{id}/delete` | Delete token |
+| `GET /api/{api_version}/{resource}` | `GET /{resource}` | List resources |
+| `POST /api/{api_version}/{resource}` | `POST /{resource}` (form) | Create resource |
+| `GET /api/{api_version}/{resource}/{id}` | `GET /{resource}/{id}` | View resource |
+| `PATCH /api/{api_version}/{resource}/{id}` | `POST /{resource}/{id}` (form) | Update resource |
+| `DELETE /api/{api_version}/{resource}/{id}` | `POST /{resource}/{id}/delete` | Delete resource |
 
 **API-only (no frontend needed):**
 
@@ -17944,10 +17922,9 @@ server:
   address: 0.0.0.0
   port: 80
 
-  users:
-    enabled: false
-    registration:
-      mode: disabled
+  features:
+    geoip:
+      enabled: false
 ⏎
 ```
 
@@ -17999,7 +17976,7 @@ function handleClick(event) {
     name: "test"
   };
 
-  fetch('/api/{api_version}/users', {
+  fetch('/api/{api_version}/items', {
     method: 'POST',
     body: JSON.stringify(data)
   });
@@ -18120,14 +18097,14 @@ func getAPIResponseFormat(r *http.Request) string {
 | `/api/{api_version}/jokes/random` | JSON | Text | Text | Text |
 | `/api/{api_version}/server/healthz` | JSON | Text | Text | Text |
 | `/api/{api_version}/status` | JSON | Text | Text | Text |
-| `/api/{api_version}/users/{username}` | JSON | Text | Text | Text |
+| `/api/{api_version}/items/{id}` | JSON | Text | Text | Text |
 
 **Frontend Routes (smart detection):**
 
 | Endpoint | Browser | CLI/curl | Accept: text/plain | Accept: text/html |
 |----------|---------|----------|-------------------|-------------------|
 | `/jokes/random` | HTML | Text | Text | HTML |
-| `/{username}` | HTML | Text | Text | HTML |
+| `/items/{id}` | HTML | Text | Text | HTML |
 | `/server/healthz` | HTML | Text | Text | HTML |
 | `/` | HTML | Text | Text | HTML |
 
@@ -18140,7 +18117,7 @@ func getAPIResponseFormat(r *http.Request) string {
 
 **Frontend with smart detection:**
 - `curl -q -LSsf https://example.com/joke/random` → Auto-detects CLI, returns text (no .txt needed)
-- `curl -q -LSsf -H "Accept: text/plain" https://example.com/users/123` → Plain text
+- `curl -q -LSsf -H "Accept: text/plain" https://example.com/items/123` → Plain text
 - Browser visit to `/joke/random` → HTML page
 - Command-line tools get text automatically
 
@@ -19010,7 +18987,6 @@ This is NOT optional. This is NOT about "adding compatibility." If you're buildi
 | **HTTP Server** | RFC 7230-7235, 9110-9114, etc. | FULL - ALL HTTP RFCs |
 | **FTP Server** | RFC 959, 2428, 4217, etc. | FULL - ALL FTP RFCs |
 | **NTP Server** | RFC 5905, 5906, etc. | FULL - ALL NTP RFCs |
-| **LDAP Server** | RFC 4510-4519, etc. | FULL - ALL LDAP RFCs |
 | **WebDAV Server** | RFC 4918, etc. | FULL - ALL WebDAV RFCs |
 
 **Why this is critical:**
@@ -19062,7 +19038,7 @@ User: "Build a Matrix homeserver"
 AI Response:
 "Matrix is a complete protocol requiring full specification compliance.
 I'll implement ALL Matrix Client-Server API endpoints per the spec:
-- Account registration and login
+- Client authentication (login/token flow)
 - Room creation and management
 - Event sending and syncing
 - Media uploads
@@ -19142,10 +19118,10 @@ Need additional compatible endpoints?"
 |--------------------|----------------------|
 | The endpoint is *operationally* useful to clients that haven't picked a version yet (spec discovery, GraphQL entry, debug tooling) | The endpoint is *data*-shaped and could change between versions (resources, business logic) |
 | The contract is stable across versions OR the alias is documented as "current version's contract" | The contract is version-specific and clients should pin a version |
-| The cost of forcing clients to read `/api/autodiscover` first is real | Versioning is the whole point (e.g., `/api/{api_version}/users`) |
+| The cost of forcing clients to read `/api/autodiscover` first is real | Versioning is the whole point (e.g., `/api/{api_version}/items`) |
 
 **Examples that get an alias:** `/api/swagger`, `/api/graphql`, `/api/healthz`, `/api/debug/*` (current set).
-**Examples that do NOT get an alias:** `/api/{api_version}/users`, `/api/{api_version}/orgs`, `/api/{api_version}/server/contact` (these stay versioned only).
+**Examples that do NOT get an alias:** `/api/{api_version}/items`, `/api/{api_version}/server/contact` (these stay versioned only).
 
 **Why "served directly — no redirect" (not a 301/302 to the versioned URL):**
 
@@ -19329,8 +19305,6 @@ Before proceeding, confirm you understand:
 | `rfc2136` | `nameserver`, `tsig_key`, `tsig_secret`, `tsig_algorithm` |
 
 **Note:** Full provider list from [lego DNS providers](https://go-acme.github.io/lego/dns/). Fields are determined dynamically at runtime.
-
-**Custom domain support (user/org branded domains) is an optional per-project feature — implement via IDEA.md if needed.**
 
 ### FQDN Resolution
 
@@ -20267,27 +20241,21 @@ Startup (for configured FQDN)
 
 | API Route | Frontend Route | Page Type |
 |-----------|----------------|-----------|
-| `GET /api/{api_version}/users` | `GET /users` | Current user profile |
-| `PATCH /api/{api_version}/users` | `POST /users` | Profile update form |
-| `GET /api/{api_version}/users/tokens` | `GET /users/tokens` | Token list page |
-| `GET /api/{api_version}/users/settings` | `GET /users/settings` | User settings page |
-| `GET /api/{api_version}/users/security` | `GET /users/security` | Security settings page |
-| `GET /api/{api_version}/orgs` | `GET /orgs` | User's org list |
-| `GET /api/{api_version}/orgs/{slug}` | `GET /orgs/{slug}` | Org detail page |
+| `GET /api/{api_version}/{resource}` | `GET /{resource}` | Resource list page |
+| `POST /api/{api_version}/{resource}` | `POST /{resource}` | Create resource form |
+| `GET /api/{api_version}/{resource}/{id}` | `GET /{resource}/{id}` | Resource detail page |
 | `GET /api/{api_version}/server/about` | `GET /server/about` | About page |
 
-### Vanity URLs (OPTIONAL - project-specific, requires multi-user support)
+### Vanity URLs (OPTIONAL - project-specific)
 
-**For apps with public user/org profiles, support short vanity URLs at root level.**
+**For apps with public resource profiles, support short vanity URLs at root level.**
 
-This is OPTIONAL and only applies to apps where user/org profiles are a core feature (social platforms, code hosting, link aggregators, etc.).
+This is OPTIONAL and only applies to apps where public short paths are a core feature (link shorteners, public profile pages, etc.).
 
 | Vanity URL | Maps To | API Equivalent | Example Apps |
 |------------|---------|----------------|--------------|
-| `/{username}` | `/users/{username}` | `/api/{api_version}/users/{username}` | GitHub, Linktree, Twitter |
-| `/{org_name}` | `/orgs/{org_name}` | `/api/{api_version}/orgs/{org_name}` | GitHub, GitLab, Gitea |
-| `/{username}/{project}` | `/users/{username}/{project}` | `/api/{api_version}/users/{username}/projects/{project}` | GitHub repos |
-| `/{org_name}/{project}` | `/orgs/{org_name}/{project}` | `/api/{api_version}/orgs/{org_name}/projects/{project}` | GitHub org repos |
+| `/{slug}` | `/{resource}/{slug}` | `/api/{api_version}/{resource}/{slug}` | Link shorteners, public profiles |
+| `/{slug}/{sub}` | `/{resource}/{slug}/{sub}` | `/api/{api_version}/{resource}/{slug}/{sub}` | Nested public resources |
 
 **Route Priority (NON-NEGOTIABLE when implemented):**
 
@@ -20390,10 +20358,10 @@ func URLNormalizeMiddleware(next http.Handler) http.Handler {
 
 | Input | Output | Action |
 |-------|--------|--------|
-| `/users/` | `/users` | 301 redirect |
+| `/items/` | `/items` | 301 redirect |
 | `/server/about/` | `/server/about` | 301 redirect |
-| `/api/{api_version}/users/` | `/api/{api_version}/users` | 301 redirect |
-| `/users` | `/users` | No redirect (canonical) |
+| `/api/{api_version}/items/` | `/api/{api_version}/items` | 301 redirect |
+| `/items` | `/items` | No redirect (canonical) |
 | `/` | `/` | No redirect (root exception) |
 | `/static/css/style.css` | `/static/css/style.css` | No redirect (file) |
 | `/dir/index.html` | `/dir/index.html` | No redirect (file) |
@@ -20500,8 +20468,8 @@ func detectClientType(r *http.Request) string {
 | Route | Browser | curl/CLI | Accept: text/plain | Accept: text/html | Accept: application/json |
 |-------|---------|----------|-------------------|-------------------|--------------------------|
 | `/` | HTML page | Text | Text | HTML | JSON |
-| `/users` | HTML list | Text list | Text list | HTML list | JSON array |
-| `/users/123` | HTML profile | Text (username) | Text | HTML profile | JSON object |
+| `/items` | HTML list | Text list | Text list | HTML list | JSON array |
+| `/items/123` | HTML detail | Text (name) | Text | HTML detail | JSON object |
 | `/jokes/random` | HTML joke page | Just the joke | Just the joke | HTML page | JSON object |
 
 ### CRUD Operations MUST Work in All Modes
@@ -20537,11 +20505,11 @@ func detectClientType(r *http.Request) string {
 
 ```bash
 # Easy: Test text output (no HTML parsing needed)
-curl -q -LSsf /users/123                  # Auto-detects CLI, returns text
-curl -q -LSsf -H "Accept: text/plain" /users/123  # Explicitly request text
+curl -q -LSsf /items/123                  # Auto-detects CLI, returns text
+curl -q -LSsf -H "Accept: text/plain" /items/123  # Explicitly request text
 
 # Hard: Testing HTML requires parsing
-curl -q -LSsf -H "Accept: text/html" /users/123 | grep "<title>"  # Fragile
+curl -q -LSsf -H "Accept: text/html" /items/123 | grep "<title>"  # Fragile
 ```
 
 **Recommended testing approach:**
@@ -20553,15 +20521,15 @@ curl -q -LSsf -H "Accept: text/html" /users/123 | grep "<title>"  # Fragile
 **Test scripts should:**
 ```bash
 # Test frontend returns text for CLI
-RESULT=$(curl -q -LSsf http://localhost:80/users/123)
-if echo "$RESULT" | grep -q "testuser"; then
-    echo "✓ Frontend returns user data"
+RESULT=$(curl -q -LSsf http://localhost:80/items/123)
+if echo "$RESULT" | grep -q "testitem"; then
+    echo "✓ Frontend returns item data"
 else
-    echo "✗ FAILED: User data not returned"
+    echo "✗ FAILED: Item data not returned"
 fi
 
 # Test frontend returns HTML for browser (optional, just check Content-Type)
-CONTENT_TYPE=$(curl -q -LSsfI -H "Accept: text/html" http://localhost:80/users/123 | grep -i "content-type")
+CONTENT_TYPE=$(curl -q -LSsfI -H "Accept: text/html" http://localhost:80/items/123 | grep -i "content-type")
 if echo "$CONTENT_TYPE" | grep -q "text/html"; then
     echo "✓ Frontend serves HTML to browsers"
 fi
@@ -21155,8 +21123,7 @@ document.addEventListener('click', function(e) {
 
 ```html
 <ul class="feature-list">
-  <li class="feature-enabled">👥 Multi-User</li>
-  <li class="feature-enabled">🏢 Organizations</li>
+  <li class="feature-enabled">🌍 GeoIP</li>
   <li class="feature-enabled">
     🧅 Tor:
     <span class="status status-ok">✅ healthy</span>
@@ -21495,7 +21462,7 @@ Does user need to make a decision or provide input?
 ```javascript
 // TOAST - Non-blocking feedback
 async function saveSettings(data) {
-    const result = await api.post('/users/settings', data);
+    const result = await api.post('/api/{api_version}/server/config', data);
     if (result.ok) {
         showToast('Settings saved', 'success');  // Non-blocking, auto-dismiss
     } else {
@@ -21939,7 +21906,6 @@ dismissAllToasts();
 | **HTTPS** | Required for service workers | Non-negotiable |
 | **Push Notifications** | Web Push API via Service Worker | User opt-in required |
 | **Geolocation** | GPS access via Geolocation API | User permission required |
-| **User Sessions** | Tokens in localStorage/IndexedDB | Persists across restarts |
 | **Background Sync** | Queue actions when offline, sync when online | Seamless offline |
 | **App Updates** | Detect new SW version, prompt user | Keep app current |
 
@@ -22464,17 +22430,17 @@ async function checkLocationPermission() {
 }
 ```
 
-### User Sessions in PWA
+### API Token Storage in PWA
 
-**PWA maintains user login across app restarts.**
+**PWA maintains API token across app restarts.**
 
 | Storage | Use Case | Cleared |
 |---------|----------|---------|
-| **localStorage** | Session token, user preferences | Manual/logout |
+| **localStorage** | API token, preferences | Manual/logout |
 | **IndexedDB** | Offline data, cached responses | Manual/logout |
-| **Cookies** | Server-side session (fallback) | Expiry/logout |
+| **Cookies** | Server-side token (fallback) | Expiry/logout |
 
-**Session persists when:**
+**Token persists when:**
 - App is closed and reopened
 - Device is restarted
 - Switching between browser and installed PWA
@@ -22509,8 +22475,8 @@ async function logout() {
     await subscription.unsubscribe();
   }
 
-  // Redirect to login
-  window.location.href = '/login';
+  // Redirect to home
+  window.location.href = '/';
 }
 ```
 
@@ -22968,11 +22934,9 @@ async function requestPersistentStorage() {
 |------------|------|---------|---------------------|
 | `BAD_REQUEST` | 400 | "Invalid request format" | Invalid request |
 | `VALIDATION_FAILED` | 400 | "Validation failed: {field}" | Check input: {field} |
-| `UNAUTHORIZED` | 401 | "Authentication required" | Please log in |
-| `TOKEN_EXPIRED` | 401 | "Token has expired" | Session expired, log in again |
-| `TOKEN_INVALID` | 401 | "Invalid token" | Invalid session |
-| `2FA_REQUIRED` | 401 | "Two-factor authentication required" | Enter 2FA code |
-| `2FA_INVALID` | 401 | "Invalid 2FA code" | Wrong code, try again |
+| `UNAUTHORIZED` | 401 | "Authentication required" | Authentication required |
+| `TOKEN_EXPIRED` | 401 | "Token has expired" | Token expired, please re-authenticate |
+| `TOKEN_INVALID` | 401 | "Invalid token" | Invalid token |
 | `FORBIDDEN` | 403 | "Permission denied" | Access denied |
 | `ACCOUNT_LOCKED` | 403 | "Account locked" | Account locked, try later |
 | `NOT_FOUND` | 404 | "Resource not found" | Not found |
@@ -23433,8 +23397,8 @@ src/server/template/
 **Public nav contains (project-specific):**
 - Home (`/`)
 - App-specific feature pages (e.g., API docs, features, pricing)
-- Login/Register (if multi-user) or just Login link
-- User menu (if logged in): Profile, Settings, Logout
+- Login link (if authentication is a project feature)
+- User menu (if logged in): Settings, Logout
 
 **Public nav NEVER contains:**
 - ❌ Admin link
@@ -24912,7 +24876,7 @@ web:
 |--------|------------|-----|
 | Session cookie (default) | `Strict` | Most browser auth is same-origin; `Strict` blocks cross-site cookie attachment entirely, neutralizing most CSRF before the token is even checked. |
 | OAuth-callback cookie (state, PKCE-verifier) | `Lax` | OAuth providers redirect cross-site back to our callback; `Strict` would drop the cookie. CSRF token is the second layer here. |
-| Pre-login cookies (e.g., 2FA continuation) | `Strict` | Set after first auth step; never crosses sites. |
+| Pre-auth cookies (e.g., auth continuation) | `Strict` | Set during auth flow; never crosses sites. |
 
 **Modern browsers default to `SameSite=Lax` if unset.** Always set `SameSite` explicitly — never rely on the default.
 
@@ -25026,7 +24990,7 @@ func ValidateFooterHTML(html string) (string, error) {
         return "", errors.New("custom HTML contained only disallowed elements")
     }
 
-    // Warn if content was modified (for admin UI feedback)
+    // Warn if content was modified (sanitization applied)
     if html != sanitized && html != "" && html != " " {
         log.Warnf("footer custom_html was sanitized: removed potentially dangerous content")
     }
@@ -26106,10 +26070,7 @@ curl -H "Accept: application/xml" https://jokes.example.com/api/v1/joke</code></
 | Section | Description |
 |---------|-------------|
 | Acceptance | Agreement to terms by using the service |
-| Account terms | User account responsibilities |
 | Acceptable use | What is/isn't allowed |
-| Content | User-generated content rules |
-| Termination | When/how accounts can be terminated |
 | Liability | Limitation of liability |
 | Changes | How terms may be updated |
 | Governing law | Jurisdiction |
@@ -26859,7 +26820,7 @@ server:
 | **Catch-up logic** | Runs missed tasks on restart |
 | **No deployment complexity** | No cron files to manage, sync, or debug |
 | **Portable** | Works identically on all platforms |
-| **Observable** | Logs, metrics, admin UI for all tasks |
+| **Observable** | Logs and metrics for all tasks |
 
 ### What If User Asks for Cron?
 
@@ -26903,8 +26864,7 @@ Every project MUST include these scheduled tasks:
 | `geoip_update` | Weekly (Sunday 03:00) | Download/update ip-location-db GeoIP databases | Yes |
 | `blocklist_update` | Daily at 04:00 | Download/update IP/domain blocklists | Yes |
 | `cve_update` | Daily at 05:00 | Download/update CVE/security databases | Yes |
-| `session_cleanup` | Every 15 minutes | Remove expired sessions | No |
-| `token_cleanup` | Every 15 minutes | Remove expired tokens | No |
+| `token_cleanup` | Every 15 minutes | Remove expired API tokens and sessions | No |
 | `log_rotation` | Daily at 00:00 | Rotate and compress old logs | No |
 | `backup_daily` | Daily at 02:00 | Full backup + daily incremental (default: 2 files) | Yes |
 | `backup_hourly` | Hourly | Hourly incremental (disabled by default) | Yes |
@@ -26951,11 +26911,6 @@ server:
         enabled: true
         retry_on_fail: true
         retry_delay: 1h
-
-      # Every 15 minutes
-      session_cleanup:
-        schedule: "@every 15m"
-        enabled: true
 
       # Every 15 minutes
       token_cleanup:
@@ -27077,7 +27032,6 @@ In cluster mode, tasks are distributed to prevent duplicate execution:
 - `backup_daily`
 
 **Local Tasks (run on each node):**
-- `session_cleanup`
 - `token_cleanup`
 - `healthcheck_self`
 - `cluster_heartbeat`
@@ -28974,7 +28928,7 @@ Content-Type: application/json
 │  ⚠️  BACKUP ENCRYPTION NOT CONFIGURED                               │
 │                                                                      │
 │  Your backups are NOT encrypted. If someone gains access to your    │
-│  backup files, they can read all data including admin credentials.  │
+│  backup files, they can read all data including server configuration.  │
 │                                                                      │
 │  [Set Encryption Password]  [Remind Me Later]  [Don't Show Again]   │
 └─────────────────────────────────────────────────────────────────────┘
@@ -29283,7 +29237,7 @@ on a Sunday counts as daily + weekly + monthly + yearly - uses highest priority)
 |-----------|--------------|
 | Database empty (first-run) | ✅ Allowed (nothing to protect) |
 | Running as root | ✅ Allowed (with confirmation) |
-| Running as service user | 🔐 Requires admin credentials |
+| Running as service user | 🔐 Requires operator password |
 | Random user | ❌ Denied |
 
 ### Restore Password Handling
@@ -30003,7 +29957,7 @@ Maintenance commands:
                     production    - Normal operation (default)
                     development   - Debug logging, dev endpoints
 
-  setup             Reset admin credentials (first-run or root only)
+  setup             Reset server configuration (first-run or root only)
 
 Examples:
   {project_name} --maintenance backup
@@ -30215,7 +30169,7 @@ macOS uses `dscl` (Directory Service Command Line) to create system users. The u
 |-------|---------|
 | 0-99 | System accounts (reserved by Apple) |
 | 100-499 | System services (macOS range) |
-| 500+ | Regular users |
+| 500+ | Normal OS users |
 
 **Safe range recommendation: 200-399** (avoid well-known service IDs at top/bottom)
 
@@ -38100,7 +38054,7 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 | `api.md` | ✓ | API documentation (endpoints, formats) |
 | `cli.md` | If applicable | CLI reference (flags, commands) |
 | `security.md` | ✓ | Security model, auth, health/public endpoints, security reporting, and well-known namespace |
-| `integrations.md` | ✓ | External identity, native app links, autodiscovery, webhooks, federation, and other protocol/platform integrations (or an explicit "none enabled" statement) |
+| `integrations.md` | ✓ | Machine/agent identity, native app links, autodiscovery, webhooks, federation, and other protocol/platform integrations (or an explicit "none enabled" statement) |
 | `development.md` | ✓ | Development/contributing guide |
 | `stylesheets/dark.css` | Optional | Dark theme customization |
 | `stylesheets/light.css` | Optional | Light theme customization |
@@ -38220,7 +38174,6 @@ nav:
   - Usage:
     - API Reference: api.md
     - CLI Reference: cli.md         # Remove if project has no CLI surface
-    - Admin API: admin.md
     - Security: security.md
     - Integrations: integrations.md
   - Development:
@@ -38570,9 +38523,8 @@ docker run -p 64580:80 {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_nam
 - [Installation](installation.md) - How to install and run
 - [Configuration](configuration.md) - All configuration options
 - [API Reference](api.md) - REST API, Swagger, GraphQL
-- [Admin API](admin.md) - Server administration API
 - [Security](security.md) - Auth, public endpoints, reporting, and hardening behavior
-- [Integrations](integrations.md) - External identity, discovery, and platform integrations
+- [Integrations](integrations.md) - Machine/agent identity, discovery, and platform integrations
 - [Development](development.md) - Contributing guide
 
 ## Links
@@ -38741,9 +38693,8 @@ GraphQL playground: [/server/docs/graphql](/server/docs/graphql)
 
 ## External Identity
 
-- OIDC providers, scopes, and claim mapping
-- LDAP providers, attribute mapping, and group mapping
-- Which flows apply to users, admins, or both
+- Machine/agent identity providers (if applicable)
+- Any federated auth flows for machine-to-machine trust
 
 ## Discovery & Protocol Endpoints
 
@@ -38988,7 +38939,7 @@ var localeFS embed.FS
 | **Single source of truth** | `src/common/i18n/locales/` — one set of translation files |
 | **All binaries embed all locales** | Server, CLI, and agent all import `common/i18n` and get the same translations |
 | **Same supported languages** | If the server supports `es`, the CLI and agent also support `es` — no partial support |
-| **Same translation keys** | All binaries use the same key namespace — CLI help text, agent status, server errors, admin UI all in one file per language |
+| **Same translation keys** | All binaries use the same key namespace — CLI help text, agent status, and server errors all in one file per language |
 | **No external locale files at runtime** | Translations are compiled into the binary via `go:embed` — no filesystem dependency |
 | **WebUI JavaScript** | Frontend fetches `/locales/{lang}.json` served by the server from the same embedded files |
 
@@ -40156,17 +40107,18 @@ func buildSchema(lang string) *graphql.Schema {
 **All email templates use translation keys, not hardcoded strings:**
 
 ```go
-func sendWelcomeEmail(user User, lang string) {
-    subject := i18n.TranslateFormat(lang, "email.subjects.welcome", map[string]string{
-        "app_name": config.AppName,
+func sendOperatorAlert(recipient, alertType, lang string) {
+    subject := i18n.TranslateFormat(lang, "email.subjects.operator_alert", map[string]string{
+        "app_name":   config.AppName,
+        "alert_type": alertType,
     })
     // Body uses translated section headings and content
-    body := renderEmailTemplate("welcome", lang, map[string]interface{}{
-        "heading":       i18n.Translate(lang, "email.body.welcome_heading"),
-        "getting_started": i18n.Translate(lang, "email.body.getting_started"),
+    body := renderEmailTemplate("operator_alert", lang, map[string]interface{}{
+        "heading":     i18n.Translate(lang, "email.body.alert_heading"),
+        "description": i18n.Translate(lang, "email.body.alert_description"),
         // ...
     })
-    send(user.Email, subject, body)
+    send(recipient, subject, body)
 }
 ```
 
@@ -40805,44 +40757,20 @@ This is separate from hosting a hidden service - it uses Tor's SOCKS5 proxy for 
 | `use_network: true`, `allow_user_preference: true` | `false` | Direct |
 | `use_network: true`, `allow_user_preference: true` | `null` | Tor |
 
-### User Preference Schema
-
-```yaml
-# In user account/preferences table
-user:
-  preferences:
-    # Use Tor network for outbound requests made on behalf of this user
-    # null = inherit server setting, true = always use Tor, false = never use Tor
-    use_tor_network: null
-```
-
 ### Outbound Implementation
 
 **See full `TorService` struct and implementation in the main Implementation section below.**
 
 ```go
 // ShouldUseTor determines if Tor network should be used for a request
-// based on server config and user preference
-func ShouldUseTor(serverConfig *Config, userPref *bool) bool {
-    // If user preferences not allowed, use server setting
-    if !serverConfig.Tor.AllowUserPreference {
-        return serverConfig.Tor.UseNetwork
-    }
-
-    // If user has no preference (nil), inherit server setting
-    if userPref == nil {
-        return serverConfig.Tor.UseNetwork
-    }
-
-    // User preference overrides
-    return *userPref
+// based on server config
+func ShouldUseTor(serverConfig *Config) bool {
+    return serverConfig.Tor.UseNetwork
 }
 
-// Example: Making a request with user's Tor preference
-func (s *Service) FetchExternalData(ctx context.Context, userID int, url string) ([]byte, error) {
-    // Get user's Tor preference
-    user, _ := s.db.GetUser(userID)
-    useTor := ShouldUseTor(s.config, user.Preferences.UseTorNetwork)
+// Example: Making a request using server Tor configuration
+func (s *Service) FetchExternalData(ctx context.Context, url string) ([]byte, error) {
+    useTor := ShouldUseTor(s.config)
 
     // Get appropriate HTTP client (TorManager.GetHTTPClient handles routing)
     client := s.torManager.GetHTTPClient(useTor)
@@ -40860,7 +40788,7 @@ func (s *Service) FetchExternalData(ctx context.Context, userID int, url string)
 
 ### torrc Configuration for Outbound
 
-When `use_network` or `allow_user_preference` is enabled, the torrc includes `SocksPort auto` for outbound connections. Otherwise `SocksPort 0` disables outbound.
+When `use_network` is enabled, the torrc includes `SocksPort auto` for outbound connections. Otherwise `SocksPort 0` disables outbound.
 
 **See full `getTorConfig()` implementation in the Implementation section below.**
 
@@ -41026,7 +40954,7 @@ This prevents conflicts with any existing Tor installation on the system.
 |-------------------|----------------|-------------|
 | `root` | `{project_name}` (after drop) | `{project_name}` |
 | `{project_name}` | `{project_name}` | `{project_name}` |
-| Regular user | Regular user | Regular user |
+| Unprivileged OS user | Unprivileged OS user | Unprivileged OS user |
 
 **Process:**
 1. Server starts (possibly as root for port binding)
@@ -42764,9 +42692,9 @@ if env.IsAutoDetectDisplayModeGUI() {
 
 **No built-in TUI/GUI wizard for Server or Agent binaries.** They just run:
 - **Server**: Configured by editing `server.yml` directly; generates a default `server.yml` on first run
-- **Agent**: Configured via connection string provided by the server admin API
+- **Agent**: Configured via connection string provided by the server API
 
-**Agent connection string example (obtained from server admin API):**
+**Agent connection string example (obtained from server API):**
 ```
 {project_name}-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
 ```
@@ -44146,11 +44074,10 @@ server:
   retry: 3                         # Retry attempts on failure
   retry_delay: 1s                  # Delay between retries
 
-# Authentication (required for multi-user projects)
+# Authentication
 auth:
-  token: ""                        # API token (usr_xxx, see PART 11)
+  token: ""                        # API token (agt_xxx or api_key, see PART 11)
   token_file: ""                   # Read token from file instead
-  # No default_context - default is ALWAYS token owner (user)
 
 # Output preferences
 output:
@@ -44866,11 +44793,11 @@ func BuildQueryString(params map[string]string) string {
 
 ```go
 // NEVER do this - injection vulnerability!
-badURL := fmt.Sprintf("%s/api/{api_version}/users/%s/pastes", serverURL, username)
+badURL := fmt.Sprintf("%s/api/{api_version}/items/%s/details", serverURL, itemID)
 
 // ALWAYS do this - properly encoded
-goodURL := urlutil.BuildAPIURL(serverURL, "/api/{api_version}/users/{username}/pastes",
-    map[string]string{"username": username},
+goodURL := urlutil.BuildAPIURL(serverURL, "/api/{api_version}/items/{id}/details",
+    map[string]string{"id": itemID},
     nil,
 )
 
@@ -44885,15 +44812,14 @@ searchURL := urlutil.BuildAPIURL(serverURL, "/api/{api_version}/search",
 )
 
 // For single segments
-path := "/api/{api_version}/users/" + urlutil.EncodePathSegment(username) + "/pastes"
+path := "/api/{api_version}/items/" + urlutil.EncodePathSegment(itemID) + "/details"
 ```
 
 ### What MUST Be Encoded
 
 | Input Type | Encoding Function | Example |
 |------------|-------------------|---------|
-| **Usernames in path** | `EncodePathSegment()` | `/users/{username}` |
-| **Org names in path** | `EncodePathSegment()` | `/orgs/{org_name}` |
+| **Resource IDs in path** | `EncodePathSegment()` | `/items/{id}` |
 | **Resource IDs** | `EncodePathSegment()` | `/pastes/{id}` |
 | **Filenames in path** | `EncodePathSegment()` | `/files/{filename}` |
 | **Search terms** | `EncodeQueryValue()` | `?q={term}` |
@@ -44941,11 +44867,11 @@ func NewAPIClient(baseURL, token string) *APIClient {
     }
 }
 
-// GetUserResource fetches a user's resource with proper URL encoding
-func (c *APIClient) GetUserResource(username, resourceType string) (*APIResponse, error) {
-    apiURL := urlutil.BuildAPIURL(c.baseURL, "/api/{api_version}/users/{username}/{resource}",
+// GetItemResource fetches a resource item with proper URL encoding
+func (c *APIClient) GetItemResource(itemID, resourceType string) (*APIResponse, error) {
+    apiURL := urlutil.BuildAPIURL(c.baseURL, "/api/{api_version}/items/{id}/{resource}",
         map[string]string{
-            "username": username,
+            "id":       itemID,
             "resource": resourceType,
         },
         nil,
@@ -46254,7 +46180,7 @@ mode: ""                           # production, development (empty = auto-detec
 | Aspect | Client | Agent |
 |--------|------------|-------|
 | **Execution context** | User-scope context | System context |
-| **Runs as** | Invoking user account (may be root/admin, but still user-scope) | root/Administrator |
+| **Runs as** | Invoking OS user (may be root/admin, but still user-scope) | root/Administrator |
 | **Config base path** | `~/` (user home) | `/` (system root) |
 | **Config directory** | `~/.config/{project_org}/{internal_name}/` | `/etc/{project_org}/{internal_name}/` |
 | **Data directory** | `~/.local/share/{project_org}/{internal_name}/` | `/var/lib/{project_org}/{internal_name}/` |
@@ -46409,8 +46335,7 @@ SERVER STARTUP                          AGENT STARTUP
 
 | Client Capability | Description |
 |-----------------------|-------------|
-| **All user operations** | Everything a logged-in user can do |
-| **All org operations** | Everything org members can do |
+| **All API operations** | Everything the API exposes for authenticated requests |
 | **All admin operations** | Full server administration via API |
 | **TUI mode** | Interactive terminal UI |
 | **CLI mode** | Scriptable command-line |
@@ -47264,7 +47189,6 @@ make docker # Build Docker image
   - [ ] docs/installation.md
   - [ ] docs/configuration.md
   - [ ] docs/api.md
-  - [ ] docs/admin.md
   - [ ] docs/security.md
   - [ ] docs/integrations.md
   - [ ] docs/development.md
@@ -48188,7 +48112,7 @@ Before starting integration:
 - [ ] Create docs/ directory for ReadTheDocs
 - [ ] Write docs/index.md
 - [ ] Write docs/installation.md
-- [ ] Write docs/configuration.md, docs/api.md, docs/admin.md, docs/security.md
+- [ ] Write docs/configuration.md, docs/api.md, docs/security.md
 - [ ] Write docs/integrations.md
 - [ ] Configure mkdocs.yml
 ```
@@ -48275,7 +48199,6 @@ When bootstrapping a new project from this specification:
    touch docs/installation.md
    touch docs/configuration.md
    touch docs/api.md
-   touch docs/admin.md
    touch docs/security.md
    touch docs/integrations.md
    touch docs/development.md
@@ -48386,7 +48309,7 @@ Implement remaining required parts:
 Implement the required client, then any project-specific optional features:
 1. **PART 32:** Client (required for all projects)
 2. **PART 32:** Agent (only if project manages or monitors external nodes)
-3. **Project-specific:** Multi-User, Organizations, Custom Domains (if defined in IDEA.md)
+3. **Project-specific:** Additional features defined in IDEA.md
 
 #### Step 9: Documentation (PART 29)
 
