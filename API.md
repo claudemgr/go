@@ -285,7 +285,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-33; PART 3
 |---------------|------------|-------------|
 | **IDEA.md** | Actual project features/endpoints | Features added/removed |
 | **README.md** | Current functionality | Usage/installation changes |
-| **docs/** | Current user/admin/API/config/security/integration behavior | Any user-facing, admin-facing, operator-facing, or integration-facing changes |
+| **docs/** | Current API/config/security/integration behavior | Any operator-facing, integration-facing changes |
 | **Swagger annotations** | Actual API endpoints | Routes changed |
 | **GraphQL schema** | Actual types/queries | Schema changed |
 
@@ -295,7 +295,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-33; PART 3
    - AI.md PARTS 0-33 define implementation patterns; PART 33 is reference-only (do NOT modify)
    - IDEA.md defines YOUR project's features (update as needed)
 2. **README.md**: Keep feature list and usage examples current
-3. **docs/**: Update when routes, config options, admin UX, security behavior, auth/integration behavior, or public protocol surfaces change
+3. **docs/**: Update when routes, config options, operator configuration, security behavior, auth/integration behavior, or public protocol surfaces change
 4. **Swagger/GraphQL**: Keep annotations matching actual endpoints
 
 ## ⚠️ CRITICAL: One Coherent Product ⚠️
@@ -884,17 +884,12 @@ src/
 │   ├── handler/               # HTTP handlers by domain
 │   │   ├── health.go          # Health check handlers
 │   │   ├── auth.go            # Authentication handlers
-│   │   ├── user.go            # User management handlers
-│   │   ├── admin.go           # Admin panel handlers
 │   │   └── api.go             # API handlers
 │   ├── service/               # Business logic by domain
 │   │   ├── auth.go            # Authentication service
-│   │   ├── user.go            # User service
 │   │   ├── email.go           # Email service
 │   │   └── scheduler.go       # Scheduled task service
 │   ├── model/                 # Data models
-│   │   ├── user.go            # User model
-│   │   ├── session.go         # Session model
 │   │   └── token.go           # Token model
 │   ├── store/                 # Data access layer
 │   │   ├── store.go           # Store interface
@@ -939,11 +934,8 @@ src/
 │   └── ssl.go                 # SSL/TLS handling
 ├── scheduler/
 │   └── scheduler.go           # Background task scheduler
-├── service/                   # Systemd service management
-│   └── service.go
-└── admin/                     # Admin-specific functionality
-    ├── admin.go               # Admin package main
-    └── handler.go             # Admin handlers
+└── service/                   # Systemd service management
+    └── service.go
 ```
 
 ### When to Split Files
@@ -1235,8 +1227,7 @@ paths:
 | server | Main binary `{project_name}` - runs as service |
 | client | CLI binary `{project_name}-cli` - REQUIRED |
 | agent | Optional binary `{project_name}-agent` |
-| Server Admin | App administrator (NOT OS root) |
-| Regular User | End-user (optional feature, not in this spec) |
+| Operator | Person who deploys and manages the server via CLI and `server.yml` |
 
 ## COMPLIANCE CHECK
 Before completing ANY task:
@@ -1459,12 +1450,6 @@ Purpose:
 ## Key Placeholders
 - `{project_name}` = [actual project name]
 - `{project_org}` = [organization name]
-## Account Types (CRITICAL)
-- **Server Admin** = manages the app (NOT a privileged OS user)
-- **Primary Admin** = first admin, cannot be deleted
-- **Regular User** = end-user (optional feature, not in this spec)
-- Server Admins ≠ Regular Users (separate DB tables)
-
 ## Cluster vs Managed Nodes (CRITICAL)
 - **Cluster Node** = another instance of THIS app (horizontal scaling)
 - **Managed Node** = EXTERNAL resource app controls/monitors (Docker hosts, etc.)
@@ -3124,7 +3109,7 @@ Implemented core server functionality and API.
 | **README.md** | Actual features, endpoints, usage | PART 3 | Features added/removed/changed |
 | **Swagger/OpenAPI** | Actual API routes in code | PART 14 | Routes changed, params changed |
 | **GraphQL schema** | Actual types/queries in code | PART 14 | Schema changed |
-| **docs/** (ReadTheDocs) | Actual config, API, admin, security, integrations, and public protocol behavior | PART 29 | Any user-facing, admin-facing, operator-facing, or integration-facing changes |
+| **docs/** (ReadTheDocs) | Actual config, API, security, integrations, and public protocol behavior | PART 29 | Any operator-facing, integration-facing changes |
 | **IDEA.md** | Actual business logic | — | Features/data models changed |
 | **CLI --help** | Actual flags/commands | PART 8 | CLI changed |
 
@@ -3319,13 +3304,6 @@ type Config struct {
 
 **YAML comments - same rule:**
 ```yaml
-# Enable multi-user mode
-enabled: false
-
-# User registration creation mode (when enabled)
-# Options: open (default), invite, admin_only, disabled
-registration:
-  mode: open
 ```
 
 ### Code Quality Rules
@@ -4298,7 +4276,7 @@ go build -o binary/{project_name} ./src
   - automatic safe defaults
   - setup/runtime detection
   - clearer UI copy and recovery flows
-  - progressive disclosure in admin UX
+  - progressive disclosure in operator configuration
   - better docs/examples
 - AI MUST NOT reduce friction by disabling, loosening, or bypassing:
   - authn / authz
@@ -5983,7 +5961,6 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 │   ├── configuration.md    # Configuration reference
 │   ├── api.md              # API documentation
 │   ├── cli.md              # CLI reference (if applicable)
-│   ├── admin.md            # Admin panel guide
 │   ├── security.md         # Security, public endpoints, and reporting
 │   ├── integrations.md     # External identity and protocol integrations
 │   ├── development.md      # Development guide
@@ -8229,7 +8206,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
 | Operation | Danger | Authorization Required |
 |-----------|--------|----------------------|
-| `--maintenance setup` | Creates admin account | First-run only OR root |
+| `--maintenance setup` | Resets server configuration to defaults | First-run only OR root |
 | `--maintenance restore` | Overwrites ALL data | Admin auth OR root OR empty database |
 | `--maintenance mode` | Changes server behavior | Admin auth OR root |
 
@@ -14049,7 +14026,7 @@ web:
     # Advertising / tracking proposals — disabled by default, regardless of project.
     # The spec's privacy posture (PART 11 → "Public Endpoint Safety Principle") forbids
     # these even if a project's IDEA.md asks for them. Operator can override but the
-    # admin panel surfaces a privacy warning.
+    # operator configuration surfaces a privacy warning.
     attribution-reporting: "()"
     browsing-topics: "()"
     interest-cohort: "()"
@@ -14586,7 +14563,7 @@ web:
 1. Server re-validates the `security_id` server-side (form value can be tampered with).
 2. Allocates a `tracking_id` — `sec_` prefix + 16 random hex chars. Stored in the security-reports table.
 3. **Encryption at rest:** the report body is encrypted with the project's PGP key if one exists; otherwise AES-256-GCM with `server.security.encryption_key` (the spec's canonical at-rest AES key — see PART 11 → "Cryptographic Keys"). Plaintext is NEVER persisted to disk.
-4. **Maintainer notification:** PGP-encrypted email to every Server Admin who has registered a personal pubkey (admin profile setting); falls back to AES-encrypted attachment + warning if no admin has a pubkey.
+4. **Maintainer notification:** PGP-encrypted email to the configured operator contact (see `server.security.contact_email`); falls back to AES-encrypted attachment + warning if no PGP key is configured.
 5. **Researcher acknowledgment:** PGP-encrypted email to researcher's submitted email (using their submitted pubkey if any), containing the `tracking_id` and the URL `/server/security/report/{tracking_id}` (with a one-shot token only the researcher can use).
 6. **Response to the form POST:** canonical success body — `{"ok": true, "data": {"tracking_id": "sec_..."}}` — with a clear "we received your report; check your email for confirmation" message rendered server-side.
 7. **Logging:** one entry to `security.log` as `security.report_received` — `tracking_id`, severity, sanitized affected-component, NO researcher PII, NO vulnerability content. Maintainers see full content only via the encrypted email or the admin tracker (after auth).
@@ -14956,7 +14933,7 @@ server:
 |-------|------|-------------|
 | `id` | String | Unique audit entry ID (ULID format) |
 | `time` | String | ISO 8601 timestamp with milliseconds, UTC |
-| `event` | String | Event type (e.g., `admin.login`) |
+| `event` | String | Event type (e.g., `config.updated`) |
 | `category` | String | Event category (e.g., `authentication`) |
 | `severity` | String | `info`, `warn`, `error`, `critical` |
 | `actor` | Object | Who performed the action |
@@ -17427,7 +17404,7 @@ type StatsInfo struct {
 |----------|---------------|---------|
 | **Version** | App version, Go version, build info | `1.0.0`, `<runtime.Version()>` |
 | **Status** | Health status, uptime | `healthy`, `2d 5h` |
-| **Features** | Enabled PUBLIC features only (not /metrics) | `multi_user: true` |
+| **Features** | Enabled PUBLIC features only (not /metrics) | `tor: enabled` |
 | **Checks** | Service status (ok/error only) | `database: ok` |
 | **Cluster** | Public node URLs | `https://node1.example.com` |
 | **Stats** | Aggregate counts only | `requests_total: 12345` |
@@ -17477,10 +17454,6 @@ features.tor.running: true
 features.tor.status: healthy
 features.tor.hostname: abc123xyz456abcdef789xyz456abcdef789xyz456abcdef789xyz.onion
 features.geoip: true
-# PROJECT-SPECIFIC: If using optional PARTS, show actual status
-# features.multi_user: true       (or false if admin disabled)
-# features.organizations: false   (disabled by admin)
-
 # 7. Checks
 checks.database: ok
 checks.cache: ok
@@ -17529,8 +17502,6 @@ When not in cluster mode:
     "nodes": []
   },
   "features": {
-    "multi_user": false,
-    "organizations": false,
     "tor": {
       "enabled": false,
       "running": false,
@@ -23362,31 +23333,18 @@ See **JavaScript Rules** section below for `app.js` structure.
 ```
 src/server/template/
 ├── layout/
-│   ├── public.tmpl         # Public-facing layout (/, /server/*, project routes)
-│   └── admin.tmpl          # Admin layout (reserved for future use)
+│   └── public.tmpl         # Public-facing layout (/, /server/*, project routes)
 ├── partial/
 │   ├── public/
 │   │   ├── header.tmpl     # Public header (logo, nav, theme toggle)
 │   │   ├── nav.tmpl        # Public navigation
 │   │   └── footer.tmpl     # Public footer (about, privacy, etc.)
-│   ├── admin/
-│   │   ├── header.tmpl     # Admin header (logo, search, notifications, logout)
-│   │   ├── sidebar.tmpl    # Admin sidebar navigation
-│   │   └── footer.tmpl     # Admin footer (version, docs)
 │   ├── head.tmpl           # <head> contents (meta, CSS)
 │   └── scripts.tmpl        # JavaScript includes
 ├── page/
 │   ├── index.tmpl          # Home page
 │   ├── healthz.tmpl        # Health check page
 │   └── error.tmpl          # Error pages (404, 500, 502, 503, etc.) - MUST use site theme
-├── auth/
-│   ├── login.tmpl          # Login page
-│   ├── register.tmpl       # Registration page
-│   └── forgot.tmpl         # Password reset
-├── admin/
-│   ├── dashboard.tmpl      # Admin dashboard
-│   ├── settings.tmpl       # Settings page
-│   └── ...
 └── component/
     ├── modal.tmpl          # Reusable modal component
     ├── toast.tmpl          # Toast notifications
@@ -23571,8 +23529,7 @@ html.theme-light {
 | Context | Preference Source | Fallback |
 |---------|-------------------|----------|
 | Public (guest) | `localStorage.theme` | `dark` |
-| Public (user) | `user_preferences.theme` | `dark` |
-| Admin | `admin_preferences.theme` | `dark` |
+| Operator | `operator_preferences.theme` | `dark` |
 
 **JavaScript theme switching (shared):**
 
@@ -23593,16 +23550,13 @@ function setTheme(theme) {
 
 ### Layout Partials
 
-| Partial | Public | Admin | Purpose |
-|---------|:------:|:-----:|---------|
-| `partial/public/header.tmpl` | ✓ | | Logo + top nav + login/user menu |
-| `partial/public/nav.tmpl` | ✓ | | Horizontal navigation links |
-| `partial/public/footer.tmpl` | ✓ | | About, Privacy, Contact links |
-| `partial/admin/header.tmpl` | | ✓ | Logo + search + bell + admin menu |
-| `partial/admin/sidebar.tmpl` | | ✓ | Collapsible sidebar navigation |
-| `partial/admin/footer.tmpl` | | ✓ | Version, docs, status |
-| `partial/head.tmpl` | ✓ | ✓ | Shared `<head>` contents |
-| `partial/scripts.tmpl` | ✓ | ✓ | Shared JavaScript includes |
+| Partial | Purpose |
+|---------|---------|
+| `partial/public/header.tmpl` | Logo + top nav |
+| `partial/public/nav.tmpl` | Horizontal navigation links |
+| `partial/public/footer.tmpl` | About, Privacy, Contact links |
+| `partial/head.tmpl` | Shared `<head>` contents |
+| `partial/scripts.tmpl` | Shared JavaScript includes |
 
 ### Static Assets Organization
 
@@ -23763,7 +23717,7 @@ layout/public.tmpl
 | Rule | Description |
 |------|-------------|
 | **Shared partials** | `partial/head.tmpl`, `partial/scripts.tmpl` |
-| **Context partials** | `partial/public/*`, `partial/admin/*` |
+| **Context partials** | `partial/public/*` |
 | **Component partials** | Reusable UI: `partial/toast.tmpl`, `partial/modal.tmpl` |
 | **No page-specific partials** | If used once, it's not a partial |
 | **Self-contained** | Partials include their own styles/scripts if needed |
@@ -23773,14 +23727,10 @@ layout/public.tmpl
 partial/
 ├── head.tmpl           # <head> - meta, CSS links (REQUIRED)
 ├── scripts.tmpl        # JS includes before </body> (REQUIRED)
-├── public/
-│   ├── header.tmpl     # Public header (REQUIRED)
-│   ├── nav.tmpl        # Public nav (REQUIRED)
-│   └── footer.tmpl     # Public footer (REQUIRED)
-└── admin/
-    ├── header.tmpl     # Admin header (REQUIRED)
-    ├── sidebar.tmpl    # Admin sidebar (REQUIRED)
-    └── footer.tmpl     # Admin footer (REQUIRED)
+└── public/
+    ├── header.tmpl     # Public header (REQUIRED)
+    ├── nav.tmpl        # Public nav (REQUIRED)
+    └── footer.tmpl     # Public footer (REQUIRED)
 ```
 
 **Optional Component Partials:**
@@ -24079,13 +24029,12 @@ Projects can create additional partials for functionality unique to that applica
 
 **App-Specific Partials (add to existing structure):**
 
-See **Template Structure** above for mandatory partials (`partial/public/*`, `partial/admin/*`, `partial/head.tmpl`, `partial/scripts.tmpl`).
+See **Template Structure** above for mandatory partials (`partial/public/*`, `partial/head.tmpl`, `partial/scripts.tmpl`).
 
 Projects add app-specific partials alongside the mandatory ones:
 ```
 src/server/template/partial/
 ├── public/                  # MANDATORY (see Template Structure)
-├── admin/                   # MANDATORY (see Template Structure)
 ├── head.tmpl                # MANDATORY
 ├── scripts.tmpl             # MANDATORY
 ├── search-box.tmpl          # APP-SPECIFIC - search component
@@ -25193,107 +25142,6 @@ When admin submits `custom_html` via API, the response includes:
   <a href="/server/healthz">Last update: {build_datetime}</a>
 </footer>
 ```
-
-### Default Admin Footer
-
-**Location:** `partial/admin/footer.tmpl`
-
-```html
-<footer class="admin-footer">
-  <div class="admin-footer-content">
-    <!-- Version info -->
-    <span class="admin-footer-version">
-      <a href="/server/info">{project_name} {projectversion}</a>
-    </span>
-
-    <span class="admin-footer-separator">•</span>
-
-    <!-- Documentation link -->
-    <span class="admin-footer-docs">
-      <a href="https://{RTD_URL}" target="_blank" rel="noopener">  <!-- Use actual RTD URL -->
-        Docs
-      </a>
-    </span>
-
-    <span class="admin-footer-separator">•</span>
-
-    <!-- Server status indicator -->
-    <span class="admin-footer-status">
-      {{ if .ServerStatus.Healthy }}
-        <span class="status-indicator status-ok" title="All systems operational">●</span>
-        <span>Healthy</span>
-      {{ else if .ServerStatus.Degraded }}
-        <span class="status-indicator status-warning" title="Some issues detected">●</span>
-        <span>Degraded</span>
-      {{ else }}
-        <span class="status-indicator status-error" title="System issues">●</span>
-        <span>Issues</span>
-      {{ end }}
-    </span>
-  </div>
-</footer>
-```
-
-**Admin Footer CSS:**
-```css
-.admin-footer {
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  text-align: center;
-  font-size: 0.875rem;
-  color: var(--text-muted);
-}
-
-.admin-footer-content {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
-}
-
-.admin-footer-separator {
-  color: var(--text-muted);
-}
-
-.admin-footer a {
-  color: var(--text-muted);
-  text-decoration: none;
-}
-
-.admin-footer a:hover {
-  color: var(--primary-color);
-  text-decoration: underline;
-}
-
-/* Status indicators */
-.status-indicator {
-  font-size: 0.75rem;
-  margin-right: 0.25rem;
-}
-
-.status-ok { color: var(--success-color); }
-.status-warning { color: var(--warning-color); }
-.status-error { color: var(--danger-color); }
-```
-
-**Admin Footer Contents:**
-
-| Element | Description |
-|---------|-------------|
-| Version | Links to `/server/info` - shows project name and version |
-| Docs | External link to ReadTheDocs documentation |
-| Status | Server health indicator (green/yellow/red) with status text |
-
-**Admin Footer Rules:**
-
-| Rule | Description |
-|------|-------------|
-| **Compact** | Single line, minimal height |
-| **Informational** | Version, docs, status - no navigation |
-| **Status indicator** | Real-time server health from `/server/healthz` |
-| **Same position rules** | Bottom of page, scrolls with content, centered |
 
 ### Footer Configuration (config file)
 
@@ -26808,9 +26656,9 @@ Templates are stored as files on disk. Override any built-in template by placing
 | Rate limit hit | ✓ | | ✓ |
 | IP blocked | ✓ | | ✓ |
 
-## Server Admin Notifications
+## Operator Notifications
 
-**Notifications shown to Server Admins.**
+**Notifications shown to operators.**
 
 | Event | Toast | Banner | Center | Description |
 |-------|:-----:|:------:|:------:|-------------|
@@ -26884,12 +26732,12 @@ Templates are stored as files on disk. Override any built-in template by placing
 
 **WebUI notifications are stored in the database for persistence.**
 
-| Storage | Server Admin | Regular User |
-|---------|--------------|--------------|
-| Table | `admin_notifications` | `user_notifications` |
-| Retention | 30 days (configurable) | 30 days (configurable) |
-| Max stored | 100 per admin | 100 per user |
-| Sync | Real-time via WebSocket | Real-time via WebSocket |
+| Storage | Details |
+|---------|---------|
+| Table | `notifications` |
+| Retention | 30 days (configurable) |
+| Max stored | 100 per operator |
+| Sync | Real-time via WebSocket |
 
 **Notification Record:**
 ```json
@@ -26912,117 +26760,16 @@ Templates are stored as files on disk. Override any built-in template by placing
 | Toast duration | `5` seconds | Auto-dismiss time (0 = manual) |
 | Error dismiss | `manual` | Errors require manual dismiss |
 | Notification retention | `30` days | How long to keep in center |
-| Max notifications | `100` | Per user/admin limit |
+| Max notifications | `100` | Per operator limit |
 | Real-time updates | `enabled` | WebSocket for instant updates |
 
-## Notification Preferences
-
-**Both Server Admins and users can configure their notification preferences.**
-
-### Admin Notification Preferences
+## Operator Notification Preferences
 
 | Category | Events | Default | Can Disable? |
 |----------|--------|---------|--------------|
-| **Security** | Login alerts, 2FA changes, password changes | All ON | No (required) |
 | **Server** | SSL expiring, updates available, disk space | All ON | Yes |
 | **Backup** | Backup complete, backup failed | Failed ON, Complete OFF | Yes |
 | **Scheduler** | Task failed, task manual run | Failed ON | Yes |
-| **Other Admins** | Admin login/logout | ON | Yes |
-
-**Security notifications cannot be disabled** - these are critical for account security.
-
-```
-Admin Notification Preferences
-┌─────────────────────────────────────────────────────────────┐
-│  Notification Preferences                                   │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  🔒 Security (cannot be disabled)                           │
-│     ☑ Login from new IP/device                              │
-│     ☑ Password changed                                      │
-│     ☑ 2FA enabled/disabled                                  │
-│     ☑ API token regenerated                                 │
-│                                                             │
-│  ⚙️ Server                                          WebUI Email│
-│     SSL certificate expiring                        [✓]  [✓] │
-│     SSL certificate renewed                         [✓]  [ ] │
-│     Update available                                [✓]  [ ] │
-│     Disk space low                                  [✓]  [✓] │
-│                                                             │
-│  💾 Backup                                                   │
-│     Backup completed                                [✓]  [ ] │
-│     Backup failed                                   [✓]  [✓] │
-│                                                             │
-│  📅 Scheduler                                                │
-│     Task failed                                     [✓]  [✓] │
-│     Task manually triggered                         [✓]  [ ] │
-│                                                             │
-│  👥 Other Admins                                             │
-│     Admin logged in                                 [✓]  [ ] │
-│     Admin logged out                                [ ]  [ ] │
-│                                                             │
-│  [Save Preferences]                                         │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### User Notification Preferences (`/users/settings/notifications`)
-
-| Category | Events | Default | Can Disable? |
-|----------|--------|---------|--------------|
-| **Security** | Login alerts, password changes, 2FA changes | All ON | No (required) |
-| **Account** | Email verified, profile updated | All ON | Yes |
-| **Sessions** | Session expired, new device | All ON | Partial |
-
-```
-User Notification Preferences (/users/settings/notifications)
-┌─────────────────────────────────────────────────────────────┐
-│  Notification Preferences                                   │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  🔒 Security (cannot be disabled)                           │
-│     ☑ Login from new IP/device                              │
-│     ☑ Password changed                                      │
-│     ☑ 2FA enabled/disabled                                  │
-│     ☑ Recovery key used                                     │
-│                                                             │
-│  👤 Account                                         WebUI Email│
-│     Email verified                                  [✓]  [✓] │
-│     Profile updated                                 [✓]  [ ] │
-│                                                             │
-│  🔑 Sessions                                                 │
-│     Session expired                                 [✓]  [ ] │
-│     Logged in from new device                       [✓]  [✓] │
-│                                                             │
-│  [Save Preferences]                                         │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Preference Storage
-
-| User Type | Storage | Key |
-|-----------|---------|-----|
-| Server Admin | `admin_preferences` table | `admin_id` |
-| Regular User | `user_preferences` table | `user_id` |
-
-**Preference Schema:**
-```json
-{
-  "notifications": {
-    "webui": {
-      "backup_complete": true,
-      "backup_failed": true,
-      "ssl_expiring": true,
-      "admin_login": true
-    },
-    "email": {
-      "backup_complete": false,
-      "backup_failed": true,
-      "ssl_expiring": true,
-      "admin_login": false
-    }
-  }
-}
-```
 
 ## Configuration
 
@@ -29202,9 +28949,6 @@ When `server.compliance.enabled: true`:
 {project_name} --maintenance backup
 # Prompts for password, creates encrypted backup
 
-# Override with explicit password:
-{project_name} --maintenance backup --password "mypassword"
-
 # Restore encrypted backup:
 {project_name} --maintenance restore backup.tar.gz.enc
 # Prompts for password
@@ -29549,7 +29293,6 @@ on a Sunday counts as daily + weekly + monthly + yearly - uses highest priority)
 | Interface | Password Not Provided | Behavior |
 |-----------|----------------------|----------|
 | **CLI** | Interactive prompt | Prompts: `Enter backup password:` |
-| **CLI** | `--password` flag | Uses provided password |
 | **WebUI** | Shows dialog | Password input dialog before restore |
 | **API** | Returns 400 error | `{"error": "password_required", "message": "Encrypted backup requires password"}` |
 
@@ -29561,9 +29304,6 @@ on a Sunday counts as daily + weekly + monthly + yearly - uses highest priority)
 Enter backup password: ••••••••••••
 Verifying backup integrity... OK
 Restoring...
-
-# Encrypted backup - password via flag
-{project_name} --maintenance restore backup_2025-01-15.tar.gz.enc --password "mypassword"
 
 # Unencrypted backup - no password needed
 {project_name} --maintenance restore backup_2025-01-15.tar.gz
@@ -29622,145 +29362,8 @@ POST /api/{api_version}/server/config/backup/restore
 | Scenario | Behavior |
 |----------|----------|
 | **Restore to same server** | Overwrites current config and database |
-| **Restore to new server** | Primary admin must re-authenticate |
+| **Restore to new server** | Server restarts with restored configuration |
 | **Version mismatch** | Warning shown, schema updates applied if needed |
-
-### Primary Admin Re-Setup on Restore
-
-**When restoring a backup to a NEW server, the Primary Admin must re-authenticate:**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  🔑 RESTORE COMPLETE - RE-AUTHENTICATION REQUIRED           │
-├─────────────────────────────────────────────────────────────┤
-│  Your existing password and settings have been preserved.   │
-│  Log in with your existing admin credentials to continue.   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Why Re-Authentication?**
-- Prevents stolen backup from granting immediate admin access
-- Verifies person restoring has server-level access (can see console)
-- Preserves existing admin credentials (just requires re-verification)
-
-**What is Preserved:**
-- Admin username
-- Admin password (still valid after re-auth)
-- Admin 2FA settings
-- Admin API token
-- All configuration
-- All user accounts
-
-### Additional Admins on Restore
-
-| Admin Type | Restore Behavior |
-|------------|------------------|
-| **Primary Admin** | Can log in with existing credentials after restore |
-| **Additional Admins (local)** | Can log in immediately with existing credentials |
-| **OIDC/LDAP Admins** | Can log in if OIDC/LDAP provider accessible |
-
-## Admin Recovery Command
-
-```bash
-{project_name} --maintenance setup
-```
-
-**Purpose:** Resets admin credentials. This is the ONLY way for a Server Admin to recover access if they have lost their password, API token, AND recovery keys.
-
-### Setup Authorization
-
-**Setup is a sensitive operation - requires authorization (see PART 5: Sensitive Operations).**
-
-| Condition | Authorization |
-|-----------|--------------|
-| Database empty (first-run) | ✅ Allowed (initial setup) |
-| Running as root | ✅ Allowed (with confirmation) |
-| Random user | ❌ Denied |
-
-### What It Does
-
-| Action | Description |
-|--------|-------------|
-| **Clears admin password** | Admin password is set to null/empty |
-| **Clears admin API token** | Admin API token is invalidated |
-| **Preserves everything else** | User accounts, data, configuration unchanged |
-
-### What It Does NOT Do
-
-| Preserved | Description |
-|-----------|-------------|
-| **User accounts** | All user accounts remain intact |
-| **User passwords** | No user credentials are modified |
-| **User data** | All user data is preserved |
-| **Configuration** | All settings except admin credentials |
-| **Database** | No data is deleted or modified |
-| **SSL certificates** | Certificates remain valid |
-
-### Usage
-
-```bash
-# Stop the service first (recommended)
-{project_name} --service stop
-
-# Run setup reset
-{project_name} --maintenance setup
-
-# Output:
-# ┌─────────────────────────────────────────────────────────────┐
-# │  🔑 ADMIN CREDENTIALS RESET                                 │
-# ├─────────────────────────────────────────────────────────────┤
-# │  Admin password and API token have been cleared.            │
-# │                                                             │
-# │  Edit server.yml to set new admin credentials, then         │
-# │  start the service: {project_name} --service start           │
-# └─────────────────────────────────────────────────────────────┘
-
-# Start the service
-{project_name} --service start
-```
-
-### Security Considerations
-
-| Consideration | Requirement |
-|---------------|-------------|
-| **Requires authorization** | Root (see Setup Authorization above) |
-| **Logged** | Action logged to audit log (if available) |
-| **Service should be stopped** | Recommended to stop service first |
-
-### When to Use
-
-| Scenario | Use `--maintenance setup` |
-|----------|---------------------------|
-| Config file is corrupt or missing | ✓ Yes |
-| Server needs re-initialization | ✓ Yes |
-| Routine config reset | ✗ No (edit `server.yml` directly) |
-
-### Recovery Flow
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ADMIN RECOVERY FLOW                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Admin locked out (no password, no token, no recovery keys)     │
-│                           │                                     │
-│                           ▼                                     │
-│  Root runs: {project_name} --maintenance setup                   │
-│                           │                                     │
-│                           ▼                                     │
-│  Admin credentials cleared                                      │
-│                           │                                     │
-│                           ▼                                     │
-│  Edit server.yml to set new admin credentials                   │
-│                           │                                     │
-│                           ▼                                     │
-│  Start the service: {project_name} --service start               │
-│                           │                                     │
-│                           ▼                                     │
-│  Admin access restored, new recovery keys issued                │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
@@ -30464,106 +30067,6 @@ Current:
   Version:  {projectversion}
   Branch:   stable
   Latest:   {latest_version} (if different)
-```
-
-## CLI Admin Help Output
-
-```bash
-$ {project_name}-cli --admin --help
-Admin CLI - manage server configuration, statistics, and blocklists.
-
-Commands:
-  config                Server configuration (--admin config --help)
-    get [key]           Get config value(s)
-    set <key> <value>   Set config value
-    list                List all config keys
-    reset <key>         Reset config to default
-
-  stats                 Server statistics (--admin stats --help)
-    overview            General server statistics
-    storage             Storage usage
-    performance         Performance metrics
-
-  blocklist             IP/domain blocklist management (--admin blocklist --help)
-    list                List all blocklist sources with stats
-    update [--source NAME]  Update all or specific blocklist
-    check <IP>          Check if IP is in any blocklist
-    add                 Add new blocklist source
-    remove <NAME>       Remove blocklist source
-    stats               Show aggregate blocklist statistics
-
-Global Flags:
-  --format {table|json|yaml}  Output format (default: table)
-  --quiet               Suppress non-essential output
-
-Examples:
-  {project_name}-cli --admin config list
-  {project_name}-cli --admin config get server.fqdn
-  {project_name}-cli --admin config set branding.title "My Server"
-  {project_name}-cli --admin stats overview
-  {project_name}-cli --admin blocklist list
-  {project_name}-cli --admin blocklist check 1.2.3.4
-```
-
-## CLI Admin Config Help Output
-
-```bash
-$ {project_name}-cli --admin config --help
-Server configuration commands:
-
-  get [key]             Get configuration value
-                        Without key: shows all config
-    --format FORMAT     Output format (table|json|yaml)
-
-  set <key> <value>     Set configuration value
-                        Changes take effect immediately (config file reload)
-    --no-reload         Don't reload config after change
-
-  list                  List all configuration keys
-    --category CAT      Filter by category (server|email|rate_limit|backup)
-
-  reset <key>           Reset configuration to default value
-    --force             Skip confirmation prompt
-
-Common Configuration Keys:
-  server.fqdn               Server FQDN (fully qualified domain name)
-  branding.title            Server display title
-  branding.description      Server description
-  server.rate_limit.read.requests   Read endpoint rate limit (per minute)
-  server.rate_limit.write.requests  Write endpoint rate limit (per minute)
-  email.smtp_host           SMTP server hostname
-  email.from_address        From email address
-
-Examples:
-  {project_name}-cli --admin config list
-  {project_name}-cli --admin config get server.fqdn
-  {project_name}-cli --admin config set branding.title "My Server"
-  {project_name}-cli --admin config reset server.rate_limit.write.requests
-```
-
-## CLI Admin Stats Help Output
-
-```bash
-$ {project_name}-cli --admin stats --help
-Server statistics commands:
-
-  overview              General server statistics
-                        Uptime, version, request counts, error rates
-
-  storage               Storage usage
-                        Database size, file storage, cache usage
-
-  performance           Performance metrics
-                        Response times, throughput, resource usage
-
-Flags:
-  --format FORMAT       Output format (table|json|yaml)
-  --period PERIOD       Time period (1h|24h|7d|30d, default: 24h)
-
-Examples:
-  {project_name}-cli --admin stats overview
-  {project_name}-cli --admin stats storage --format json
-  {project_name}-cli --admin stats performance
 ```
 
 ## System User Requirements
@@ -33106,7 +32609,7 @@ docker/
 
 **Runtime `./volumes/`** (never committed from repo-local runs):
 ```
-# Production (Server Admin's choice of location):
+# Production (operator's choice of location):
 /path/to/deployment/
 ├── docker-compose.yml   # copied from repo
 └── volumes/             # RUNTIME - created on server
@@ -38596,7 +38099,6 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 | `configuration.md` | ✓ | Configuration reference (all settings) |
 | `api.md` | ✓ | API documentation (endpoints, formats) |
 | `cli.md` | If applicable | CLI reference (flags, commands) |
-| `admin.md` | ✓ | Admin panel guide |
 | `security.md` | ✓ | Security model, auth, health/public endpoints, security reporting, and well-known namespace |
 | `integrations.md` | ✓ | External identity, native app links, autodiscovery, webhooks, federation, and other protocol/platform integrations (or an explicit "none enabled" statement) |
 | `development.md` | ✓ | Development/contributing guide |
@@ -39161,7 +38663,6 @@ All settings can be overridden via environment:
 All settings are configurable via the server config file or CLI. Server API is available at `/api/{api_version}/server/config/`.
 
 Document:
-- external auth provider settings (OIDC/LDAP) if enabled
 - well-known namespace settings and optional entries if enabled
 - health/public endpoint toggles that operators can change
 ```
@@ -39200,36 +38701,6 @@ GraphQL playground: [/server/docs/graphql](/server/docs/graphql)
 ```graphql
 # ... (GraphQL schema)
 ```
-```
-
-### docs/admin.md
-
-```markdown
-# Admin API
-
-## Access
-
-- Base URL: `/api/{api_version}/server/`
-- First-run setup creates admin account via CLI
-- Token-based authentication (Bearer)
-
-## Features
-
-- Server configuration (via config file)
-- User management
-- Database management
-- Backup/restore
-- SSL/TLS management
-- Monitoring & logs
-
-Document:
-- external auth provider settings (OIDC/LDAP) via config file
-- web/robots/security.txt settings via config file
-- any security-reporting or public-endpoint settings enabled by the project
-
-## Server API
-
-Programmatic access via `/api/{api_version}/server/` — all endpoints are publicly accessible (no auth required). Rate limiting applies.
 ```
 
 ### docs/security.md
@@ -40143,22 +39614,7 @@ var localeFS embed.FS
       "title": "Administradores del servidor",
       "your_account": "Su cuenta:",
       "total_admins": "Total de administradores:",
-      "currently_online": "Actualmente en línea:",
-      "invite_new": "Invitar nuevo administrador",
-      "invite_title": "Invitar nuevo administrador del servidor",
-      "invite_expires": "La invitación expira en:",
-      "generate_invite": "Generar invitación",
-      "invite_created": "Invitación de administrador creada",
-      "invite_url": "URL de invitación (compartir con el nuevo administrador):",
-      "copy_url": "Copiar URL",
-      "invite_once": "Este enlace solo funcionará UNA VEZ y expira en {duration}.",
-      "invite_password_note": "El nuevo administrador establecerá su propia contraseña en el primer uso.",
-      "privacy_note": "Por seguridad, no puede ver otras cuentas de administrador. Cada administrador gestiona sus propias credenciales de forma independiente.",
-      "1_hour": "1 hora",
-      "6_hours": "6 horas",
-      "24_hours": "24 horas",
-      "48_hours": "48 horas",
-      "7_days": "7 días"
+      "currently_online": "Actualmente en línea:"
     },
 
     "profile": {
@@ -41335,21 +40791,8 @@ This is separate from hosting a hidden service - it uses Tor's SOCKS5 proxy for 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ Server Admin Setting: server.tor.use_network                       │
+│ Operator Setting: server.tor.use_network                           │
 │ Default: false (direct connections)                                 │
-└─────────────┬───────────────────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ Server Admin Setting: server.tor.allow_user_preference              │
-│ Default: true (users can override)                                  │
-└─────────────┬───────────────────────────────────────────────────────┘
-              │ if true
-              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ User Account Setting: user.preferences.use_tor_network              │
-│ Default: inherit from server (null = use server setting)            │
-│ Options: true (always), false (never), null (inherit)               │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -41975,8 +41418,8 @@ AccountingMax %s`, cfg.MaxMonthlyBandwidth)
     return fmt.Sprintf(`
 # ============================================================
 # Tor Configuration - Generated by server binary
-# This file is PERSISTENT - edits via admin panel are preserved
-# Manual edits may be overwritten when config is saved via admin
+# This file is PERSISTENT - manual edits are preserved
+# Manual edits may be overwritten when config is saved via operator
 # ============================================================
 
 # SOCKS port for outbound connections (0 = disabled, auto = runtime port)
@@ -43091,233 +42534,6 @@ update:
 | `cli.token_revoked_detected` | CLI received `401 TOKEN_REVOKED`, exited / cleared cached token |
 | `cli.cluster_failover` | CLI failed over from primary to cluster URL |
 
-## User/Org Context (Smart Detection, NON-NEGOTIABLE)
-
-**If project implements multi-user/orgs, client MUST support `--user` flag for user/org context. Server auto-detects type.**
-
-### --user Flag
-
-| Flag | Description |
-|------|-------------|
-| `--user NAME` | Target user OR org (server auto-detects) |
-| `--user @NAME` | Force user context (explicit) |
-| `--user +NAME` | Force org context (explicit) |
-
-**Smart detection priority:**
-1. If prefixed with `@` → user
-2. If prefixed with `+` → org
-3. Otherwise → server auto-detects from name
-
-### Global Token (Works Across User + Orgs)
-
-**A user's token grants access to:**
-- Their own user account
-- All orgs where they have permissions
-- Resources based on their role in each org
-
-```
-Token: usr_abc123... (user: alice)
-├── User context: alice's personal resources
-├── Org context: acme-corp (alice is admin)
-├── Org context: dev-team (alice is member)
-└── Org context: open-source-proj (alice is owner)
-```
-
-**One token, multiple contexts - no need for separate org tokens.**
-
-### Server-Side Smart Detection
-
-**Server MUST auto-detect if target is user or org:**
-
-```go
-// DetectTargetType determines if name is user or org
-func DetectTargetType(ctx context.Context, name string) (TargetType, error) {
-    // 1. Check explicit prefix
-    if strings.HasPrefix(name, "@") {
-        return TargetUser, nil
-    }
-    if strings.HasPrefix(name, "+") {
-        return TargetOrg, nil
-    }
-
-    // 2. Strip prefix for lookup
-    cleanName := strings.TrimLeft(name, "@+")
-
-    // 3. Check user table first (users are more common)
-    if userExists(ctx, cleanName) {
-        return TargetUser, nil
-    }
-
-    // 4. Check org table
-    if orgExists(ctx, cleanName) {
-        return TargetOrg, nil
-    }
-
-    // 5. Not found
-    return TargetUnknown, ErrNotFound
-}
-
-// ValidateAccess checks if token has access to target
-func ValidateAccess(ctx context.Context, token *Token, target string, action string) error {
-    targetType, err := DetectTargetType(ctx, target)
-    if err != nil {
-        return err
-    }
-
-    cleanName := strings.TrimLeft(target, "@+")
-
-    switch targetType {
-    case TargetUser:
-        // Token owner must BE this user
-        if token.UserID != getUserID(ctx, cleanName) {
-            return ErrForbidden
-        }
-        return nil
-
-    case TargetOrg:
-        // Token owner must have permission in this org
-        org := getOrg(ctx, cleanName)
-        role := getOrgRole(ctx, token.UserID, org.ID)
-        if !role.Can(action) {
-            return ErrForbidden
-        }
-        return nil
-    }
-
-    return ErrNotFound
-}
-```
-
-### CLI Usage Examples
-
-```bash
-# Default: use token owner's personal context (no --user flag)
-{project_name}-cli list                    # GET /api/{api_version}/users/{resource} (current user)
-
-# Explicit user context (view another user's public resources)
-{project_name}-cli --user @alice list      # GET /api/{api_version}/users/alice/{resource}
-
-# Org context (user must have org access)
-{project_name}-cli --user +acme-corp list  # GET /api/{api_version}/orgs/acme-corp/{resource}
-
-# Auto-detect: CLI determines if name is user or org
-{project_name}-cli --user alice list       # GET /api/{api_version}/users/alice/{resource} (if user)
-{project_name}-cli --user acme-corp list   # GET /api/{api_version}/orgs/acme-corp/{resource} (if org)
-```
-
-**Note:** `{resource}` is the project-specific resource type (e.g., `repos`, `pastes`, `links`). See IDEA.md for your project's resources.
-
-### CLI Route Translation (URL-Scoped)
-
-**CLI translates `--user` flag to URL-scoped routes:**
-
-| CLI Command | API Route |
-|-------------|-----------|
-| `list` (no flag) | `GET /api/{api_version}/users/{resource}` (current user) |
-| `--user @alice list` | `GET /api/{api_version}/users/alice/{resource}` |
-| `--user +acme-corp list` | `GET /api/{api_version}/orgs/acme-corp/{resource}` |
-| `--user alice list` | Auto-detect → `/api/{api_version}/users/alice/{resource}` or `/api/{api_version}/orgs/alice/{resource}` |
-
-```bash
-# CLI translates --user to URL-scoped route
-{project_name}-cli --user acme-corp list
-
-# Becomes:
-GET /api/{api_version}/orgs/acme-corp/{resource}
-Authorization: Bearer usr_abc123...
-```
-
-### Detection Flow
-
-```
-CLI receives --user flag
-│
-├─► No --user flag
-│   └─► Use /api/{api_version}/users/{resource} (current user from token)
-│
-├─► --user NAME provided
-│   ├─► Prefix @? → Use /api/{api_version}/users/{name}/{resource}
-│   ├─► Prefix +? → Use /api/{api_version}/orgs/{name}/{resource}
-│   └─► No prefix → CLI auto-detects:
-│       ├─► Query server for name type
-│       ├─► User? → /api/{api_version}/users/{name}/{resource}
-│       ├─► Org? → /api/{api_version}/orgs/{name}/{resource}
-│       └─► Neither → Error: not found
-│
-└─► Server validates token has access to resource
-    ├─► User resource: token owner or public profile
-    ├─► Org resource: token owner has org role
-    └─► No access → 403 Forbidden
-```
-
-### Smart Context Detection (Based on Token Scope)
-
-**`--user` flag only needed when token has multiple contexts. Server auto-detects when possible.**
-
-| Token Scope | `--user` Needed? | Default Context |
-|-------------|------------------|-----------------|
-| User only (no orgs) | No | User |
-| Single org only | No | That org |
-| User + 1 org | Optional | User (use `--user {org}` for org) |
-| User + multiple orgs | Yes (for orgs) | User (must specify which org) |
-
-**Examples by token scope:**
-
-```bash
-# Token: alice (no org access)
-{project_name}-cli list                    # Uses alice's context (only option)
-{project_name}-cli --user alice list       # Same (redundant but valid)
-{project_name}-cli --user acme-corp list   # ERROR: no access to acme-corp
-
-# Token: scoped to acme-corp only (org-specific token)
-{project_name}-cli list                    # Uses acme-corp context (only option)
-{project_name}-cli --user acme-corp list   # Same (redundant but valid)
-{project_name}-cli --user @me list         # ERROR: token not scoped to user
-
-# Token: alice + acme-corp (user has one org)
-{project_name}-cli list                    # Uses alice's context (default = user)
-{project_name}-cli --user acme-corp list   # Uses acme-corp context
-
-# Token: alice + acme-corp + dev-team (user has multiple orgs)
-{project_name}-cli list                    # Uses alice's context (default = user)
-{project_name}-cli --user acme-corp list   # Uses acme-corp context
-{project_name}-cli --user dev-team list    # Uses dev-team context
-```
-
-**Server-side scope detection:**
-
-```go
-// GetDefaultContext returns the default context for a token
-func GetDefaultContext(token *Token) (string, TargetType) {
-    scopes := token.GetScopes()
-
-    // Single scope - use it directly, no --user needed
-    if len(scopes) == 1 {
-        return scopes[0].Name, scopes[0].Type
-    }
-
-    // Multiple scopes - default to user if available
-    for _, scope := range scopes {
-        if scope.Type == TargetUser {
-            return scope.Name, TargetUser
-        }
-    }
-
-    // No user scope, multiple orgs - require --user flag
-    return "", TargetUnknown
-}
-
-// Token scope types
-type TokenScope struct {
-    Name string      // "alice" or "acme-corp"
-    Type TargetType  // TargetUser or TargetOrg
-}
-```
-
-**Why this design?**
-- Zero friction for simple cases (single scope = no flag needed)
-- Explicit only when ambiguous (multiple orgs)
-- Token scope determines what's possible, `--user` selects which
 
 ### Flag-to-Config Save Rules
 
@@ -43373,25 +42589,6 @@ func SaveIfEmptyOrInvalid(current, flagValue string, validate func(string) bool)
 # → Uses staging for THIS command, but cli.yml still has api.example.com
 
 # To permanently change: edit cli.yml directly
-```
-
-### Reserved Names
-
-**These names are reserved and cannot be users OR orgs:**
-
-| Name | Reason |
-|------|--------|
-| `me` | Alias for current token owner |
-| `self` | Alias for current token owner |
-| `@me` | Explicit user self-reference |
-| `admin` | Reserved for system |
-| `system` | Reserved for system |
-| `api` | Reserved for routes |
-| `www` | Reserved for routes |
-
-```bash
-# @me always means token owner
-{project_name}-cli --user @me list    # Always personal context
 ```
 
 ## Modes
@@ -44954,7 +44151,6 @@ auth:
   token: ""                        # API token (usr_xxx, see PART 11)
   token_file: ""                   # Read token from file instead
   # No default_context - default is ALWAYS token owner (user)
-  # Use --user {org} to switch to org context
 
 # Output preferences
 output:
@@ -45010,7 +44206,7 @@ defaults:
 # Pattern: {PROJECT_NAME}_{SECTION}_{KEY} or {PROJECT_NAME}_{KEY}
 {PROJECT_NAME}_SERVER_PRIMARY="https://example.com"
 {PROJECT_NAME}_SERVER_TIMEOUT=60
-{PROJECT_NAME}_TOKEN="usr_abc123..."
+{PROJECT_NAME}_TOKEN="tok_abc123..."
 {PROJECT_NAME}_OUTPUT_FORMAT="json"
 {PROJECT_NAME}_DEBUG=true
 ```
@@ -45442,15 +44638,10 @@ Flags:
       --server URL                  Server URL (default: from config)
       --token TOKEN                 API token for authentication
       --token-file FILE             Read token from file
-      --user NAME                   Target user or org (auto-detect, @user, +org)
       --config NAME                 Config profile name (default: cli.yml)
       --debug                       Debug output
       --color {always|never|auto}   Color output (default: auto)
       --lang CODE                   Language for output (default: auto)
-
-Administration (requires admin token):
-      --admin CMD                   Admin operations (--admin --help for details)
-      --admin server CMD            Server admin operations (--admin server --help)
 
   {project-specific flags listed here}
 
@@ -47132,7 +46323,6 @@ All three binaries are built for the SAME project and work together as a system:
 │  • Full remote admin              • Purpose-specific daemon                │
 │  • TUI/CLI/GUI modes              • Headless, no admin                     │
 │  • User context (~/)              • System context (/)                     │
-│  • --admin* flags                 • No --admin* flags                      │
 │                                                                            │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
@@ -47173,7 +46363,7 @@ All three binaries are built for the SAME project and work together as a system:
 | Component | Purpose | Admin Capabilities | Modes |
 |-----------|---------|-------------------|-------|
 | **Server** | Central server | N/A (IS the admin) | Daemon/service |
-| **Client** | Full remote administration | ✅ `--admin*` flags, full server control | TUI, CLI, GUI |
+| **Client** | Full remote administration | ✅ Full server control | TUI, CLI, GUI |
 | **Agent** | Purpose-specific work | ❌ No admin flags | Daemon/service (headless) |
 
 ### Agent Shares Server Structure
@@ -47221,19 +46411,10 @@ SERVER STARTUP                          AGENT STARTUP
 |-----------------------|-------------|
 | **All user operations** | Everything a logged-in user can do |
 | **All org operations** | Everything org members can do |
-| **All admin operations** | `--admin*` flags for server administration |
+| **All admin operations** | Full server administration via API |
 | **TUI mode** | Interactive terminal UI |
 | **CLI mode** | Scriptable command-line |
 | **GUI mode** | Native graphical interface (if available) |
-
-**Admin flags (Client only):**
-```bash
-{project_name}-cli --admin users list          # List all users
-{project_name}-cli --admin users create ...    # Create user
-{project_name}-cli --admin server status       # Server status
-{project_name}-cli --admin server config       # View/edit config
-{project_name}-cli --admin backup create       # Create backup
-```
 
 ### Agent = Purpose-Specific Worker
 
@@ -47897,7 +47078,7 @@ make docker # Build Docker image
 - [ ] Extended healthz response includes:
   - [ ] version, go_version, build info
   - [ ] cluster (enabled, status, primary, nodes, role)
-  - [ ] features (multi_user, organizations, tor, geoip, metrics)
+  - [ ] features (tor, geoip, metrics)
   - [ ] checks (database, cache, disk, scheduler, cluster)
   - [ ] stats (requests_total, requests_24h, active_connections)
 - [ ] NEVER expose sensitive data (tokens, credentials, paths, internal IPs)
@@ -48228,9 +47409,7 @@ make docker # Build Docker image
 - [ ] Global burst ceiling enforced: 240 req/min per IP
 - [ ] `429 Too Many Requests` with `Retry-After` header on limit hit
 - [ ] Rate limit counters stored in `server.db`
-- [ ] Separate session tables (`admin_sessions`, `user_sessions`)
 - [ ] Server API routes protected (`/api/{api_version}/server/*`)
-- [ ] No privilege escalation path from user to admin
 
 ---
 
