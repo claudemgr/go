@@ -2281,7 +2281,7 @@ When reading a PART and you encounter a reference like "See PART X" or "Read PAR
 2. Jump to the referenced PART and read it
 3. **Return to your original location** and continue reading
 
-Example: If you're reading PART 5 at line 7000 and it says "See PART 10", read PART 10, then **return to PART 5 line 7000** and continue.
+Example: If you're partway through PART 5 and it says "See PART 10", read PART 10, then **return to your previous position in PART 5** and continue.
 
 **Never abandon your current PART after following a reference.**
 
@@ -2753,7 +2753,7 @@ fi
 |---------|-----------------|
 | Adding a new `http.Error()` call | Use `t(r, "errors.*")` — never hardcoded English |
 | Adding `fmt.Printf`/`fmt.Fprintf` with user-visible text | Use `i18n.T(lang, "key")` or `i18n.Tf(lang, "key", args)` |
-| Adding a new admin page/section | Add translation keys for ALL labels, buttons, messages, tooltips |
+| Adding a new web page/section | Add translation keys for ALL labels, buttons, messages, tooltips |
 | Adding a new CLI command/flag | Add `cli.*` translation keys for help text and output |
 | Adding a new agent feature | Add `agent.*` translation keys for status/output |
 | Adding a new notification type | Add notification translation key |
@@ -4180,8 +4180,8 @@ Every feature MUST work via:
 | `/server/docs/graphql` | `/api/{api_version}/server/graphql` (also `/api/graphql` alias) | GraphiQL UI / GraphQL POST endpoint |
 
 **This pattern applies to ALL features:**
-- Every admin page has a corresponding admin API
-- Every public page has a corresponding public API
+- Every server-management endpoint exposed via REST is reachable under `/api/{api_version}/server/...`
+- Every public web page has a corresponding public API
 - Project-specific features (IDEA.md) follow same pattern
 
 **Rule:** For every web page, there's a corresponding API endpoint. For every API endpoint, the data can be displayed in a web page.
@@ -7128,12 +7128,12 @@ server.yml (source of truth)
 Application reads config
      │
      ▼
-Admin panel writes to server.yml
+Operator edits server.yml directly (text editor or config-management tool)
 ```
 
 - All settings stored in `server.yml`
-- Admin panel edits `server.yml` directly
-- SQLite databases for credentials/sessions only
+- Operator edits `server.yml` directly — there is no admin web UI
+- SQLite database stores resource owner tokens, audit log, etc. (not user accounts)
 
 ### Cluster Mode
 
@@ -7148,7 +7148,7 @@ Database (source of truth)
 Application reads config from DB
      │
      ▼
-Admin panel writes to database
+Operator edits server.yml on each node OR seeds DB once at bootstrap
      │
      ▼
 Changes synced to server.yml cache
@@ -7159,7 +7159,7 @@ All nodes see changes immediately
 
 - Database is source of truth
 - `server.yml` is cache AND backup
-- Admin panel writes to database
+- Operator-driven config changes go into the database (via direct SQL or bootstrap import) — no admin web UI
 - Changes automatically synced to local `server.yml`
 - If database unavailable → read-only mode using cached config
 
@@ -7245,7 +7245,7 @@ func onConfigChange(db *sql.DB, key string, value interface{}) {
 | Aspect | Behavior |
 |--------|----------|
 | **Public API** | Read-only operations only |
-| **Admin panel** | Accessible with fix instructions |
+| **Server status endpoint** | Accessible with fix instructions in response body |
 | **Writes** | Rejected with 503 |
 | **Self-healing** | Continuously attempting in background |
 | **Recovery** | Automatic when issue resolved |
@@ -11599,7 +11599,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_category ON audit_log(category);
-CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(actor_type, actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_actor_ip ON audit_log(actor_ip);
+CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_log(target_type, target_id);
 
 -- ----------------------------------------------------------------------------
 -- Scheduler (background task tracking)
@@ -11872,11 +11873,11 @@ func categorizeChanges(changes []string) (hotReload, needsRestart []string) {
 }
 ```
 
-**Admin UI Restart Notification:**
+**Server Status Endpoint - Restart Notification:**
 
 ```go
 // GET /api/{api_version}/server/status returns pending restart info
-func adminStatusHandler(w http.ResponseWriter, r *http.Request) {
+func serverStatusHandler(w http.ResponseWriter, r *http.Request) {
     status := map[string]interface{}{
         "running":         true,
         "pending_restart": configManager.PendingRestart(),
@@ -11886,18 +11887,7 @@ func adminStatusHandler(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-**Admin UI displays:**
-```
-┌─────────────────────────────────────────────────────────┐
-│ ⚠️  Restart Required                                    │
-│                                                         │
-│ The following settings require a restart to take effect:│
-│ • server.port                                           │
-│ • ssl.enabled                                           │
-│                                                         │
-│ [Restart Now]  [Dismiss]                                │
-└─────────────────────────────────────────────────────────┘
-```
+Operators query `/api/{api_version}/server/status` (with `server.token`) to discover which settings still need a process restart to take effect — there is no admin web UI; this is reported via API and logs only.
 
 **Health Check Endpoint (`/server/healthz`):**
 
@@ -13345,7 +13335,7 @@ if err != nil && !isColumnExistsError(err) {
 | Feature | Description |
 |---------|-------------|
 | **Config Sync** | Change setting on one node → syncs to all nodes |
-| **Session Sharing** | User sessions shared across nodes |
+| **Token Cache Sharing** | API token validation cache shared across nodes |
 | **Distributed Locks** | Prevent duplicate task execution |
 | **Primary Election** | One node handles cluster-wide tasks |
 | **Health Monitoring** | Nodes monitor each other |
@@ -14622,7 +14612,7 @@ web:
 
 | Mode | Triggered when | Form changes |
 |------|----------------|--------------|
-| Standard contact | No `security_id`, OR id present but invalid | Standard fields (Name, Email, Subject, Message, Captcha) — see PART 17 → `/server/contact`. |
+| Standard contact | No `security_id`, OR id present but invalid | Standard fields (Name, Email, Subject, Message, Captcha) — see PART 12 → Contact Configuration. |
 | Security report | `security_id` present AND matches current or previous 48h window | Security-research fields appended; submission routes to the security pipeline; tracking id issued. |
 
 **Security-mode form fields (in addition to Name + Email + Captcha):**
@@ -14693,7 +14683,7 @@ web:
 
 | Field | Description |
 |-------|-------------|
-| `fingerprint` | Full SHA-256 fingerprint, displayed on admin page and in security.txt comments |
+| `fingerprint` | Full SHA-256 fingerprint, returned by the status API and embedded in security.txt comments |
 | `created_at` | When the keypair was generated |
 | `expires_at` | Key expiry (2 years default) |
 | `last_rotated_at` | When most recently rotated (NULL if never) |
@@ -14713,7 +14703,7 @@ web:
 
 **Restore behavior:** restoring a backup re-installs the keypair AND re-publishes the public key to the configured keyservers (idempotent — keyservers de-duplicate by fingerprint). The `installation_secret` is restored from the same backup, so the encrypted private key decrypts correctly.
 
-**Operator UX:** running `{project_name} backup create` and `{project_name} backup restore` covers the security keypair without any extra steps. Admin panel "Test Backup" runs a dry-run restore of the keypair specifically and reports whether the encrypted private key decrypts successfully.
+**Operator UX:** running `{project_name} backup create` and `{project_name} backup restore` covers the security keypair without any extra steps. `{project_name} backup test` runs a dry-run restore of the keypair specifically and reports whether the encrypted private key decrypts successfully.
 
 ## Logging
 
@@ -15431,13 +15421,13 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | `/api/{api_version}/server/consents` | GET | Get consents |
 | `/api/{api_version}/server/consents` | PATCH | Update consents |
 
-### Admin UI: Compliance Dashboard
+### Compliance Reporting (API + CLI)
 
-**Location:** Compliance dashboard is managed via config file.
+**Compliance is configured in `server.yml` and exposed via REST + CLI — no admin web UI.** Operators query the `/api/{api_version}/server/compliance/*` endpoints (authenticated with `server.token`) or run `{project_name} compliance ...` subcommands.
 
 | Section | Description |
 |---------|-------------|
-| Enabled Standards | Toggle switches for each standard |
+| Enabled Standards | Per-standard toggles in `server.yml` |
 | Compliance Score | Per-standard compliance percentage |
 | Issues | Outstanding compliance issues |
 | Data Requests | Pending export/deletion requests |
@@ -24282,7 +24272,6 @@ var staticFS embed.FS
 
 **Theme system applies to THE ENTIRE PROJECT - ALL interfaces share the same colors and settings:**
 - Web interface (HTML pages)
-- Admin panel
 - Swagger UI
 - GraphiQL interface
 - CLI colored output
@@ -24605,12 +24594,11 @@ server:
 | Public documentation pages (project-defined, if any) | Dynamic | 0.8 | weekly |
 | API docs (`/server/docs/swagger`, `/server/docs/graphql`) | Always | 0.7 | weekly |
 | Project-specific public resources | Dynamic | 0.6 | weekly |
-| Admin pages | **NEVER** | - | - |
+| Authenticated server-management pages | **NEVER** | - | - |
 | API endpoints (`/api/*`) | **NEVER** | - | - |
 
 **Dynamic Content:**
 - Project resource pages: Include only if public/published
-- Custom domain pages: Include with their custom domain URL
 
 **Sitemap Configuration:**
 
@@ -26955,7 +26943,7 @@ because the built-in scheduler provides:
 - Cluster-aware execution
 - Automatic catch-up for missed runs
 - State tracking and logging
-- Admin panel visibility
+- Visibility via `/api/{api_version}/server/scheduler/*` endpoints
 ```
 
 ### Exceptions (NONE)
@@ -27221,7 +27209,7 @@ Execute task
 
 The scheduler status is available via the server status API. Task execution can be triggered or toggled via CLI commands.
 
-**Admin UI - Scheduler Overview:**
+**CLI / API - Scheduler Overview** (`{project_name} scheduler list` or `GET /api/{api_version}/server/scheduler`):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -27244,7 +27232,7 @@ The scheduler status is available via the server status API. Task execution can 
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Admin UI - Task Detail (Backup):**
+**CLI / API - Task Detail** (`{project_name} scheduler show backup` or `GET /api/{api_version}/server/scheduler/backup`):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -29123,7 +29111,7 @@ Every backup is verified **immediately after creation** - backups must be 100% w
 
 **Only delete old backups if new backup passes ALL verification checks.**
 
-**Admin UI:**
+**Configuration (`server.yml` → `server.backup`):**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -36567,8 +36555,7 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 
 1. **First run** - Binary auto-generates config in OS config directory with sane defaults
 2. **Flags/env override** - Command-line flags and environment variables override config
-3. **Admin panel** - WebUI for all settings (server)
-4. **Manual edit** - Users can edit generated config file if needed
+3. **Manual edit** - Operators edit generated `server.yml` directly (there is no admin web UI)
 
 **Configuration precedence (highest to lowest):**
 1. Command-line flags
@@ -40769,11 +40756,8 @@ server:
     binary: ""
 
     # --- Outbound Network Settings ---
-    # Use Tor network for outbound connections (server-wide default)
+    # Use Tor network for outbound connections (server-wide setting)
     use_network: false
-
-    # Allow users to set their own Tor network preference
-    allow_user_preference: true
 
     # --- Performance Settings ---
     # Maximum circuits to keep open (higher = faster but more memory)
@@ -40864,14 +40848,10 @@ This is separate from hosting a hidden service - it uses Tor's SOCKS5 proxy for 
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-| Server Setting | User Preference | Result |
-|----------------|-----------------|--------|
-| `use_network: false`, `allow_user_preference: false` | (ignored) | Direct |
-| `use_network: true`, `allow_user_preference: false` | (ignored) | Tor |
-| `use_network: false`, `allow_user_preference: true` | `null` | Direct |
-| `use_network: false`, `allow_user_preference: true` | `true` | Tor |
-| `use_network: true`, `allow_user_preference: true` | `false` | Direct |
-| `use_network: true`, `allow_user_preference: true` | `null` | Tor |
+| Server Setting | Result |
+|----------------|--------|
+| `use_network: false` | Direct |
+| `use_network: true` | Tor |
 
 ### Outbound Implementation
 
@@ -41129,8 +41109,7 @@ type TorConfig struct {
     Binary string `yaml:"binary" json:"binary"`
 
     // Outbound network settings
-    UseNetwork          bool `yaml:"use_network" json:"use_network"`
-    AllowUserPreference bool `yaml:"allow_user_preference" json:"allow_user_preference"`
+    UseNetwork bool `yaml:"use_network" json:"use_network"`
 
     // Performance settings
     MaxCircuits      int `yaml:"max_circuits" json:"max_circuits"`           // 1-128, default 32
@@ -42039,7 +42018,6 @@ func ensureTorFile(path string, content []byte) error {
 |---------|------|---------|------------|-------------|
 | **Outbound Network** | | | | |
 | `use_network` | Boolean | `false` | - | Use Tor for outbound connections |
-| `allow_user_preference` | Boolean | `true` | - | Allow users to override outbound setting |
 | **Performance** | | | | |
 | `max_circuits` | Integer | `32` | 1-128 | Maximum circuits to keep open |
 | `circuit_timeout` | Integer | `60` | 10-300 | Circuit timeout (seconds) |
@@ -42335,7 +42313,6 @@ make
   },
   "config": {
     "use_network": false,
-    "allow_user_preference": true,
     "max_circuits": 32,
     "circuit_timeout": 60,
     "bootstrap_timeout": 180,
@@ -47000,7 +46977,6 @@ make docker # Build Docker image
 - [ ] `src/ssl/ssl.go` - SSL/TLS handling
 - [ ] `src/scheduler/scheduler.go` - Background tasks
 - [ ] `src/service/service.go` - Service management
-- [ ] `src/admin/` - Admin panel package
 - [ ] `src/server/` - HTTP server with subdirs
 - [ ] `docker/` - Docker configuration
 - [ ] `docs/` - ReadTheDocs documentation only
@@ -47391,12 +47367,11 @@ make docker # Build Docker image
 
 - [ ] No hardcoded credentials in code
 - [ ] Config/backup passwords hashed with Argon2id (NEVER bcrypt); API tokens hashed with SHA-256
-- [ ] Session tokens are cryptographically random
-- [ ] Session expiration enforced
+- [ ] API tokens are cryptographically random (CSPRNG)
 - [ ] CSRF protection on all forms
 - [ ] API authentication on all protected endpoints
 - [ ] Rate limiting prevents brute force
-- [ ] Account lockout after failed attempts
+- [ ] Token auto-revocation after repeated failures from the same source
 - [ ] Privilege escalation properly controlled
 
 ### Input Validation
@@ -47622,7 +47597,7 @@ make docker # Build Docker image
 - [ ] Empty verification codes NOT rendered
 - [ ] Invalid verification codes NOT rendered (XSS prevention)
 - [ ] Custom verification tags validated (name/property + content)
-- [ ] Admin panel validates codes on save
+- [ ] Config loader validates codes on load (rejects invalid `server.yml`)
 - [ ] Custom tags limited to alphanumeric + hyphens/underscores
 
 ### SEO Meta Tags
@@ -47763,7 +47738,6 @@ make docker # Build Docker image
 ### Theme Coverage
 
 - [ ] Web frontend uses theme
-- [ ] Admin panel uses theme
 - [ ] Error pages use theme (404, 500, 502, 503, etc.)
 - [ ] Swagger UI uses theme
 - [ ] GraphQL Playground uses theme
@@ -47958,7 +47932,6 @@ make docker # Build Docker image
 
 ### Content Coverage
 
-- [ ] Admin panel: all pages have translation keys (dashboard, settings, security, allowlist, blocklists, GeoIP, backup, logs, etc.)
 - [ ] Public frontend: all pages translated
 - [ ] Email templates: subject lines and body text translated
 - [ ] Error pages (400, 401, 403, 404, 500, 502, 503): error messages translated
@@ -48190,9 +48163,9 @@ Before starting integration:
 
 ## Critical (P0) - Do First
 
-- [ ] Fix SQL injection vulnerability in user search (line 234)
-- [ ] Add missing input validation on admin endpoints
-- [ ] Fix session management security issue
+- [ ] Fix SQL injection vulnerability in resource search
+- [ ] Add missing input validation on admin API endpoints
+- [ ] Fix token validation edge case
 
 ## High (P1) - NON-NEGOTIABLE Requirements
 
@@ -48486,8 +48459,7 @@ Implement the required client, then any project-specific optional features:
 - [ ] CLI flags work per spec
 - [ ] Configuration loading works (file, env, flags)
 - [ ] Logging configured properly
-- [ ] Admin panel accessible
-- [ ] First-run default `server.yml` generation works
+- [ ] First-run default `server.yml` generation works (including auto-generated `server.token`)
 - [ ] REST API endpoints defined
 - [ ] Swagger UI accessible at `/server/docs/swagger`; OpenAPI JSON at `/api/{api_version}/server/swagger` (with `/api/swagger` alias)
 - [ ] GraphiQL UI accessible at `/server/docs/graphql`; GraphQL POST at `/api/{api_version}/server/graphql` (with `/api/graphql` alias)
