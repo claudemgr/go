@@ -11770,7 +11770,7 @@ The server generates the token, stores `SHA-256(token)` in `api_tokens` with `re
 {project_name} token revoke <prefix>   # revoke a specific resource token
 {project_name} token list              # list active tokens (prefix + resource)
 ```
-Or call `DELETE /api/{api_version}/server/tokens/{prefix}` with `server.token`.
+Token revocation is operator-only via CLI: `{project_name} token revoke <prefix>`
 
 **Config Load/Save Helpers:**
 
@@ -11873,21 +11873,13 @@ func categorizeChanges(changes []string) (hotReload, needsRestart []string) {
 }
 ```
 
-**Server Status Endpoint - Restart Notification:**
+**Server Restart Notification:**
 
-```go
-// GET /api/{api_version}/server/status returns pending restart info
-func serverStatusHandler(w http.ResponseWriter, r *http.Request) {
-    status := map[string]interface{}{
-        "running":         true,
-        "pending_restart": configManager.PendingRestart(),
-        "restart_reason":  configManager.RestartSettings(),
-    }
-    json.NewEncoder(w).Encode(status)
-}
+When a config change requires a process restart, the server logs a warning to `server.log` and `audit.log`:
 ```
-
-Operators query `/api/{api_version}/server/status` (with `server.token`) to discover which settings still need a process restart to take effect — there is no admin web UI; this is reported via API and logs only.
+WARN  config_change requires_restart=true settings="ssl.cert,ssl.key" action="restart required"
+```
+Operators check pending-restart state via CLI: `{project_name} status`
 
 **Health Check Endpoint (`/server/healthz`):**
 
@@ -15253,8 +15245,8 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | Feature | Behavior |
 |---------|----------|
 | Cookie consent | Required popup before any tracking |
-| Data export | `/api/{api_version}/server/data/export` endpoint enabled |
-| Data deletion | `/api/{api_version}/server/data/delete` endpoint enabled |
+| Data export | `{project_name} data export` CLI command |
+| Data deletion | `{project_name} data delete` CLI command |
 | Consent tracking | All consents logged with timestamp |
 | Data residency | Configurable allowed regions |
 | Privacy policy | Required, must specify data processing |
@@ -15300,9 +15292,9 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 
 | Feature | Behavior |
 |---------|----------|
-| Data disclosure | `/api/{api_version}/server/data/export` - what data is collected (we do not sell data) |
+| Data disclosure | `{project_name} data export` - what data is collected (we do not sell data) |
 | Opt-out of sale | Dynamic: if `data.sold=false` shows notice; if `data.sold=true` shows opt-out toggle |
-| Right to delete | `/api/{api_version}/server/data/delete` endpoint enabled |
+| Right to delete | `{project_name} data delete` CLI command |
 | Non-discrimination | Cannot deny service for exercising rights |
 | Privacy notice | Dynamic based on `server.privacy.data.sold` setting |
 | Verification | Identity verification before data requests |
@@ -15403,37 +15395,10 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/server/data/export` | GET | Request server data export (GDPR/CCPA) |
-| `/server/data/export/{id}` | GET | Download data export |
-| `/server/data/delete` | POST | Request data deletion (GDPR/CCPA) |
-| `/server/consents` | GET | View consent history |
-| `/server/consents` | PATCH | Update consent preferences |
 | `/server/privacy` | GET | Privacy policy |
 | `/server/dpo` | GET | Data Protection Officer contact (GDPR) |
 
-### Compliance API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/server/data/export` | POST | Request data export |
-| `/api/{api_version}/server/data/export/{export_id}` | GET | Download export |
-| `/api/{api_version}/server/data/delete` | POST | Request deletion |
-| `/api/{api_version}/server/consents` | GET | Get consents |
-| `/api/{api_version}/server/consents` | PATCH | Update consents |
-
-### Compliance Reporting (API + CLI)
-
-**Compliance is configured in `server.yml` and exposed via REST + CLI — no admin web UI.** Operators query the `/api/{api_version}/server/compliance/*` endpoints (authenticated with `server.token`) or run `{project_name} compliance ...` subcommands.
-
-| Section | Description |
-|---------|-------------|
-| Enabled Standards | Per-standard toggles in `server.yml` |
-| Compliance Score | Per-standard compliance percentage |
-| Issues | Outstanding compliance issues |
-| Data Requests | Pending export/deletion requests |
-| Breach Log | Data breach history |
-| Reports | Generate/download compliance reports |
-| Upcoming | Scheduled audits, certificate renewals |
+**Compliance is configured entirely in `server.yml`. Consent state is stored client-side (localStorage/cookies) — there is no server-side user consent table. Operators run `{project_name} compliance report` for a compliance summary.**
 
 ### Compliance Audit Events
 
@@ -21547,7 +21512,7 @@ Does user need to make a decision or provide input?
 ```javascript
 // TOAST - Non-blocking feedback
 async function saveSettings(data) {
-    const result = await api.post('/api/{api_version}/server/config', data);
+    // server config is file-only (server.yml); no API endpoint
     if (result.ok) {
         showToast('Settings saved', 'success');  // Non-blocking, auto-dismiss
     } else {
@@ -26398,9 +26363,9 @@ server:
 - ✓ Show clear message: "Email features require SMTP configuration"
 
 **API Behavior:**
-- If SMTP not configured, `GET /api/{api_version}/server/config/settings` returns `email.configured: false`
+- If SMTP not configured, the startup log reports `email.configured=false`
 - Email-dependent features disabled until SMTP configured
-- `POST /api/{api_version}/server/config/email/test` validates SMTP actually works before enabling email features
+- `{project_name} email test` validates SMTP actually works before enabling email features
 
 ## Default Templates
 
@@ -26595,7 +26560,7 @@ Next run: {next_run}
 
 ## Email Template Configuration
 
-Templates are stored as files on disk. Override any built-in template by placing a file in the configured template directory. Use `POST /api/{api_version}/server/config/email/test` to send a test email and verify configuration.
+Templates are stored as files on disk. Override any built-in template by placing a file in the configured template directory. Use `{project_name} email test` to send a test email and verify configuration.
 
 **Editor Features:**
 - Syntax highlighting for `{variables}`
@@ -26811,7 +26776,7 @@ Templates are stored as files on disk. Override any built-in template by placing
   "type": "warning",
   "title": "SSL Certificate Expiring",
   "message": "Certificate expires in 3 days",
-  "link": "/server/config/ssl",
+  "link": "/server/help#ssl",
   "read": false,
   "created_at": "2025-01-15T10:30:00Z"
 }
@@ -26943,7 +26908,7 @@ because the built-in scheduler provides:
 - Cluster-aware execution
 - Automatic catch-up for missed runs
 - State tracking and logging
-- Visibility via `/api/{api_version}/server/scheduler/*` endpoints
+- Visibility via `{project_name} scheduler list` CLI command
 ```
 
 ### Exceptions (NONE)
@@ -27209,7 +27174,7 @@ Execute task
 
 The scheduler status is available via the server status API. Task execution can be triggered or toggled via CLI commands.
 
-**CLI / API - Scheduler Overview** (`{project_name} scheduler list` or `GET /api/{api_version}/server/scheduler`):
+**CLI - Scheduler Overview** (`{project_name} scheduler list`):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -27232,7 +27197,7 @@ The scheduler status is available via the server status API. Task execution can 
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**CLI / API - Task Detail** (`{project_name} scheduler show backup` or `GET /api/{api_version}/server/scheduler/backup`):
+**CLI - Task Detail** (`{project_name} scheduler show backup`):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -27302,17 +27267,16 @@ The scheduler status is available via the server status API. Task execution can 
 **What backup_hourly creates (if enabled: +1 file):**
 - `{project_name}-hourly.tar.gz[.enc]` - Hourly incremental
 
-### API Endpoints
+### CLI Commands
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/server/config/scheduler` | GET | List all tasks |
-| `/api/{api_version}/server/config/scheduler/{id}` | GET | Get task details |
-| `/api/{api_version}/server/config/scheduler/{id}` | PATCH | Update task settings |
-| `/api/{api_version}/server/config/scheduler/{id}/run` | POST | Run task immediately |
-| `/api/{api_version}/server/config/scheduler/{id}/enable` | POST | Enable task |
-| `/api/{api_version}/server/config/scheduler/{id}/disable` | POST | Disable task |
-| `/api/{api_version}/server/config/scheduler/{id}/history` | GET | Get execution history |
+| Command | Description |
+|---------|-------------|
+| `{project_name} scheduler list` | List all tasks and status |
+| `{project_name} scheduler show <id>` | Get task details |
+| `{project_name} scheduler run <id>` | Run task immediately |
+| `{project_name} scheduler enable <id>` | Enable task |
+| `{project_name} scheduler disable <id>` | Disable task |
+| `{project_name} scheduler history <id>` | Get execution history |
 
 ### Shutdown Behavior
 
@@ -29012,18 +28976,7 @@ When `server.compliance.enabled: true`:
 # Prompts for password
 ```
 
-**API Backup with Encryption:**
-
-```
-POST /api/{api_version}/server/config/backup
-Content-Type: application/json
-
-{
-  "password": "backup-encryption-password"
-}
-```
-
-**Note:** The `password` field is required if encryption is enabled.
+**Note:** The `--password` flag is required if encryption is enabled.
 
 **Warning Shown if Encryption Not Enabled:**
 
@@ -29382,21 +29335,15 @@ Restoring...
 └─────────────────────────────────────────┘
 ```
 
-**API Restore:**
+**CLI Restore:**
 
 ```bash
 # Encrypted backup - password required
-POST /api/{api_version}/server/config/backup/restore
-{
-  "backup_file": "backup_2025-01-15.tar.gz.enc",
-  "password": "backup-encryption-password"
-}
+{project_name} --maintenance restore backup_2025-01-15.tar.gz.enc
+# Prompts for password
 
 # Unencrypted backup - no password
-POST /api/{api_version}/server/config/backup/restore
-{
-  "backup_file": "backup_2025-01-15.tar.gz"
-}
+{project_name} --maintenance restore backup_2025-01-15.tar.gz
 ```
 
 ### Restore Verification
@@ -37104,11 +37051,6 @@ test_endpoint GET "/api/{api_version}/jokes/random"
 test_endpoint GET "/api/{api_version}/jokes/categories"
 test_endpoint GET "/api/{api_version}/jokes/{id}"
 
-# SERVER API (with auth)
-test_endpoint GET "/api/{api_version}/server/config/settings"
-test_endpoint PUT "/api/{api_version}/server/config/settings"
-test_endpoint GET "/api/{api_version}/server/config/logs"
-
 # At end: verify ALL endpoints were tested
 verify_all_endpoints_tested
 ```
@@ -38715,7 +38657,7 @@ All settings can be overridden via environment:
 
 ## Server Administration
 
-All settings are configurable via the server config file or CLI. Server API is available at `/api/{api_version}/server/config/`.
+All settings are configurable via `server.yml` or CLI.
 
 Document:
 - well-known namespace settings and optional entries if enabled
@@ -40890,7 +40832,7 @@ When `use_network` is enabled, the torrc includes `SocksPort auto` for outbound 
 
 ### Admin API (Tor Settings)
 
-**`GET /api/{api_version}/server/config/settings` → `tor` section:**
+**`server.yml` → `tor` section:**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -41993,369 +41935,18 @@ func ensureTorFile(path string, content []byte) error {
 | PID file | `{data_dir}/tor/tor.pid` | `0600` | app user | |
 | Log file | `{log_dir}/tor.log` | `0600` | app user | |
 
-## Server API (Tor Configuration)
 
-### /api/{api_version}/server/config/tor
+**Tor is configured via `server.yml` and CLI only. No REST API for Tor configuration.**
 
-**Hidden service is ALWAYS enabled if Tor binary is found.** No enable/disable toggle.
-
-#### Status Section (Read-Only)
-
-| Element | Type | Description |
-|---------|------|-------------|
-| Tor Status | Indicator | ● Connected / ○ Not Installed / ⚠ Error |
-| Binary Path | Read-only text | Detected Tor binary location |
-| Binary Version | Read-only text | Tor version (e.g., "0.4.8.9") |
-| .onion Address | Read-only text | Full address with copy button |
-| Uptime | Read-only text | Time since Tor started |
-| Circuits Active | Read-only text | Number of active circuits |
-
-#### Configuration Settings (All Settings with Validation)
-
-**All settings validated before saving. Invalid settings show inline errors.**
-
-| Setting | Type | Default | Validation | Description |
-|---------|------|---------|------------|-------------|
-| **Outbound Network** | | | | |
-| `use_network` | Boolean | `false` | - | Use Tor for outbound connections |
-| **Performance** | | | | |
-| `max_circuits` | Integer | `32` | 1-128 | Maximum circuits to keep open |
-| `circuit_timeout` | Integer | `60` | 10-300 | Circuit timeout (seconds) |
-| `bootstrap_timeout` | Integer | `180` | 30-600 | Bootstrap timeout (seconds) |
-| **Security** | | | | |
-| `safe_logging` | Boolean | `true` | - | Scrub sensitive info from logs |
-| `max_streams_per_circuit` | Integer | `100` | 10-500 | Max streams per circuit |
-| `close_circuit_on_stream_limit` | Boolean | `true` | - | Close circuit on stream limit |
-| **Bandwidth** | | | | |
-| `bandwidth_rate` | String | `"1 MB"` | Pattern: `^\d+\s*(KB\|MB)$` | Max bandwidth rate/second |
-| `bandwidth_burst` | String | `"2 MB"` | Pattern: `^\d+\s*(KB\|MB)$`, >= rate | Max bandwidth burst/second |
-| `max_monthly_bandwidth` | String | `"100 GB"` | Pattern: `^\d+\s*(GB\|TB)\|unlimited$` | Monthly limit (or "unlimited") |
-| **Hidden Service** | | | | |
-| `num_intro_points` | Integer | `3` | 3-10 | Number of introduction points |
-| `virtual_port` | Integer | `80` | 1-65535 | Virtual port (.onion port) |
-
-#### Validation Rules
-
-```go
-type TorConfigValidation struct {
-    Field   string
-    Rule    string
-    Message string
-}
-
-var torValidationRules = []TorConfigValidation{
-    // Performance
-    {"max_circuits", "min:1,max:128", "Must be between 1 and 128"},
-    {"circuit_timeout", "min:10,max:300", "Must be between 10 and 300 seconds"},
-    {"bootstrap_timeout", "min:30,max:600", "Must be between 30 and 600 seconds"},
-
-    // Security
-    {"max_streams_per_circuit", "min:10,max:500", "Must be between 10 and 500"},
-
-    // Bandwidth
-    {"bandwidth_rate", "pattern:^\\d+\\s*(KB|MB)$", "Format: number + KB or MB (e.g., '1 MB')"},
-    {"bandwidth_burst", "pattern:^\\d+\\s*(KB|MB)$,gte:bandwidth_rate", "Must be >= bandwidth_rate"},
-    {"max_monthly_bandwidth", "pattern:^(\\d+\\s*(GB|TB)|unlimited)$", "Format: number + GB/TB or 'unlimited'"},
-
-    // Hidden Service
-    {"num_intro_points", "min:3,max:10", "Must be between 3 and 10"},
-    {"virtual_port", "min:1,max:65535", "Must be valid port (1-65535)"},
-}
-
-// ValidateTorConfig validates all Tor settings before saving
-func ValidateTorConfig(config *TorConfig) []ValidationError {
-    var errors []ValidationError
-
-    // Performance validation
-    if config.MaxCircuits < 1 || config.MaxCircuits > 128 {
-        errors = append(errors, ValidationError{
-            Field:   "max_circuits",
-            Message: "Must be between 1 and 128",
-        })
-    }
-
-    if config.CircuitTimeout < 10 || config.CircuitTimeout > 300 {
-        errors = append(errors, ValidationError{
-            Field:   "circuit_timeout",
-            Message: "Must be between 10 and 300 seconds",
-        })
-    }
-
-    // Bandwidth validation
-    rate, rateErr := parseBandwidth(config.BandwidthRate)
-    burst, burstErr := parseBandwidth(config.BandwidthBurst)
-
-    if rateErr != nil {
-        errors = append(errors, ValidationError{
-            Field:   "bandwidth_rate",
-            Message: "Invalid format. Use: '1 MB' or '500 KB'",
-        })
-    }
-
-    if burstErr != nil {
-        errors = append(errors, ValidationError{
-            Field:   "bandwidth_burst",
-            Message: "Invalid format. Use: '2 MB' or '1 MB'",
-        })
-    }
-
-    if rateErr == nil && burstErr == nil && burst < rate {
-        errors = append(errors, ValidationError{
-            Field:   "bandwidth_burst",
-            Message: "Must be greater than or equal to bandwidth_rate",
-        })
-    }
-
-    // Hidden service validation
-    if config.NumIntroPoints < 3 || config.NumIntroPoints > 10 {
-        errors = append(errors, ValidationError{
-            Field:   "num_intro_points",
-            Message: "Must be between 3 and 10",
-        })
-    }
-
-    return errors
-}
-```
-
-#### WebUI Layout
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│ Tor Hidden Service                                                  │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│ Status: ● Connected              Uptime: 2d 5h 32m                  │
-│ Binary: /usr/bin/tor             Version: 0.4.8.9                   │
-│                                                                     │
-│ .onion Address:                                                     │
-│ ┌─────────────────────────────────────────────────────────────────┐ │
-│ │ abcdef1234567890abcdef1234567890abcdef1234567890abcdef12.onion  │ │
-│ └─────────────────────────────────────────────────────────[Copy]──┘ │
-│                                                                     │
-│ [Regenerate Address]                                                │
-├─────────────────────────────────────────────────────────────────────┤
-│ Vanity Address                                                      │
-│                                                                     │
-│ Prefix: [______] (max 6 chars)  [Generate]                          │
-│ ⏳ Generating: "myapp" - 2h 15m elapsed... [Cancel]                 │
-├─────────────────────────────────────────────────────────────────────┤
-│ Import External Keys                                   [Import Keys]│
-│ ⓘ Help: How to generate longer vanity addresses                    │
-├─────────────────────────────────────────────────────────────────────┤
-│ Configuration                                            [Expand ▼] │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│ ┌─ Outbound Network ────────────────────────────────────────────┐   │
-│ │ Use Tor for outbound connections:  [ ] Enabled                │   │
-│ │ Allow users to set preference:     [✓] Enabled                │   │
-│ └───────────────────────────────────────────────────────────────┘   │
-│                                                                     │
-│ ┌─ Performance ─────────────────────────────────────────────────┐   │
-│ │ Max circuits:         [32___]  (1-128)                        │   │
-│ │ Circuit timeout:      [60___]  seconds (10-300)               │   │
-│ │ Bootstrap timeout:    [180__]  seconds (30-600)               │   │
-│ └───────────────────────────────────────────────────────────────┘   │
-│                                                                     │
-│ ┌─ Security ────────────────────────────────────────────────────┐   │
-│ │ Safe logging:                    [✓] Enabled                  │   │
-│ │ Max streams per circuit:         [100__]  (10-500)            │   │
-│ │ Close circuit on stream limit:   [✓] Enabled                  │   │
-│ └───────────────────────────────────────────────────────────────┘   │
-│                                                                     │
-│ ┌─ Bandwidth ───────────────────────────────────────────────────┐   │
-│ │ Bandwidth rate:     [1___] [MB ▼]  (per second)               │   │
-│ │ Bandwidth burst:    [2___] [MB ▼]  (per second)               │   │
-│ │ Monthly limit:      [100_] [GB ▼]  ☐ Unlimited                │   │
-│ │   Current usage: 23.4 GB / 100 GB (23%)  ▓▓░░░░░░░░           │   │
-│ └───────────────────────────────────────────────────────────────┘   │
-│                                                                     │
-│ ┌─ Hidden Service ──────────────────────────────────────────────┐   │
-│ │ Introduction points:  [3___]  (3-10, more = resilient)        │   │
-│ │ Virtual port:         [80__]  (.onion port)                   │   │
-│ └───────────────────────────────────────────────────────────────┘   │
-│                                                                     │
-│                              [Cancel] [Save Configuration]          │
-│                                                                     │
-│ ⚠ Changes require Tor restart. Hidden service will be briefly      │
-│   unavailable during restart.                                       │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-#### Validation Error Display
-
-```
-┌─ Bandwidth ───────────────────────────────────────────────────┐
-│ Bandwidth rate:   [abc__] [MB ▼]                              │
-│                   ⚠ Invalid format. Use: '1 MB' or '500 KB'   │
-│ Bandwidth burst:  [1___] [MB ▼]                               │
-│                   ⚠ Must be greater than or equal to rate     │
-└───────────────────────────────────────────────────────────────┘
-```
-
-#### Save Flow
-
-1. User clicks "Save Configuration"
-2. Client-side validation runs (immediate feedback)
-3. If client validation passes, send PATCH request
-4. Server validates again (never trust client)
-5. If server validation fails, return errors with field names
-6. If validation passes:
-   - Save new config to file
-   - Regenerate torrc with new settings
-   - Restart Tor process
-   - Return success with new status
-7. WebUI shows "Configuration saved. Tor restarting..." toast
-8. Poll status endpoint until Tor reconnects
-
-### Vanity Address Generation
-
-**Built-in generation (max 6 characters):**
-
-| Prefix Length | Approximate Time |
-|---------------|------------------|
-| 1-4 chars | Seconds to minutes |
-| 5 chars | Minutes to hours |
-| 6 chars | Hours to days |
-
-**Behavior:**
-- Generation runs in background
-- Current .onion address remains active while generating
-- Notification sent when vanity address is ready
-- User clicks notification or "Apply" button to activate
-- Old keys deleted, new vanity keys activated
-- Tor restarts with new address
-
-### External Vanity Generation (7+ characters)
-
-For prefixes longer than 6 characters, use external tools with GPU acceleration. The API documentation includes guidance:
-
-**Using mkp224o (Linux/macOS/BSD):**
-```bash
-# Install
-git clone https://github.com/cathugger/mkp224o
-cd mkp224o && ./autogen.sh && ./configure && make
-
-# Generate (example: 7-char prefix "myapp12")
-./mkp224o -d ./keys myapp12
-
-# Output: ./keys/myapp12xxxxx.onion/
-#   ├── hostname        # Your .onion address
-#   ├── hs_ed25519_public_key
-#   └── hs_ed25519_secret_key
-```
-
-**Using mkp224o with GPU (Linux/macOS - much faster):**
-```bash
-# With CUDA support
-./configure --enable-cuda
-make
-
-# Generate
-./mkp224o -d ./keys myapp12
-```
-
-**Windows users:**
-- Use WSL (Windows Subsystem for Linux) to run mkp224o
-- Or use pre-built Windows binaries if available from trusted sources
-- Generated keys are portable - generate on any platform, import via CLI or API
-
-**Importing keys:**
-1. Generate keys using mkp224o or similar tool
-2. Use `POST /api/{api_version}/server/config/tor/import-keys`
-3. Upload `hs_ed25519_secret_key` file (or zip containing both key files)
-4. Confirm to replace current address
-5. Tor restarts with imported keys
-
-**Time estimates for longer prefixes:**
-
-| Prefix Length | CPU Time | GPU Time |
-|---------------|----------|----------|
-| 7 chars | Days to weeks | Hours to days |
-| 8 chars | Weeks to months | Days to weeks |
-| 9+ chars | Months to years | Weeks to months |
-
-**Security Notes:**
-- .onion address shown only after admin authentication
-- "Regenerate Address" requires confirmation modal (destructive - old address stops working)
-- Address regeneration logged to audit log
-- Imported keys should be generated on a trusted machine
-- Delete source key files after successful import
-
-### API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/server/config/tor` | GET | Get Tor status, config, and .onion address |
-| `/api/{api_version}/server/config/tor` | PATCH | Update Tor settings (validates before saving) |
-| `/api/{api_version}/server/config/tor/validate` | POST | Validate config without saving |
-| `/api/{api_version}/server/config/tor/regenerate` | POST | Regenerate .onion address |
-| `/api/{api_version}/server/config/tor/restart` | POST | Restart Tor process |
-| `/api/{api_version}/server/config/tor/vanity` | GET | Get vanity generation status |
-| `/api/{api_version}/server/config/tor/vanity` | POST | Start vanity generation |
-| `/api/{api_version}/server/config/tor/vanity` | DELETE | Cancel vanity generation |
-| `/api/{api_version}/server/config/tor/vanity/apply` | POST | Apply vanity address |
-| `/api/{api_version}/server/config/tor/import` | POST | Import external keys |
-
-### Response Format
-
-**GET `/api/{api_version}/server/config/tor`**
-
-```json
-{
-  "status": {
-    "state": "connected",
-    "binary_path": "/usr/bin/tor",
-    "binary_version": "0.4.8.9",
-    "onion_address": "exampleonionaddressv3fordemoabcdefghijklmnopqrstuvwxyz23.onion",
-    "uptime_seconds": 192600,
-    "circuits_active": 12
-  },
-  "config": {
-    "use_network": false,
-    "max_circuits": 32,
-    "circuit_timeout": 60,
-    "bootstrap_timeout": 180,
-    "safe_logging": true,
-    "max_streams_per_circuit": 100,
-    "close_circuit_on_stream_limit": true,
-    "bandwidth_rate": "1 MB",
-    "bandwidth_burst": "2 MB",
-    "num_intro_points": 3,
-    "virtual_port": 80
-  }
-}
-```
-
-**POST `/api/{api_version}/server/config/tor/validate`** (or PATCH with invalid config)
-
-```json
-{
-  "valid": false,
-  "errors": [
-    {
-      "field": "max_circuits",
-      "message": "Must be between 1 and 128"
-    },
-    {
-      "field": "bandwidth_burst",
-      "message": "Must be greater than or equal to bandwidth_rate"
-    }
-  ]
-}
-```
-
-**PATCH `/api/{api_version}/server/config/tor`** (success)
-
-```json
-{
-  "success": true,
-  "message": "Configuration saved. Tor restarting...",
-  "status": {
-    "state": "restarting"
-  }
-}
-```
+| Operation | CLI Command |
+|-----------|-------------|
+| View status | `{project_name} tor status` |
+| Validate config | `{project_name} tor validate` |
+| Restart Tor | `{project_name} tor restart` |
+| Regenerate .onion address | `{project_name} tor regenerate` |
+| Start vanity address search | `{project_name} tor vanity start` |
+| Apply vanity address | `{project_name} tor vanity apply` |
+| Import existing keys | `{project_name} tor import-keys <path>` |
 
 ## Behavior
 
@@ -48358,7 +47949,7 @@ When bootstrapping a new project from this specification:
 4. **Implement SMTP configuration**
 5. **Add all notification configuration pages**
 
-**Test:** Email sending works via server API at `/api/{api_version}/server/config/email`
+**Test:** Email sending works via CLI: `{project_name} email test`
 
 #### Step 6: API Layer (PART 14)
 
