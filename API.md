@@ -825,7 +825,6 @@ src/main.go                 # Server application entry point
 src/config/                 # Configuration package
 src/server/                 # HTTP server package
 src/client/                 # client (REQUIRED - all projects)
-src/agent/                  # Agent (OPTIONAL - monitoring/management projects only)
 docker/                     # Docker files (REQUIRED)
 docker/Dockerfile           # Multi-stage Dockerfile
 docker/docker-compose.yml   # Production docker-compose
@@ -837,7 +836,6 @@ releases/                   # Release artifacts (gitignored)
 
 **Notes:**
 - `src/client/` is REQUIRED for all projects (client binary is mandatory). See PART 32 for client details.
-- `src/agent/` is OPTIONAL (only for monitoring/management projects). See PART 32 for agent details.
 - `docker/rootfs/` is the BUILD-TIME container overlay (copied into image).
 - Runtime volumes use `./volumes/config` and `./volumes/data` relative to where `docker run` or `docker compose` is executed; they are NEVER committed to the repo.
 
@@ -894,7 +892,7 @@ src/
 │   ├── store/                 # Data access layer
 │   │   ├── store.go           # Store interface
 │   │   ├── sqlite.go          # SQLite implementation
-│   │   └── postgres.go        # PostgreSQL implementation (if needed)
+│   │   └── libsql.go          # libsql/Turso remote implementation
 │   └── template/              # HTML templates (if not embedded)
 │       ├── layout/            # Base layouts
 │       ├── page/              # Full pages
@@ -1226,7 +1224,6 @@ paths:
 |------|---------|
 | server | Main binary `{project_name}` - runs as service |
 | client | CLI binary `{project_name}-cli` - REQUIRED |
-| agent | Optional binary `{project_name}-agent` |
 | Operator | Person who deploys and manages the server via CLI and `server.yml` |
 
 ## COMPLIANCE CHECK
@@ -1445,7 +1442,6 @@ Purpose:
 ## Binary Terminology
 - **server** = `{project_name}` (main binary, runs as service)
 - **client** = `{project_name}-cli` (REQUIRED companion, CLI/TUI/GUI)
-- **agent** = `{project_name}-agent` (optional, runs on remote machines)
 
 ## Key Placeholders
 - `{project_name}` = [actual project name]
@@ -2008,13 +2004,12 @@ Instructions for how this agent should behave...
 
 ## Binary Terminology
 
-**Three binaries may be built from a project. All support renaming (affects help/docs, not directories/user/group):**
+**Two binaries are built from a project. Both support renaming (affects help/docs, not directories/user/group):**
 
 | Term | Default Binary Name | Description |
 |------|---------------------|-------------|
 | **server** | `{project_name}` | The main application binary - runs as service/daemon, serves API/WebUI |
 | **client** | `{project_name}-cli` | Required companion binary - terminal interface with CLI/TUI/GUI modes |
-| **agent** | `{project_name}-agent` | Optional companion binary - runs on remote machines, reports to server |
 
 **Renaming behavior:**
 - Renaming a binary (e.g., `cp jokes myjokes`) changes user-visible output (help text, banners, User-Agent)
@@ -2023,11 +2018,11 @@ Instructions for how this agent should behave...
 
 ## Core Terms
 
-**Note:** "Project", "App", and "Application" are used interchangeably throughout this document - they all refer to the complete codebase including all binaries (server, client, agent), configuration, and functionality.
+**Note:** "Project", "App", and "Application" are used interchangeably throughout this document - they all refer to the complete codebase including all binaries (server, client), configuration, and functionality.
 
 | Term | Definition |
 |------|------------|
-| **Project / App / Application** | The complete codebase you are building - includes server, client, agent binaries |
+| **Project / App / Application** | The complete codebase you are building - includes server and client binaries |
 | **App Instance** | A single running copy of a binary (one process) |
 | **System** | The operating system (Linux, macOS, Windows, FreeBSD) - NOT this application |
 
@@ -2079,7 +2074,7 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 **Key difference:** Cluster nodes run your code. Managed nodes are things your code talks to.
 
-**Most apps only have cluster nodes. Managed nodes are app-specific and require PART 32 agent functionality.**
+**Most apps only have cluster nodes. Managed nodes are app-specific.**
 
 ## Examples
 
@@ -2755,7 +2750,7 @@ fi
 | Adding `fmt.Printf`/`fmt.Fprintf` with user-visible text | Use `i18n.T(lang, "key")` or `i18n.Tf(lang, "key", args)` |
 | Adding a new web page/section | Add translation keys for ALL labels, buttons, messages, tooltips |
 | Adding a new CLI command/flag | Add `cli.*` translation keys for help text and output |
-| Adding a new agent feature | Add `agent.*` translation keys for status/output |
+| Adding a new CLI feature | Add `cli.*` translation keys for status/output |
 | Adding a new notification type | Add notification translation key |
 | Adding a new error type | Add `errors.*` translation key |
 | Adding new config with user-visible default | Ensure default falls back to translation key |
@@ -3038,7 +3033,7 @@ Implemented core server functionality and API.
 | Well-known namespace | PART 11 / web routes | `/.well-known/**` only serves documented allowlisted entries, unsupported entries 404, and optional entries exist only when the corresponding feature is defined |
 | Rate limiting | PART 11 | Read, write, health, and global burst limits configured; defaults applied when not set in `server.yml` |
 | CLI interface | PART 8 | Flags, commands, help output match spec |
-| Client/agent scope | PART 32 | `src/client/` exists for all projects; `src/agent/` only when project needs it |
+| Client scope | PART 32 | `src/client/` exists for all projects |
 | Untrusted content handling | PART 11, PART 16 | User-controlled files/markdown/HTML render as escaped text or sanitized markdown; dangerous types are not served executable on the app origin |
 
 ### Step 2: File Sync Verification
@@ -3802,12 +3797,10 @@ Enter choice [1-4]:
 ```
 Which database should be used?
 
-a) SQLite (recommended for single-node)
-b) PostgreSQL (recommended for cluster)
-c) MySQL/MariaDB
-d) Other (specify)
+a) SQLite (local, default)
+b) libsql/Turso (remote)
 
-Enter choice [a-d]:
+Enter choice [a-b]:
 ```
 
 **Rules:**
@@ -3919,10 +3912,6 @@ ls -la docker/
 | 32 | Client & Agent | ✅ Implement fully |
 | 33 | IDEA.md Reference | ✅ Reference only |
 | FINAL | Compliance Checklist | ✅ Verify all items |
-
-### PART 32: Client & Agent (REQUIRED)
-
-**CLI is REQUIRED for all projects. Agent is OPTIONAL (only for monitoring/remote management projects).**
 
 ### PART 32: Client (REQUIRED)
 
@@ -4130,7 +4119,6 @@ If blocked on current feature:
 ### Required / Project-Specific Features
 ```
 □ client follows SPEC (required for all projects)
-□ agent follows SPEC (if implemented)
 □ IDEA.md business logic defines scope, trust boundaries, data sensitivity, abuse cases, and security exceptions
 □ Implementation matches the declared threat/abuse model
 ```
@@ -5503,7 +5491,7 @@ For MIT/ISC/BSD licenses, a summary table is sufficient. Full text only needed f
 |---------|---------|---------|-----------|
 | github.com/go-chi/chi/v5 | v5.2.0 | MIT | 2015-present Peter Kieltyka, Google Inc. |
 | modernc.org/sqlite | v1.29.1 | BSD-3-Clause | 2017 The Sqlite Authors |
-| github.com/jackc/pgx/v5 | v5.7.2 | MIT | 2013-2024 Jack Christensen |
+| github.com/tursodatabase/libsql-client-go | v0.0.0-20240902231107-85af5b9d094d | MIT | 2023-2024 Turso Authors |
 
 Full license texts available at: https://spdx.org/licenses/
 
@@ -5547,7 +5535,7 @@ This software includes the following third-party libraries:
 | Library | Version | License | Copyright |
 |---------|---------|---------|-----------|
 | github.com/go-chi/chi/v5 | v5.2.0 | MIT | 2015-present Peter Kieltyka, Google Inc. |
-| github.com/jackc/pgx/v5 | v5.7.2 | MIT | 2013-2024 Jack Christensen |
+| github.com/tursodatabase/libsql-client-go | v0.0.0-20240902231107-85af5b9d094d | MIT | 2023-2024 Turso Authors |
 | github.com/redis/go-redis/v9 | v9.7.0 | BSD-2-Clause | 2012-2024 The go-redis Authors |
 | modernc.org/sqlite | v1.29.1 | BSD-3-Clause | 2017 The Sqlite Authors |
 | golang.org/x/crypto | v0.31.0 | BSD-3-Clause | 2009 The Go Authors |
@@ -5916,8 +5904,8 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 │       ├── ai-rules.md         # PART 0, 1: AI Assistant Rules, Critical Rules
 │       ├── project-rules.md    # PART 2, 3, 4: License & Attribution, Project Structure, OS-Specific Paths
 │       ├── config-rules.md     # PART 5, 6, 12: Configuration, Application Modes, Server Configuration
-│       ├── binary-rules.md     # PART 7, 8, 32: Binary Requirements, Server Binary CLI, Client & Agent
-│       ├── backend-rules.md    # PART 9, 10, 11, 31: Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service
+│       ├── binary-rules.md     # PART 7, 8, 32: Binary Requirements, Server Binary CLI, Client
+│       ├── backend-rules.md    # PART 9, 10, 11, 31: Error Handling & Caching, Database, Security & Logging, Tor Hidden Service
 │       ├── api-rules.md        # PART 13, 14, 15: Health & Versioning, API Structure, SSL/TLS & Let's Encrypt
 │       ├── frontend-rules.md   # PART 16: Web Frontend
 │       ├── features-rules.md   # PART 17-22: Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command
@@ -6348,14 +6336,10 @@ require (
 
 | Database | Library | Driver Name | Config Aliases | Notes |
 |----------|---------|-------------|----------------|-------|
-| **SQLite** | `modernc.org/sqlite` | `sqlite` | `sqlite2`, `sqlite3` | Pure Go, NO CGO |
-| **libSQL** | `github.com/tursodatabase/libsql-client-go` | `libsql` | `turso` | Pure Go, remote only (Turso/sqld) |
-| **PostgreSQL** | `github.com/jackc/pgx/v5/stdlib` | `pgx` | `postgres`, `pgsql`, `postgresql` | Pure Go, best performance |
-| **MySQL/MariaDB** | `github.com/go-sql-driver/mysql` | `mysql` | `mariadb` | Pure Go |
-| **MSSQL** | `github.com/microsoft/go-mssqldb` | `sqlserver` | `mssql` | Pure Go |
-| **MongoDB** | `go.mongodb.org/mongo-driver/mongo` | (native) | `mongodb`, `mongo` | Pure Go, not database/sql |
+| **SQLite** | `modernc.org/sqlite` | `sqlite` | `sqlite`, `sqlite2`, `sqlite3` | Pure Go, NO CGO |
+| **libSQL** | `github.com/tursodatabase/libsql-client-go` | `libsql` | `libsql`, `turso` | Pure Go, remote only (Turso/sqld) |
 
-**Driver Name vs Config Aliases:** The "Driver Name" column shows what Go's `sql.Open()` expects. The "Config Aliases" column shows what users can put in config files - these get normalized to the actual driver name internally. Users should use the friendly aliases (`postgres`, `mysql`, `mssql`, `sqlite`, `libsql`) in configs.
+**Driver Name vs Config Aliases:** The "Driver Name" column shows what Go's `sql.Open()` expects. The "Config Aliases" column shows what users can put in config files - these get normalized to the actual driver name internally. Users should use the friendly aliases (`sqlite`, `libsql`) in configs.
 
 ### Cache/Cluster
 
@@ -6423,14 +6407,6 @@ func normalizeDriver(driver string) string {
         return "sqlite"     // All map to modernc.org/sqlite
     case "libsql", "turso":
         return "libsql"     // Turso/libSQL remote database
-    case "postgres", "pgsql", "postgresql":
-        return "pgx"        // pgx is the actual driver name
-    case "mysql", "mariadb":
-        return "mysql"      // MariaDB uses same driver as MySQL
-    case "mssql":
-        return "sqlserver"  // Microsoft driver uses "sqlserver"
-    case "mongodb", "mongo":
-        return "mongodb"    // MongoDB native driver
     default:
         return driver
     }
@@ -6527,6 +6503,7 @@ require github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d
 
 | Use Case | Driver |
 |----------|--------|
+| Default (no config needed) | `sqlite` (file auto-created at `{data_dir}/db/{internal_name}.db`) |
 | Single server, local data | `sqlite` (modernc.org/sqlite) |
 | Edge/distributed, Turso cloud | `libsql` |
 | Self-hosted libSQL server | `libsql` |
@@ -6537,7 +6514,7 @@ require github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d
 | Library | Reason | Alternative |
 |---------|--------|-------------|
 | `github.com/mattn/go-sqlite3` | Requires CGO | `modernc.org/sqlite` |
-| `github.com/lib/pq` | Outdated, less performant | `github.com/jackc/pgx/v5` |
+| `github.com/lib/pq` | PostgreSQL driver, not needed | use `libsql` for remote |
 | `github.com/ooni/go-libtor` | Requires CGO | `github.com/cretz/bine` + external Tor |
 | `github.com/dgrijalva/jwt-go` | Unmaintained, security issues | `github.com/golang-jwt/jwt/v5` |
 | `github.com/gorilla/mux` | Archived, no longer maintained | `github.com/go-chi/chi/v5` |
@@ -6557,10 +6534,6 @@ require (
 	// Database drivers
 	modernc.org/sqlite v1.34.5                      // SQLite (pure Go)
 	github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d094d  // libSQL/Turso (remote)
-	github.com/jackc/pgx/v5 v5.7.2                  // PostgreSQL
-	github.com/go-sql-driver/mysql v1.8.1           // MySQL/MariaDB
-	github.com/microsoft/go-mssqldb v1.8.0          // MSSQL
-	go.mongodb.org/mongo-driver v1.17.2             // MongoDB
 
 	// Cache/Cluster
 	github.com/redis/go-redis/v9 v9.7.0             // Valkey/Redis
@@ -6588,7 +6561,6 @@ require (
 - Version numbers are examples - always use latest stable versions
 - Not all projects need all modules - include only what you use
 - Clean up unused dependencies: handled automatically by `make build/local/dev`
-- MongoDB uses native driver, not database/sql
 - **NEVER run `go` directly - always use Makefile targets (`make dev`, `make test`, etc.)**
 
 ---
@@ -6830,7 +6802,7 @@ port: 8080
 
 ## Path Normalization & Validation
 
-**All paths MUST be normalized and validated. This is a GLOBAL security rule for all binaries (server, agent, cli) and applies to:**
+**All paths MUST be normalized and validated. This is a GLOBAL security rule for all binaries (server, cli) and applies to:**
 - Configuration values (static_path, etc.)
 - HTTP request paths
 - File paths
@@ -7105,7 +7077,7 @@ func setupMiddleware(handler http.Handler) http.Handler {
 |------|---------|
 | **server.yml** | YAML configuration file on disk |
 | **Configuration** | Settings (stored in server.yml OR database) |
-| **Database** | SQLite (local) or PostgreSQL/MySQL (remote) |
+| **Database** | SQLite (local) or libsql/Turso (remote) |
 | **Server Address** | The bind address for the server (e.g., `[::]`, `0.0.0.0`, `127.0.0.1`) |
 | **FQDN** | Fully Qualified Domain Name (e.g., `api.example.com`) |
 | **Node ID** | Unique identifier for a cluster node (default: hostname) |
@@ -7318,18 +7290,17 @@ Self-Healing Successful?                        │
 │                                                             │
 │  📋 Suggested Actions:                                      │
 │                                                             │
-│  1. Check if database server is running                     │
-│     └─ ssh db.example.com "systemctl status postgresql"     │
+│  1. Check database status                                   │
+│     └─ {project_name} db status                             │
 │                                                             │
-│  2. Verify network connectivity                             │
-│     └─ ping db.example.com                                  │
-│     └─ telnet db.example.com 5432                           │
+│  2. Verify network connectivity (libsql/Turso only)         │
+│     └─ ping your-db.turso.io                                │
 │                                                             │
 │  3. Check database credentials                              │
-│     └─ Verify password in server.yml or environment         │
+│     └─ Verify TURSO_AUTH_TOKEN in server.yml or environment │
 │                                                             │
 │  4. Check database logs                                     │
-│     └─ ssh db.example.com "tail /var/log/postgresql/*.log"  │
+│     └─ {project_name} db logs                               │
 │                                                             │
 │  [Test Connection]  [View Full Diagnostics]                 │
 │                                                             │
@@ -7342,12 +7313,10 @@ Self-Healing Successful?                        │
 
 | Check | Command/Action | What to Look For |
 |-------|----------------|------------------|
-| Server running | `systemctl status postgresql` | Active (running) |
-| Network | `ping db.example.com` | Response |
-| Port open | `telnet db.example.com 5432` | Connected |
-| Credentials | Check server.yml | Correct password |
-| Max connections | Check DB logs | "too many connections" |
-| Firewall | Check iptables/ufw | Port 5432 allowed |
+| DB status | `{project_name} db status` | Connected |
+| Network (libsql) | `ping your-db.turso.io` | Response |
+| Credentials | Check server.yml / TURSO_AUTH_TOKEN | Correct token |
+| SQLite file | Check `{data_dir}/db/{internal_name}.db` | File exists and readable |
 
 **Disk Full:**
 
@@ -7496,13 +7465,11 @@ server:
 # Database connection (always present)
 server:
   database:
-    driver: postgres
-    host: db.example.com
-    port: 5432
-    name: myapp
-    username: myapp
-    password: ${DB_PASSWORD}
-    sslmode: require
+    driver: libsql           # or "sqlite" for local
+    url: libsql://your-db-name.turso.io?authToken=${TURSO_AUTH_TOKEN}
+    # For local SQLite (default, no config needed):
+    # driver: sqlite
+    # url: "{data_dir}/db/{internal_name}.db"  # auto-created
 
 # Cached configuration (synced from file, used as backup when file unavailable)
 _cache:
@@ -7762,7 +7729,7 @@ func (req *CreateUserRequest) Parse() (*User, error) {
 | `TERM` | Terminal type; `TERM=dumb` disables ALL ANSI escapes and forces CLI mode (see PART 7) |
 | `DOMAIN` | FQDN override (highest priority for hostname resolution) |
 | `MODE` | `production` (default) or `development` |
-| `DATABASE_DRIVER` | `file`, `sqlite` (+ `sqlite2`, `sqlite3`), `libsql` (+ `turso`), `postgres` (+ `pgsql`, `postgresql`), `mysql` (+ `mariadb`), `mssql`, `mongodb` (+ `mongo`) |
+| `DATABASE_DRIVER` | `sqlite` (+ `sqlite2`, `sqlite3`), `libsql` (+ `turso`) |
 | `DATABASE_URL` | Database connection string |
 | `SMTP_HOST` | SMTP server hostname (if set, skips autodetect) |
 | `SMTP_PORT` | SMTP server port (default: 587) |
@@ -9438,7 +9405,7 @@ data:
 
 ## Display Environment Detection
 
-**ALL binaries (server, CLI, agent) MUST detect display environment and adapt output accordingly.**
+**ALL binaries (server, CLI) MUST detect display environment and adapt output accordingly.**
 
 ### Display Mode Hierarchy
 
@@ -9615,7 +9582,6 @@ func ShowProgress(env *DisplayEnv, percent int) {
 # Test dumb terminal behavior
 TERM=dumb {project_name} --status
 TERM=dumb {project_name}-cli list
-TERM=dumb {project_name}-agent status
 
 # Should produce plain text output with no escape codes
 TERM=dumb {project_name} --status | cat -v   # No ^[ sequences
@@ -9736,7 +9702,6 @@ func (e *DisplayEnv) detectPlatformDisplay() {
 |--------|-----|-----|-----|----------|
 | **Server** | Status window | Status banner | Commands | Default (daemon) |
 | **CLI** | ✅ Full app | ✅ Full app (default) | ✅ Commands | ❌ Error |
-| **Agent** | Status window | Status banner | Commands | Default (service) |
 
 **Server/Agent just show status banners (not interactive). CLI is the only full TUI/GUI app with a built-in setup wizard.**
 
@@ -9744,7 +9709,7 @@ func (e *DisplayEnv) detectPlatformDisplay() {
 
 ## Common Go Modules
 
-**Shared packages used by server, CLI, and agent binaries:**
+**Shared packages used by server and CLI binaries:**
 
 ### Module Structure
 
@@ -9774,7 +9739,6 @@ src/
 │   ├── cli/                         # CLI mode
 │   ├── tui/                         # TUI mode (bubbletea)
 │   └── gui/                         # GUI mode (native)
-└── agent/                           # Agent binary
     ├── cli/                         # Agent CLI commands
     └── collector/                   # Metrics/data collection
 ```
@@ -9948,17 +9912,15 @@ func PrintStartupBanner(cfg BannerConfig) {
 | Binary | Default Name | Purpose | Key Flags |
 |--------|--------------|---------|-----------|
 | **Server** | `{project_name}` | Runs the HTTP server | `--config`, `--data`, `--port`, `--mode` |
-| **Agent** | `{project_name}-agent` | Reports to server | `--server`, `--config` |
 | **Client** | `{project_name}-cli` | User interface to server | `--server`, `--token`, `--output` |
 
 **Shared flags (ALL binaries):** `--help`, `--version`, `--shell`, `--debug`, `--color`, `--lang`
 
-**Binary naming rules (ALL binaries: server, agent, client):**
+**Binary naming rules (ALL binaries: server, client):**
 
 | Binary | Default Name | User-Agent |
 |--------|--------------|------------|
 | Server | `{project_name}` | `{project_name}/{version}` |
-| Agent | `{project_name}-agent` | `{project_name}-agent/{version}` |
 | Client | `{project_name}-cli` | `{project_name}-cli/{version}` |
 
 **ALL binaries can be renamed by users. Must show ACTUAL binary name in:**
@@ -9990,11 +9952,11 @@ User-Agent: jokes/1.0.0             # Hardcoded project name
 Default config: /etc/apimgr/jokes/  # Hardcoded project name
 ```
 
-**For client and agent flags, see PART 32.**
+**For client flags, see PART 32.**
 
 ## NO_COLOR Support (ALL Binaries)
 
-**All binaries (server, client, agent) MUST respect the [NO_COLOR](https://no-color.org/) standard.**
+**All binaries (server, client) MUST respect the [NO_COLOR](https://no-color.org/) standard.**
 
 When the `NO_COLOR` environment variable is set and not empty (value doesn't matter), disable ANSI color codes and emojis in terminal output.
 
@@ -11352,51 +11314,17 @@ All projects use SQLite with a single database file:
 | Cluster | 1+ remote databases | 1× Valkey/Redis | Multiple instances, shared state, HA |
 
 **Cluster minimum requirements:**
-- 1× remote database (PostgreSQL, MySQL, MariaDB, or MSSQL)
+- 1× libsql/Turso remote database
 - 1× Valkey/Redis instance (does NOT need to be a cluster)
 
 **Supported Databases:**
 
 | Database | Notes |
 |----------|-------|
-| **PostgreSQL** | Recommended for production. Read replicas supported. SSL/TLS recommended. |
-| **MySQL/MariaDB** | Full support. Read replicas supported. UTF8MB4 required. |
-| **MSSQL** | Full support. Windows environments. |
 | **SQLite** | Embedded, zero config. Default. See below. |
-| **MongoDB** | Project-specific only. See below. |
+| **libsql/Turso** | Remote, edge-distributed, Turso cloud or self-hosted sqld. |
 
-**MongoDB (Project-Specific Use):**
-
-MongoDB is available but NOT used for standard schema (config, sessions, admins, api_keys, etc.). Use for project-specific application data only.
-
-**Good for:**
-- Document/JSON-heavy data (logs, events, analytics)
-- Flexible schemas that change frequently
-- Geospatial data and queries
-- Time-series data
-- Projects migrating from existing MongoDB
-
-**Example use cases:**
-- `quotes` - storing quote collections with varying metadata
-- `jokes` - joke database with categories, tags, nested data
-- `analytics` - event tracking, user behavior logs
-- `search` - document indexing alongside Elasticsearch
-
-**Configuration (when needed):**
-
-```yaml
-# Project-specific MongoDB connection (NOT for standard schema)
-mongodb:
-  url: ${MONGODB_URL}  # mongodb://user:pass@host:27017/dbname
-  database: myapp
-  # Replica set for HA
-  replica_set: rs0
-  # Connection pool
-  max_pool_size: 100
-  min_pool_size: 10
-```
-
-**Standard schema still uses relational DB (SQLite/PostgreSQL/MySQL/MSSQL).**
+**Standard schema uses SQLite (local) or libsql (remote).**
 
 **SQLite Details:**
 
@@ -11418,16 +11346,16 @@ mongodb:
 **NOT good for:**
 - Multiple app instances (no shared state)
 - High write concurrency (SQLite locks on write)
-- Large datasets (> 10GB, consider PostgreSQL)
+- Large datasets (> 10GB, consider libsql/Turso remote)
 
-**SQLite as Local Cache (with remote DB):**
+**SQLite as Local Cache (with remote libsql/Turso DB):**
 
 ```yaml
 database:
-  # Primary: remote database
+  # Primary: remote libsql/Turso database
   primary:
-    driver: postgres
-    url: ${DATABASE_URL}
+    driver: libsql
+    url: ${DATABASE_URL}  # libsql://your-db.turso.io?authToken=${TURSO_AUTH_TOKEN}
 
   # Local SQLite cache for fast reads and offline resilience
   cache:
@@ -11444,78 +11372,18 @@ When enabled:
 - If remote unavailable, serve from cache (read-only mode)
 - Background sync keeps cache fresh
 
-**Multiple Connections & Mixed Mode:**
-
-Supports multiple database connections of different types with automatic sync:
-
-```yaml
-database:
-  # Primary database (required)
-  primary:
-    driver: postgres
-    url: ${DATABASE_URL}
-
-  # Additional databases (optional, for redundancy/failover)
-  replicas:
-    - name: mariadb-1
-      driver: mysql
-      url: mysql://user:pass@mariadb1.example.com:3306/myapp
-      priority: 1        # Failover priority (lower = higher priority)
-      read_only: true    # Read replica
-
-    - name: mariadb-2
-      driver: mysql
-      url: mysql://user:pass@mariadb2.example.com:3306/myapp
-      priority: 2
-      read_only: true
-
-    - name: postgres-backup
-      driver: postgres
-      url: postgres://user:pass@pg-backup.example.com:5432/myapp
-      priority: 3
-      read_only: false   # Can be promoted to primary
-
-    - name: mssql-legacy
-      driver: mssql
-      url: sqlserver://user:pass@mssql.example.com:1433?database=myapp
-      priority: 10
-      sync: true         # Sync data to this DB
-
-  # Sync settings
-  sync:
-    enabled: true        # Auto-sync between all databases
-    interval: 5s         # Sync check interval
-
-  # Failover settings
-  failover:
-    enabled: true
-    health_check: 10s    # Health check interval
-    threshold: 3         # Failed checks before failover
-```
-
-**Failover Priority:**
-- Lower number = higher priority
-- Primary always tried first
-- On primary failure, try replicas in priority order
-- Auto-promote read-write replica if primary down
-
-**Automatic Sync:**
-- Changes written to primary, synced to all replicas
-- Conflict resolution: primary wins
-- Sync uses Valkey/Redis pub/sub for real-time updates
-
 See **PART 12: SERVER CONFIGURATION** for Valkey/Redis setup.
 See **PART 10: DATABASE & CLUSTER** for full cluster configuration.
 
 **SQLite vs Remote - Key Differences:**
 
-| Feature | SQLite | PostgreSQL/MySQL |
-|---------|--------|------------------|
-| Files | `server.db` | Single DB, prefixed tables (`srv_*`) |
-| Timestamps | `strftime('%s','now')` | `EXTRACT(EPOCH FROM NOW())` / `UNIX_TIMESTAMP()` |
-| Auto-increment | `AUTOINCREMENT` | `SERIAL` / `AUTO_INCREMENT` |
-| Upsert | `ON CONFLICT DO UPDATE` | `ON CONFLICT DO UPDATE` / `ON DUPLICATE KEY` |
-| Boolean | `INTEGER (0/1)` | `BOOLEAN` / `TINYINT(1)` |
+| Feature | SQLite | libsql/Turso |
+|---------|--------|--------------|
+| Files | `server.db` (local file) | Single remote DB, prefixed tables (`srv_*`) |
+| Timestamps | `strftime('%s','now')` | `strftime('%s','now')` (libsql is SQLite-compatible) |
+| Auto-increment | `AUTOINCREMENT` | `AUTOINCREMENT` |
+| Upsert | `ON CONFLICT DO UPDATE` | `ON CONFLICT DO UPDATE` |
+| Boolean | `INTEGER (0/1)` | `INTEGER (0/1)` |
 
 **Automatic Detection:**
 
@@ -13180,7 +13048,7 @@ func runScheduledBackup(ctx context.Context) error {
 ---
 
 
-# PART 10: DATABASE & CLUSTER
+# PART 10: DATABASE
 
 ## Database Schema
 
@@ -13235,9 +13103,7 @@ var schemaUpdates = []string{
 // isColumnExistsError checks if error is "column already exists"
 func isColumnExistsError(err error) bool {
     msg := err.Error()
-    return strings.Contains(msg, "duplicate column") ||      // SQLite
-           strings.Contains(msg, "already exists") ||        // PostgreSQL
-           strings.Contains(msg, "Duplicate column name")    // MySQL
+    return strings.Contains(msg, "duplicate column") // SQLite and libsql
 }
 ```
 
@@ -13281,18 +13147,12 @@ func (p *Paste) SetSlug(slug string) {
 
 ### Remote Database Updates
 
-**Same approach for SQLite and remote databases (PostgreSQL/MySQL).**
+**Same approach for SQLite and libsql/Turso.**
 
 | Database | `CREATE TABLE IF NOT EXISTS` | `ALTER TABLE ADD COLUMN` |
 |----------|------------------------------|--------------------------|
 | SQLite | ✓ Native support | Ignore "duplicate column" error |
-| PostgreSQL | ✓ Native support | `ADD COLUMN IF NOT EXISTS` (v9.6+) |
-| MySQL | ✓ Native support | Ignore error code 1060 |
-
-**PostgreSQL-specific (v9.6+):**
-```sql
-ALTER TABLE pastes ADD COLUMN IF NOT EXISTS slug TEXT DEFAULT '';
-```
+| libsql | ✓ Remote (via Turso API) | `CREATE TABLE IF NOT EXISTS` |
 
 **Cross-database compatible:**
 ```go
@@ -13302,190 +13162,6 @@ if err != nil && !isColumnExistsError(err) {
     return err
 }
 ```
-
-### Cluster Schema Updates
-
-**All nodes must run the same application version.**
-
-| Scenario | Behavior |
-|----------|----------|
-| Rolling upgrade | Each node applies schema updates on startup |
-| First node | Creates tables, adds columns |
-| Subsequent nodes | Statements succeed (idempotent) or ignored |
-| Version mismatch | Older nodes may lack new columns (app handles gracefully) |
-
-**Upgrade order doesn't matter** - schema changes are additive, so:
-- New nodes can read old data (new columns have defaults)
-- Old nodes can read new data (ignore unknown columns)
-
-## Cluster Support
-
-**ALL apps MUST support cluster mode with config sync.**
-
-### What Clustering Provides (Standard for ALL Apps)
-
-| Feature | Description |
-|---------|-------------|
-| **Config Sync** | Change setting on one node → syncs to all nodes |
-| **Token Cache Sharing** | API token validation cache shared across nodes |
-| **Distributed Locks** | Prevent duplicate task execution |
-| **Primary Election** | One node handles cluster-wide tasks |
-| **Health Monitoring** | Nodes monitor each other |
-
-**This is the BASE functionality. Every project gets this.**
-
-### Single Instance (Auto-detected)
-
-- No external cache/database configured
-- Uses local file/SQLite for state
-- Fully functional, just not clustered
-
-### Cluster Mode (Auto-detected)
-
-- Auto-enabled when external cache or shared database detected
-- Requires: PostgreSQL/MySQL + Valkey/Redis
-- All nodes share same database and cache
-- Config changes propagate automatically
-
-**Cluster join + secret distribution:** new nodes join via the cluster join flow defined in PART 10 → "Cluster". The bootstrap response from the existing node carries every `app_secrets` row (PART 11 → "Cryptographic Keys") inside the encrypted payload — `installation_secret`, `cookie_signing_key`, `csrf_token_secret` are NOT regenerated per node. The pre-existing `server.security.encryption_key` (`server.yml`) is also distributed in the same encrypted payload. All replicas share one set.
-
-**Cluster nodes vs agents (do NOT confuse):**
-
-| Term | What it is | Where it runs | Auth |
-|------|-----------|----------------|------|
-| **Cluster node** | Another instance of THIS server binary, sharing the same DB and cache, behind the same admin namespace | Anywhere reachable from the primary node | Internal — joins via the cluster join token; subsequent traffic uses the shared DB |
-| **Agent** (PART 32) | A separate, purpose-built `{project_name}-agent` binary on a remote machine reporting INTO the server | Customer / operator machines (web hosts, build runners, monitored machines) | None — server is open API; agents connect without auth tokens |
-
-Agents are NEVER cluster nodes; they don't share the DB; they don't get `app_secrets` distributed to them. Cluster nodes are NEVER agents; they don't register via `/agents/register`.
-
-### Cluster Heartbeat & Failure Handling
-
-**Every cluster node sends heartbeats to detect failures.**
-
-| Setting | Value | Description |
-|---------|-------|-------------|
-| Heartbeat interval | 30 seconds | How often nodes send heartbeats |
-| Heartbeat timeout | 90 seconds | 3 missed heartbeats = node considered unresponsive |
-| Degraded threshold | 90 seconds | Node marked as `degraded` |
-| Offline threshold | 5 minutes | Node marked as `offline` |
-| Removal threshold | Manual | Offline nodes require manual removal |
-
-**Node States:**
-
-| State | Meaning | Action |
-|-------|---------|--------|
-| `healthy` | Heartbeat received within 30 seconds | Normal operation |
-| `degraded` | Heartbeat missed (30-90 seconds) | Logged, monitoring continues |
-| `offline` | No heartbeat for 5+ minutes | Node excluded from load balancing |
-| `removed` | Manually removed by admin | Node record deleted |
-
-**Failure Detection Flow:**
-
-```
-Node A sends heartbeat every 30 seconds
-         │
-         ▼
-Other nodes track "last_seen" timestamp
-         │
-         ▼
-If now - last_seen > 90 seconds:
-   Mark as "degraded", log warning
-         │
-         ▼
-If now - last_seen > 5 minutes:
-   Mark as "offline", exclude from cluster operations
-         │
-         ▼
-Admin manually removes dead nodes via CLI command or config file.
-```
-
-**Heartbeat Payload (every 30s, written to `nodes` table):**
-
-| Field | Description |
-|-------|-------------|
-| `node_id` | Hostname or operator-assigned ID |
-| `app_version` | Running binary's version (Tier-2 public-safe per PART 11) |
-| `commit_hash` | Build commit |
-| `installation_secret_version` | The version number of the `installation_secret` row this node currently has loaded (matches `app_secrets.version` for the `installation_secret` name). Used to detect drift. |
-| `server_security_encryption_key_version` | Same idea for the at-rest AES key (`server.security.encryption_key`). |
-| `cookie_signing_key_version` | Same. |
-| `csrf_token_secret_version` | Same. |
-| `learned_origins_version` | Latest `MAX(observed_at)` from the `learned_origins` table this node has read. |
-| `last_seen` | Heartbeat timestamp (server-side, on insert) |
-
-**Secret-version mismatch handling:** if a node's heartbeat reports a `*_version` lower than the cluster's current version (read from `app_secrets`), the primary logs `cluster.secret_version_drift` (which node, which secret, version delta) and the lagging node forces a re-read from the table on its next tick. If the drift exceeds 7 days (the `installation_secret` rotation grace window), the lagging node is marked **`stale`** instead of `healthy` and excluded from cluster ops until it catches up — preventing it from validating in-flight HMACs against an old key.
-
-### Secret Rotation in a Cluster (Anti-Split-Brain)
-
-**Rotating any `app_secrets` row across multiple nodes during a network partition could produce two "current" values. The rotation flow uses an advisory lock + quorum to prevent this.**
-
-| Step | Action |
-|------|--------|
-| 1 | The admin (or scheduler, for auto-rotated keys) calls `INSERT ... ON CONFLICT` on `app_secrets` with the next monotonic `version`, wrapped in an advisory lock keyed on `('rotate', name)`. PostgreSQL: `pg_try_advisory_xact_lock`; SQLite: a `BEGIN IMMEDIATE` transaction with a sentinel row in `cluster_locks`. |
-| 2 | Inside the lock, the node verifies it can reach **majority of healthy nodes** (per the latest heartbeat read; cached up to 30s). Fewer than majority → rotation **aborts** with `cluster.rotation_aborted_no_quorum`. The advisory lock releases without a row inserted. |
-| 3 | If quorum holds, the new row is inserted, the previous version's `expires_at` is set to `now + grace_window`, and the lock releases. |
-| 4 | All other nodes pick up the new version on their next 30s poll (or via Postgres `LISTEN` / Valkey pub-sub if enabled). They store both versions until the previous one's `expires_at` passes. |
-| 5 | If a partition is detected after step 3 (the rotating node is suddenly unable to confirm majority), the rotation is NOT rolled back — the version is in the DB, all nodes that can read the DB will converge. The minority side will mark itself `stale` (per heartbeat handling above) until reconnected. |
-
-**Why this prevents split-brain:** rotations only succeed if the rotating node has at least majority of healthy nodes available at the moment of rotation. Two halves of a partitioned cluster cannot both hit majority simultaneously. Even if a partition forms after rotation, the DB is the source of truth and the minority side knows it's stale.
-
-**Single-node "cluster" (most deployments):** quorum is trivially 1; the lock is still acquired but the majority check passes immediately. No special path.
-
-### Removed-Node Local Cleanup
-
-**When a node is manually removed via CLI command or config file, the database record is deleted, but the node's local on-disk state may still contain valid copies of `app_secrets` (it had them while it was in the cluster). The removal flow MUST handle both sides:**
-
-| Side | Action |
-|------|--------|
-| **Server-side** (from the removing node) | Delete the row from `nodes` table. Mark `app_secrets` versions valid for that node as `revoked_for_node = node_id` so audit can see the removal happened mid-rotation if applicable. Emit `cluster.node_removed` audit event. |
-| **Removed-node-side** (when the removed node next attempts to heartbeat) | Heartbeat returns `403 NODE_REMOVED`. The binary on the removed node MUST: (1) wipe `{config_dir}/security/pgp.priv.asc.enc` if present (PGP keys are cluster-shared and the removed node has lost permission to participate); (2) wipe its `app_secrets` cache; (3) leave `server.yml` minus the cluster section; (4) log `cluster.removed_self_cleanup` to local `audit.log`; (5) refuse to serve requests until re-joined. The binary does NOT delete logs, data files, or user content — those stay on the removed host for forensic / audit purposes. |
-| **If the removed node is offline at removal time** | The cleanup happens whenever the removed node next attempts to communicate. Until then, it's running with stale secrets — but per the secret-version-mismatch flow above, its requests would already fail because `installation_secret` may have rotated. Operators removing a node SHOULD power down or `systemctl stop {internal_name}` first, then remove. The API surfaces this guidance via the cluster status endpoint. |
-
-**Caveat:** removed-node cleanup is best-effort. A truly compromised host that's been removed cannot be trusted to wipe its own secrets — assume the secrets it had ARE in attacker hands. Always rotate `installation_secret`, `cookie_signing_key`, `csrf_token_secret`, `server.security.encryption_key`, and the project PGP keypair after removing a compromised node. The API offers a "Rotate everything" endpoint on the cluster remove flow.
-
-**Primary Election:**
-
-| Event | Action |
-|-------|--------|
-| Cluster starts | Node with lowest ID becomes primary |
-| Primary goes offline | Next healthy node (by ID) becomes primary |
-| Primary comes back | Remains secondary (no preemption) |
-| Split-brain | Database is source of truth (latest write wins) |
-
-**What Primary Node Handles:**
-
-- Scheduled tasks (only primary runs cron jobs)
-- Cluster-wide maintenance
-- GeoIP/blocklist updates (once, shared via DB)
-
-### Extended Node Functions (PER-PROJECT)
-
-**Beyond config sync, what nodes DO varies by project.**
-
-| App Type | Base (Config Sync) | Extended Node Function |
-|----------|:------------------:|------------------------|
-| Jokes API | ✓ | None - sync only |
-| Quotes API | ✓ | None - sync only |
-| Watchtower-type | ✓ | + Manage Docker hosts |
-| DNS Server | ✓ | + HA failover |
-| Monitoring App | ✓ | + Monitor remote servers |
-| Proxmox-type | ✓ | + Manage VMs + HA failover |
-
-**Extended functions are defined in the project's AI.md under "Node Functions".**
-
-### High Availability (Specialized Apps Only)
-
-**HA is NOT standard - only for apps that specifically require failover.**
-
-| HA Requirement | Examples |
-|----------------|----------|
-| DNS failover | DNS servers, domain controllers |
-| Service continuity | Proxmox, cPanel, critical infrastructure |
-| Data redundancy | Database clusters, storage systems |
-
-**If your app needs HA, define it in AI.md under "High Availability Requirements".**
-
-Most apps (Jokes, Quotes, Airports, etc.) do NOT need HA - clustering with config sync is sufficient.
 
 ---
 
@@ -13498,17 +13174,16 @@ Most apps (Jokes, Quotes, Airports, etc.) do NOT need HA - clustering with confi
 ```yaml
 server:
   database:
-    driver: postgres
-    host: localhost
-    port: 5432
-    name: myapp
-    username: myapp
-    password: ${DB_PASSWORD}
+    driver: sqlite           # or "libsql" for Turso remote
+    url: "{data_dir}/db/{internal_name}.db"  # auto-created; omit for default
+    # For Turso remote:
+    # driver: libsql
+    # url: libsql://your-db-name.turso.io?authToken=${TURSO_AUTH_TOKEN}
 
-    # Connection pool settings
+    # Connection pool settings (libsql/remote only; SQLite uses single writer)
     pool:
-      max_open: 25        # Max open connections
-      max_idle: 5         # Max idle connections
+      max_open: 5         # SQLite: 1 writer + readers; libsql: adjust as needed
+      max_idle: 2         # Max idle connections
       max_lifetime: 5m    # Max connection lifetime
       max_idle_time: 1m   # Max idle time before close
 ```
@@ -13762,10 +13437,9 @@ func WithSerializableRetry(ctx context.Context, db *sql.DB, maxRetries int, fn f
 }
 
 func isSerializationError(err error) bool {
-    // PostgreSQL: 40001 serialization_failure
-    // MySQL: 1213 Deadlock found
-    return strings.Contains(err.Error(), "40001") ||
-           strings.Contains(err.Error(), "1213")
+    // SQLite/libsql: SQLITE_BUSY or database is locked
+    return strings.Contains(err.Error(), "SQLITE_BUSY") ||
+           strings.Contains(err.Error(), "database is locked")
 }
 ```
 
@@ -13813,7 +13487,7 @@ func isSerializationError(err error) bool {
 | `go_version` | `/server/healthz` (under `runtime`) | Build metadata, not a vulnerability vector on its own |
 | `uptime` (seconds or human) | `/server/healthz` | Operational diagnostic |
 | `mode` (`production` / `development`) | `/server/healthz` | Operational diagnostic; debug is gated separately |
-| `db_type` (`sqlite` / `postgres` / `valkey` / etc.) | `/server/healthz` | Just the engine family — no host, no creds |
+| `db_type` (`sqlite` / `libsql`) | `/server/healthz` | Just the engine family — no host, no creds |
 | `db_locality` (`local` / `remote`) | `/server/healthz` | Fuzzy — no host name or IP |
 | `cluster_size`, `is_primary`, `is_secondary` | `/server/healthz` | Cluster state, no addresses |
 | `request_count_24h`, `active_connections`, `total_connections` | `/server/healthz` (under `metrics`) | Operational, aggregate |
@@ -17128,7 +16802,7 @@ type StatsInfo struct {
 
 **Database/cache checks MUST be vague:**
 - ✅ `"database": "ok"` or `"database": "error"`
-- ❌ `"database": "postgresql://user:pass@host:5432/db"`
+- ❌ `"database": "libsql://user:token@host/db"` (exposes credentials)
 - ❌ `"database": {"host": "10.0.0.5", "port": 5432}`
 
 ### /server/healthz Response Formats
@@ -17581,15 +17255,14 @@ When not in cluster mode:
 | `stats.requests_24h` | Requests in last 24 hours |
 | `stats.active_connections` | Current active connections |
 
-**Cluster fields for agent/CLI failover:**
+**Cluster fields for CLI failover:**
 - `cluster.primary` - The primary server URL
-- `cluster.nodes` - All available nodes (agents/CLI use for automatic failover)
+- `cluster.nodes` - All available nodes (CLI uses for automatic failover)
 
 **Who uses health endpoints:**
 - Browsers, curl, and uptime checks use `/server/healthz`
-- CLI and agents use `/api/{api_version}/server/healthz` for cluster discovery and failover updates
+- CLI uses `/api/{api_version}/server/healthz` for cluster discovery and failover updates
 - Unversioned `/api/healthz` exists for machine-friendly versionless probing
-- Cluster nodes do **NOT** use `/server/healthz` or `/api/{api_version}/server/healthz` as the authoritative failover signal; node liveness and primary election use shared DB state and heartbeats
 
 ## Versioning
 
@@ -17697,8 +17370,7 @@ OS/Arch: {GOOS}/{GOARCH}
 | **Project-specific features** | Yes | `/api/{api_version}/items` → `/items` page |
 | **Admin features** | No (config file only) | Server administration is file-only — no web routes |
 | **Health/status** | Yes | `/server/healthz` has HTML frontend (with emojis), `/api/{api_version}/server/healthz` is JSON, `/api/healthz` is direct alias JSON |
-| **Agent endpoints** | No | `/api/{api_version}/*/agents/*` - CLI/agent only |
-| **Cluster nodes** | No | Node-to-node cluster communication only |
+| **Agent endpoints** | No | `/api/{api_version}/*/agents/*` - CLI only |
 
 | Requirement | Description |
 |-------------|-------------|
@@ -17716,13 +17388,6 @@ OS/Arch: {GOOS}/{GOARCH}
 | `GET /api/{api_version}/{resource}/{id}` | `GET /{resource}/{id}` | View resource |
 | `PATCH /api/{api_version}/{resource}/{id}` | `POST /{resource}/{id}` (form) | Update resource |
 | `DELETE /api/{api_version}/{resource}/{id}` | `POST /{resource}/{id}/delete` | Delete resource |
-
-**API-only (no frontend needed):**
-
-| API Endpoint | Why No Frontend |
-|--------------|-----------------|
-| `/api/{api_version}/server/config/agents/*` | Agent binary uses directly |
-| `/api/{api_version}/server/config/nodes/*` | Node-to-node cluster communication |
 
 ### Frontend Functionality Requirements
 
@@ -17789,7 +17454,7 @@ Before adding ANY route, verify:
 - [ ] Is it lowercase with hyphens? (`api-keys`, not `API_Keys`)
 - [ ] Does the route follow scope rules? (`/server/`, `/api/{api_version}/*`)
 - [ ] If user-facing: does frontend route exist and work?
-- [ ] If system/agent: documented as API-only?
+- [ ] If system-only: documented as API-only?
 
 ## Route Naming Convention
 
@@ -17831,7 +17496,6 @@ Before adding ANY route, verify:
 
 | Direction | Example | Reason |
 |-----------|---------|--------|
-| **API-only** | `/api/{api_version}/server/config/agents/*`, `/api/{api_version}/server/config/nodes/*` | Machine/system use only (see table above) |
 | **Frontend-only** | `/server` → `/server/about` redirect | UX convenience redirects, no API equivalent needed |
 
 ### ID/Slug Consistency
@@ -19147,7 +18811,7 @@ Need additional compatible endpoints?"
 | `/server/docs/swagger` | GET | None | Swagger UI (interactive REST explorer; fetches spec from `/api/swagger`) |
 | `/server/docs/graphql` | GET | None | GraphiQL UI (interactive GraphQL explorer; POSTs to `/api/graphql`) |
 | `/metrics` | GET | Optional | Prometheus metrics |
-| `/api/autodiscover` | GET | None | Server settings, config schema, and options for CLI/agent (non-versioned) |
+| `/api/autodiscover` | GET | None | Server settings, config schema, and options for CLI (non-versioned) |
 | `/api/swagger` | GET | None | OpenAPI JSON spec — direct alias for current `{api_version}` |
 | `/api/graphql` | POST | None | GraphQL queries — direct alias for current `{api_version}` |
 | `/api/healthz` | GET | None | Health check JSON — direct alias for current `{api_version}` |
@@ -20285,7 +19949,7 @@ Startup (for configured FQDN)
 | **Same validation** | Frontend validates same rules as backend |
 | **Real-time feedback** | Frontend shows success/error from backend responses |
 
-**User-facing features work in browser. System/agent endpoints are API-only (see PART 14).**
+**User-facing features work in browser. System-only endpoints are API-only (see PART 14).**
 
 ### Frontend Route Structure
 
@@ -22978,7 +22642,7 @@ async function requestPersistentStorage() {
 
 ## Unified Response Format
 
-**ALL responses (server → client/agent) use this exact format. Simple to parse everywhere.**
+**ALL responses (server → client) use this exact format. Simple to parse everywhere.**
 
 ### Success Response
 
@@ -22999,7 +22663,7 @@ async function requestPersistentStorage() {
 }
 ```
 
-### Standard Error Codes (server sends, client/agent parses)
+### Standard Error Codes (server sends, client parses)
 
 | Error Code | HTTP | Message | Client/Agent Display |
 |------------|------|---------|---------------------|
@@ -23019,10 +22683,10 @@ async function requestPersistentStorage() {
 
 ### Parsing Rules
 
-**All consumers (client binary, agent binary, WebUI, external tools) parse the same way:**
+**All consumers (client binary, WebUI, external tools) parse the same way:**
 
 ```go
-// Universal API response parser - works for server, client, agent
+// Universal API response parser - works for server, client
 type APIResponse struct {
     OK      bool            `json:"ok"`
     Data    json.RawMessage `json:"data,omitempty"`
@@ -23038,7 +22702,7 @@ func ParseAPIResponse(body []byte) (*APIResponse, error) {
     return &r, nil
 }
 
-// Usage in client/agent
+// Usage in client
 resp, _ := ParseAPIResponse(body)
 if !resp.OK {
     // Display: resp.Message (human) or handle by resp.Error (code)
@@ -23120,7 +22784,7 @@ if !resp.OK {
 
 ## Text Response Format
 
-**CLI/agent text output uses standardized format. Easy to parse with grep/awk/cut.**
+**CLI text output uses standardized format. Easy to parse with grep/awk/cut.**
 
 ### Success Response (text/plain)
 
@@ -23163,7 +22827,7 @@ ERROR: VALIDATION_FAILED: email must be valid
 
 ## Server Response Rules
 
-**These rules apply SERVER-WIDE to ALL responses (API, frontend AJAX, CLI, agent, webhooks).**
+**These rules apply SERVER-WIDE to ALL responses (API, frontend AJAX, CLI, webhooks).**
 
 ### Content-Type Detection
 
@@ -24914,7 +24578,7 @@ web:
 
 ## CSRF Protection
 
-**CSRF protects cookie-authenticated browser forms from cross-site forgery. It does NOT apply to Bearer/API-token requests, public endpoints, read-only methods, or callers that don't carry browser cookies — applying it there breaks legitimate clients (CLI tools, agents, webhooks, OAuth callbacks) without adding security value.**
+**CSRF protects cookie-authenticated browser forms from cross-site forgery. It does NOT apply to Bearer/API-token requests, public endpoints, read-only methods, or callers that don't carry browser cookies — applying it there breaks legitimate clients (CLI tools, webhooks, OAuth callbacks) without adding security value.**
 
 ### When CSRF Validation Runs
 
@@ -30129,7 +29793,7 @@ Current:
 | 982 | saned | Scanner access |
 | 981 | usbmux | iOS USB mux |
 | 980 | cups-pk-helper | CUPS printing |
-| 170-179 | postgres, mysql | Database servers |
+| 170-179 | (reserved, legacy DB servers) | Not used |
 | 101-110 | sshd, postfix, dovecot | Common services |
 
 **Safe range recommendation: 200-899** (avoid top and bottom of 100-999 range)
@@ -30901,7 +30565,6 @@ format_version_tag() {
 |--------|------------|--------------|
 | **Server** | `{project_name}` | `{project_name}-{os}-{arch}` |
 | **CLI** | `{project_name}-cli` | `{project_name}-cli-{os}-{arch}` |
-| **Agent** | `{project_name}-agent` | `{project_name}-agent-{os}-{arch}` |
 
 ### Examples
 
@@ -30909,7 +30572,6 @@ format_version_tag() {
 |--------|------|-------------|---------------|
 | Server | `jokes` | `jokes-linux-amd64` | `jokes-windows-amd64.exe` |
 | CLI | `jokes-cli` | `jokes-cli-linux-amd64` | `jokes-cli-windows-amd64.exe` |
-| Agent | `jokes-agent` | `jokes-agent-linux-amd64` | `jokes-agent-windows-amd64.exe` |
 
 ### Directory Structure
 
@@ -30917,7 +30579,6 @@ format_version_tag() {
 binaries/
 ├── {project_name}                      # Local server binary
 ├── {project_name}-cli                  # Local CLI binary (if src/client/ exists)
-├── {project_name}-agent                # Local agent binary (if src/agent/ exists)
 ├── {project_name}-linux-amd64          # Server distributions
 ├── {project_name}-linux-arm64
 ├── {project_name}-darwin-amd64
@@ -30929,9 +30590,6 @@ binaries/
 ├── {project_name}-cli-linux-amd64      # CLI distributions
 ├── {project_name}-cli-linux-arm64
 ├── ...
-├── {project_name}-agent-linux-amd64    # Agent distributions
-├── {project_name}-agent-linux-arm64
-└── ...
 ```
 
 ### Local/Testing
@@ -31050,19 +30708,6 @@ build: clean
 		done; \
 	fi
 
-	# Build agent for all platforms (if exists)
-	@if [ -d "src/agent" ]; then \
-		for platform in $(PLATFORMS); do \
-			OS=$${platform%/*}; \
-			ARCH=$${platform#*/}; \
-			OUTPUT=$(BINDIR)/$(PROJECTNAME)-agent-$$OS-$$ARCH; \
-			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
-			echo "Building agent $$OS/$$ARCH..."; \
-			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
-				go build -ldflags \"$(LDFLAGS)\" \
-				-o $$OUTPUT ./src/agent" || exit 1; \
-		done; \
-	fi
 
 	@echo "Build complete: $(BINDIR)/"
 
@@ -31091,12 +30736,6 @@ local: clean
 			go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-cli ./src/client"; \
 	fi
 
-	# Build agent binary (if exists)
-	@if [ -d "src/agent" ]; then \
-		echo "Building $(PROJECTNAME)-agent..."; \
-		$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-			go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-agent ./src/agent"; \
-	fi
 
 	@echo "Local build complete: $(BINDIR)/"
 
@@ -31183,7 +30822,7 @@ test:
 # DEV - Quick build for local development/testing (to random temp dir)
 # =============================================================================
 # Fast: local platform only, no ldflags, random temp dir for isolation
-# Builds server + CLI + agent (if they exist)
+# Builds server + CLI (if they exist)
 dev:
 	@mkdir -p $(GOCACHE) $(GODIR)
 	@$(GO_DOCKER) go mod tidy
@@ -31195,10 +30834,6 @@ dev:
 		if [ -d "src/client" ]; then \
 			$(GO_DOCKER) go build -o $$BUILD_DIR/$(PROJECTNAME)-cli ./src/client && \
 			echo "Built: $$BUILD_DIR/$(PROJECTNAME)-cli"; \
-		fi && \
-		if [ -d "src/agent" ]; then \
-			$(GO_DOCKER) go build -o $$BUILD_DIR/$(PROJECTNAME)-agent ./src/agent && \
-			echo "Built: $$BUILD_DIR/$(PROJECTNAME)-agent"; \
 		fi && \
 		echo "Test:  docker run --rm -it --name $(PROJECTNAME)-test -v $$BUILD_DIR:/app alpine:latest /app/$(PROJECTNAME) --help"
 
@@ -31234,7 +30869,7 @@ var (
 
 **Build date format:** Uses build system timezone or `TZ` env var.
 
-**OfficialSite usage:** If set, CLI/Agent use this as default `--server` value. If empty, users must provide `--server` flag or configure in cli.yml/agent.yml.
+**OfficialSite usage:** If set, CLI uses this as default `--server` value. If empty, users must provide `--server` flag or configure in cli.yml.
 
 ## Go Module Caching
 
@@ -31307,7 +30942,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 1. **Runs `clean` first** (removes previous build artifacts)
 2. Builds local platform binaries only (fast)
-3. Outputs to `binaries/` (server, cli, agent if applicable)
+3. Outputs to `binaries/` (server, cli)
 4. Full `-ldflags` (version info embedded)
 5. Uses Docker (`golang:alpine`) - keeps local machine clean
 6. **Use for local testing before full cross-platform build**
@@ -31328,7 +30963,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 | **1. Coding** | `make dev` | Rapid iteration - builds to temp dir, no version info |
 | **2. Quick Test** | Run binary in Docker | Debug with curl, file, bash tools |
 | **3. Unit Tests** | `make test` | Verify logic, coverage |
-| **4. Integration** | `./tests/run_tests.sh` | Full server + CLI + agent tests |
+| **4. Integration** | `./tests/run_tests.sh` | Full server + CLI tests |
 | **5. Production Test** | `make local` | Build with version info to `binaries/` |
 | **6. Release** | `make build` | Full cross-platform build (8 platforms) |
 
@@ -31628,7 +31263,6 @@ docker/
 ├── db/                               # All database storage
 │   ├── sqlite/                       # SQLite databases
 │   │   └── server.db                # Main app database
-│   ├── postgres/                     # PostgreSQL data (if used)
 │   └── valkey/                       # Valkey/Redis data (if used)
 ├── log/                              # Log files
 │   └── {project_name}/               # App logs
@@ -31646,7 +31280,6 @@ docker/
 | `/config/{project_name}/` | App config (server.yml, ssl/, tor/) |
 | `/data/{project_name}/` | App data (uploads, cache, tor/) |
 | `/data/db/sqlite/` | SQLite databases (server.db) |
-| `/data/db/postgres/` | PostgreSQL data directory |
 | `/data/db/valkey/` | Valkey/Redis persistence |
 | `/data/log/{project_name}/` | App logs |
 | `/data/backups/{project_name}/` | Backup archives |
@@ -31677,7 +31310,6 @@ volumes:
     ├── {project_name}/        # App data
     ├── db/
     │   ├── sqlite/           # SQLite databases (server.db)
-    │   ├── postgres/         # PostgreSQL (if multi-service)
     │   └── valkey/           # Valkey (if multi-service)
     ├── log/
     └── backups/
@@ -31687,7 +31319,7 @@ volumes:
 - Binary owns Tor completely - Tor dirs are under `{project_name}/`, not separate
 - All SQLite databases in `/data/db/sqlite/` (not scattered)
 - Database name is ALWAYS `server.db` (globally consistent)
-- External services (postgres, valkey) have their own `/data/db/{service}/` dirs
+- External services (valkey) have their own `/data/db/{service}/` dirs
 - Compose mounts entire `/config` and `/data` - not individual subdirectories
 
 ### OCI Meta Labels (Required)
@@ -32078,8 +31710,9 @@ services:
 ### Multi-Service Example
 
 ```yaml
-# {project_name} - with PostgreSQL + Valkey
+# {project_name} - with Valkey cache
 # nginx proxy address - http://172.17.0.1:64580
+# Database: SQLite (local, auto-created) or set DATABASE_URL for libsql/Turso remote
 
 name: {project_name}
 
@@ -32102,10 +31735,10 @@ services:
       - PORT=80
       - DEBUG=false
       - TZ=${TZ:-America/New_York}
-      - DB_HOST={project_name}-db
-      - DB_NAME={project_name}
-      - DB_USER={project_name}
       - CACHE_HOST={project_name}-cache
+      # For remote libsql/Turso: set DATABASE_DRIVER=libsql and DATABASE_URL
+      # - DATABASE_DRIVER=libsql
+      # - DATABASE_URL=libsql://your-db.turso.io?authToken=${TURSO_AUTH_TOKEN}
     volumes:
       - './volumes/config:/config:z'
       - './volumes/data:/data:z'
@@ -32118,31 +31751,8 @@ services:
       retries: 3
       start_period: 90s
     depends_on:
-      {project_name}-db:
-        condition: service_healthy
       {project_name}-cache:
         condition: service_healthy
-    networks:
-      - {project_name}
-
-  {project_name}-db:
-    image: postgres:alpine
-    pull_policy: always
-    container_name: {project_name}-db
-    restart: always
-    logging: *default-logging
-    environment:
-      - POSTGRES_DB={project_name}
-      - POSTGRES_USER={project_name}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-{project_name}}
-    volumes:
-      - './volumes/data/db/postgres/{project_name}:/var/lib/postgresql/data:z'
-    healthcheck:
-      test: pg_isready -U {project_name} -d {project_name}
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
     networks:
       - {project_name}
 
@@ -32261,30 +31871,28 @@ networks:
 
 ## All-in-One Database and Cache
 
-**Database:** PostgreSQL (preferred for AIO)
-- Better defaults out of the box
-- Strong ACID compliance
-- Superior handling of concurrent connections
-- Built-in connection pooling
+**Database:** SQLite (embedded, zero config — auto-created at `{data_dir}/db/{internal_name}.db`)
+- Zero configuration, no server required
+- Ships with the binary
+- Automatic backups via `--maintenance backup`
 
 **Cache:** Valkey (Redis-compatible)
 - Low memory footprint
 - Persistence via AOF
 - Unix socket for local communication (faster than TCP)
 
-**Port Exposure:** Only port 80 (server) is exposed. Database (5432) and cache (6379) ports are internal-only - no external access.
+**Port Exposure:** Only port 80 (server) is exposed. Cache (6379) port is internal-only - no external access.
 
 | Service | Internal Port | External Port | Access |
 |---------|---------------|---------------|--------|
 | App | 80 | 80 | Exposed |
-| PostgreSQL | 5432 | - | Internal only |
 | Valkey | 6379 (or socket) | - | Internal only |
 | Tor | 9050 | - | Internal only |
 
 **All-in-One Dockerfile (`docker/Dockerfile.aio`):**
 
 ```dockerfile
-# All-in-One Dockerfile - includes app + postgresql + valkey + tor
+# All-in-One Dockerfile - includes app + valkey + tor
 # Build: golang:alpine (static binary, CGO_ENABLED=0)
 # Runtime: debian:latest (stable, broad compatibility)
 # Image name: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest-aio
@@ -32317,32 +31925,27 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o {project_name} ./src
 
 # =============================================================================
-# Stage 2: Runtime image with PostgreSQL + Valkey + Tor
+# Stage 2: Runtime image with Valkey + Tor
 # =============================================================================
 FROM debian:latest
 
 # No LABEL blocks — image metadata applied as OCI annotations at build time.
 
-# Install dependencies (PostgreSQL + Valkey + Tor + Supervisor)
+# Install dependencies (Valkey + Tor + Supervisor)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    postgresql \
-    postgresql-contrib \
     valkey \
     supervisor \
     tor \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
-# Create directories for EXTERNAL services only (PostgreSQL, Valkey)
+# Create directories for EXTERNAL services only (Valkey)
 # NOTE: App directories (config, data, sqlite, logs, backups) created by server binary
-# External services need dirs pre-created with special ownership (postgres user)
-RUN mkdir -p /config/postgres /config/valkey \
-             /data/db/postgres /data/db/valkey \
-             /data/log/postgres \
-             /run/postgresql /run/valkey \
-    && chown -R postgres:postgres /data/db/postgres /data/log/postgres /run/postgresql
+RUN mkdir -p /config/valkey \
+             /data/db/valkey \
+             /run/valkey
 
 # Copy configs and entrypoint
 COPY docker/rootfs/ /
@@ -32358,10 +31961,6 @@ ENV MODE=production \
     DEBUG=false \
     TZ=America/New_York \
     DATABASE_DIR=/data/db/sqlite \
-    PGDATA=/data/db/postgres \
-    DB_HOST=/run/postgresql \
-    DB_NAME={project_name} \
-    DB_USER={project_name} \
     VALKEY_SOCKET=/run/valkey/valkey.sock
 
 # Only expose app port - db/cache are internal
@@ -32380,15 +31979,6 @@ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 nodaemon=true
 logfile=/data/log/supervisord.log
 pidfile=/var/run/supervisord.pid
-
-[program:postgresql]
-command=/usr/bin/postgres -D /data/db/postgres
-user=postgres
-autostart=true
-autorestart=true
-priority=10
-stdout_logfile=/data/log/postgres/postgresql.log
-stderr_logfile=/data/log/postgres/postgresql.log
 
 [program:valkey]
 command=/usr/bin/valkey-server /config/valkey/valkey.conf
@@ -32413,47 +32003,6 @@ autorestart=true
 priority=100
 stdout_logfile=/data/log/app.log
 stderr_logfile=/data/log/app.log
-```
-
-**All-in-One PostgreSQL config (`docker/rootfs/config/postgres/postgresql.conf`):**
-
-```ini
-# PostgreSQL configuration optimized for AIO containers
-# Low memory footprint, single-container deployment
-
-# Connection settings (unix socket only - no TCP)
-listen_addresses = ''
-unix_socket_directories = '/run/postgresql'
-max_connections = 50
-
-# Memory (conservative for AIO - adjust based on container limits)
-shared_buffers = 64MB
-effective_cache_size = 128MB
-work_mem = 4MB
-maintenance_work_mem = 32MB
-
-# WAL settings (balanced durability/performance)
-wal_level = replica
-max_wal_size = 256MB
-min_wal_size = 64MB
-checkpoint_completion_target = 0.9
-
-# Query planner
-random_page_cost = 1.1
-effective_io_concurrency = 200
-
-# Logging
-log_destination = 'stderr'
-logging_collector = off
-log_min_duration_statement = 1000
-log_line_prefix = '%t [%p]: '
-
-# Autovacuum (lighter for AIO)
-autovacuum_max_workers = 2
-autovacuum_naptime = 60s
-
-# Disable features not needed for AIO
-ssl = off
 ```
 
 **All-in-One Valkey config (`docker/rootfs/config/valkey/valkey.conf`):**
@@ -32505,39 +32054,15 @@ if [ -n "$TZ" ]; then
     echo $TZ > /etc/timezone
 fi
 
-# Setup directories for EXTERNAL services only (PostgreSQL, Valkey)
-# NOTE: App directories (config, data, sqlite, logs) are created by the server binary
-# External services need special ownership that binary can't set
-mkdir -p /data/db/postgres /data/db/valkey /run/postgresql /run/valkey
-chown -R postgres:postgres /data/db/postgres /run/postgresql
-chmod 700 /data/db/postgres
+# Setup directories for EXTERNAL services only (Valkey)
+# NOTE: App directories (config, data, sqlite, logs, backups) are created by the server binary
+mkdir -p /data/db/valkey /run/valkey
 chmod 755 /run/valkey
-
-# Initialize PostgreSQL if not already done
-if [ ! -f /data/db/postgres/PG_VERSION ]; then
-    echo "Initializing PostgreSQL database..."
-    su - postgres -c "initdb -D /data/db/postgres"
-
-    # Copy optimized config from /config/postgres/
-    cp /config/postgres/postgresql.conf /data/db/postgres/postgresql.conf
-
-    # Start PostgreSQL temporarily to create database and user
-    su - postgres -c "pg_ctl -D /data/db/postgres -l /data/log/postgres/init.log start"
-    sleep 3
-
-    # Create application database and user
-    su - postgres -c "psql -c \"CREATE USER ${DB_USER:-{project_name}} WITH PASSWORD '${DB_PASSWORD:-{project_name}}';\""
-    su - postgres -c "psql -c \"CREATE DATABASE ${DB_NAME:-{project_name}} OWNER ${DB_USER:-{project_name}};\""
-    su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME:-{project_name}} TO ${DB_USER:-{project_name}};\""
-
-    # Stop PostgreSQL (supervisor will start it)
-    su - postgres -c "pg_ctl -D /data/db/postgres stop"
-fi
 
 # Set Tor enabled flag for supervisor
 export TOR_ENABLED="${TOR_ENABLED:-false}"
 
-# Start supervisor (manages postgresql + valkey + tor + app)
+# Start supervisor (manages valkey + tor + app)
 exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
 ```
 
@@ -32546,7 +32071,7 @@ exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
 | Image | Dockerfile | Description |
 |-------|------------|-------------|
 | `{name}:latest` | `Dockerfile` | Standard image (app only, alpine) |
-| `{name}:latest-aio` | `Dockerfile.aio` | All-in-one (app + postgresql + valkey + tor, debian) |
+| `{name}:latest-aio` | `Dockerfile.aio` | All-in-one (app + valkey + tor, debian) |
 
 **AIO Environment Variables:**
 
@@ -32556,16 +32081,15 @@ exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
 | `PORT` | `80` | Application port |
 | `DEBUG` | `false` | Debug mode |
 | `TZ` | `America/New_York` | Timezone |
-| `DB_NAME` | `{project_name}` | PostgreSQL database name |
-| `DB_USER` | `{project_name}` | PostgreSQL username |
-| `DB_PASSWORD` | `{project_name}` | PostgreSQL password |
+| `DATABASE_DRIVER` | `sqlite` | Database driver (`sqlite` or `libsql`) |
+| `DATABASE_URL` | (auto) | SQLite path or libsql URL |
 | `TOR_ENABLED` | `false` | Enable Tor hidden service |
 
 **App Connection Strings (internal):**
 
 ```go
-// PostgreSQL via unix socket (faster than TCP)
-dbURL := "postgres:///projectname?host=/run/postgresql"
+// SQLite (default, auto-created)
+dbURL := "/data/db/sqlite/server.db"
 
 // Valkey via unix socket
 valkeyURL := "unix:///run/valkey/valkey.sock"
@@ -32588,8 +32112,7 @@ docker build -t {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:late
 - Self-contained deployment (single `docker pull && docker run`)
 
 **When to use Multi-Service:**
-- Need separate database (PostgreSQL, MySQL)
-- Cache needs dedicated resources
+- Need dedicated cache (Valkey) with separate resources
 - Horizontal scaling of specific components
 - Microservice architecture
 
@@ -32651,7 +32174,7 @@ $TEMP_DIR/
 | `/data/{project_name}/` | Binary's {data_dir} |
 | `/data/{project_name}/security/` | Security DBs (geoip, blocklists, cve, trivy) |
 | `/data/{project_name}/tor/` | Tor data (hidden service keys) - binary owns Tor |
-| `/data/db/{dbtype}/` | Database data (postgres, valkey, sqlite, etc.) |
+| `/data/db/{dbtype}/` | Database data (sqlite, valkey) |
 | `/data/log/{project_name}/` | App logs (access.log, error.log, tor.log) |
 | `/data/log/{internal_name}/` | Service logs (nginx, caddy, etc.) |
 | `/data/backups/{project_name}/` | Backup files |
@@ -32896,7 +32419,7 @@ cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
 rm -rf "$TEMP_DIR"  # Cleanup after tests
 ```
 
-### Docker Compose with Database Example
+### Docker Compose with Cache Example
 
 **Location:** `docker/docker-compose.yml`
 
@@ -32910,7 +32433,7 @@ services:
     container_name: {project_name}-app
     restart: always
     depends_on:
-      {project_name}-db:
+      {project_name}-cache:
         condition: service_healthy
     environment:
       # Tor auto-enabled (tor binary installed in image)
@@ -32919,11 +32442,9 @@ services:
       # DOMAIN (optional - containers behind reverse proxy auto-detect from headers)
       # Only set if NOT behind reverse proxy, comma-separated list supported
       # - DOMAIN=myapp.com,www.myapp.com,api.myapp.com
-      - DB_HOST={project_name}-db
-      - DB_PORT=5432
-      - DB_NAME={project_name}
-      - DB_USER={project_name}
-      - DB_PASSWORD=${DB_PASSWORD:-{project_name}}
+      # For remote libsql/Turso: set DATABASE_DRIVER and DATABASE_URL
+      # - DATABASE_DRIVER=libsql
+      # - DATABASE_URL=libsql://your-db.turso.io?authToken=${TURSO_AUTH_TOKEN}
     ports:
       # Production: bound to Docker bridge only (reverse proxy handles external)
       - "172.17.0.1:64580:80"
@@ -32933,20 +32454,15 @@ services:
     networks:
       - {project_name}
 
-  {project_name}-db:
-    image: postgres:alpine
+  {project_name}-cache:
+    image: valkey/valkey:alpine
     pull_policy: always
-    container_name: {project_name}-db
+    container_name: {project_name}-cache
     restart: always
-    environment:
-      - POSTGRES_DB={project_name}
-      - POSTGRES_USER={project_name}
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-{project_name}}
-      - TZ=America/New_York
     volumes:
-      - ./volumes/data/db/postgres/{project_name}:/var/lib/postgresql/data:z
+      - ./volumes/data/db/valkey/{project_name}:/data:z
     healthcheck:
-      test: pg_isready -U {project_name} -d {project_name}
+      test: valkey-cli ping || exit 1
       interval: 10s
       timeout: 5s
       retries: 3
@@ -32972,7 +32488,7 @@ networks:
 | Tor config dir | `/config/{project_name}/tor/` (binary owns Tor) |
 | Data dir | `/data/{project_name}/` (binary's {data_dir}) |
 | Tor data dir | `/data/{project_name}/tor/` (binary owns Tor) |
-| Database dir | `/data/db/{dbtype}/` (postgres, valkey, sqlite) |
+| Database dir | `/data/db/{dbtype}/` (sqlite, valkey) |
 | Log dir | `/data/log/{project_name}/` |
 | Backup dir | `/data/backups/{project_name}/` |
 | Binary | `/usr/local/bin/{project_name}` |
@@ -33402,23 +32918,6 @@ jobs:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
-      # Agent build - only if src/agent/ directory exists
-      - name: Build Agent
-        if: hashFiles('src/agent/') != ''
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
-
-      - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -33594,23 +33093,6 @@ jobs:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
-      # Agent build - only if src/agent/ directory exists
-      - name: Build Agent
-        if: hashFiles('src/agent/') != ''
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
-
-      - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -33778,23 +33260,6 @@ jobs:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
-      # Agent build - only if src/agent/ directory exists
-      - name: Build Agent
-        if: hashFiles('src/agent/') != ''
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
-
-      - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -33846,7 +33311,7 @@ jobs:
 | Image | Dockerfile | Tag Suffix | Base | Contents |
 |-------|------------|------------|------|----------|
 | **Standard** | `docker/Dockerfile` | (none) | alpine | App only |
-| **All-in-One** | `docker/Dockerfile.aio` | `-aio` | debian | App + PostgreSQL + Valkey + Tor |
+| **All-in-One** | `docker/Dockerfile.aio` | `-aio` | debian | App + Valkey + Tor |
 
 ### Triggers and Tags
 
@@ -34051,7 +33516,7 @@ jobs:
             org.opencontainers.image.vendor={project_org}
             org.opencontainers.image.authors={project_org}
             org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
-            org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
+            org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + valkey + tor)
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.created=${{ env.BUILD_DATE }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
@@ -34063,7 +33528,7 @@ jobs:
             manifest:org.opencontainers.image.vendor={project_org}
             manifest:org.opencontainers.image.authors={project_org}
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
-            manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
+            manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + valkey + tor)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
             manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
@@ -34265,23 +33730,6 @@ jobs:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
-      # Agent build - only if src/agent/ directory exists
-      - name: Build Agent
-        if: hashFiles('src/agent/') != ''
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
-
-      - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -34443,23 +33891,6 @@ jobs:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
-      # Agent build - only if src/agent/ directory exists
-      - name: Build Agent
-        if: hashFiles('src/agent/') != ''
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
-
-      - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -34627,23 +34058,6 @@ jobs:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
-      # Agent build - only if src/agent/ directory exists
-      - name: Build Agent
-        if: hashFiles('src/agent/') != ''
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
-
-      - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -34901,7 +34315,7 @@ jobs:
             org.opencontainers.image.vendor={project_org}
             org.opencontainers.image.authors={project_org}
             org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
-            org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
+            org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + valkey + tor)
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.created=${{ env.BUILD_DATE }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
@@ -34913,7 +34327,7 @@ jobs:
             manifest:org.opencontainers.image.vendor={project_org}
             manifest:org.opencontainers.image.authors={project_org}
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
-            manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
+            manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + valkey + tor)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
             manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
@@ -35039,7 +34453,6 @@ build:linux-amd64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-linux-amd64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-amd64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-linux-amd64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-linux-amd64*
@@ -35056,7 +34469,6 @@ build:linux-arm64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-linux-arm64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-arm64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-linux-arm64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-linux-arm64*
@@ -35073,7 +34485,6 @@ build:darwin-amd64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-darwin-amd64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-amd64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-darwin-amd64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-darwin-amd64*
@@ -35090,7 +34501,6 @@ build:darwin-arm64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-darwin-arm64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-darwin-arm64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-darwin-arm64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-darwin-arm64*
@@ -35107,7 +34517,6 @@ build:windows-amd64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-windows-amd64.exe ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-amd64.exe ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-windows-amd64.exe ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-windows-amd64*.exe
@@ -35124,7 +34533,6 @@ build:windows-arm64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-windows-arm64.exe ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-arm64.exe ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-windows-arm64.exe ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-windows-arm64*.exe
@@ -35141,7 +34549,6 @@ build:freebsd-amd64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-freebsd-amd64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-amd64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-amd64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-freebsd-amd64*
@@ -35158,7 +34565,6 @@ build:freebsd-arm64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-freebsd-arm64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-arm64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-arm64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-freebsd-arm64*
@@ -35262,14 +34668,6 @@ build:beta:
     - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-amd64 ./src/client; fi
     - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-arm64 ./src/client; fi
     # Build Agent if exists
-    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-linux-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-linux-arm64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-darwin-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-darwin-arm64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-windows-amd64.exe ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-windows-arm64.exe ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-arm64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-*
@@ -35310,14 +34708,6 @@ build:daily:
     - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-amd64 ./src/client; fi
     - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-arm64 ./src/client; fi
     # Build Agent if exists
-    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-linux-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-linux-arm64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-darwin-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-darwin-arm64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-windows-amd64.exe ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-windows-arm64.exe ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-arm64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECT_NAME}-*
@@ -35436,7 +34826,7 @@ docker:build-aio:
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
         --label "org.opencontainers.image.title=${PROJECT_NAME}-aio" \
-        --label "org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + postgresql + valkey + tor)" \
+        --label "org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + valkey + tor)" \
         --label "org.opencontainers.image.licenses=MIT" \
         --label "org.opencontainers.image.version=${VERSION}" \
         --label "org.opencontainers.image.created=${BUILD_DATE}" \
@@ -35447,7 +34837,7 @@ docker:build-aio:
         --annotation "manifest:org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --annotation "manifest:org.opencontainers.image.authors=${PROJECT_ORG}" \
         --annotation "manifest:org.opencontainers.image.title=${PROJECT_NAME}-aio" \
-        --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + postgresql + valkey + tor)" \
+        --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + valkey + tor)" \
         --annotation "manifest:org.opencontainers.image.licenses=MIT" \
         --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
         --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
@@ -35610,7 +35000,6 @@ pipeline {
                     env.OFFICIALSITE = sh(script: '[ -f site.txt ] && cat site.txt || echo "${OFFICIALSITE:-}"', returnStdout: true).trim()
                     env.LDFLAGS = "-s -w -X 'main.Version=${env.VERSION}' -X 'main.CommitID=${env.COMMIT_ID}' -X 'main.BuildDate=${env.BUILD_DATE}' -X 'main.OfficialSite=${env.OFFICIALSITE}'"
                     env.HAS_CLI = sh(script: '[ -d src/client ] && echo true || echo false', returnStdout: true).trim()
-                    env.HAS_AGENT = sh(script: '[ -d src/agent ] && echo true || echo false', returnStdout: true).trim()
                 }
                 sh 'mkdir -p ${BINDIR} ${RELDIR}'
                 echo "Build type: ${BUILD_TYPE}, Version: ${VERSION}"
@@ -35923,160 +35312,7 @@ pipeline {
             }
         }
 
-        // Agent builds - only if src/agent/ exists (matches GitHub Actions)
-        stage('Build Agent') {
-            when {
-                expression { env.HAS_AGENT == 'true' }
-            }
-            parallel {
-                stage('Agent Linux AMD64') {
-                    agent { label 'amd64' }
-                    steps {
-                        sh '''
-                            docker run --rm -it \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
-                                -v ${WORKSPACE}:/build \
-                                -v ${GOCACHE}:/root/.cache/go-build \
-                                -v ${GODIR}:/go \
-                                -w /build \
-                                -e CGO_ENABLED=0 \
-                                -e GOOS=linux \
-                                -e GOARCH=amd64 \
-                                golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-agent-linux-amd64 ./src/agent
-                        '''
-                    }
-                }
-                stage('Agent Linux ARM64') {
-                    agent { label 'arm64' }
-                    steps {
-                        sh '''
-                            docker run --rm -it \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
-                                -v ${WORKSPACE}:/build \
-                                -v ${GOCACHE}:/root/.cache/go-build \
-                                -v ${GODIR}:/go \
-                                -w /build \
-                                -e CGO_ENABLED=0 \
-                                -e GOOS=linux \
-                                -e GOARCH=arm64 \
-                                golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-agent-linux-arm64 ./src/agent
-                        '''
-                    }
-                }
-                stage('Agent Darwin AMD64') {
-                    agent { label 'amd64' }
-                    steps {
-                        sh '''
-                            docker run --rm -it \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
-                                -v ${WORKSPACE}:/build \
-                                -v ${GOCACHE}:/root/.cache/go-build \
-                                -v ${GODIR}:/go \
-                                -w /build \
-                                -e CGO_ENABLED=0 \
-                                -e GOOS=darwin \
-                                -e GOARCH=amd64 \
-                                golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-agent-darwin-amd64 ./src/agent
-                        '''
-                    }
-                }
-                stage('Agent Darwin ARM64') {
-                    agent { label 'amd64' }
-                    steps {
-                        sh '''
-                            docker run --rm -it \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
-                                -v ${WORKSPACE}:/build \
-                                -v ${GOCACHE}:/root/.cache/go-build \
-                                -v ${GODIR}:/go \
-                                -w /build \
-                                -e CGO_ENABLED=0 \
-                                -e GOOS=darwin \
-                                -e GOARCH=arm64 \
-                                golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-agent-darwin-arm64 ./src/agent
-                        '''
-                    }
-                }
-                stage('Agent Windows AMD64') {
-                    agent { label 'amd64' }
-                    steps {
-                        sh '''
-                            docker run --rm -it \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
-                                -v ${WORKSPACE}:/build \
-                                -v ${GOCACHE}:/root/.cache/go-build \
-                                -v ${GODIR}:/go \
-                                -w /build \
-                                -e CGO_ENABLED=0 \
-                                -e GOOS=windows \
-                                -e GOARCH=amd64 \
-                                golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-agent-windows-amd64.exe ./src/agent
-                        '''
-                    }
-                }
-                stage('Agent Windows ARM64') {
-                    agent { label 'amd64' }
-                    steps {
-                        sh '''
-                            docker run --rm -it \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
-                                -v ${WORKSPACE}:/build \
-                                -v ${GOCACHE}:/root/.cache/go-build \
-                                -v ${GODIR}:/go \
-                                -w /build \
-                                -e CGO_ENABLED=0 \
-                                -e GOOS=windows \
-                                -e GOARCH=arm64 \
-                                golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-agent-windows-arm64.exe ./src/agent
-                        '''
-                    }
-                }
-                stage('Agent FreeBSD AMD64') {
-                    agent { label 'amd64' }
-                    steps {
-                        sh '''
-                            docker run --rm -it \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
-                                -v ${WORKSPACE}:/build \
-                                -v ${GOCACHE}:/root/.cache/go-build \
-                                -v ${GODIR}:/go \
-                                -w /build \
-                                -e CGO_ENABLED=0 \
-                                -e GOOS=freebsd \
-                                -e GOARCH=amd64 \
-                                golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-agent-freebsd-amd64 ./src/agent
-                        '''
-                    }
-                }
-                stage('Agent FreeBSD ARM64') {
-                    agent { label 'amd64' }
-                    steps {
-                        sh '''
-                            docker run --rm -it \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
-                                -v ${WORKSPACE}:/build \
-                                -v ${GOCACHE}:/root/.cache/go-build \
-                                -v ${GODIR}:/go \
-                                -w /build \
-                                -e CGO_ENABLED=0 \
-                                -e GOOS=freebsd \
-                                -e GOARCH=arm64 \
-                                golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT_NAME}-agent-freebsd-arm64 ./src/agent
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Test') {
+        stage('Test')        stage('Test') {
             agent { label 'amd64' }
             steps {
                 sh '''
@@ -36263,7 +35499,7 @@ pipeline {
                             --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.title=${PROJECT_NAME}-aio" \
-                            --label "org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + postgresql + valkey + tor)" \
+                            --label "org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + valkey + tor)" \
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.version=${VERSION}" \
                             --label "org.opencontainers.image.created=${BUILD_DATE}" \
@@ -36274,7 +35510,7 @@ pipeline {
                             --annotation "manifest:org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --annotation "manifest:org.opencontainers.image.authors=${PROJECT_ORG}" \
                             --annotation "manifest:org.opencontainers.image.title=${PROJECT_NAME}-aio" \
-                            --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + postgresql + valkey + tor)" \
+                            --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + valkey + tor)" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
                             --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
@@ -36306,8 +35542,8 @@ pipeline {
 | Setting | Value |
 |---------|-------|
 | Agent labels | `amd64` and `arm64` MUST be available |
-| Docker | Required on all agents (builds use golang:alpine) |
-| Docker buildx | Required on amd64 agent for multi-arch builds |
+| Docker | Required for builds (golang:alpine) |
+| Docker buildx | Required on amd64 runner for multi-arch builds |
 | Go caches | `/tmp/{project_org}/go-cache` and `/tmp/{project_org}/go-mod-cache` |
 
 ### Credentials Setup (Jenkins → Credentials → Add Credentials)
@@ -36678,7 +35914,7 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
 | Put it in... | Use for... | Why it belongs there |
 |--------------|------------|----------------------|
 | `*_test.go` | Package logic, pure functions, validation, parsing, normalization, config loading, path helpers, mode detection, data transforms, error mapping, handler logic that can be tested with mocks/httptest | `go test -cover` measures Go code coverage here. These tests are fast, deterministic, and prove every branch/error path in the package logic |
-| `./tests/*.sh` | Full running server behavior, route coverage, auth flows, content negotiation, `.txt` endpoints, CLI/server/agent interaction, service install/startup behavior, container/Incus scenarios | These tests prove the real binaries work together end-to-end in a realistic environment. They verify behavior that unit tests alone cannot prove |
+| `./tests/*.sh` | Full running server behavior, route coverage, auth flows, content negotiation, `.txt` endpoints, CLI/server interaction, service install/startup behavior, container/Incus scenarios | These tests prove the real binaries work together end-to-end in a realistic environment. They verify behavior that unit tests alone cannot prove |
 
 **Decision rule:**
 - If the behavior can be proven without starting the full application, it belongs in `*_test.go`
@@ -37172,13 +36408,12 @@ fi
 1. Set up Go cache directories (GODIR/GOCACHE) for faster builds
 2. Build all binaries using Docker (golang:alpine) in temp directory:
    - Server (`./src`)
-   - client (`./src/client`) if exists
-   - Agent (`./src/agent`) if exists
+   - Client (`./src/client`) if exists
 3. Install test tools in container (Docker: `apk add --no-cache curl bash file jq`)
 4. Copy binaries to test container
 5. Start server
 6. Run full beta test suite:
-   - Version and help checks (server, CLI, agent if built)
+   - Version and help checks (server, CLI)
    - Binary info verification
    - **Binary rename tests** (copy binary, verify --help shows new name)
    - **Admin setup** (login with credentials from server.yml → generate API token)
@@ -37187,7 +36422,6 @@ fi
    - Test project-specific endpoints (from IDEA.md)
    - Test admin authentication (see "Testing Admin Routes")
    - **CLI full functionality** (with API token against running server)
-   - **Agent full functionality** (with API token against running server)
 7. Clean up on exit
 
 #### tests/docker.sh
@@ -37231,11 +36465,6 @@ if [ -d "src/client" ]; then
     $GO_DOCKER go build -o "$BUILD_DIR/${PROJECT_NAME}-cli" ./src/client
 fi
 
-# Build agent if exists
-if [ -d "src/agent" ]; then
-    echo "Building agent in Docker..."
-    $GO_DOCKER go build -o "$BUILD_DIR/${PROJECT_NAME}-agent" ./src/agent
-fi
 
 echo "Testing in Docker (Alpine)..."
 docker run --rm -it \
@@ -37249,7 +36478,6 @@ docker run --rm -it \
 
     chmod +x /app/${PROJECT_NAME}
     [ -f /app/${PROJECT_NAME}-cli ] && chmod +x /app/${PROJECT_NAME}-cli
-    [ -f /app/${PROJECT_NAME}-agent ] && chmod +x /app/${PROJECT_NAME}-agent
 
     echo '=== Version Check ==='
     /app/${PROJECT_NAME} --version
@@ -37351,26 +36579,6 @@ docker run --rm -it \
     fi
 
     echo '=== Agent Tests (if exists) ==='
-    if [ -f /app/${PROJECT_NAME}-agent ]; then
-        /app/${PROJECT_NAME}-agent --version || echo 'FAILED: Agent --version'
-        /app/${PROJECT_NAME}-agent --help || echo 'FAILED: Agent --help'
-
-        # Test binary rename
-        cp /app/${PROJECT_NAME}-agent /app/renamed-agent
-        chmod +x /app/renamed-agent
-        if /app/renamed-agent --help 2>&1 | grep -q 'renamed-agent'; then
-            echo '✓ Agent binary rename works'
-        else
-            echo '✗ FAILED: Agent --help does not show renamed binary name'
-        fi
-
-        # Full Agent functionality tests against server (no token required)
-        echo '--- Agent Full Functionality Tests ---'
-        /app/${PROJECT_NAME}-agent --server http://localhost:64580 status || echo 'Agent status failed'
-        # Project-specific agent commands go here (IDEA.md)
-    else
-        echo 'Agent not built - skipping'
-    fi
 
     echo '=== Stopping Server ==='
     kill \$SERVER_PID
@@ -37433,11 +36641,6 @@ if [ -d "src/client" ]; then
     $GO_DOCKER go build -o "$BUILD_DIR/${PROJECT_NAME}-cli" ./src/client
 fi
 
-# Build agent if exists
-if [ -d "src/agent" ]; then
-    echo "Building agent in Docker..."
-    $GO_DOCKER go build -o "$BUILD_DIR/${PROJECT_NAME}-agent" ./src/agent
-fi
 
 echo "Launching Incus container (Debian + systemd)..."
 incus launch "$INCUS_IMAGE" "$CONTAINER_NAME"
@@ -37455,11 +36658,6 @@ if [ -f "$BUILD_DIR/${PROJECT_NAME}-cli" ]; then
     incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/${PROJECT_NAME}-cli"
 fi
 
-# Copy agent if built
-if [ -f "$BUILD_DIR/${PROJECT_NAME}-agent" ]; then
-    incus file push "$BUILD_DIR/${PROJECT_NAME}-agent" "$CONTAINER_NAME/usr/local/bin/"
-    incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/${PROJECT_NAME}-agent"
-fi
 
 # Ensure curl is available for testing
 incus exec "$CONTAINER_NAME" -- bash -c "command -v curl || apt-get update && apt-get install -y curl" >/dev/null 2>&1
@@ -37573,27 +36771,6 @@ incus exec "$CONTAINER_NAME" -- bash -c "
     fi
 
     echo '=== Agent Tests (if exists) ==='
-    if [ -f /usr/local/bin/${PROJECT_NAME}-agent ]; then
-        ${PROJECT_NAME}-agent --version || echo 'FAILED: Agent --version'
-        ${PROJECT_NAME}-agent --help || echo 'FAILED: Agent --help'
-
-        # Test binary rename
-        cp /usr/local/bin/${PROJECT_NAME}-agent /tmp/renamed-agent
-        chmod +x /tmp/renamed-agent
-        if /tmp/renamed-agent --help 2>&1 | grep -q 'renamed-agent'; then
-            echo '✓ Agent binary rename works'
-        else
-            echo '✗ FAILED: Agent --help does not show renamed binary name'
-        fi
-
-        # Full Agent functionality tests against server
-        echo '--- Agent Full Functionality Tests ---'
-        # Full Agent functionality tests against server (no token required)
-        ${PROJECT_NAME}-agent --server http://localhost:80 status || echo 'Agent status failed'
-        # Project-specific agent commands go here (IDEA.md)
-    else
-        echo 'Agent not installed - skipping'
-    fi
 
     echo '=== Service Stop Test ==='
     systemctl stop ${PROJECT_NAME}  # inside VM — not a host-service mutation
@@ -37637,13 +36814,12 @@ fi
 | **Build method** | ALWAYS use Docker (golang:alpine) with GODIR/GOCACHE |
 | **Go cache** | Use `GODIR="${HOME}/.local/share/go"` and `GOCACHE="${HOME}/.local/share/go/build"` |
 | **Build location** | ALWAYS use temp directory |
-| **Build all components** | Build server, client (if `src/client/` exists), agent (if `src/agent/` exists) |
+| **Build all components** | Build server, client (if `src/client/` exists) |
 | **Test container tools** | Docker alpine MUST install: `apk add --no-cache curl bash file jq` |
-| **Test all binaries** | Test `--version` and `--help` for server, client, and agent if built |
+| **Test all binaries** | Test `--version` and `--help` for server and client if built |
 | **Binary rename test** | Copy binary with new name, verify `--help` shows renamed name (not hardcoded) |
 | **Admin setup** | Login with credentials from server.yml, generate API token |
 | **CLI full functionality** | Test CLI with API token against running server (not just --help) |
-| **Agent full functionality** | Test agent with API token against running server (not just --help) |
 | **API endpoint testing** | MUST test .txt extension and Accept headers on API routes |
 | **Frontend testing** | MUST test smart detection (CLI → formatted text, browser → HTML) |
 | **Content negotiation** | Test JSON, text/plain, and text/html responses |
@@ -37656,7 +36832,7 @@ fi
 
 ### Shell Completions (Built-in)
 
-**ALL binaries (server, agent, client) support shell completions - built into binary, no separate files.**
+**ALL binaries (server, client) support shell completions - built into binary, no separate files.**
 
 See PART 32: "Shell Completions (Built-in)" for full implementation details.
 
@@ -37664,12 +36840,10 @@ See PART 32: "Shell Completions (Built-in)" for full implementation details.
 # Generate and install completions (prints to stdout, user redirects)
 {project_name} --shell completions bash > /etc/bash_completion.d/{project_name}
 {project_name}-cli --shell completions bash > /etc/bash_completion.d/{project_name}-cli
-{project_name}-agent --shell completions bash > /etc/bash_completion.d/{project_name}-agent
 
 # Or use eval in shell rc file
 eval "$({project_name} --shell init)"
 eval "$({project_name}-cli --shell init)"
-eval "$({project_name}-agent --shell init)"
 ```
 
 | Advantage | Description |
@@ -38652,7 +37826,7 @@ All settings can be overridden via environment:
 
 ```bash
 {PROJECT_NAME}_SERVER_PORT=8080
-{PROJECT_NAME}_DATABASE_TYPE=postgres
+{PROJECT_NAME}_DATABASE_TYPE=sqlite
 ```
 
 ## Server Administration
@@ -38751,7 +37925,7 @@ GraphQL playground: [/server/docs/graphql](/server/docs/graphql)
 
 - Android App Links (`/.well-known/assetlinks.json`) if enabled
 - Apple Universal Links / WebCredentials (`/.well-known/apple-app-site-association`) if enabled
-- Autodiscovery, federation, webhooks, or client/agent bootstrap endpoints if the project supports them
+- Autodiscovery, federation, webhooks, or client bootstrap endpoints if the project supports them
 
 ## Operator Notes
 
@@ -38863,7 +38037,7 @@ make test
 
 ### Supported Languages
 
-**All languages below are supported by ALL binaries (server, CLI, agent). No partial support.**
+**All languages below are supported by ALL binaries (server, CLI). No partial support.**
 
 | Code | Language | Direction | Plural Categories |
 |------|----------|-----------|-------------------|
@@ -38966,7 +38140,7 @@ func LanguageMiddleware(next http.Handler) http.Handler {
 
 **Location:** `src/common/i18n/locales/{lang}.json`
 
-**ALL binaries (server, CLI, agent) embed the SAME translation files.** Translations are a shared `src/common/i18n` package — not duplicated, not subsetted.
+**ALL binaries (server, CLI) embed the SAME translation files.** Translations are a shared `src/common/i18n` package — not duplicated, not subsetted.
 
 ```go
 // src/common/i18n/i18n.go
@@ -38982,9 +38156,9 @@ var localeFS embed.FS
 | Rule | Description |
 |------|-------------|
 | **Single source of truth** | `src/common/i18n/locales/` — one set of translation files |
-| **All binaries embed all locales** | Server, CLI, and agent all import `common/i18n` and get the same translations |
-| **Same supported languages** | If the server supports `es`, the CLI and agent also support `es` — no partial support |
-| **Same translation keys** | All binaries use the same key namespace — CLI help text, agent status, and server errors all in one file per language |
+| **All binaries embed all locales** | Server and CLI both import `common/i18n` and get the same translations |
+| **Same supported languages** | If the server supports `es`, the CLI also supports `es` — no partial support |
+| **Same translation keys** | All binaries use the same key namespace — CLI help text and server errors all in one file per language |
 | **No external locale files at runtime** | Translations are compiled into the binary via `go:embed` — no filesystem dependency |
 | **WebUI JavaScript** | Frontend fetches `/locales/{lang}.json` served by the server from the same embedded files |
 
@@ -39632,55 +38806,6 @@ var localeFS embed.FS
       "save_changes": "Guardar cambios"
     },
 
-    "agents": {
-      "title": "Agentes conectados",
-      "add_agent": "Agregar agente",
-      "name": "Nombre",
-      "connected": "Conectado",
-      "last_seen": "Última vez visto",
-      "summary": "Resumen: {online} en línea, {offline} fuera de línea",
-      "system_info": "Información del sistema",
-      "hostname": "Nombre de host:",
-      "os": "SO:",
-      "arch": "Arquitectura:",
-      "agent_version": "Versión del agente:",
-      "tags": "Etiquetas:",
-      "connection": "Conexión",
-      "last_report": "Último informe:",
-      "ip_address": "Dirección IP:",
-      "system_metrics": "Métricas del sistema",
-      "network": "Red:",
-      "load": "Carga:",
-      "refresh_now": "Actualizar ahora",
-      "edit_tags": "Editar etiquetas",
-      "regenerate_token": "Regenerar token",
-      "remove_agent": "Eliminar agente",
-      "requires_confirmation": "Requiere confirmación",
-      "back_to_list": "Volver a la lista",
-      "add_new": "Agregar nuevo agente",
-      "agent_name": "Nombre del agente (opcional):",
-      "name_hint": "Dejar en blanco para usar el nombre de host.",
-      "tags_optional": "Etiquetas (opcional):",
-      "tags_hint": "Separadas por comas. Usadas para filtrar y agrupar.",
-      "token_expiry": "Expiración del token:",
-      "1_hour": "1 hora",
-      "24_hours": "24 horas (recomendado)",
-      "7_days": "7 días",
-      "never_expires": "Nunca expira",
-      "generate_token": "Generar token de agente",
-      "token_generated": "Token de agente generado",
-      "run_command": "Ejecute este comando en la máquina de destino:",
-      "or_manually": "O manualmente:",
-      "token_expires_in": "El token expira en {duration} y solo se puede usar una vez.",
-      "agent_connected": "{name} se ha conectado. El agente ahora envía datos al servidor.",
-      "view_agent": "Ver agente",
-      "dismiss": "Descartar",
-      "remove_confirm": "¿Está seguro de que desea eliminar el agente '{name}'?",
-      "remove_warning": "Esto hará lo siguiente:",
-      "no_cancel": "No, cancelar",
-      "yes_remove": "Sí, eliminar agente"
-    },
-
     "footer": {
       "healthy": "Saludable",
       "degraded": "Degradado",
@@ -39890,48 +39015,6 @@ var localeFS embed.FS
     "requires_privileges": "{action} requiere privilegios elevados.",
     "escalate_prompt": "¿Escalar? [S/n]: ",
     "running_in_mode_label": "Modo"
-  },
-
-  "agent": {
-    "description": "{project_name}-agent {projectversion} - Agente para {project_name}",
-    "usage": "Uso:",
-    "commands": "Comandos:",
-    "flags": "Opciones:",
-    "status": "Estado del agente",
-    "test_connection": "Probar conexión al servidor",
-    "register": "Registro interactivo",
-    "show_help": "Mostrar ayuda",
-    "show_version": "Mostrar versión",
-    "config_dir": "Directorio de configuración",
-    "data_dir": "Directorio de datos",
-    "log_dir": "Directorio de registros",
-    "server_url": "URL del servidor al que conectarse",
-    "auth_token": "Token de autenticación",
-    "app_mode": "Modo de aplicación",
-    "debug_mode": "Habilitar modo de depuración",
-    "color_output": "Salida de color (predeterminado: auto)",
-    "lang_output": "Idioma de salida (predeterminado: auto)",
-    "show_health": "Mostrar salud del agente",
-    "service_mgmt": "Gestión del servicio (install|uninstall|start|stop|restart)",
-    "self_update": "Verificar/realizar actualización",
-    "banner_mode": "Modo: {mode}",
-    "banner_server": "Servidor: {url}",
-    "banner_hostname": "Nombre de host: {hostname}",
-    "banner_tags": "Etiquetas: {tags}",
-    "banner_connected": "Conectado al servidor",
-    "banner_disconnected": "Desconectado del servidor",
-    "banner_reconnecting": "Reconectando...",
-    "register_prompt": "Ejecute este comando en la máquina de destino:",
-    "register_success": "Agente registrado exitosamente",
-    "register_failed": "Error al registrar agente: {error}",
-    "test_success": "Conexión al servidor exitosa",
-    "test_failed": "Error al conectar al servidor: {error}",
-    "token_expired": "Token de agente expirado, se requiere nuevo registro",
-    "collection_started": "Recolección de datos iniciada (intervalo: {interval})",
-    "collection_stopped": "Recolección de datos detenida",
-    "report_sent": "Informe enviado al servidor ({items} elementos)",
-    "report_failed": "Error al enviar informe: {error}, reintentando en {delay}",
-    "offline_buffering": "Servidor no disponible, almacenando en búfer ({count}/{max})"
   },
 
   "version": {
@@ -40174,7 +39257,7 @@ func sendOperatorAlert(recipient, alertType, lang string) {
 | Priority | Source | Example |
 |----------|--------|---------|
 | 1 | `--lang` flag | `--lang es` |
-| 2 | Config file | `lang: es` (in `server.yml`, `cli.yml`, or `agent.yml`) |
+| 2 | Config file | `lang: es` (in `server.yml` or `cli.yml`) |
 | 3 | `LANG` / `LC_ALL` env var | `LANG=es_ES.UTF-8` |
 | 4 | Auto-detect | System locale |
 | 5 | Default | `en` (English) |
@@ -40251,7 +39334,7 @@ func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request,
 |----------|--------|---------|
 | 1 | `?lang=` query param | `/api/v1/endpoint?lang=es` |
 | 2 | `lang` cookie | Set by previous `?lang=` visit |
-| 3 | `Accept-Language` header | Sent by CLI/agent/browser |
+| 3 | `Accept-Language` header | Sent by CLI/browser |
 | 4 | Server default | `en` |
 
 ```bash
@@ -40262,7 +39345,6 @@ func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request,
 # ...
 
 # Agent output in Spanish
-{project_name}-agent --lang es --server https://example.com
 
 # Server banner in Spanish
 LANG=es_ES.UTF-8 {project_name}
@@ -40287,9 +39369,9 @@ LANG=es_ES.UTF-8 {project_name}-cli --help
 1. Copy `src/common/i18n/locales/en.json` to `src/common/i18n/locales/{lang}.json`
 2. Translate ALL keys (no key may be omitted)
 3. Add language code to `config.server.i18n.available_languages`
-4. Language automatically appears in the language selector (WebUI) and `--lang` flag (CLI/agent)
+4. Language automatically appears in the language selector (WebUI) and `--lang` flag (CLI)
 5. Run `make i18n-validate` to verify all keys are present
-6. Rebuild ALL binaries — server, CLI, and agent all get the new language via `go:embed`
+6. Rebuild ALL binaries — server and CLI both get the new language via `go:embed`
 
 ### Build-Time Validation
 
@@ -41996,7 +41078,7 @@ Node: node-abc123
 Cluster: connected
   Status: healthy
   Nodes: 3
-  Database: postgres://db.example.com/myapp
+  Database: sqlite:///data/db/sqlite/server.db
 
 Tor Hidden Service: Connected
   Address: abcd1234...wxyz.onion
@@ -42016,19 +41098,17 @@ Tor Hidden Service: Connected
 
 
 
-# PART 32: CLIENT & AGENT
+# PART 32: CLIENT
 
 ## Overview
 
-**client is REQUIRED for all projects. Agent is PER-PROJECT determination.**
+**client is REQUIRED for all projects.**
 
 Every server MUST have a companion client. The client provides terminal-based access to all server functionality and is essential for:
 - Scripting and automation
 - Headless/SSH environments
 - CI/CD pipelines
 - Power users who prefer terminal
-
-**Agent remains optional** - only needed for monitoring, remote management, or similar projects (see "When Agent is Needed" section).
 
 When a project includes a client, it provides a terminal-based interface for interacting with the server. The client supports both standard command-line usage and an interactive TUI (Terminal User Interface) mode.
 
@@ -42042,7 +41122,7 @@ When a project includes a client, it provides a terminal-based interface for int
 
 ## Binary Naming Rules
 
-**Same rules apply to ALL binaries (server, agent, client). See PART 8 for full details.**
+**Same rules apply to ALL binaries (server, client). See PART 8 for full details.**
 
 | Rule | Display | Internal |
 |------|---------|----------|
@@ -42104,9 +41184,9 @@ userAgent := fmt.Sprintf("%s-cli/%s", projectName, version)
 
 The CLI never adds URLs that weren't in the autodiscover response — operators control which cluster nodes are exposed.
 
-## CLI Auto-Update (Same Pattern as Server Self-Update + Agent)
+## CLI Auto-Update (Same Pattern as Server Self-Update)
 
-**The CLI follows the same flow as the server's self-update (PART 22) and the agent's auto-update (PART 32 above): check version via autodiscover, download from the server, verify SHA-256, atomic replace, restart.**
+**The CLI follows the same flow as the server's self-update (PART 22): check version via autodiscover, download from the server, verify SHA-256, atomic replace, restart.**
 
 | Step | Action |
 |------|--------|
@@ -42115,13 +41195,13 @@ The CLI never adds URLs that weren't in the autodiscover response — operators 
 | 3. Download | Fetch `{base}/cli/binaries/{project_name}-cli-{os}-{arch}` over HTTPS. Save to a tmp path (`/tmp/{project_org}/{project_name}-XXXXXX/cli.update.tmp` per the spec's tmp-dir rules). |
 | 4. Verify SHA-256 | Same `verifyChecksum()` from PART 22 — match against the `sha256` from autodiscover. Mismatch → delete temp, abort with stderr error. |
 | 5. Atomic swap | Same platform-specific `replaceBinary()` from PART 22. The CLI is user-installed (typically `/usr/local/bin/` or `~/bin/`) — if the user lacks write permission to the install path, CLI prints "you do not have permission to update {binary_path}; ask your admin or move the binary to a writable path" and exits cleanly. |
-| 6. Re-exec | After successful replace, CLI `exec`s the new binary with the original argv to continue the in-progress command. (Server / agent restart via service manager; CLI just re-execs since it's foreground.) |
+| 6. Re-exec | After successful replace, CLI `exec`s the new binary with the original argv to continue the in-progress command. (Server restarts via service manager; CLI just re-execs since it's foreground.) |
 
 **Configuration (`cli.yml`):**
 
 ```yaml
 update:
-  auto: false                # default false for CLI (interactive prompt unless explicitly opted in). Server / agent default true.
+  auto: false                # default false for CLI (interactive prompt unless explicitly opted in). Server default true.
   check_interval: per_invocation   # CLI is short-lived; checks once per command. No background poll.
   channel: stable
 ```
@@ -42130,7 +41210,7 @@ update:
 
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
-| `/api/autodiscover` | GET | None or bearer | Returns `cli_versions` (each entry has `version` + `sha256`) and `cli_min_version` alongside agent and server info |
+| `/api/autodiscover` | GET | None or bearer | Returns `cli_versions` (each entry has `version` + `sha256`) and `cli_min_version` alongside server info |
 | `{base}/cli/binaries/{project_name}-cli-{os}-{arch}` | GET | None (public — CLIs are user-distributed) OR bearer if `cli.binary_download.require_auth: true` is set | Streams the binary |
 
 **Why CLI download default is unauthenticated:** the CLI is the entry point for new users. Forcing auth on the download means they need a token before they can install the tool that obtains the token. Operators who run a private deployment can flip `cli.binary_download.require_auth` to `true`.
@@ -42348,9 +41428,8 @@ if env.IsAutoDetectDisplayModeGUI() {
 |--------|-----|-----|-----|----------|
 | **Server** | Status window | Status banner | Commands | Default (daemon) |
 | **CLI** | ✅ Full app | ✅ Full app (default) | ✅ Commands | ❌ Error |
-| **Agent** | Status window | Status banner | Commands | Default (service) |
 
-**Server/Agent just show status banners. CLI is the only full-featured TUI/GUI app.**
+**Server just shows status banners. CLI is the only full-featured TUI/GUI app.**
 
 ### First-Run / Double-Click Behavior
 
@@ -42360,11 +41439,10 @@ if env.IsAutoDetectDisplayModeGUI() {
 |--------|-----------|---------------------|
 | **Server** | Generate default `server.yml` if absent, show status banner | Edit `server.yml` directly |
 | **CLI** | Setup wizard (GUI/TUI) | Setup wizard (no WebUI for CLI) |
-| **Agent** | Start with connection string, show status banner | Server provides connection string |
 
-### Server & Agent: Status Banner Only
+### Server: Status Banner Only
 
-**Server and Agent detect environment and show appropriate status banner:**
+**Server detects environment and shows appropriate status banner:**
 
 | Environment | Banner Type |
 |-------------|-------------|
@@ -42374,14 +41452,9 @@ if env.IsAutoDetectDisplayModeGUI() {
 | **Container** | Log output only |
 | **Headless/daemon** | Log to file |
 
-**No built-in TUI/GUI wizard for Server or Agent binaries.** They just run:
+**No built-in TUI/GUI wizard for the Server binary.** It just runs:
 - **Server**: Configured by editing `server.yml` directly; generates a default `server.yml` on first run
-- **Agent**: Configured via connection string provided by the server API
 
-**Agent connection string example (obtained from server API):**
-```
-{project_name}-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
-```
 
 ### CLI: Full TUI/GUI App with Setup Wizard
 
@@ -42410,7 +41483,6 @@ Why CLI needs a setup wizard:
 |--------|-------------------|---------------------|
 | **Server** | Start immediately, log output | Env vars, mounted config, or defaults |
 | **CLI** | Requires `--server` flag | Flag, env var, or mounted config |
-| **Agent** | Requires connection string | `--connect` flag or env var |
 
 ### GUI/TUI Requirements for CLI (NON-NEGOTIABLE)
 
@@ -42584,27 +41656,16 @@ User double-clicks {project_name}-cli:
 3. Launch full TUI/GUI application
 ```
 
-**Agent First-Run (NO setup wizard):**
-
-```
-Agent is configured via server-provided connection string:
-
-{project_name}-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
-
-First run without connection string:
-- Show error: "No connection configured. Use --connect flag with server-provided URL."
-- Agent does NOT have interactive setup wizard
-```
 
 **Platform-Specific Double-Click Behavior:**
 
-| Platform | Server | CLI | Agent |
-|----------|--------|-----|-------|
-| **Windows** | Console opens, banner shown, runs in foreground | Console opens, setup wizard or TUI | Console opens, error (needs --connect) |
-| **macOS (Terminal)** | Banner shown, runs in foreground | Setup wizard or TUI | Error (needs --connect) |
-| **macOS (Finder)** | ⚠️ Opens Terminal briefly, closes | ⚠️ Opens Terminal briefly, closes | ⚠️ Opens Terminal briefly, closes |
-| **Linux (Terminal)** | Banner shown, runs in foreground | Setup wizard or TUI | Error (needs --connect) |
-| **Linux (File Manager)** | Depends on DE settings | Depends on DE settings | Depends on DE settings |
+| Platform | Server | CLI |
+|----------|--------|-----|
+| **Windows** | Console opens, banner shown, runs in foreground | Console opens, setup wizard or TUI |
+| **macOS (Terminal)** | Banner shown, runs in foreground | Setup wizard or TUI |
+| **macOS (Finder)** | ⚠️ Opens Terminal briefly, closes | ⚠️ Opens Terminal briefly, closes |
+| **Linux (Terminal)** | Banner shown, runs in foreground | Setup wizard or TUI |
+| **Linux (File Manager)** | Depends on DE settings | Depends on DE settings |
 
 **macOS Finder Note:** Raw binaries don't persist when double-clicked from Finder. Users should either:
 1. Run from Terminal: `./projectname-cli`
@@ -42649,7 +41710,7 @@ func RunSetupWizard() error {
     })
 }
 
-// Called at CLI startup only (Agent uses --connect flag, not wizard)
+// Called at CLI startup only
 func EnsureConfigured() error {
     cfg, _ := config.LoadCLIConfig()
     if cfg == nil || cfg.Server == "" {
@@ -43251,7 +42312,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
     return m, nil
 }
 
-// Server/Agent: Handle window resize for console output
+// Server: Handle window resize for console output
 // Platform-specific implementations below
 
 // --- watch_unix.go ---
@@ -43760,7 +42821,7 @@ server:
 
 # Authentication
 auth:
-  token: ""                        # API token (agt_xxx or api_key, see PART 11)
+  token: ""                        # API token (see PART 11)
   token_file: ""                   # Read token from file instead
 
 # Output preferences
@@ -44084,7 +43145,7 @@ defaults:
 
 ### Shell Completions (Built-in, NON-NEGOTIABLE)
 
-**ALL binaries (server, agent, client) MUST support shell completions. Built into binary - no separate files.**
+**ALL binaries (server, client) MUST support shell completions. Built into binary - no separate files.**
 
 | Flag | Description |
 |------|-------------|
@@ -44127,7 +43188,6 @@ eval "$({project_name} --shell init bash)"      # if $SHELL=/bin/bash
 # Explicit shell specification
 {project_name} --shell completions bash > ~/.local/share/bash-completion/completions/{project_name}
 {project_name}-cli --shell completions zsh > ~/.zsh/completions/_{project_name}-cli
-{project_name}-agent --shell completions fish > ~/.config/fish/completions/{project_name}-agent.fish
 {project_name} --shell completions powershell > ~/Documents/PowerShell/completions/{project_name}.ps1
 
 # Auto-detect shell (omit SHELL argument)
@@ -44137,7 +43197,6 @@ eval "$({project_name} --shell init)"              # auto-detect in eval
 
 # Specific shell init
 eval "$({project_name}-cli --shell init bash)"
-eval "$({project_name}-agent --shell init zsh)"
 {project_name} --shell init fish | source
 ```
 
@@ -44146,7 +43205,6 @@ eval "$({project_name}-agent --shell init zsh)"
 # ~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish, etc.
 eval "$({project_name} --shell init)"        # server (auto-detect)
 eval "$({project_name}-cli --shell init)"    # client (auto-detect)
-eval "$({project_name}-agent --shell init)"  # agent (auto-detect)
 ```
 
 **Why built-in (not separate files):**
@@ -44712,9 +43770,9 @@ func detectInput(args []string) (content string, source string) {
 ### Local Development (Makefile + Docker)
 
 ```bash
-# Quick dev build (server + CLI + agent if exist)
+# Quick dev build (server + CLI if exist)
 make dev
-# Output: ${TMPDIR}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX/{project_name}, {project_name}-cli, {project_name}-agent
+# Output: ${TMPDIR}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX/{project_name}, {project_name}-cli
 
 # Production test build
 make local
@@ -45219,926 +44277,6 @@ Is your target user comfortable in a terminal?
 | Mobile-only users | ❌ No |
 
 ---
-
-## Agent Binary (OPTIONAL - NON-NEGOTIABLE WHEN IMPLEMENTED)
-
-**Agent is OPTIONAL and only needed for very specific project types.** Most projects do NOT need an agent.
-
-### When Agent is Needed vs Not Needed
-
-**Key Question: Does the server need to reach INTO remote machines to collect data or execute commands?**
-
-| Scenario | Agent Needed? | Why |
-|----------|---------------|-----|
-| Server collects CPU/RAM/disk from 50 machines | ✅ YES | Agent runs on each machine, pushes metrics |
-| Users upload files via web form | ❌ NO | User initiates, server receives |
-| API serves random quotes | ❌ NO | Server has all data locally |
-| Execute shell commands on remote servers | ✅ YES | Agent receives commands, executes locally |
-| CI/CD pipeline runner on build machines | ✅ YES | Agent pulls jobs, runs builds |
-| Pastebin with user submissions | ❌ NO | Pull-based, users push data |
-| Centralized log aggregation | ✅ YES | Agent tails local logs, ships to server |
-| Weather API (fetches from external sources) | ❌ NO | Server fetches, no machine access needed |
-| Backup orchestration across servers | ✅ YES | Agent runs backup commands locally |
-| Git hosting (Gitea, Forgejo) | ❌ NO | Users push/pull via git protocol |
-
-### Project Examples: Agent vs No Agent
-
-**Projects that DO need an agent:**
-
-| Project Type | Example Names | What Agent Does |
-|--------------|---------------|-----------------|
-| **System Monitoring** | Zabbix, Nagios, Beszel, Netdata | Collects CPU, RAM, disk, network stats from each machine |
-| **Remote Desktop/Shell** | MeshCentral, RustDesk, Teleport | Provides remote access tunnel from the machine |
-| **Log Management** | Fluentd, Filebeat, Vector, Loki | Tails log files, ships to central server |
-| **CI/CD Runners** | GitLab Runner, GitHub Actions Runner, Drone | Pulls jobs from server, executes builds |
-| **Backup Agents** | Restic, Borg, Velero, Bacula | Runs backup commands, ships data to server |
-| **Config Management** | Puppet Agent, Salt Minion, CFEngine | Pulls and applies configuration from server |
-| **Security Scanning** | OSSEC, Wazuh, Falco, Lynis | Monitors files, processes, runs audits |
-| **Container Orchestration** | Kubernetes Kubelet, Nomad Client | Runs containers as directed by control plane |
-| **Network Monitoring** | Prometheus Node Exporter, Telegraf | Exposes machine metrics for scraping |
-| **Update Management** | Landscape Client, WSUS Client | Checks for and applies updates |
-
-**Projects that do NOT need an agent:**
-
-| Project Type | Example Names | Why No Agent |
-|--------------|---------------|--------------|
-| **Content APIs** | Jokes API, Quotes API, Facts API | Data is on server, clients just fetch |
-| **Pastebin/URL Shortener** | Hastebin, YOURLS, Shlink | Users push content, server stores it |
-| **Git Hosting** | Gitea, Forgejo, GitLab | Git protocol handles push/pull |
-| **Image Hosting** | Immich, Photoprism, Piwigo | Users upload, server stores/serves |
-| **Chat/Forum** | Mattermost, Discourse, Flarum | Users connect via web/API |
-| **Wiki/Docs** | Wiki.js, BookStack, Outline | Users edit via web interface |
-| **File Sharing** | Nextcloud, Seafile, FileBrowser | Web/WebDAV uploads, no machine access |
-| **Media Server** | Jellyfin, Plex, Navidrome | Serves content from local storage |
-| **Auth/SSO** | Authentik, Authelia, Keycloak | Applications connect to auth server |
-| **Status Pages** | Uptime Kuma, Gatus, Cachet | Server checks endpoints (pull-based) |
-
-### Agent Architecture Decision Tree
-
-```
-Does your server need to:
-│
-├─► Collect data FROM remote machines (metrics, logs, files)?
-│   └─► YES → Agent needed (runs on each machine, pushes to server)
-│
-├─► Execute commands ON remote machines (shell, backup, updates)?
-│   └─► YES → Agent needed (receives commands from server)
-│
-├─► Run jobs/tasks ON remote machines (builds, scans)?
-│   └─► YES → Agent needed (pulls jobs, executes locally)
-│
-├─► Provide remote access TO machines (shell, desktop, file transfer)?
-│   └─► YES → Agent needed (establishes reverse tunnel)
-│
-└─► Just serve an API/web interface that clients call?
-    └─► NO agent - users/clients connect TO your server
-```
-
-### Agent vs Webhook/API Callback
-
-**Don't confuse agents with webhooks:**
-
-| Mechanism | Direction | Use Case |
-|-----------|-----------|----------|
-| **Agent** | Machine ↔ Server (persistent) | Continuous metrics, remote commands, bidirectional |
-| **Webhook** | External → Server (triggered) | Event notifications, CI triggers |
-| **API Poll** | Server → External (scheduled) | Weather data, external service status |
-
-**Agent = persistent daemon on remote machine communicating with central server**
-
-### Agent Communication Patterns (CRITICAL)
-
-**Agents can SEND, RECEIVE, or BOTH depending on the project type.**
-
-| Pattern | Direction | Description |
-|---------|-----------|-------------|
-| **Send Only** | Agent → Server | Agent pushes data to server (metrics, logs, status) |
-| **Receive Only** | Server → Agent | Agent receives commands/config from server |
-| **Bidirectional** | Agent ↔ Server | Agent both sends data AND receives commands |
-
-#### Send Only (Agent → Server)
-
-Agent collects local data and pushes to server. Server does NOT send commands back.
-
-| Project Type | Examples | What Agent Sends |
-|--------------|----------|------------------|
-| **Metrics Collection** | Beszel Agent, Telegraf, collectd | CPU, RAM, disk, network stats |
-| **Log Shipping** | Filebeat, Fluentd, Vector, Promtail | Log entries, parsed logs |
-| **Health Reporting** | Consul Agent (client mode), Serf | Node health, service status |
-| **Event Streaming** | Kafka producers, NATS publishers | Application events |
-| **Uptime Monitoring** | Uptime Kuma push mode, Healthchecks.io | Heartbeats, alive signals |
-
-**Characteristics:**
-- Simple, stateless agents
-- Server is passive receiver
-- Agent initiates all communication
-- No command execution on agent
-- Lower security risk (no remote code execution)
-
-#### Receive Only (Server → Agent)
-
-Agent receives configuration or commands from server. Agent does NOT push data back (or minimal status only).
-
-| Project Type | Examples | What Agent Receives |
-|--------------|----------|---------------------|
-| **Config Management (pull)** | Puppet Agent, CFEngine | Configuration manifests, policies |
-| **Update Distribution** | WSUS Client, Landscape Client | Package updates, patches |
-| **DNS Updates** | Dynamic DNS clients | Zone changes, record updates |
-| **Certificate Distribution** | Vault Agent, cert-manager | TLS certificates, secrets |
-| **Feature Flags** | LaunchDarkly SDK, Unleash | Flag states, targeting rules |
-
-**Characteristics:**
-- Agent polls server for changes
-- Server pushes config/commands
-- Minimal feedback (success/failure only)
-- Agent applies changes locally
-
-#### Bidirectional (Agent ↔ Server) - MOST COMMON
-
-Agent both sends data AND receives commands. Full two-way communication.
-
-| Project Type | Examples | Agent Sends | Agent Receives |
-|--------------|----------|-------------|----------------|
-| **CI/CD Runners** | Jenkins Agent, GitLab Runner, GitHub Actions Runner, Drone Runner, Buildkite Agent | Build logs, artifacts, test results, status | Job definitions, build commands, environment vars |
-| **Remote Management** | MeshCentral Agent, RustDesk, Teleport, Apache Guacamole | Screen capture, file data, command output | Mouse/keyboard input, file transfers, shell commands |
-| **Container Orchestration** | Kubernetes Kubelet, Nomad Client, Docker Swarm Agent | Pod status, resource usage, container logs | Pod specs, deployments, scaling commands |
-| **Backup Orchestration** | Veeam Agent, Commvault, Bacula File Daemon | Backup status, file metadata, transfer progress | Backup schedules, retention policies, restore commands |
-| **Security/SIEM** | Wazuh Agent, OSSEC, Velociraptor | Security events, file integrity, process info | Detection rules, response actions, hunt queries |
-| **Config Management (push)** | SaltStack Minion, Ansible (with callback) | Execution results, state reports | State definitions, ad-hoc commands |
-| **Edge Computing** | Azure IoT Edge, AWS Greengrass | Telemetry, processed data | Deployment manifests, ML models |
-| **Database Replication** | MySQL Replica, PostgreSQL Standby | Replication lag, health status | WAL segments, replication commands |
-
-**Characteristics:**
-- Persistent connection (WebSocket, gRPC, or long-poll)
-- Full command-and-control capability
-- Rich status reporting
-- Higher complexity and security considerations
-- Requires authentication and authorization
-
-### Communication Pattern Decision Matrix
-
-| If your agent needs to... | Pattern | Example |
-|---------------------------|---------|---------|
-| Only report metrics/logs | **Send Only** | Beszel, Filebeat |
-| Only receive config updates | **Receive Only** | Puppet, WSUS |
-| Report status AND execute commands | **Bidirectional** | Jenkins, MeshCentral |
-| Provide remote shell/desktop | **Bidirectional** | RustDesk, Teleport |
-| Run builds/jobs on demand | **Bidirectional** | GitLab Runner, Drone |
-| Execute backups on schedule from server | **Bidirectional** | Veeam, Bacula |
-| Only push heartbeats | **Send Only** | Healthchecks.io |
-| Apply configurations pulled from server | **Receive Only** | Puppet, CFEngine |
-| Both apply config AND report detailed state | **Bidirectional** | Salt, Ansible+callback |
-
-### Security Implications by Pattern
-
-| Pattern | Risk Level | Key Concerns |
-|---------|------------|--------------|
-| **Send Only** | Low | Data exfiltration, DoS via flood |
-| **Receive Only** | Medium | Malicious config, unauthorized updates |
-| **Bidirectional** | High | Remote code execution, lateral movement |
-
-**Bidirectional agents require:**
-- Strong authentication (mTLS, tokens)
-- Authorization (what commands can execute)
-- Audit logging (who did what)
-- Input validation (prevent injection)
-- Sandboxing where possible
-
-### Determining If YOUR Project Needs Agent
-
-Answer these questions for your specific project:
-
-1. **Where does the data originate?**
-   - On user devices → No agent (users submit data)
-   - On remote servers you manage → Agent likely needed
-
-2. **Who initiates the connection?**
-   - User/client initiates → No agent (standard API)
-   - Server needs to reach machines → Agent needed
-
-3. **What runs on remote machines?**
-   - Nothing (just users with browsers) → No agent
-   - Background daemon collecting/executing → Agent needed
-
-4. **Is it push or pull?**
-   - Server pulls from external APIs → No agent
-   - Machines push data to server → Agent needed
-
-### Project Types That Need Agent
-
-| Category | Examples | Agent Purpose |
-|----------|----------|---------------|
-| **Monitoring** | Zabbix, Nagios, Prometheus Node Exporter | Machine metrics, health checks |
-| **Remote Management** | MeshCentral, RustDesk, TeamViewer | Remote shell, desktop, file transfer |
-| **System Monitor** | Beszel, Netdata, Glances | Real-time system stats |
-| **Log Shipping** | Fluentd, Filebeat, Vector | Tail and forward logs |
-| **Backup** | Restic, Borg, Duplicati | Execute local backups |
-| **Config Management** | Puppet, Ansible (pull mode), Salt | Apply configurations |
-| **Security/Compliance** | OSSEC, Wazuh, Lynis | Security scanning, audit |
-
-### Agent Runs Directly on the System, NOT Container
-
-**Agents MUST run directly on the target system, not in containers.**
-
-| Deployment | Supported | Reason |
-|------------|-----------|--------|
-| Direct on system | ✅ Yes | Full system access, accurate metrics |
-| systemd service | ✅ Yes | Preferred for Linux |
-| Windows service | ✅ Yes | Preferred for Windows |
-| launchd daemon | ✅ Yes | Preferred for macOS |
-| Docker container | ❌ No | Limited system visibility |
-| Kubernetes pod | ❌ No | Cannot monitor system properly |
-
-### Overview
-
-| Attribute | Value |
-|-----------|-------|
-| Binary naming | `{project_name}-agent-{os}-{arch}` |
-| Examples | `monitor-agent-linux-amd64`, `monitor-agent-windows-arm64` |
-| Versioning | Same as server and client |
-| Build | Part of same Makefile (`make build` builds all if `src/agent/` exists) |
-| Config file | `{config_dir}/agent.yml` (same dir as server) |
-| Data directory | `{data_dir}/` (same as server) |
-| Database | `{data_dir}/db/agent.db` (if needed, same dir as server) |
-| Privileges | **Root/Admin required** (for full system access) |
-| Update mechanism | Same as client (self-update) |
-
-### Agent Binary Structure (Same as Server)
-
-**Agent shares the same CLI structure, banner, and modes as the server binary.**
-
-| Component | Server | Agent | Notes |
-|-----------|--------|-------|-------|
-| Startup banner | ✅ | ✅ | Responsive, terminal-aware |
-| Mode line | ✅ | ✅ | Shows production/development |
-| Debug flag | ✅ | ✅ | Enables verbose logging |
-| Service management | ✅ | ✅ | install/uninstall/start/stop |
-| Self-update | ✅ | ✅ | --update flag |
-| WebUI | ✅ | ❌ | Agent is headless |
-
-### Agent Startup Banner
-
-```
-┌────────────────────────────────────────┐
-│  ███╗   ███╗ ██████╗ ███╗   ██╗        │
-│  ████╗ ████║██╔═══██╗████╗  ██║        │
-│  ██╔████╔██║██║   ██║██╔██╗ ██║        │
-│  ██║╚██╔╝██║██║   ██║██║╚██╗██║        │
-│  ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║        │
-│  ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝        │
-│                                  AGENT │
-└────────────────────────────────────────┘
-
-🤖 monitor-agent v1.0.0
-🔒 Running in mode: production
-
-📡 Server: https://monitor.example.com
-🏷️  Hostname: web-server-01
-🏷️  Tags: production, web-tier
-
-✅ Connected to server
-```
-
-**Compact banner (60-79 cols):**
-```
-🤖 monitor-agent v1.0.0
-🔒 Mode: production
-📡 https://monitor.example.com
-🏷️  web-server-01
-✅ Connected
-```
-
-**Minimal banner (<60 cols):**
-```
-monitor-agent 1.0.0
-web-server-01 → monitor.example.com
-Connected
-```
-
-**Plain banner (NO_COLOR / TERM=dumb):**
-```
-monitor-agent v1.0.0
-Mode: production
-Server: https://monitor.example.com
-Hostname: web-server-01
-Tags: production, web-tier
-[OK] Connected to server
-```
-
-### Agent Flags
-
-**Same flag style as server binary, EXCEPT no `--port` or `--address` (agents don't serve web).**
-
-| Server Flag | Agent | Reason |
-|-------------|-------|--------|
-| `--port` | ❌ No | Agent doesn't serve HTTP |
-| `--address` | ❌ No | Agent doesn't listen for connections |
-| `--config` | ✅ Yes | Same config directory |
-| `--data` | ✅ Yes | Same data directory |
-| `--status` | ✅ Yes | Health check (exit 0=healthy, 1=unhealthy) |
-| `--service` | ✅ Yes | Service management |
-| `--update` | ✅ Yes | Self-update |
-
-```bash
-# Information
---help, -h                    # Show help
---version, -v                 # Show version (same format as server)
---shell completions [SHELL]   # Print shell completions (auto-detect if SHELL omitted)
---shell init [SHELL]          # Print shell init command (auto-detect if SHELL omitted)
---status                      # Show status and health (exit 0=healthy, 1=unhealthy)
-
-# Configuration
---config {path}               # Config directory (default: {config_dir})
---data {path}                 # Data directory override
---log {path}                  # Log directory override
-
-# Connection (can also be set in agent.yml)
---server {url}                # Server URL to connect to
---token {token}               # Authentication token (from server)
-
-# Runtime
---mode {production|development}  # Force mode (auto-detected by default)
---debug                       # Enable debug logging (implies development features)
---color {always|never|auto}   # Color output (default: auto, respects NO_COLOR)
---lang {code}                 # Language for output (default: auto, from LANG env)
-
-# Commands (subcommands like server)
-status                        # Show agent status
-test                          # Test server connection
-register                      # Interactive registration with server
-
-# Service management (same as server)
---service {install|uninstall|start|stop|restart|status}
-
-# Updates (same as server/CLI)
---update [check|yes]          # Check for or perform self-update
-```
-
-### Agent --help Output
-
-```bash
-$ {project_name}-agent --help
-{project_name}-agent {projectversion} - Agent for {project_name}
-
-Usage:
-  {project_name}-agent [flags]
-  {project_name}-agent [command]
-
-Commands:
-  status                        Show agent status
-  test                          Test server connection
-  register                      Interactive registration
-
-Flags:
-  -h, --help                        Show help
-  -v, --version                     Show version
-      --shell completions [SHELL]   Print shell completions (auto-detect if SHELL omitted)
-      --shell init [SHELL]          Print shell init command (auto-detect if SHELL omitted)
-      --shell --help                Show shell integration help
-
-      --config DIR                  Config directory
-      --data DIR                    Data directory
-      --log DIR                     Log directory
-      --server URL                  Server URL to connect to
-      --token TOKEN                 Authentication token
-
-      --mode {production|development}  Application mode
-      --debug                       Enable debug mode
-      --color {always|never|auto}   Color output (default: auto)
-      --lang CODE                   Language for output (default: auto)
-      --status                      Show agent health
-
-      --service CMD                 Service management (install|uninstall|start|stop|restart)
-      --update [CMD]                Check/perform self-update
-
-Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
-```
-
-### Agent Commands
-
-**Agent has subcommands similar to server:**
-
-```bash
-# Default: run agent (foreground)
-{project_name}-agent
-
-# Status: show current agent status
-{project_name}-agent status
-  Agent: monitor-agent v1.0.0
-  Hostname: web-server-01
-  Server: https://monitor.example.com
-  Status: Connected (5m 32s)
-  Last Report: 2025-01-15 10:30:00
-  Next Report: 2025-01-15 10:31:00
-
-# Test: verify server connection
-{project_name}-agent test
-  Testing connection to https://monitor.example.com...
-  ✅ Connection successful
-  ✅ Agent registered
-
-# Connect: one-liner (no token required — open API)
-{project_name}-agent --server https://monitor.example.com
-  Connecting to https://monitor.example.com...
-  ✅ Connection successful
-  ✅ Agent registered as "web-server-01"
-
-  Config saved to: /etc/projectorg/projectname/agent.yml
-  Installing service...
-  ✅ Service installed and started
-
-  Agent is now sending data to server for admin scope.
-
-# Service management
-{project_name}-agent --service install   # Install as system service
-{project_name}-agent --service start     # Start service
-{project_name}-agent --service stop      # Stop service
-{project_name}-agent --service status    # Show service status
-{project_name}-agent --service uninstall # Remove service
-```
-
-### Agent Setup Process
-
-**Agent setup requires no tokens — the server is an open API:**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    AGENT SETUP FLOW                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. On Target Machine (one command)                         │
-│     └─→ Run: {project_name}-agent --server {url}            │
-│     └─→ Agent connects, registers, saves config             │
-│     └─→ Server logs: "{name} has connected"                 │
-│                                                             │
-│  2. Agent auto-starts and sends data                        │
-│     └─→ Agent installs itself as service (if root)          │
-│     └─→ Begins sending data to server                       │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Server generates the connect command:**
-```go
-func GenerateAgentCommand(serverURL string) string {
-    return fmt.Sprintf("%s-agent --server %s", projectName, serverURL)
-}
-```
-
-### Agent Registration API
-
-**Single endpoint — no token required:**
-
-**Endpoint:** `POST /api/{api_version}/agents/register`
-
-**Request:**
-```json
-{
-  "hostname": "web-server-01",
-  "os": "linux",
-  "arch": "amd64",
-  "version": "1.0.0",
-  "tags": ["production", "web-tier"]
-}
-```
-
-**Response (success):**
-```json
-{
-  "ok": true,
-  "data": {
-    "agent_id": "uuid-here",
-    "name": "web-server-01",
-    "server_time": "2025-01-15T10:00:00Z"
-  }
-}
-```
-
-### agent.yml Configuration
-
-**EVERYTHING must be configurable via agent.yml. Sane defaults match server where applicable.**
-
-**File: `{config_dir}/agent.yml`** (same directory as server.yml)
-
-```yaml
-# /etc/{project_org}/{internal_name}/agent.yml (root)
-# ~/.config/{project_org}/{internal_name}/agent.yml (user)
-# Agent configuration - ALL options with defaults
-
-# Language for agent output and API requests
-lang: auto                           # auto = detect from env, or "en", "es", etc.
-
-# Server connection
-server:
-  primary: ""                      # Server URL (required, set during registration)
-  cluster: []                      # Auto-discovered cluster nodes
-  api_version: v1                  # API version prefix (default: v1, must match server)
-  timeout: 30s                     # Request timeout (match server default)
-  retry: 3                         # Retry attempts on failure
-  retry_delay: 5s                  # Delay between retries
-  reconnect_delay: 10s             # Delay before reconnect attempt
-
-# Authentication
-auth:
-  token: ""                        # Agent token ({scope}_agt_xxx, see PART 11)
-  token_file: ""                   # Read token from file instead
-
-# Agent identity
-identity:
-  hostname: ""                     # Hostname (auto-detect if empty)
-  display_name: ""                 # Friendly name (defaults to hostname)
-  tags: []                         # Tags for grouping ["production", "web-tier"]
-  labels: {}                       # Key-value labels {environment: prod, tier: web}
-
-# Data collection (project-specific)
-collection:
-  enabled: true                    # Enable data collection
-  interval: 60s                    # Collection interval
-  batch_size: 100                  # Max items per batch
-  buffer_size: 1000                # Max buffered items if offline
-
-# Logging
-logging:
-  level: info                      # debug, info, warn, error (match server default)
-  file: ""                         # Log file path (empty = {log_dir}/agent.log)
-  max_size: 10MB                   # Max log file size (match server default)
-  max_files: 5                     # Max log files to keep (match server default)
-
-# Health reporting
-health:
-  enabled: true                    # Report agent health to server
-  interval: 30s                    # Health check interval
-
-# Debug
-debug: false                       # Enable debug mode (same as --debug)
-
-# Mode (auto-detected, can override)
-mode: ""                           # production, development (empty = auto-detect)
-```
-
-**Config precedence (highest to lowest):**
-
-| Priority | Source | Example |
-|----------|--------|---------|
-| 1 | CLI flag | `--server https://...` |
-| 2 | Environment variable | `{PROJECT_NAME}_AGENT_SERVER=https://...` |
-| 3 | Config file | `server.primary: https://...` |
-| 4 | Compiled default | (none for server, must be configured) |
-
-**Environment variable mapping:**
-```bash
-# Pattern: {PROJECT_NAME}_AGENT_{KEY} or {PROJECT_NAME}_{KEY}
-{PROJECT_NAME}_AGENT_SERVER_PRIMARY="https://example.com"
-{PROJECT_NAME}_AGENT_HOSTNAME="web-server-01"
-{PROJECT_NAME}_AGENT_COLLECTION_INTERVAL=30
-{PROJECT_NAME}_DEBUG=true
-```
-
-### Agent Cluster Failover
-
-**Agents MUST support automatic cluster failover. Everything is automatic.**
-
-| Feature | Behavior |
-|---------|----------|
-| **Node discovery** | Agent calls `/api/autodiscover` on connect |
-| **Auto-update** | `server.cluster` updated from `cluster.nodes` in response |
-| **Failover** | If primary fails, try cluster nodes in order |
-| **Reconnect** | When primary recovers, switch back automatically |
-| **No manual config** | Cluster list maintained automatically |
-
-**Failover Flow:**
-```
-1. Agent connects to server.primary
-2. Agent calls GET /api/{api_version}/server/healthz
-3. Agent reads cluster.primary and cluster.nodes from response
-4. Agent saves to server.primary and server.cluster in agent.yml
-5. If primary fails:
-   a. Try each node in server.cluster
-   b. First successful = new active connection
-   c. Continue trying primary in background
-6. When primary recovers:
-   a. Switch back to primary
-   b. Update cluster list (may have changed)
-```
-
-**Agent Startup Sequence:**
-```
-1. Load agent.yml
-2. Try server.primary
-3. If fails → try server.cluster nodes
-4. Once connected → GET /api/{api_version}/server/healthz
-5. Update server.primary and server.cluster from response
-6. Begin normal operation
-```
-
-### Shared Directories with Server
-
-**Agent uses the SAME directory structure as server:**
-
-| Directory | Path | Shared With |
-|-----------|------|-------------|
-| Config | `{config_dir}/` | Server (agent.yml alongside server.yml) |
-| Data | `{data_dir}/` | Server |
-| Database | `{data_dir}/db/agent.db` | Server uses `server.db` in same dir |
-| Logs | `{log_dir}/agent.log` | Server uses `server.log` in same dir |
-| Cache | `{cache_dir}/` | Server |
-
-**Same privilege escalation as server (see PART 23)** - agent requires root/admin for full system access.
-
-### Agent vs Client vs Server
-
-| Aspect | Server | Client | Agent |
-|--------|--------|------------|-------|
-| **Runs as** | Service/daemon | Interactive/one-shot | Service/daemon |
-| **Purpose** | Serve API, WebUI | User interaction | Data collection |
-| **Initiated by** | System startup | User | System startup |
-| **Connection** | Listens for connections | Connects to server | Connects to server |
-| **Lifetime** | Long-running | Short-lived | Long-running |
-| **User interaction** | WebUI, API | Terminal, TUI | None (headless) |
-| **Updates** | Manual or scheduled | Manual | Auto or server-pushed |
-
-### Execution Context
-
-**Client and Agent run in fundamentally different execution contexts:**
-
-| Aspect | Client | Agent |
-|--------|------------|-------|
-| **Execution context** | User-scope context | System context |
-| **Runs as** | Invoking OS user (may be root/admin, but still user-scope) | root/Administrator |
-| **Config base path** | `~/` (user home) | `/` (system root) |
-| **Config directory** | `~/.config/{project_org}/{internal_name}/` | `/etc/{project_org}/{internal_name}/` |
-| **Data directory** | `~/.local/share/{project_org}/{internal_name}/` | `/var/lib/{project_org}/{internal_name}/` |
-| **Log directory** | `~/.local/log/{project_org}/{internal_name}/` | `/var/log/{project_org}/{internal_name}/` |
-| **Cache directory** | `~/.cache/{project_org}/{internal_name}/` | `/var/cache/{project_org}/{internal_name}/` |
-| **Privilege requirement** | No escalation required | Elevated (root/admin) |
-| **System access** | User-scope files/dirs only | Full system access |
-
-**Why Different Contexts?**
-
-| Component | Context | Reason |
-|-----------|---------|--------|
-| **Client** | User (`~/`) | User tool - accesses user's files, runs with user permissions, stores user-specific settings |
-| **Agent** | System (`/`) | System daemon - needs root for system metrics, hardware access, service management |
-
-**Path Examples:**
-
-```bash
-# Client (user context - runs as "alice")
-~/.config/{project_org}/{internal_name}/cli.yml        # Alice's config
-~/.local/share/{project_org}/{internal_name}/          # Alice's data
-~/.local/log/{project_org}/{internal_name}/cli.log     # Alice's logs
-
-# Agent (system context - runs as root)
-/etc/{project_org}/{internal_name}/agent.yml           # System config
-/var/lib/{project_org}/{internal_name}/                # System data
-/var/log/{project_org}/{internal_name}/agent.log       # System logs
-```
-
-**Platform-Specific Paths:**
-
-| Platform | Client Config | Agent Config |
-|----------|-------------------|--------------|
-| **Linux** | `~/.config/{project_org}/{internal_name}/` | `/etc/{project_org}/{internal_name}/` |
-| **macOS** | `~/Library/Application Support/{project_org}/{internal_name}/` | `/Library/Application Support/{project_org}/{internal_name}/` |
-| **Windows** | `%APPDATA%\{project_org}\{internal_name}\` | `%PROGRAMDATA%\{project_org}\{internal_name}\` |
-| **FreeBSD** | `~/.config/{project_org}/{internal_name}/` | `/usr/local/etc/{project_org}/{internal_name}/` |
-
-### Purpose Matching
-
-**Client and Agent are companion binaries designed FOR the Server. They match the server's intent, purpose, and functionality.**
-
-All three binaries are built for the SAME project and work together as a system:
-
-```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                          PROJECT BINARY ECOSYSTEM                          │
-├───────────────────────────────────────────────────────────────────────────┤
-│                                                                            │
-│  ┌─────────────────────┐                                                   │
-│  │       SERVER        │  Central server - serves API, WebUI, manages data│
-│  │    {project_name}    │  Runs as service/daemon                           │
-│  └──────────┬──────────┘                                                   │
-│             │                                                              │
-│             │ API                                                          │
-│             │                                                              │
-│       ┌─────┴─────┐                                                        │
-│       │           │                                                        │
-│       ▼           ▼                                                        │
-│  ┌─────────────────────┐     ┌─────────────────────────┐                   │
-│  │ {project_name} CLIENT │     │         AGENT           │                   │
-│  │  {project_name}-cli  │     │  {project_name}-agent    │                   │
-│  └─────────────────────┘     └─────────────────────────┘                   │
-│                                                                            │
-│  {project_name} CLIENT:                AGENT:                                   │
-│  • Full remote admin              • Purpose-specific daemon                │
-│  • TUI/CLI/GUI modes              • Headless, no admin                     │
-│  • User context (~/)              • System context (/)                     │
-│                                                                            │
-└───────────────────────────────────────────────────────────────────────────┘
-```
-
-**Real-World Examples:**
-
-| Product | Server | Client | Agent |
-|---------|--------|------------|-------|
-| **Jenkins** | Jenkins Server (WebUI, job management) | Jenkins CLI (remote admin) | Jenkins Agent (executes builds on nodes) |
-| **Portainer** | Portainer Server (container management UI) | - | Portainer Agent (runs on Docker hosts) |
-| **Beszel** | Beszel Hub (monitoring dashboard) | - | Beszel Agent (collects machine metrics) |
-| **Zabbix** | Zabbix Server (monitoring, alerting) | zabbix_get (query agents) | Zabbix Agent (host monitoring) |
-| **Netdata** | Netdata Parent (aggregates metrics) | netdatacli (local control) | Netdata Child (streams to parent) |
-| **Prometheus** | Prometheus Server (scrapes, stores, alerts) | promtool (config validation) | Node Exporter (exposes machine metrics) |
-| **ManageEngine** | ManageEngine Server (IT management) | CLI tools | Desktop Central Agent (endpoint management) |
-| **Proxmox** | Proxmox VE (virtualization management) | pvesh (API access) | qemu-guest-agent (VM guest agent) |
-| **Kubernetes** | kube-apiserver (control plane) | kubectl (cluster admin) | kubelet (runs pods on nodes) |
-| **Salt** | Salt Master (configuration management) | salt (command execution) | Salt Minion (applies configs on nodes) |
-| **Ansible AWX** | AWX Server (automation platform) | awx-cli (tower-cli) | - (agentless, but receptor for mesh) |
-
-**The Pattern:**
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  SERVER: Central control, WebUI, data storage, orchestration           │
-│  └─► Portainer, Zabbix Server, Jenkins, Proxmox VE, K8s API Server      │
-├─────────────────────────────────────────────────────────────────────────┤
-│  CLIENT: Full remote administration, scripting, automation │
-│  └─► kubectl, pvesh, salt, zabbix_get, jenkins-cli                      │
-├─────────────────────────────────────────────────────────────────────────┤
-│  AGENT: Runs on managed hosts, reports to server, executes tasks         │
-│  └─► Portainer Agent, Zabbix Agent, Jenkins Agent, kubelet, Salt Minion │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-**Component Responsibilities:**
-
-| Component | Purpose | Admin Capabilities | Modes |
-|-----------|---------|-------------------|-------|
-| **Server** | Central server | N/A (IS the admin) | Daemon/service |
-| **Client** | Full remote administration | ✅ Full server control | TUI, CLI, GUI |
-| **Agent** | Purpose-specific work | ❌ No admin flags | Daemon/service (headless) |
-
-### Agent Shares Server Structure
-
-**Agent has many of the same flags and startup procedures as Server, but in agent context.**
-
-The Agent is essentially the Server's "little sibling" - same professional structure, similar startup sequence, but connecting TO a server instead of BEING the server.
-
-**For detailed flag documentation, see:**
-- **"Agent Flags"** - Complete flag list and comparison
-- **"Agent Startup Banner"** - Banner examples for all screen sizes
-- **"Agent Commands"** - Subcommands and usage
-
-**Key Differences (Server vs Agent):**
-
-| Aspect | Server | Agent |
-|--------|--------|-------|
-| **Listens for connections** | ✅ Yes (`--port`, `--address`) | ❌ No |
-| **Connects to parent server** | ❌ No (IS the server) | ✅ Yes (`--server`, `--token`) |
-| **Setup** | ✅ CLI-based (`{project_name} --maintenance setup`) | ❌ No (registers with server via connection string) |
-| **Admin operations** | N/A (IS the server) | ❌ No (Client's job) |
-| **WebUI** | ✅ Yes | ❌ No (headless) |
-| **Database** | ✅ `server.db` | ✅ `agent.db` (if needed) |
-
-**Startup Sequence Comparison:**
-
-```
-SERVER STARTUP                          AGENT STARTUP
-─────────────────                       ─────────────────
-1. Parse flags                          1. Parse flags
-2. Load config                          2. Load config
-3. Detect mode (prod/dev)               3. Detect mode (prod/dev)
-4. Show banner                          4. Show banner
-5. Initialize logging                   5. Initialize logging
-6. Connect to database                  6. Connect to SERVER ← different
-7. Start HTTP server                    7. Start reporter/collector ← different
-8. Listen for connections               8. Begin agent tasks ← different
-```
-
-### Client = Full Server Access
-
-**The Client is a COMPLETE interface to the server. It can do EVERYTHING the server offers.**
-
-| Client Capability | Description |
-|-----------------------|-------------|
-| **All API operations** | Everything the API exposes for authenticated requests |
-| **All admin operations** | Full server administration via API |
-| **TUI mode** | Interactive terminal UI |
-| **CLI mode** | Scriptable command-line |
-| **GUI mode** | Native graphical interface (if available) |
-
-### Agent = Purpose-Specific Worker
-
-**The Agent does ONE thing: its designated job. No admin, no user operations, no TUI.**
-
-| Agent Does | Agent Does NOT |
-|------------|----------------|
-| Connect to server | Admin operations |
-| Authenticate with agent token | User operations |
-| Perform its designated function | Interactive modes (TUI/GUI) |
-| Report status/data to server | Server configuration |
-| Execute server-assigned tasks | Anything outside its scope |
-
-**Example by project type:**
-
-| Project Type | Agent Purpose |
-|--------------|---------------|
-| **Monitoring** | Collect machine metrics (CPU, RAM, disk), send to server |
-| **CI/CD** | Pull jobs from server, execute builds, report results |
-| **Log aggregation** | Tail local logs, ship to server |
-| **Backup** | Execute backup commands, upload to server |
-| **Remote management** | Provide reverse tunnel for remote access |
-
-### Same Codebase, Same Project
-
-**All three binaries are built from the same source tree:**
-
-```
-src/
-├── common/           # Shared code used by server, client, and agent
-│   ├── banner/       # Startup banner (responsive, terminal-aware)
-│   ├── config/       # Configuration loading/parsing
-│   ├── display/      # Display environment detection
-│   ├── terminal/     # Terminal size/capabilities
-│   ├── theme/        # Color palette (dark/light/auto)
-│   ├── version/      # Version info (shared across all binaries)
-│   └── ...           # Other shared packages as needed
-├── server/           # Server-specific code
-├── client/           # Client-specific code (TUI, GUI, admin commands)
-└── agent/            # Agent-specific code (collectors, reporters)
-```
-
-| Aspect | Description |
-|--------|-------------|
-| **Same codebase** | All three built from `src/` |
-| **Same release** | `make build` produces all binaries together |
-| **Shared packages** | `src/common/` used by server, client, and agent |
-| **Same API** | Client and Agent use server's API |
-| **Same models** | Shared data structures across all components |
-| **Cluster support** | Both Client and Agent support automatic cluster failover |
-
-### Cluster Support (Client and Agent)
-
-**Both Client and Agent support automatic cluster failover. See dedicated sections for details:**
-
-| Component | Cluster Section | Config Key |
-|-----------|-----------------|------------|
-| **Client** | "CLI Cluster Failover" | `server.primary`, `server.cluster` in `cli.yml` |
-| **Agent** | "Agent Cluster Failover" | `server.primary`, `server.cluster` in `agent.yml` |
-
-**Shared Cluster Behavior:**
-
-| Feature | Client | Agent |
-|---------|------------|-------|
-| **Discovery** | Background `/api/autodiscover` | On connect `/api/autodiscover` |
-| **Auto-update** | Updates `cli.yml` with discovered nodes | Updates `agent.yml` with discovered nodes |
-| **Failover** | Silent failover to cluster nodes | Automatic failover to cluster nodes |
-| **Recovery** | Uses primary when available | Switches back to primary when recovered |
-
-### Agent Directory Structure
-
-**Source Code:**
-```
-src/
-├── server/               # Server-specific code
-├── client/               # CLI-specific code (if present)
-└── agent/                # Agent-specific code
-    ├── collector/        # Data collectors
-    │   ├── collector.go
-    │   ├── cpu.go
-    │   ├── memory.go
-    │   ├── disk.go
-    │   └── network.go
-    ├── reporter/         # Server reporting
-    │   └── reporter.go
-    ├── service/          # OS service management
-    │   ├── service.go
-    │   ├── linux.go
-    │   ├── windows.go
-    │   └── darwin.go
-    └── updater/          # Self-update logic
-        └── updater.go
-```
-
-### Build Output
-
-**`make build` automatically builds all components if their source directories exist:**
-
-```
-binaries/
-├── {project_name}                         # Local server binary - for testing
-├── {project_name}-cli                     # Local CLI binary (if src/client/ exists)
-├── {project_name}-agent                   # Local agent binary (if src/agent/ exists)
-├── {project_name}-linux-amd64             # Server
-├── {project_name}-linux-arm64
-├── {project_name}-cli-linux-amd64         # CLI (if src/client/ exists)
-├── {project_name}-cli-linux-arm64
-├── {project_name}-agent-linux-amd64       # Agent (if src/agent/ exists)
-├── {project_name}-agent-linux-arm64
-├── {project_name}-agent-windows-amd64.exe
-├── {project_name}-agent-darwin-amd64
-└── {project_name}-agent-darwin-arm64
-```
-
-**See PART 25 (Makefile) for full build details.**
 
 ---
 
@@ -46645,7 +44783,7 @@ make docker # Build Docker image
 
 **PART 10: Database & Cluster**
 - [ ] SQLite default for single-node
-- [ ] PostgreSQL/MySQL for cluster mode
+- [ ] libsql/Turso for remote/cluster mode
 - [ ] CREATE TABLE IF NOT EXISTS pattern
 - [ ] Automatic migrations on startup
 - [ ] No manual schema creation required
@@ -46914,32 +45052,6 @@ make docker # Build Docker image
 - [ ] Theme matching server (dark default)
 - [ ] Shell completions (bash, zsh, fish, powershell)
 - [ ] All server API operations accessible via CLI
-- [ ] Cluster failover support:
-  - [ ] `server.primary` and `server.cluster` in cli.yml
-  - [ ] Auto-discover nodes from `/api/autodiscover`
-  - [ ] Auto-update cli.yml with discovered nodes
-  - [ ] Automatic failover to next node if primary fails
-
-*Agent (only for monitoring/remote management projects):*
-- [ ] Binary: `{project_name}-agent`
-- [ ] `src/agent/` directory exists
-- [ ] Runs directly on system, NOT in container
-- [ ] Same version as server
-- [ ] Systemd/launchd/Windows service support
-
-*Agent (only for monitoring/remote management projects, agent-specific config):*
-- [ ] Config: `/etc/{project_org}/{internal_name}/agent.yml`
-- [ ] Connects to central server
-- [ ] Same flags as server EXCEPT no `--port`/`--address` (agents don't serve HTTP)
-- [ ] Communication pattern documented:
-  - [ ] **Send Only**: Agent pushes data to server (metrics, logs)
-  - [ ] **Receive Only**: Agent receives config/commands from server
-  - [ ] **Bidirectional**: Agent both sends data AND receives commands
-- [ ] Cluster failover support:
-  - [ ] `server.primary` and `server.cluster` in agent.yml
-  - [ ] Auto-discover nodes from `/api/autodiscover`
-  - [ ] Auto-update agent.yml with discovered nodes
-  - [ ] Automatic failover to next node if primary fails
 
 ### Phase 12: Project-Specific (IDEA.md)
 
@@ -47044,13 +45156,6 @@ make docker # Build Docker image
 - [ ] **"local binary"** used (not "host binary")
 - [ ] **"local platform"** used (not "host platform")
 - [ ] **"locally"** used for dev machine context (not "on host")
-
-### Agent Terminology
-
-- [ ] **"remote machine"** used (not "remote host")
-- [ ] **"target machine"** used for deployment target
-- [ ] **"target system"** used for OS where agent runs
-- [ ] **"machine metrics"** used (not "host metrics")
 
 ### Git Terminology
 
@@ -47399,7 +45504,7 @@ make docker # Build Docker image
 - [ ] `--color {always|never|auto}` available on all binaries
 - [ ] `--lang CODE` available on all binaries
 - [ ] `--debug` available on all binaries
-- [ ] Flag parsing consistent across server, client, agent
+- [ ] Flag parsing consistent across server, client
 
 ### Error Pages (Web Frontend)
 
@@ -47465,12 +45570,12 @@ make docker # Build Docker image
 
 ### Binary Parity
 
-- [ ] `src/common/i18n/` package is imported by server, CLI, and agent
+- [ ] `src/common/i18n/` package is imported by server and CLI
 - [ ] `//go:embed locales/*.json` embeds all locale files into every binary
-- [ ] Server, CLI, and agent all support the SAME set of languages
-- [ ] `--lang` flag works on all binaries (server, CLI, agent)
+- [ ] Server and CLI support the SAME set of languages
+- [ ] `--lang` flag works on all binaries (server, CLI)
 - [ ] `LANG` / `LC_ALL` env var detection works on all binaries
-- [ ] Config file `lang:` setting works (server.yml, cli.yml, agent.yml)
+- [ ] Config file `lang:` setting works (server.yml, cli.yml)
 - [ ] Unsupported language silently falls back to `en` on all binaries — never errors
 
 ### Server HTTP Translation
@@ -47491,15 +45596,6 @@ make docker # Build Docker image
 - [ ] Error messages use `i18n.T(lang, "cli.*")` — no hardcoded English
 - [ ] Status output (`--status`) translated
 - [ ] Admin command output translated
-- [ ] `Accept-Language` header sent on all API requests to server
-
-### Agent Translation
-
-- [ ] `--help` output fully translated
-- [ ] Startup banner text translated (Mode, Server, Hostname, Tags, Connected/Disconnected)
-- [ ] Error messages use `i18n.T(lang, "agent.*")` — no hardcoded English
-- [ ] Status/health output translated
-- [ ] Registration prompts translated
 - [ ] `Accept-Language` header sent on all API requests to server
 
 ### No Hardcoded English
