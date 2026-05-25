@@ -790,7 +790,7 @@ The `release` job already has `contents: write` to push assets — this covers t
 | Rule | Description |
 |------|-------------|
 | **SQLite default** | `{db_dir}/server.db` (see PART 4 for platform-specific paths) |
-| **Valkey/Redis** | Every app supports it for caching/clustering |
+| **Valkey/Redis** | Optional, used only as a local cache; this app does not use it for clustering |
 
 ## CLI Rules
 
@@ -1137,8 +1137,8 @@ Claude Code creates `.claude/rules/` on first session (see PART 0: Session Initi
 | `ai-rules.md` | 0, 1 | AI Assistant Rules, Critical Rules |
 | `project-rules.md` | 2, 3, 4 | License & Attribution, Project Structure, OS-Specific Paths |
 | `config-rules.md` | 5, 6, 12 | Configuration, Application Modes, Server Configuration |
-| `binary-rules.md` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client & Agent |
-| `backend-rules.md` | 9, 10, 11, 32 | Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service |
+| `binary-rules.md` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client |
+| `backend-rules.md` | 9, 10, 11, 32 | Error Handling & Caching, Database, Security & Logging, Tor Hidden Service |
 | `api-rules.md` | 13, 14, 15 | Health & Versioning, API Structure, SSL/TLS & Let's Encrypt |
 | `frontend-rules.md` | 16 | Web Frontend |
 | `features-rules.md` | 17-22 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
@@ -1322,8 +1322,8 @@ Cursor uses `.mdc` files. Create the same logical groupings:
 | `ai-rules.mdc` | 0, 1 | AI Assistant Rules, Critical Rules |
 | `project-rules.mdc` | 2, 3, 4 | License & Attribution, Project Structure, OS-Specific Paths |
 | `config-rules.mdc` | 5, 6, 12 | Configuration, Application Modes, Server Configuration |
-| `binary-rules.mdc` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client & Agent |
-| `backend-rules.mdc` | 9, 10, 11, 32 | Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service |
+| `binary-rules.mdc` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client |
+| `backend-rules.mdc` | 9, 10, 11, 32 | Error Handling & Caching, Database, Security & Logging, Tor Hidden Service |
 | `api-rules.mdc` | 13, 14, 15 | Health & Versioning, API Structure, SSL/TLS & Let's Encrypt |
 | `frontend-rules.mdc` | 16 | Web Frontend |
 | `features-rules.mdc` | 17-22 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
@@ -1446,11 +1446,6 @@ Purpose:
 ## Key Placeholders
 - `{project_name}` = [actual project name]
 - `{project_org}` = [organization name]
-## Cluster vs Managed Nodes (CRITICAL)
-- **Cluster Node** = another instance of THIS app (horizontal scaling)
-- **Managed Node** = EXTERNAL resource app controls/monitors (Docker hosts, etc.)
-- Most apps only have cluster nodes
-
 ## NEVER Do (Top 19) - VIOLATIONS ARE BUGS
 1. Use bcrypt for config/backup passwords → Use Argon2id
 2. Put Dockerfile in root → `docker/Dockerfile`
@@ -2041,60 +2036,19 @@ This distinction exists for clarity. When referring to OS-level resources that b
 | "data directory" | **server's data dir** | Where our server stores data |
 | "config directory" | **server's config dir** | Where our server reads config |
 
-## Clustering Terms
+## Deployment Model
 
 | Term | Definition |
 |------|------------|
-| **Cluster** | Multiple app instances sharing config and state via shared database/cache |
-| **Cluster Node** | An app instance participating in a cluster (synonym: cluster member) |
-| **Config Sync** | Automatic propagation of settings changes across all cluster nodes |
-| **Primary Node** | The elected cluster node that handles cluster-wide tasks |
-| **Secondary Node** | Any non-primary cluster node in the cluster |
-| **Single Instance** | App running standalone without clustering (local SQLite, no shared state) |
+| **Single Instance** | This app runs as a single instance with a local SQLite database (or remote libsql/Turso). There is no cluster mode, no horizontal scaling, no node election. |
 
 ## Extended Functionality Terms
 
 | Term | Definition |
 |------|------------|
-| **Managed Node** | An EXTERNAL resource the app controls/monitors (NOT an app instance) - e.g., Docker hosts, monitored servers |
-| **HA (High Availability)** | Automatic failover for critical apps - specialized, not standard |
 | **Rate Limiting** | Server protection against abuse/DDoS - NOT usage limits for monetization (we never do that) |
 | **Background Job** | Server-side scheduled or queued task (backup, sync, cleanup) - managed by internal scheduler, NOT cron |
-| **Primary Election** | Process where cluster nodes elect a Primary Node for cluster-wide tasks |
 | **Canonical Terms Only** | New rules, docs, config, APIs, and UI MUST use the current canonical name only. Do NOT add legacy/compatibility aliases, duplicate terms, or migration wording unless the user explicitly asks for a migration feature. |
-
-## Managed Nodes vs Cluster Nodes
-
-**CRITICAL DISTINCTION** (see definitions above):
-
-| Type | What It Is | Examples |
-|------|------------|----------|
-| Cluster Node | Another instance of THIS app (horizontal scaling) | 3 copies of `jokes` behind a load balancer, all syncing config |
-| Managed Node | An EXTERNAL resource this app controls/monitors | Docker hosts, VMs, network devices, IoT sensors, backup targets |
-
-**Key difference:** Cluster nodes run your code. Managed nodes are things your code talks to.
-
-**Most apps only have cluster nodes. Managed nodes are app-specific.**
-
-## Examples
-
-| App Type | Cluster Nodes | Managed Nodes | HA |
-|----------|---------------|---------------|:--:|
-| **Simple API** (jokes, pastebin) | ✓ Multiple instances syncing config | ✗ None | ✗ |
-| **Container Manager** (Watchtower-type) | ✓ Multiple instances syncing config | ✓ Docker hosts to update | ✗ |
-| **Monitoring/Observability** | ✓ Multiple instances syncing config | ✓ Servers/services being monitored | ✗ |
-| **DNS Server** | ✓ Multiple instances syncing zones | ✗ None | ✓ |
-| **Backup Manager** | ✓ Multiple instances syncing schedules | ✓ Remote backup targets (NAS, S3, etc.) | ✗ |
-| **IoT Hub** | ✓ Multiple instances syncing device registry | ✓ IoT devices/sensors reporting in | ✗ |
-| **CI/CD Controller** | ✓ Multiple instances syncing job queue | ✓ Build runners/agents | ✗ |
-| **Network Manager** | ✓ Multiple instances syncing config | ✓ Routers, switches, firewalls | ✗ |
-| **VM Orchestrator** | ✓ Multiple instances syncing state | ✓ Hypervisors, VM guests | ✓ |
-| **Certificate Manager** | ✓ Multiple instances syncing cert inventory | ✓ Servers needing cert deployment | ✗ |
-
-**Reading the table:**
-- **Cluster Nodes column**: What the app instances sync (config, zones, schedules, etc.)
-- **Managed Nodes column**: What external resources the app controls (if any)
-- **HA column**: Whether the app handles automatic failover for critical services
 
 ## Account Types
 
@@ -2109,7 +2063,7 @@ This distinction exists for clarity. When referring to OS-level resources that b
 |------|------------|
 | **CLI Setup Wizard** | Built-in TUI/GUI wizard in CLI binary - prompts for server URL, tests connection, saves config (CLI is the ONLY binary with a built-in wizard) |
 
-**Key distinction:** Server is configured by editing `server.yml` directly. CLI has a built-in interactive wizard (TUI/GUI). Agent has no wizard (uses connection string).
+**Key distinction:** Server is configured by editing `server.yml` directly. CLI has a built-in interactive wizard (TUI/GUI).
 
 ## Other Terms
 
@@ -2177,7 +2131,7 @@ server:
 |-----------|:-------------:|:----------:|-----|
 | Status (healthy/unhealthy) | ✓ | ✗ | Public info |
 | Version, uptime, build info | ✓ | ✓ | Safe to expose |
-| Cluster nodes, Tor address | ✓ | ✗ | Public feature info |
+| Tor address | ✓ | ✗ | Public feature info |
 | Request counts (total) | ✓ | ✓ | Aggregate is safe |
 | Request counts (by path/status) | ✗ | ✓ | Internal detail, high cardinality |
 | Request latency histograms | ✗ | ✓ | Performance telemetry |
@@ -2225,8 +2179,8 @@ server:
 | 7 | ~9159 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
 | 8 | ~9808 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color/--lang flags** |
 | 9 | ~12985 | Error Handling & Caching | Error/cache patterns |
-| 10 | ~13362 | Database & Cluster | Database work |
-| 11 | ~13908 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
+| 10 | ~13362 | Database | Database work |
+| 11 | ~13908 | Security & Logging | Security features, **Resource Owner Tokens**, **Context Detection** |
 | 12 | ~15944 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
 | 13 | ~17071 | Health & Versioning | Health endpoints |
 | 14 | ~17822 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
@@ -2236,7 +2190,7 @@ server:
 | 18 | ~29886 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
 | 19 | ~30333 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
 | 20 | ~30818 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 21 | ~30915 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
+| 21 | ~30915 | Backup & Restore | Backup features, **Compliance encryption** |
 | 22 | ~32360 | Update Command | Update feature |
 | 23 | ~33089 | Privilege Escalation & Service | Service/privilege work |
 | 24 | ~33568 | Service Support | Systemd/runit/rc.d/launchd templates |
@@ -2245,9 +2199,9 @@ server:
 | 27 | ~35438 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
 | 28 | ~36946 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
 | 29 | ~39880 | ReadTheDocs Documentation | Documentation |
-| 30 | ~41719 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
+| 30 | ~41719 | I18N & A11Y | Internationalization, **Translation parity (both binaries)**, **--lang flag** |
 | 31 | ~42451 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 32 | ~44413 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
+| 32 | ~44413 | Client | Client **REQUIRED** — CLI/TUI/GUI, **Resource Owner Tokens**, **Smart Context**, **First-Run Wizard** |
 | 33 | ~46165 | IDEA.md Reference | **Examples only** - NEVER modify |
 | FINAL | — | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
 
@@ -2550,8 +2504,8 @@ Before I proceed, can you confirm [specific question]?
 | `.claude/rules/ai-rules.md` | 0, 1 | AI Assistant Rules, Critical Rules |
 | `.claude/rules/project-rules.md` | 2, 3, 4 | License & Attribution, Project Structure, OS-Specific Paths |
 | `.claude/rules/config-rules.md` | 5, 6, 12 | Configuration, Application Modes, Server Configuration |
-| `.claude/rules/binary-rules.md` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client & Agent |
-| `.claude/rules/backend-rules.md` | 9, 10, 11, 32 | Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service |
+| `.claude/rules/binary-rules.md` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client |
+| `.claude/rules/backend-rules.md` | 9, 10, 11, 32 | Error Handling & Caching, Database, Security & Logging, Tor Hidden Service |
 | `.claude/rules/api-rules.md` | 13, 14, 15 | Health & Versioning, API Structure, SSL/TLS & Let's Encrypt |
 | `.claude/rules/frontend-rules.md` | 16 | Web Frontend |
 | `.claude/rules/features-rules.md` | 17-22 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
@@ -3887,7 +3841,7 @@ ls -la docker/
 | 7 | Binary Requirements | ✅ Implement fully |
 | 8 | Server Binary CLI | ✅ Implement fully |
 | 9 | Error Handling & Caching | ✅ Implement fully |
-| 10 | Database & Cluster | ✅ Implement fully |
+| 10 | Database | ✅ Implement fully |
 | 11 | Security & Logging | ✅ Implement fully |
 | 12 | Server Configuration | ✅ Implement fully |
 | 13 | Health & Versioning | ✅ Implement fully |
@@ -3909,7 +3863,7 @@ ls -la docker/
 | 29 | ReadTheDocs Documentation | ✅ Implement fully |
 | 30 | I18N & A11Y | ✅ Implement fully |
 | 31 | Tor Hidden Service | ✅ Implement fully |
-| 32 | Client & Agent | ✅ Implement fully |
+| 32 | Client | ✅ Implement fully |
 | 33 | IDEA.md Reference | ✅ Reference only |
 | FINAL | Compliance Checklist | ✅ Verify all items |
 
@@ -4343,14 +4297,14 @@ db.Query("SELECT * FROM users WHERE email = '" + email + "'")
 |------------|-----------|--------------|
 | **Invalid input format** | "Please enter a valid value" | `validation_error: field format invalid, input=[redacted]` |
 | **Rate limited** | "Too many requests. Try again in a moment" | `rate_limit: endpoint=/api/{api_version}/..., ip=1.2.3.4, limit=10/min` |
-| **Database error** | "An error occurred. Please try again" | `db_error: connection refused, host=db.local:5432, err=[full error]` |
+| **Database error** | "An error occurred. Please try again" | `db_error: open failed, path=/var/lib/claudemgr/db.sqlite, err=[full error]` |
 | **Internal panic** | "An unexpected error occurred" | `panic: [full stack trace], request_id=abc123` |
 
 **Console Output (Development):**
 ```
-[ERROR] 2025-01-15 10:30:45 database connection failed
-        host: localhost:5432
-        error: connection refused
+[ERROR] 2025-01-15 10:30:45 database open failed
+        path: /var/lib/claudemgr/db.sqlite
+        error: unable to open database file
         stack: main.go:123 → db.go:45 → connect.go:12
 ```
 
@@ -4361,9 +4315,9 @@ db.Query("SELECT * FROM users WHERE email = '" + email + "'")
   "time": "2025-01-15T10:30:45Z",
   "request_id": "abc123",
   "component": "database",
-  "message": "connection failed",
-  "host": "db.local:5432",
-  "error": "connection refused",
+  "message": "open failed",
+  "path": "/var/lib/claudemgr/db.sqlite",
+  "error": "unable to open database file",
   "stack": "..."
 }
 ```
@@ -6341,7 +6295,7 @@ require (
 
 **Driver Name vs Config Aliases:** The "Driver Name" column shows what Go's `sql.Open()` expects. The "Config Aliases" column shows what users can put in config files - these get normalized to the actual driver name internally. Users should use the friendly aliases (`sqlite`, `libsql`) in configs.
 
-### Cache/Cluster
+### Cache
 
 | Purpose | Library | Notes |
 |---------|---------|-------|
@@ -6535,7 +6489,7 @@ require (
 	modernc.org/sqlite v1.34.5                      // SQLite (pure Go)
 	github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d094d  // libSQL/Turso (remote)
 
-	// Cache/Cluster
+	// Cache
 	github.com/redis/go-redis/v9 v9.7.0             // Valkey/Redis
 	github.com/bradfitz/gomemcache v0.0.0-20230905024940-24af94b03874  // Memcache
 
@@ -7080,18 +7034,12 @@ func setupMiddleware(handler http.Handler) http.Handler {
 | **Database** | SQLite (local) or libsql/Turso (remote) |
 | **Server Address** | The bind address for the server (e.g., `[::]`, `0.0.0.0`, `127.0.0.1`) |
 | **FQDN** | Fully Qualified Domain Name (e.g., `api.example.com`) |
-| **Node ID** | Unique identifier for a cluster node (default: hostname) |
 
 **IMPORTANT:** We use "Server Address" (bind address), NOT "Server Name". The server address is where the server listens; the FQDN is how clients reach it.
 
 ### Configuration Source of Truth
 
-| Mode | Source of Truth | server.yml Role |
-|------|-----------------|-----------------|
-| **Single Instance (SQLite)** | server.yml | Primary configuration |
-| **Cluster Mode (Remote DB)** | Database | Bootstrap only (connection settings) |
-
-### Single Instance Mode
+`server.yml` is the sole source of truth for configuration. The SQLite (or remote libsql/Turso) database stores resource state, owner tokens, audit log entries, etc. — never user accounts or operator-editable configuration.
 
 ```
 server.yml (source of truth)
@@ -7105,85 +7053,7 @@ Operator edits server.yml directly (text editor or config-management tool)
 
 - All settings stored in `server.yml`
 - Operator edits `server.yml` directly — there is no admin web UI
-- SQLite database stores resource owner tokens, audit log, etc. (not user accounts)
-
-### Cluster Mode
-
-```
-server.yml (cache + backup)
-     │
-     └─ Contains: database connection + cached config
-
-Database (source of truth)
-     │
-     ▼
-Application reads config from DB
-     │
-     ▼
-Operator edits server.yml on each node OR seeds DB once at bootstrap
-     │
-     ▼
-Changes synced to server.yml cache
-     │
-     ▼
-All nodes see changes immediately
-```
-
-- Database is source of truth
-- `server.yml` is cache AND backup
-- Operator-driven config changes go into the database (via direct SQL or bootstrap import) — no admin web UI
-- Changes automatically synced to local `server.yml`
-- If database unavailable → read-only mode using cached config
-
-### server.yml as Cache/Backup
-
-**When using external database, server.yml becomes a local cache and backup.**
-
-```
-Normal Operation:
-┌──────────────┐         ┌──────────────┐
-│   Database   │◄───────►│  server.yml  │
-│ (source of   │  sync   │   (cache)    │
-│   truth)     │         │              │
-└──────────────┘         └──────────────┘
-       │
-       ▼
-  Application
-  reads from DB
-
-Database Unavailable:
-┌──────────────┐         ┌──────────────┐
-│   Database   │    ✗    │  server.yml  │
-│   (DOWN)     │         │   (backup)   │
-└──────────────┘         └──────────────┘
-                               │
-                               ▼
-                         Application
-                         READ-ONLY MODE
-                         uses cached config
-```
-
-### Config Sync (Database → server.yml)
-
-**Every config change in database is synced to local server.yml:**
-
-```go
-func onConfigChange(db *sql.DB, key string, value interface{}) {
-    // 1. Write to database (source of truth)
-    writeToDatabase(db, key, value)
-
-    // 2. Sync to local server.yml (cache)
-    syncToLocalConfig(key, value)
-
-    // 3. Update last_sync timestamp
-    updateSyncTimestamp()
-}
-```
-
-**Sync happens:**
-- Immediately after any config change
-- On application startup (DB → server.yml)
-- Periodically (every 5 minutes) to catch any drift
+- Database stores resource owner tokens, audit log, etc. (not user accounts)
 
 ### Maintenance Mode
 
@@ -7278,11 +7148,11 @@ Self-Healing Successful?                        │
 │                                                             │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  Error: Database Connection Failed                          │
+│  Error: Database Open Failed                                │
 │  ─────────────────────────────────────────                  │
-│  Host: db.example.com:5432                                  │
-│  Error: connection refused                                  │
-│  Last successful connection: 5 minutes ago                  │
+│  Path: /var/lib/{project_name}/db.sqlite                    │
+│  Error: unable to open database file                        │
+│  Last successful access: 5 minutes ago                      │
 │                                                             │
 │  Self-Healing Status: Retrying... (attempt 15)              │
 │                                                             │
@@ -7450,84 +7320,26 @@ server:
 
 ### What Goes Where
 
-| Setting | Single Instance | Cluster Mode | Read-Only Fallback |
-|---------|-----------------|--------------|-------------------|
-| Database connection | server.yml | server.yml | server.yml |
-| Admin credentials | Local SQLite | Remote DB | Cached in server.yml |
-| Server settings | server.yml | Remote DB | Cached in server.yml |
-| Branding/SEO | server.yml | Remote DB | Cached in server.yml |
-| SSL settings | server.yml | Remote DB | Cached in server.yml |
-| API tokens | Local SQLite | Remote DB | ❌ Unavailable |
+| Setting | Location |
+|---------|----------|
+| Database connection | server.yml |
+| Server settings | server.yml |
+| Branding/SEO | server.yml |
+| SSL settings | server.yml |
+| API tokens (resource owner) | Database (`api_tokens`, SHA-256 stored) |
+| Resource state, audit log | Database |
 
-### server.yml Structure (Cluster Mode with Cache)
+### server.yml Structure
 
 ```yaml
-# Database connection (always present)
 server:
   database:
-    driver: libsql           # or "sqlite" for local
-    url: libsql://your-db-name.turso.io?authToken=${TURSO_AUTH_TOKEN}
-    # For local SQLite (default, no config needed):
-    # driver: sqlite
-    # url: "{data_dir}/db/{internal_name}.db"  # auto-created
-
-# Cached configuration (synced from file, used as backup when file unavailable)
-_cache:
-  last_sync: "2025-01-15T10:30:00Z"
-
-  branding:
-    title: "My Application"
-    tagline: "The best app ever"
-
-  ssl:
-    enabled: true
-    letsencrypt:
-      enabled: true
-      email: admin@example.com
-
-  # ... all other settings cached here
+    driver: sqlite           # or "libsql" for remote Turso/libsql
+    url: "{data_dir}/db/{internal_name}.db"  # auto-created for sqlite
+    # For remote libsql:
+    # driver: libsql
+    # url: libsql://your-db-name.turso.io?authToken=${TURSO_AUTH_TOKEN}
 ```
-
-### Database Schema for Configuration
-
-**Configuration Table (in remote database):**
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `key` | String | Config key (e.g., "branding.title") |
-| `value` | JSON | Config value |
-| `updated_at` | Timestamp | Last update time |
-| `updated_by` | String | Node ID or "admin" |
-
-**Example data:**
-
-| key | value | updated_at |
-|-----|-------|------------|
-| `branding.title` | `"My Application"` | 2025-01-15 10:30:00 |
-| `branding.tagline` | `"The best app"` | 2025-01-15 10:30:00 |
-| `ssl.enabled` | `true` | 2025-01-15 09:00:00 |
-| `ssl.letsencrypt.enabled` | `true` | 2025-01-15 09:00:00 |
-| `rate_limit.enabled` | `true` | 2025-01-14 15:00:00 |
-| `rate_limit.requests` | `0` | 2025-01-14 15:00:00 |
-
-**Cluster State Table:**
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `key` | String | State key |
-| `value` | JSON | State value |
-| `node_id` | String | Node that owns this state (or NULL for global) |
-| `updated_at` | Timestamp | Last update |
-
-**Example state data:**
-
-| key | value | node_id | updated_at |
-|-----|-------|---------|------------|
-| `cluster.id` | `"cluster_abc123"` | NULL | 2025-01-10 |
-| `cluster.name` | `"Production"` | NULL | 2025-01-10 |
-| `encryption.key` | `"encrypted..."` | NULL | 2025-01-10 |
-| `tor.onion_address` | `"abc...xyz.onion"` | `node-1` | 2025-01-15 |
-| `tor.onion_address` | `"def...uvw.onion"` | `node-2` | 2025-01-15 |
 
 ### Full Database Schema Summary
 
@@ -9703,7 +9515,7 @@ func (e *DisplayEnv) detectPlatformDisplay() {
 | **Server** | Status window | Status banner | Commands | Default (daemon) |
 | **CLI** | ✅ Full app | ✅ Full app (default) | ✅ Commands | ❌ Error |
 
-**Server/Agent just show status banners (not interactive). CLI is the only full TUI/GUI app with a built-in setup wizard.**
+**Server just shows status banners (not interactive). CLI is the only full TUI/GUI app with a built-in setup wizard.**
 
 **See PART 32 for full CLI/TUI/GUI mode implementation details.**
 
@@ -9739,8 +9551,6 @@ src/
 │   ├── cli/                         # CLI mode
 │   ├── tui/                         # TUI mode (bubbletea)
 │   └── gui/                         # GUI mode (native)
-    ├── cli/                         # Agent CLI commands
-    └── collector/                   # Metrics/data collection
 ```
 
 ### Go Module Imports
@@ -11310,12 +11120,8 @@ All projects use SQLite with a single database file:
 
 | Mode | Database | Cache | Use Case |
 |------|----------|-------|----------|
-| Single Instance | SQLite (default) | memory (default) | Development, small deployments |
-| Cluster | 1+ remote databases | 1× Valkey/Redis | Multiple instances, shared state, HA |
-
-**Cluster minimum requirements:**
-- 1× libsql/Turso remote database
-- 1× Valkey/Redis instance (does NOT need to be a cluster)
+| Local | SQLite (default) | memory (default) | Default deployment |
+| Remote | libsql/Turso | memory or valkey/redis | Edge-distributed storage |
 
 **Supported Databases:**
 
@@ -11373,7 +11179,7 @@ When enabled:
 - Background sync keeps cache fresh
 
 See **PART 12: SERVER CONFIGURATION** for Valkey/Redis setup.
-See **PART 10: DATABASE & CLUSTER** for full cluster configuration.
+See **PART 10: DATABASE** for full database configuration.
 
 **SQLite vs Remote - Key Differences:**
 
@@ -11476,7 +11282,6 @@ CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_log(target_type, target_id)
 CREATE TABLE IF NOT EXISTS scheduler_tasks (
     id          TEXT PRIMARY KEY,              -- Task name: "backup_daily", "backup_hourly", "geoip_update", "cleanup"
     name        TEXT NOT NULL,                 -- Human-readable: "Daily Backup", "Hourly Incremental"
-    task_type   TEXT NOT NULL DEFAULT 'global', -- global (one node) or local (all nodes)
     enabled     INTEGER NOT NULL DEFAULT 1,
     schedule    TEXT NOT NULL,                 -- Cron expression: "0 2 * * *"
     last_run    INTEGER,                       -- Unix timestamp
@@ -11484,9 +11289,7 @@ CREATE TABLE IF NOT EXISTS scheduler_tasks (
     last_status TEXT,                          -- success, failed, running, skipped
     last_error  TEXT,                          -- Error message if failed
     run_count   INTEGER NOT NULL DEFAULT 0,
-    fail_count  INTEGER NOT NULL DEFAULT 0,
-    locked_by   TEXT,                          -- Node ID holding lock (cluster mode)
-    locked_at   INTEGER                        -- When lock was acquired (cluster mode)
+    fail_count  INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS scheduler_history (
@@ -11805,15 +11608,6 @@ func buildHealthResponse() *HealthResponse {
             Date:   version.Date,
         },
 
-        // Cluster (dynamic - from cluster manager)
-        Cluster: ClusterInfo{
-            Enabled: cfg.Cluster.Enabled,
-            Status:  clusterManager.Status(),    // "connected", "disconnected"
-            Primary: clusterManager.PrimaryURL(),
-            Nodes:   clusterManager.NodeURLs(),
-            Role:    clusterManager.Role(),      // "primary", "member"
-        },
-
         // Features (PUBLIC only - do NOT include /metrics)
         Features: FeaturesInfo{
             GeoIP:         cfg.Features.GeoIP.Enabled,
@@ -11832,7 +11626,6 @@ func buildHealthResponse() *HealthResponse {
             Cache:     checkCache(),
             Disk:      checkDisk(),
             Scheduler: checkScheduler(),
-            Cluster:   checkCluster(),
         },
 
         // Stats (public-safe aggregates only)
@@ -12885,11 +12678,11 @@ See **PART 12: SERVER CONFIGURATION** for full Valkey/Redis setup.
 
 ### Cache Drivers
 
-| Driver | Mode | Use Case | Notes |
-|--------|------|----------|-------|
-| `memory` | Single instance | Development, small deployments | Default, in-process, lost on restart |
-| `valkey` | Single/Cluster | Production | Preferred, open-source Redis fork |
-| `redis` | Single/Cluster | Production | Full compatibility |
+| Driver | Use Case | Notes |
+|--------|----------|-------|
+| `memory` | Development, small deployments | Default, in-process, lost on restart |
+| `valkey` | Production | Preferred, open-source Redis fork |
+| `redis` | Production | Full compatibility |
 
 ### Cache Key Naming
 
@@ -13014,37 +12807,6 @@ func warmCache(ctx context.Context) error {
 }
 ```
 
-### Distributed Locks
-
-**Use for operations that must run on only one node:**
-
-```go
-func acquireLock(ctx context.Context, key string, ttl time.Duration) (bool, error) {
-    // SET key value NX EX ttl
-    return cache.SetNX(ctx, "lock:"+key, nodeID, ttl)
-}
-
-func releaseLock(ctx context.Context, key string) error {
-    // Only release if we own the lock
-    val, _ := cache.Get(ctx, "lock:"+key)
-    if val == nodeID {
-        return cache.Delete(ctx, "lock:"+key)
-    }
-    return nil
-}
-
-// Usage
-func runScheduledBackup(ctx context.Context) error {
-    acquired, err := acquireLock(ctx, "backup", 30*time.Minute)
-    if err != nil || !acquired {
-        return nil // Another node is handling it
-    }
-    defer releaseLock(ctx, "backup")
-
-    return performBackup(ctx)
-}
-```
-
 ---
 
 
@@ -13141,7 +12903,7 @@ func (p *Paste) SetSlug(slug string) {
     p.Name = slug  // Keep old column in sync
 }
 
-// Step 3: After all nodes upgraded, old column ignored (v1.5.0+)
+// Step 3: After server upgraded, old column ignored (v1.5.0+)
 // Old column stays in DB (never drop), just unused
 ```
 
@@ -13193,11 +12955,9 @@ server:
 | Deployment | max_open | max_idle | Reason |
 |------------|----------|----------|--------|
 | Development | 5 | 2 | Minimal resources |
-| Small (1-2 nodes) | 25 | 5 | Default, works for most |
-| Medium (3-5 nodes) | 50 | 10 | More concurrent requests |
-| Large (6+ nodes) | 100 | 20 | High concurrency |
-
-**Formula:** `max_open = (available_connections / num_nodes) * 0.8`
+| Small | 25 | 5 | Default, works for most |
+| Medium | 50 | 10 | More concurrent requests |
+| Large | 100 | 20 | High concurrency |
 
 ### Implementation
 
@@ -13489,7 +13249,6 @@ func isSerializationError(err error) bool {
 | `mode` (`production` / `development`) | `/server/healthz` | Operational diagnostic; debug is gated separately |
 | `db_type` (`sqlite` / `libsql`) | `/server/healthz` | Just the engine family — no host, no creds |
 | `db_locality` (`local` / `remote`) | `/server/healthz` | Fuzzy — no host name or IP |
-| `cluster_size`, `is_primary`, `is_secondary` | `/server/healthz` | Cluster state, no addresses |
 | `request_count_24h`, `active_connections`, `total_connections` | `/server/healthz` (under `metrics`) | Operational, aggregate |
 | `unique_visitors_24h`, `peak_concurrent` | `/server/healthz` (aggregate only) | Bragging rights / monitoring; no per-IP detail |
 | Public domain(s) the app serves (`{fqdn}`, learned reverse-proxy hosts) | `/api/autodiscover`, banners | Already public — that's how visitors got here |
@@ -13665,8 +13424,8 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 |----------|--------|
 | Length | 32 bytes (256 bits) of `crypto/rand` |
 | Generated | First start. Stored in `server.db` row `app_secrets.installation_secret`, base64-encoded. |
-| Scope | Cluster-wide. The first node generates it; subsequent nodes joining the cluster receive it via the secure cluster join protocol (PART 10 → "Cluster" — the join token is HMAC-derived and the `installation_secret` is delivered as part of the same handshake payload). NEVER appears in a request, response, or log. |
-| Used by | `{security_id}` HMAC (PART 11 → "Security Reports"); PGP private-key KDF (PART 11 → "GPG Keypair Management"); future derived material (cluster-internal request signing, cookie signing salts). |
+| Scope | Server-wide. Generated on first start and persisted to `server.db`. NEVER appears in a request, response, or log. |
+| Used by | `{security_id}` HMAC (PART 11 → "Security Reports"); PGP private-key KDF (PART 11 → "GPG Keypair Management"); future derived material (cookie signing salts, etc.). |
 | Rotation | Manual via CLI command or config file. Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt operator password, log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and re-bases all live HMACs. The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
 | Backup | Always — see PART 21 → "Backup Contents". Required for any restore: without it, the PGP private key in the backup is undecryptable. |
 | Loss = catastrophic | Lost = cannot decrypt PGP private key (and therefore cannot decrypt in-flight encrypted security reports); cannot validate `{security_id}` URLs on existing security.txt copies until the file regenerates. Recovery requires admin to: regenerate keypair, regenerate `installation_secret`, accept that all in-flight encrypted reports are unreadable. |
@@ -13684,7 +13443,7 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 |-----|--------|---------|---------|----------|
 | `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run) | At-rest encryption for ALL sensitive server data: API token hashes, security report bodies (used as the AES fallback when no PGP keypair exists, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via API (sensitive-op flow). 30-day grace for in-flight encrypted data. |
 
-**Note on consolidation:** `server.security.encryption_key` is the canonical at-rest AES key — every place the spec talks about "encrypt this sensitive data at rest" resolves to this one key, including security report bodies. It is NOT duplicated in `app_secrets`. The four `app_secrets` rows above are HMAC keys (not AES) and a root-secret for HMAC derivation; they are stored in the DB rather than `server.yml` because they have independent rotation lifecycles and need to be visible to cluster replicas via shared DB read.
+**Note on consolidation:** `server.security.encryption_key` is the canonical at-rest AES key — every place the spec talks about "encrypt this sensitive data at rest" resolves to this one key, including security report bodies. It is NOT duplicated in `app_secrets`. The four `app_secrets` rows above are HMAC keys (not AES) and a root-secret for HMAC derivation; they are stored in the DB rather than `server.yml` because they have independent rotation lifecycles.
 
 **All secrets above:**
 - Generated on first start, before any user-visible operation.
@@ -14272,7 +14031,7 @@ web:
 | Validation window | Server accepts the **current** AND **previous** 48h window's id — prevents boundary failures for researchers who load the security.txt at second 47:59:59 |
 | Where it appears | Only in `/.well-known/security.txt` `Contact:` line. NEVER logged, NEVER returned in any other response. |
 | Failure mode | Invalid / expired id → form silently falls back to normal contact mode. Log to `security.log` as `security.security_id_invalid` (IP, user-agent, supplied id) — useful for catching scrape attempts. |
-| Why HMAC, not random | Determinism — each replica of the cluster computes the same id without coordinating state. The `installation_secret` (cluster-wide, persisted) is the only secret required. |
+| Why HMAC, not random | Determinism — the server computes the same id deterministically from the persisted `installation_secret` without needing to track separate state. |
 
 ### `/server/contact?security_id={id}` — Mode Switch
 
@@ -14625,22 +14384,13 @@ server:
 | `backup.restored` | Backup restored | Filename |
 | `backup.deleted` | Backup deleted | Filename |
 | `backup.failed` | Backup failed | Error message |
-| `server.started` | Application started | Version, mode, node ID |
+| `server.started` | Application started | Version, mode |
 | `server.stopped` | Application stopped | Reason, uptime |
 | `server.maintenance_entered` | Maintenance mode enabled | Reason |
 | `server.maintenance_exited` | Maintenance mode disabled | Duration |
 | `server.updated` | Application updated | Old version, new version |
 | `scheduler.task_failed` | Scheduled task failed | Task name, error |
 | `scheduler.task_manual_run` | Task manually triggered | Task name, IP |
-
-### Cluster Events
-
-| Event | Description | Logged Data |
-|-------|-------------|-------------|
-| `cluster.node_joined` | Node joined cluster | Node ID, IP |
-| `cluster.node_removed` | Node removed from cluster | Node ID |
-| `cluster.node_failed` | Node became unreachable | Node ID, last seen |
-| `cluster.mode_changed` | Cluster mode changed | Old mode, new mode |
 
 ## Audit Log Format
 
@@ -14663,8 +14413,7 @@ server:
   "details": {
     "changed_keys": ["server.port"]
   },
-  "result": "success",
-  "node_id": "node-1"
+  "result": "success"
 }
 ```
 
@@ -14686,7 +14435,6 @@ server:
 |-------|------|-------------|
 | `target` | Object | What was acted upon |
 | `details` | Object | Event-specific details |
-| `node_id` | String | Node ID (cluster mode) |
 | `reason` | String | Reason for action (if provided) |
 
 ## Severity Levels
@@ -14720,7 +14468,6 @@ server:
         security: true        # Rate limit violations and security events
         backup: true          # Backup/restore
         server: true          # Server events (start, stop, maintenance)
-        cluster: true         # Cluster events
 
       # Sensitive data handling
       include_user_agent: true
@@ -14736,7 +14483,7 @@ server:
 | `keep` | `none` | Delete on rotation (no old logs kept) |
 | `compress` | `false` | No compression (deleted immediately) |
 | `mask_emails` | `true` | Mask email addresses |
-| All event categories | `true` | Log config, security, backup, server, cluster events |
+| All event categories | `true` | Log config, security, backup, and server events |
 | `token_usage` | `false` | Don't log every token use |
 
 **Why `keep: none` by default?**
@@ -15517,8 +15264,8 @@ server:
 server:
   contact:
     # ---- Admin (server notifications) ----
-    # Recipient for server-internal alerts: error rate spike, cluster split,
-    # cert renewal failure, scheduled task crash, backup failure, etc.
+    # Recipient for server-internal alerts: error rate spike, cert renewal
+    # failure, scheduled task crash, backup failure, etc.
     # NEVER public. Used as the universal fallback when a role-specific
     # address is empty.
     admin:
@@ -15594,7 +15341,7 @@ Every outbound webhook POST includes these headers so the receiver can verify th
 | `X-Webhook-Signature` | `sha256=<hex_hmac>` where `hmac = HMAC-SHA256(per_webhook_secret, request_body_bytes)`. The `per_webhook_secret` is auto-generated when the webhook URL is first saved (random 32 bytes, persisted in `server.yml` next to the URL as `webhooks.<name>_secret`) and returned ONCE in the API response for the operator to configure on the receiving end. |
 | `X-Webhook-Timestamp` | Unix seconds — receiver SHOULD reject if delta exceeds `±5 min` to prevent replay |
 | `X-Webhook-ID` | UUID v7 (PART 13) — idempotency key the receiver can use to deduplicate retries |
-| `X-Webhook-Event` | The event type (e.g., `security.report_received`, `admin.cluster_failover`) |
+| `X-Webhook-Event` | The event type (e.g., `security.report_received`, `admin.backup_failed`) |
 | `User-Agent` | `{project_name}/{project_version} (+{app_url})` |
 
 The signature applies to **all** transports — even built-in adapters (Telegram, Discord, Slack) get an `X-Webhook-Signature` header in the unlikely case their endpoint is forwarded somewhere that wants to verify origin. Adapters that the target service doesn't read (Telegram doesn't care about the header) ignore it harmlessly.
@@ -15616,7 +15363,7 @@ if !subtle.ConstantTimeCompare([]byte(got), []byte(want)) {
 
 | Role | When triggered | What is sent |
 |------|----------------|--------------|
-| `admin` | Server-internal events: error rate spike, panic, cluster failover, backup failure, cert renewal, security report received (summary only) | Subject + body + severity. NEVER includes user content. |
+| `admin` | Server-internal events: error rate spike, panic, backup failure, cert renewal, security report received (summary only) | Subject + body + severity. NEVER includes user content. |
 | `security` | Incoming security report (full content, encrypted), researcher status update, CVE assignment milestone | PGP-encrypted body if a researcher pubkey or admin pubkey is configured (PART 11 → "GPG Keypair Management"). |
 | `general` | `/server/contact` form submission (non-security) | Sender name, sender email, subject, message body. Spam-filtered before dispatch. |
 
@@ -16424,23 +16171,12 @@ func CanLoadAnalytics(r *http.Request) bool {
 
 ## Cache Configuration
 
-**EVERY application MUST support Valkey/Redis.** This is REQUIRED for:
-- Clustering (session sharing, state sync)
-- Mixed Mode (cross-database synchronization)
-- Horizontal scaling
-- Rate limiting in distributed deployments
-
-| Mode | Cache Requirement |
-|------|-------------------|
-| **Single Instance** | `memory` (default) - works standalone |
-| **Cluster** | `valkey` or `redis` - REQUIRED for state sync |
-| **Mixed Mode** | `valkey` or `redis` - REQUIRED for cross-DB sync |
+**Cache is optional.** Defaults to `memory` (in-process). Valkey/Redis is supported when an external cache is desired (persistent counters across restarts, rate limits, etc.).
 
 ```yaml
 server:
   cache:
     # Type: none (disabled), memory (default), valkey, redis
-    # IMPORTANT: Use valkey/redis for cluster or mixed mode deployments
     type: memory
 
     # Connection: Use EITHER url OR host/port/password (not both)
@@ -16470,11 +16206,6 @@ server:
 
     # Default TTL
     ttl: 1h
-
-    # Cluster settings (when using Valkey/Redis Cluster)
-    cluster: false
-    # e.g., ["node1:6379", "node2:6379", "node3:6379"]
-    cluster_nodes: []
 ```
 
 ### Connection Methods
@@ -16516,20 +16247,6 @@ server:
     prefix: "{project_name}:"
 ```
 
-**Valkey/Redis Cluster:**
-```yaml
-server:
-  cache:
-    type: valkey
-    cluster: true
-    cluster_nodes:
-      - valkey1.example.com:6379
-      - valkey2.example.com:6379
-      - valkey3.example.com:6379
-    password: ${VALKEY_PASSWORD}
-    prefix: "{project_name}:"
-```
-
 ### Cache Usage in Application
 
 | Feature | Uses Cache | Purpose |
@@ -16537,9 +16254,6 @@ server:
 | Sessions | Yes | Session data storage |
 | Rate limiting | Yes | Request counters per IP/user |
 | API responses | Optional | Response caching |
-| Cluster heartbeat | Yes | Node liveness detection |
-| Pub/Sub events | Yes | Real-time state sync |
-| Distributed locks | Yes | Prevent duplicate task execution |
 
 ## Settings Configuration (config file)
 
@@ -16578,7 +16292,7 @@ All settings above are configured via config file:
 
 | Type | Description | Defined Where |
 |------|-------------|---------------|
-| **Global (this template)** | Complete structure: project, status, version, build, runtime, cluster, features, checks, stats | Below (comprehensive) |
+| **Global (this template)** | Complete structure: project, status, version, build, runtime, features, checks, stats | Below (comprehensive) |
 | **App-specific (extend)** | Additional features, stats, checks relevant to your app | IDEA.md |
 
 **How to extend:**
@@ -16611,7 +16325,7 @@ All settings above are configured via config file:
 
 #### Backend Structure (Go)
 
-**Based on template PARTS: branding (PART 16), modes (PART 6), cluster (PART 10), features (PARTS 20, 32), scheduler (PART 18).**
+**Based on template PARTS: branding (PART 16), modes (PART 6), database (PART 10), features (PARTS 20, 32), scheduler (PART 18).**
 
 ```go
 // HealthResponse - canonical field order for /server/healthz
@@ -16636,19 +16350,16 @@ type HealthResponse struct {
     Mode      string    `json:"mode"`         // "production" or "development"
     Timestamp time.Time `json:"timestamp"`    // current UTC time
 
-    // 5. Cluster info (PART 10: database & cluster)
-    Cluster ClusterInfo `json:"cluster"`
-
-    // 6. Features - PUBLIC only (PARTS 20, 32)
+    // 5. Features - PUBLIC only (PARTS 20, 32)
     Features FeaturesInfo `json:"features"`
 
-    // 7. Component health checks
+    // 6. Component health checks
     Checks ChecksInfo `json:"checks"`
 
-    // 8. Statistics (public-safe aggregates)
+    // 7. Statistics (public-safe aggregates)
     Stats StatsInfo `json:"stats"`
 
-    // 9. APP-SPECIFIC: Add custom fields here
+    // 8. APP-SPECIFIC: Add custom fields here
     // AppData AppSpecificInfo `json:"app_data,omitempty"`
 }
 
@@ -16663,16 +16374,6 @@ type ProjectInfo struct {
 type BuildInfo struct {
     Commit string `json:"commit"` // git short hash (7 chars)
     Date   string `json:"date"`   // ISO 8601 build timestamp
-}
-
-// ClusterInfo - from cluster manager (PART 10)
-type ClusterInfo struct {
-    Enabled   bool     `json:"enabled"`
-    Status    string   `json:"status,omitempty"`    // "connected", "disconnected"
-    Primary   string   `json:"primary,omitempty"`   // primary node public URL
-    Nodes     []string `json:"nodes,omitempty"`     // all node public URLs
-    NodeCount int      `json:"node_count,omitempty"` // total nodes (healthy + degraded + offline)
-    Role      string   `json:"role,omitempty"`      // "primary" or "member"
 }
 
 // FeaturesInfo - PUBLIC features only (no /metrics - PART 20 is internal)
@@ -16702,7 +16403,6 @@ type ChecksInfo struct {
     Cache     string `json:"cache"`               // PART 10: "ok" or "error"
     Disk      string `json:"disk"`                // Disk space check
     Scheduler string `json:"scheduler"`           // PART 18: "ok" or "error"
-    Cluster   string `json:"cluster,omitempty"`   // PART 10: "ok" or "error" (if enabled)
     Tor       string `json:"tor,omitempty"`       // PART 31: "ok" or "error" (if enabled)
     // APP-SPECIFIC: Add your checks here
     // Example: Storage string `json:"storage"`
@@ -16732,14 +16432,12 @@ type StatsInfo struct {
 | `build.date` | `version.Date` (build var) | 7 |
 | `uptime` | `formatUptime(startTime)` | - |
 | `mode` | `cfg.Server.Mode` | 6 |
-| `cluster.*` | `clusterManager.*` | 10 |
 | `features.tor.*` | `torManager.*` | 32 |
 | `features.geoip` | `cfg.GeoIP.Enabled` (true/false) | 20 |
 | `features.*` (project-specific) | Show actual status when project-specific optional features used | - |
 | `checks.database` | `checkDatabase()` | 10 |
 | `checks.cache` | `checkCache()` | 10 |
 | `checks.scheduler` | `checkScheduler()` | 19 |
-| `checks.cluster` | `checkCluster()` | 10 |
 | `checks.tor` | `checkTor()` | 32 |
 | `stats.*` | `statsCollector.*` | - |
 
@@ -16753,10 +16451,9 @@ type StatsInfo struct {
 | 2 | **Status** | `status` | `.status-banner.status-ok/error/warning` | Large centered banner with icon |
 | 3 | **Version & Build** | `version`, `go_version`, `build.*` | `.section-card` + `.info-list` | Key-value pairs, version/commit in `<code>` |
 | 4 | **Runtime** | `uptime`, `mode`, `timestamp` | `.section-card` + `.info-list` | Uptime as text, mode as `.badge` |
-| 5 | **Cluster** | `cluster.*` | `.section-card` + `.info-list` + `.node-list` | Status badge, node_count, URLs with copy buttons |
-| 6 | **Features** | `features.*` | `.section-card` + `.feature-list` | Icons per feature, Tor address (56 chars) with copy button |
-| 7 | **Checks** | `checks.*` | `.section-card` + `.table-wrapper` + `.data-table` | Table with `.status-ok`/`.status-error` badges |
-| 8 | **Stats** | `stats.*` | `.section-card` + `.info-list` | Key-value with formatted numbers (commas) |
+| 5 | **Features** | `features.*` | `.section-card` + `.feature-list` | Icons per feature, Tor address (56 chars) with copy button |
+| 6 | **Checks** | `checks.*` | `.section-card` + `.table-wrapper` + `.data-table` | Table with `.status-ok`/`.status-error` badges |
+| 7 | **Stats** | `stats.*` | `.section-card` + `.info-list` | Key-value with formatted numbers (commas) |
 
 #### Field Display Rules
 
@@ -16773,10 +16470,6 @@ type StatsInfo struct {
 | Uptime | plain text | No | `2d 5h 30m` |
 | Mode | `.badge` | No | `<span class="badge badge-production">Production</span>` |
 | Timestamp | `<time>` | No | `<time datetime="...">Jan 15, 2024 10:30 AM</time>` |
-| Cluster status | `.status` | No | `<span class="status status-ok">✅ Connected</span>` |
-| Cluster node_count | plain text | No | `3 nodes` |
-| Node URLs | `.code-block` | **Yes** | With copy button, horizontal scroll (56 char onion) |
-| Primary URL | `.code-block` | **Yes** | With copy button, horizontal scroll |
 | Tor address | `.code-block` | **Yes** | 56-char v3 onion, copy button, horizontal scroll |
 | Feature enabled | `.feature-enabled` | No | `<li class="feature-enabled">🌍 GeoIP</li>` |
 | Feature disabled | `.feature-disabled` | No | Muted, strikethrough |
@@ -16797,13 +16490,11 @@ type StatsInfo struct {
 | Uptime: "2d 5h" | File paths on server |
 | Mode: "production" | Environment variables |
 | Checks: "ok"/"error" | Config file contents |
-| Node ID (opaque) | |
-| Cluster node count | |
 
 **Database/cache checks MUST be vague:**
 - ✅ `"database": "ok"` or `"database": "error"`
 - ❌ `"database": "libsql://user:token@host/db"` (exposes credentials)
-- ❌ `"database": {"host": "10.0.0.5", "port": 5432}`
+- ❌ `"database": {"path": "/var/lib/{project_name}/db.sqlite"}` (exposes filesystem layout)
 
 ### /server/healthz Response Formats
 
@@ -16821,7 +16512,7 @@ type StatsInfo struct {
 | Layout | Standard public layout (header, main.container, footer) |
 | CSS patterns | PART 16 global classes |
 | Field order | Same as backend struct (1-8) |
-| Copy buttons | Required for node URLs, Tor address |
+| Copy buttons | Required for Tor address and other long identifiers |
 
 **HTML Structure:**
 
@@ -16870,51 +16561,7 @@ type StatsInfo struct {
       </dl>
     </section>
 
-    <!-- Cluster Info (if enabled) -->
-    <section class="section-card">
-      <h2>🔗 Cluster</h2>
-      <dl class="info-list">
-        <dt>Status</dt>
-        <dd><span class="status status-ok">✅ Connected</span></dd>
-
-        <dt>👑 Primary</dt>
-        <dd>
-          <div class="code-block">
-            <code class="code-content">https://node1.example.com</code>
-            <button class="copy-btn" data-copy="https://node1.example.com">
-              <span class="copy-icon">📋</span><span class="copy-text">Copy</span>
-            </button>
-          </div>
-        </dd>
-
-        <dt>🎭 Role</dt>
-        <dd>Member</dd>
-      </dl>
-
-      <h3>🖥️ Nodes</h3>
-      <ul class="node-list">
-        <li>
-          <div class="code-block">
-            <code class="code-content">https://node1.example.com</code>
-            <button class="copy-btn" data-copy="https://node1.example.com">
-              <span class="copy-icon">📋</span>
-            </button>
-          </div>
-          <span class="badge badge-primary">👑 Primary</span>
-        </li>
-        <li>
-          <div class="code-block">
-            <code class="code-content">https://node2.example.com</code>
-            <button class="copy-btn" data-copy="https://node2.example.com">
-              <span class="copy-icon">📋</span>
-            </button>
-          </div>
-          <span class="status status-ok">✅</span>
-        </li>
-      </ul>
-    </section>
-
-    <!-- 6. Features (NON-NEGOTIABLE only, show actual status) -->
+    <!-- 5. Features (NON-NEGOTIABLE only, show actual status) -->
     <section class="section-card">
       <h2>🎛️ Features</h2>
       <!-- Only NON-NEGOTIABLE features. Show actual enabled/disabled status. -->
@@ -16944,7 +16591,6 @@ type StatsInfo struct {
             <tr><td>💾 Cache</td><td><span class="status status-ok">✅ OK</span></td></tr>
             <tr><td>💿 Disk</td><td><span class="status status-ok">✅ OK</span></td></tr>
             <tr><td>⏰ Scheduler</td><td><span class="status status-ok">✅ OK</span></td></tr>
-            <tr><td>🔗 Cluster</td><td><span class="status status-ok">✅ OK</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -17047,18 +16693,6 @@ type StatsInfo struct {
   "uptime": "2d 5h 30m",
   "mode": "production",
   "timestamp": "2024-01-15T10:30:00Z",
-  "cluster": {
-    "enabled": true,
-    "status": "connected",
-    "primary": "https://node1.example.com",
-    "nodes": [
-      "https://node1.example.com",
-      "https://node2.example.com",
-      "https://node3.example.com"
-    ],
-    "node_count": 3,
-    "role": "member"
-  },
   "features": {
     "tor": {
       "enabled": true,
@@ -17073,7 +16707,6 @@ type StatsInfo struct {
     "cache": "ok",
     "disk": "ok",
     "scheduler": "ok",
-    "cluster": "ok",
     "tor": "ok"
   },
   "stats": {
@@ -17108,7 +16741,6 @@ type StatsInfo struct {
 | **Status** | Health status, uptime | `healthy`, `2d 5h` |
 | **Features** | Enabled PUBLIC features only (not /metrics) | `tor: enabled` |
 | **Checks** | Service status (ok/error only) | `database: ok` |
-| **Cluster** | Public node URLs | `https://node1.example.com` |
 | **Stats** | Aggregate counts only | `requests_total: 12345` |
 | **Mode** | Production/development | `production` |
 
@@ -17142,29 +16774,20 @@ uptime: 2d 5h 30m
 mode: production
 timestamp: 2024-01-15T10:30:00Z
 
-# 5. Cluster (PART 10)
-cluster.enabled: true
-cluster.status: connected
-cluster.primary: https://node1.example.com
-cluster.nodes: https://node1.example.com, https://node2.example.com, https://node3.example.com
-cluster.node_count: 3
-cluster.role: member
-
-# 6. Features - NON-NEGOTIABLE only (show actual status)
+# 5. Features - NON-NEGOTIABLE only (show actual status)
 features.tor.enabled: true
 features.tor.running: true
 features.tor.status: healthy
 features.tor.hostname: abc123xyz456abcdef789xyz456abcdef789xyz456abcdef789xyz.onion
 features.geoip: true
-# 7. Checks
+# 6. Checks
 checks.database: ok
 checks.cache: ok
 checks.disk: ok
 checks.scheduler: ok
-checks.cluster: ok
 checks.tor: ok
 
-# 8. Stats
+# 7. Stats
 stats.requests_total: 1234567
 stats.requests_24h: 45678
 stats.active_connections: 42
@@ -17177,54 +16800,6 @@ Same underlying health response as `/server/healthz`, but formatted using the st
 - `.txt`: text
 - `Accept: text/plain`: text
 - non-interactive API clients: text
-
-### Single Instance Response
-
-When not in cluster mode:
-
-```json
-{
-  "project": {
-    "name": "My Application",
-    "description": "A brief description of what this application does"
-  },
-  "status": "healthy",
-  "version": "1.0.0",
-  "mode": "production",
-  "uptime": "2d 5h 30m",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "go_version": "<runtime.Version()>",
-  "build": {
-    "commit": "abc1234",
-    "date": "2024-01-10T10:00:00Z"
-  },
-  "cluster": {
-    "enabled": false,
-    "primary": "",
-    "nodes": []
-  },
-  "features": {
-    "tor": {
-      "enabled": false,
-      "running": false,
-      "status": "",
-      "hostname": ""
-    },
-    "geoip": true
-  },
-  "checks": {
-    "database": "ok",
-    "cache": "ok",
-    "disk": "ok",
-    "scheduler": "ok"
-  },
-  "stats": {
-    "requests_total": 12345,
-    "requests_24h": 678,
-    "active_connections": 5
-  }
-}
-```
 
 ### Health Response Fields
 
@@ -17240,11 +16815,6 @@ When not in cluster mode:
 | `go_version` | Go runtime version |
 | `build.commit` | Git commit hash (short) |
 | `build.date` | Build timestamp |
-| `cluster.enabled` | Whether cluster mode is active |
-| `cluster.status` | connected, degraded, disconnected |
-| `cluster.primary` | Primary node URL (for failover) |
-| `cluster.nodes` | Array of all node URLs (for failover) |
-| `cluster.role` | member (all nodes are equal) |
 | `features.*` | Enabled features (bool or object) |
 | `features.tor.enabled` | Tor hidden service enabled (auto-detected or admin setting) |
 | `features.tor.running` | Tor process currently running |
@@ -17255,13 +16825,9 @@ When not in cluster mode:
 | `stats.requests_24h` | Requests in last 24 hours |
 | `stats.active_connections` | Current active connections |
 
-**Cluster fields for CLI failover:**
-- `cluster.primary` - The primary server URL
-- `cluster.nodes` - All available nodes (CLI uses for automatic failover)
-
 **Who uses health endpoints:**
 - Browsers, curl, and uptime checks use `/server/healthz`
-- CLI uses `/api/{api_version}/server/healthz` for cluster discovery and failover updates
+- CLI uses `/api/{api_version}/server/healthz` for status checks
 - Unversioned `/api/healthz` exists for machine-friendly versionless probing
 
 ## Versioning
@@ -17370,7 +16936,6 @@ OS/Arch: {GOOS}/{GOARCH}
 | **Project-specific features** | Yes | `/api/{api_version}/items` → `/items` page |
 | **Admin features** | No (config file only) | Server administration is file-only — no web routes |
 | **Health/status** | Yes | `/server/healthz` has HTML frontend (with emojis), `/api/{api_version}/server/healthz` is JSON, `/api/healthz` is direct alias JSON |
-| **Agent endpoints** | No | `/api/{api_version}/*/agents/*` - CLI only |
 
 | Requirement | Description |
 |-------------|-------------|
@@ -20559,7 +20124,6 @@ document.addEventListener('click', function(e) {
 |--------------|--------------|--------|
 | Tor .onion addresses | **Yes** | Long, complex, users need to copy |
 | API tokens | **Yes** | Users need to paste elsewhere |
-| Node URLs | **Yes** | Users may need to copy for config |
 | Git clone URLs | **Yes** | Users copy to terminal |
 | Build commit hash | Optional | May be useful for bug reports |
 | Version numbers | No | Short, rarely copied |
@@ -20885,9 +20449,9 @@ document.addEventListener('click', function(e) {
 }
 ```
 
-### Node/URL Lists
+### URL Lists
 
-**For cluster nodes, endpoints, etc.:**
+**For endpoints, related resources, etc.:**
 
 ```html
 <ul class="node-list">
@@ -23156,7 +22720,7 @@ src/server/template/
 │  🔒 Security │          (content area)                          │
 │  🌐 Network  │                                                  │
 │  👥 Users    │                                                  │
-│  🔗 Cluster  │                                                  │
+│  ⚙️ Settings  │                                                  │
 │              │                                                  │
 │  Sidebar     │                                                  │
 ├──────────────┴──────────────────────────────────────────────────┤
@@ -26526,7 +26090,6 @@ server:
 | **Always Running** | Scheduler starts with application and runs until shutdown |
 | **Persistent State** | Task state survives restarts (stored in server.db) |
 | **Automatic Recovery** | Missed tasks run on startup if within catch-up window |
-| **Cluster Aware** | Only one node runs each task in cluster mode |
 | **No External Dependencies** | Built-in, no cron or external scheduler needed |
 
 ## NEVER Use External Schedulers
@@ -26548,7 +26111,6 @@ server:
 | Reason | Explanation |
 |--------|-------------|
 | **Single source of truth** | All schedules visible via API |
-| **Cluster aware** | External cron doesn't know about cluster nodes |
 | **State tracking** | Tracks last run, next run, success/failure |
 | **Catch-up logic** | Runs missed tasks on restart |
 | **No deployment complexity** | No cron files to manage, sync, or debug |
@@ -26569,7 +26131,6 @@ To configure backup schedule:
 
 External schedulers (cron, Task Scheduler, etc.) are not supported
 because the built-in scheduler provides:
-- Cluster-aware execution
 - Automatic catch-up for missed runs
 - State tracking and logging
 - Visibility via `{project_name} scheduler list` CLI command
@@ -26603,7 +26164,6 @@ Every project MUST include these scheduled tasks:
 | `backup_hourly` | Hourly | Hourly incremental (disabled by default) | Yes |
 | `healthcheck_self` | Every 5 minutes | Self-health verification | No |
 | `tor_health` | Every 10 minutes | Check Tor connectivity, restart if needed | No (when Tor installed) |
-| `cluster_heartbeat` | Every 30 seconds | Cluster node heartbeat (cluster mode only) | No |
 
 ### Task Configuration
 
@@ -26722,8 +26282,6 @@ Task state is stored in `server.db`:
 | `run_count` | Integer | Total successful runs |
 | `fail_count` | Integer | Total failed runs |
 | `enabled` | Boolean | Is task enabled |
-| `locked_by` | String | Node ID holding lock (cluster mode) |
-| `locked_at` | Timestamp | When lock was acquired |
 
 ### Startup Behavior
 
@@ -26749,50 +26307,6 @@ Start scheduler loop
 Scheduler runs continuously until shutdown
 ```
 
-### Cluster Mode Task Distribution
-
-In cluster mode, tasks are distributed to prevent duplicate execution:
-
-| Task Type | Execution |
-|-----------|-----------|
-| **Global Tasks** | Run on ONE node only (primary election) |
-| **Local Tasks** | Run on EVERY node |
-
-**Global Tasks (run once per cluster):**
-- `ssl_renewal`
-- `geoip_update`
-- `blocklist_update`
-- `backup_daily`
-
-**Local Tasks (run on each node):**
-- `token_cleanup`
-- `healthcheck_self`
-- `cluster_heartbeat`
-
-### Task Locking (Cluster Mode)
-
-```
-Task Ready to Run
-       │
-       ▼
-Attempt to acquire lock in database
-       │
-       ├─► Lock acquired
-       │   │
-       │   ▼
-       │   Execute task
-       │   │
-       │   ▼
-       │   Release lock, update last_run
-       │
-       └─► Lock held by another node
-           │
-           ▼
-           Skip execution (other node handling it)
-```
-
-**Lock timeout:** 5 minutes (auto-release if node dies during task)
-
 ### Task Execution Flow
 
 ```
@@ -26802,11 +26316,6 @@ Task Triggered (scheduled or manual)
 Check if enabled
        │
        ├─► Disabled: Skip
-       │
-       ▼
-Acquire lock (cluster mode)
-       │
-       ├─► Lock failed: Skip (another node running)
        │
        ▼
 Execute task
@@ -26870,7 +26379,7 @@ The scheduler status is available via the server status API. Task execution can 
 │                                                                             │
 │  Status:      ✓ Enabled                                                    │
 │  Schedule:    0 2 * * * (Daily at 02:00)                                   │
-│  Type:        Global (runs on one cluster node)                            │
+│  Type:        Scheduled                                                    │
 │  Last Run:    2025-01-15 02:00:05 (15.1s)                                  │
 │  Next Run:    2025-01-16 02:00:00                                          │
 │  Run Count:   342 successful, 2 failed                                     │
@@ -26975,10 +26484,9 @@ Shutdown complete
 
 1. **Use Go's time/ticker** - No external cron libraries required
 2. **Database-backed state** - All state in server.db, survives restarts
-3. **Graceful shutdown** - Complete running tasks, release locks
-4. **Cluster-safe** - Distributed locking for global tasks
-5. **Audit logging** - All task executions logged
-6. **Notifications** - Failed tasks trigger notifications (if configured)
+3. **Graceful shutdown** - Complete running tasks before exit
+4. **Audit logging** - All task executions logged
+5. **Notifications** - Failed tasks trigger notifications (if configured)
 
 ---
 
@@ -27371,16 +26879,6 @@ server:
 | `go_gc_runs_total` | Counter | - | Total garbage collection runs |
 | `go_gc_pause_total_seconds` | Counter | - | Total time spent in GC pauses |
 
-### Cluster Metrics (if using PART 10 clustering)
-
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `cluster_nodes_total` | Gauge | - | Total nodes in cluster |
-| `cluster_nodes_healthy` | Gauge | - | Healthy nodes in cluster |
-| `cluster_is_primary` | Gauge | - | 1 if this node is primary, 0 otherwise |
-| `cluster_sync_lag_seconds` | Gauge | - | Replication lag from primary |
-| `cluster_elections_total` | Counter | - | Total primary elections |
-
 ### Tor Metrics (if using PART 31 Tor)
 
 | Metric | Type | Labels | Description |
@@ -27515,18 +27013,6 @@ server:
 # HELP {project_name}_go_gc_runs_total Total number of GC runs
 # TYPE {project_name}_go_gc_runs_total counter
 {project_name}_go_gc_runs_total 1523
-
-# HELP {project_name}_cluster_nodes_total Total nodes in cluster
-# TYPE {project_name}_cluster_nodes_total gauge
-{project_name}_cluster_nodes_total 3
-
-# HELP {project_name}_cluster_nodes_healthy Healthy nodes in cluster
-# TYPE {project_name}_cluster_nodes_healthy gauge
-{project_name}_cluster_nodes_healthy 3
-
-# HELP {project_name}_cluster_is_primary 1 if this node is primary
-# TYPE {project_name}_cluster_is_primary gauge
-{project_name}_cluster_is_primary 1
 
 # HELP {project_name}_tor_enabled 1 if Tor is enabled
 # TYPE {project_name}_tor_enabled gauge
@@ -28910,39 +28396,6 @@ on a Sunday counts as daily + weekly + monthly + yearly - uses highest priority)
 ```
 
 **Daily incremental is NOT counted** in retention - it's always exactly 1 file that gets replaced.
-
-### Cluster Backup Rules
-
-**In cluster mode, EVERY node must maintain its own valid backups.**
-
-| Rule | Description |
-|------|-------------|
-| **Per-node backups** | Each node creates and stores its own backups |
-| **Same retention** | All nodes use same `max_backups` setting |
-| **Same schedule** | All nodes backup at same time (staggered by 5min per node) |
-| **Same encryption** | All nodes use same encryption password |
-| **Local storage** | Backups stored in node's local `{backup_dir}` |
-| **Shared storage (optional)** | Can configure shared NFS/S3 for centralized backups |
-
-**Cluster Backup Verification:**
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  CLUSTER BACKUP STATUS                                          │
-├─────────────────────────────────────────────────────────────────┤
-│  Node              Last Backup      Status    Backups  Daily   │
-│  ─────────────────────────────────────────────────────────────  │
-│  node1.example.com 2025-01-15 02:05 ✓ Valid   4/4      ✓       │
-│  node2.example.com 2025-01-15 02:10 ✓ Valid   4/4      ✓       │
-│  node3.example.com 2025-01-15 02:15 ✓ Valid   4/4      ✓       │
-│                                                                 │
-│  [Backup All Now]  [Verify All]  [Download from Node...]       │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Cluster Backup Alerts:**
-- Alert if ANY node has no valid backups
-- Alert if ANY node's daily backup is missing or invalid
-- Alert if nodes have different backup counts (sync issue)
 
 ## Restore Command
 
@@ -38265,10 +37718,6 @@ var localeFS embed.FS
     "uptime": "Tiempo de actividad",
     "mode": "Modo",
     "status": "Estado",
-    "primary": "Primario",
-    "role": "Rol",
-    "nodes": "Nodos",
-    "cluster": "Clúster",
     "features": "Características",
     "component_status": "Estado de componentes",
     "server_statistics": "Estadísticas del servidor",
@@ -38491,8 +37940,6 @@ var localeFS embed.FS
       "user_list": "Lista de usuarios",
       "invites": "Invitaciones",
       "roles": "Roles",
-      "cluster": "Clúster",
-      "add_node": "Agregar nodo",
       "help": "Ayuda",
       "documentation": "Documentación"
     },
@@ -41043,9 +40490,7 @@ func ensureTorFile(path string, content []byte) error {
 
 ## CLI
 
-The `--status` command includes Tor and cluster status:
-
-### Single Instance
+The `--status` command includes Tor status:
 
 ```
 $ myapp --status
@@ -41054,31 +40499,6 @@ Server Status: Running
   Port: 8080
   Mode: production
   Uptime: 2d 5h 30m
-
-Node: standalone
-Cluster: disabled
-
-Tor Hidden Service: Connected
-  Address: abcd1234...wxyz.onion
-```
-
-### Cluster Mode
-
-```
-$ myapp --status
-
-Server Status: Running
-  Port: 8080
-  Mode: production
-  Uptime: 2d 5h 30m
-
-Node: node-abc123
-  Hostname: server-1.example.com
-
-Cluster: connected
-  Status: healthy
-  Nodes: 3
-  Database: sqlite:///data/db/sqlite/server.db
 
 Tor Hidden Service: Connected
   Address: abcd1234...wxyz.onion
@@ -41088,11 +40508,11 @@ Tor Hidden Service: Connected
 
 | Field | Description |
 |-------|-------------|
-| Node | Node ID (standalone or unique ID) |
-| Hostname | Server hostname |
-| Cluster | disabled, connected, degraded, disconnected |
-| Nodes | Number of nodes in cluster |
-| Database | Database connection info (driver://host/db) |
+| Server Status | Running, stopped, or starting |
+| Port | Bind port |
+| Mode | production or development |
+| Uptime | Human-readable uptime |
+| Tor | Connected/disabled and onion address |
 
 ---
 
@@ -41170,20 +40590,6 @@ userAgent := fmt.Sprintf("%s-cli/%s", projectName, version)
 | `~/.config/{project_org}/{internal_name}/cli.yml` (Unix) | `0644` |
 | `%APPDATA%\{project_org}\{internal_name}\cli.yml` (Windows) | Default ACL |
 
-## CLI Cluster Failover
-
-**The autodiscover response (PART 14) returns the full cluster URL list (`primary` + `cluster: [...]`). The CLI MUST honor this for fault tolerance — if the primary becomes unreachable mid-session, the CLI tries the next cluster URL automatically.**
-
-| Step | Action |
-|------|--------|
-| 1. Initial config | After `login` (or initial bootstrap), CLI calls `/api/autodiscover` and caches the full cluster URL list in `cli.yml` under `server.cluster: [...]`. |
-| 2. Periodic refresh | Every 30 minutes (or on every CLI start, whichever comes first), CLI re-runs autodiscover against `server.primary` and refreshes the cluster list. |
-| 3. Failover | On any request to `server.primary` that fails with a connection-level error (DNS failure, TCP timeout, TLS handshake failure, 5xx after retry) — NOT auth or 4xx errors — the CLI tries each `server.cluster` URL in order with a fresh request. First success becomes the new "preferred" URL for the rest of the session. |
-| 4. Promotion | If the primary stays down for >5 minutes (CLI session-local timer) AND a cluster URL is consistently working, CLI updates `cli.yml` to make the working URL the new `server.primary`. The old primary stays in `cluster:` so it's tried again later. |
-| 5. Total failure | If ALL cluster URLs fail, print: `error: cannot reach {project_name} server at any of {N} configured URLs (last error: ...)`. Exit non-zero. Do not auto-retry beyond the cluster list — operator handles via DNS / connectivity tools. |
-
-The CLI never adds URLs that weren't in the autodiscover response — operators control which cluster nodes are exposed.
-
 ## CLI Auto-Update (Same Pattern as Server Self-Update)
 
 **The CLI follows the same flow as the server's self-update (PART 22): check version via autodiscover, download from the server, verify SHA-256, atomic replace, restart.**
@@ -41224,7 +40630,6 @@ update:
 | `cli.update_checksum_invalid` | SHA-256 didn't match the published checksum |
 | `cli.update_forced` | CLI below `cli_min_version`; refused to make further requests until updated |
 | `cli.token_revoked_detected` | CLI received `401 TOKEN_REVOKED`, exited / cleared cached token |
-| `cli.cluster_failover` | CLI failed over from primary to cluster URL |
 
 
 ### Flag-to-Config Save Rules
@@ -41505,8 +40910,8 @@ Why CLI needs a setup wizard:
 
 ### Display Detection
 
-| Environment | Server/Agent | CLI |
-|-------------|--------------|-----|
+| Environment | Server | CLI |
+|-------------|--------|-----|
 | **Local display** | GUI status window | Full GUI app |
 | **Terminal** | Console banner | Full TUI app |
 | **Remote (SSH/Mosh)** | Console banner | Full TUI app |
@@ -42813,7 +42218,6 @@ func resolveYamlExtension(path string) string {
 # Server connection
 server:
   primary: ""                      # Server URL (empty = use {official_site} or prompt)
-  cluster: []                      # Auto-discovered cluster nodes
   api_version: v1                  # API version prefix (default: v1, must match server)
   timeout: 30s                     # Request timeout (match server default)
   retry: 3                         # Retry attempts on failure
@@ -42883,44 +42287,14 @@ defaults:
 {PROJECT_NAME}_DEBUG=true
 ```
 
-### CLI Cluster Failover
-
-**client MUST support automatic cluster failover. Background node discovery keeps config current.**
-
-| Feature | Behavior |
-|---------|----------|
-| **Background discovery** | CLI calls `/api/autodiscover` in background |
-| **Auto-update** | `server.cluster` updated from `cluster.nodes` in response |
-| **Failover** | If primary fails, try cluster nodes transparently |
-| **No user action** | Completely automatic, user sees no difference |
-
-**CLI Cluster Behavior:**
-```
-On every CLI command:
-1. Load cli.yml
-2. Try server.primary
-3. If fails → try server.cluster nodes (silent failover)
-4. Execute command on first available node
-5. Background: GET /api/{api_version}/server/healthz
-6. Read cluster.primary and cluster.nodes from response
-7. Update server.primary and server.cluster in cli.yml (async, non-blocking)
-```
-
-**User Experience:**
-- User runs `mycli list` - just works
-- If primary is down, CLI silently uses cluster node
-- No error unless ALL nodes are unreachable
-- Config stays current automatically
-
 ### Server Address Resolution
 
 **Priority order (highest to lowest):**
 
 1. `--server` flag (if provided)
 2. `server.primary` in `cli.yml` (if set)
-3. `server.cluster` nodes (if primary fails)
-4. `{official_site}` compiled default (if project has official site)
-5. Error with setup instructions
+3. `{official_site}` compiled default (if project has official site)
+4. Error with setup instructions
 
 **Behavior:**
 
@@ -42928,7 +42302,6 @@ On every CLI command:
 |----------|--------|
 | `--server` flag used | Use that server, **save to `server.primary` in cli.yml** |
 | `server.primary` in cli.yml | Use configured primary server |
-| Primary fails, cluster exists | Silently try cluster nodes |
 | Project has `{official_site}` | Use official site as default |
 | No server available | Error with setup instructions |
 
@@ -44781,13 +44154,12 @@ make docker # Build Docker image
 
 ### Phase 3: Data Layer (PARTS 10-11)
 
-**PART 10: Database & Cluster**
-- [ ] SQLite default for single-node
-- [ ] libsql/Turso for remote/cluster mode
+**PART 10: Database**
+- [ ] SQLite default for local
+- [ ] libsql/Turso for remote
 - [ ] CREATE TABLE IF NOT EXISTS pattern
 - [ ] Automatic migrations on startup
 - [ ] No manual schema creation required
-- [ ] Cluster-aware task locking (when applicable)
 - [ ] Connection pooling configured
 - [ ] Prepared statements used (no SQL injection)
 
@@ -44813,7 +44185,6 @@ make docker # Build Docker image
 - [ ] Runtime reload of safe settings
 - [ ] Restart required clearly documented
 - [ ] Valkey/Redis configuration (if applicable)
-- [ ] Cluster configuration (if applicable)
 
 **PART 13: Health & Versioning**
 - [ ] `/server/healthz` endpoint exists (frontend - smart detection)
@@ -44823,9 +44194,8 @@ make docker # Build Docker image
 - [ ] Smart detection: browser → HTML, CLI → formatted text
 - [ ] Extended healthz response includes:
   - [ ] version, go_version, build info
-  - [ ] cluster (enabled, status, primary, nodes, role)
   - [ ] features (tor, geoip, metrics)
-  - [ ] checks (database, cache, disk, scheduler, cluster)
+  - [ ] checks (database, cache, disk, scheduler)
   - [ ] stats (requests_total, requests_24h, active_connections)
 - [ ] NEVER expose sensitive data (tokens, credentials, paths, internal IPs)
 - [ ] `release.txt` contains version
@@ -44893,7 +44263,6 @@ make docker # Build Docker image
 - [ ] SSL renewal: 03:00 daily
 - [ ] GeoIP update: 03:00 Sunday
 - [ ] Session cleanup: hourly
-- [ ] Cluster-aware task locking
 - [ ] Scheduler status in admin API
 - [ ] Manual task trigger option
 
@@ -44924,7 +44293,6 @@ make docker # Build Docker image
 - [ ] **Backup verification after creation** (checksum, decrypt, extract, DB integrity)
 - [ ] **Daily incremental** `{project_name}-daily.tar.gz[.enc]` always valid
 - [ ] **Hourly incremental** `{project_name}-hourly.tar.gz[.enc]` (if enabled)
-- [ ] **Cluster mode**: each node maintains own valid backups (max_backups per node)
 
 ### Phase 8: Maintenance (PARTS 23-26)
 
@@ -45040,7 +44408,7 @@ make docker # Build Docker image
   - [ ] `features.tor.status` (healthy/error:{message})
   - [ ] `features.tor.hostname` ({onion_address})
 
-**PART 32: Client & Agent**
+**PART 32: Client**
 
 *Client (REQUIRED for all projects):*
 - [ ] Binary: `{project_name}-cli`
@@ -46061,7 +45429,7 @@ When bootstrapping a new project from this specification:
 
 Implement remaining required parts:
 1. **PART 9:** Error Handling & Caching
-2. **PART 10:** Database & Cluster
+2. **PART 10:** Database
 3. **PART 11:** Security & Logging
 4. **PART 12:** Server Configuration
 5. **PART 13:** Health & Versioning
@@ -46084,8 +45452,7 @@ Implement remaining required parts:
 
 Implement the required client, then any project-specific optional features:
 1. **PART 32:** Client (required for all projects)
-2. **PART 32:** Agent (only if project manages or monitors external nodes)
-3. **Project-specific:** Additional features defined in IDEA.md
+2. **Project-specific:** Additional features defined in IDEA.md
 
 #### Step 9: Documentation (PART 29)
 
