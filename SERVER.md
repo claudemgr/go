@@ -5798,7 +5798,7 @@ jobs:
 #!/bin/bash
 # scripts/verify-licenses.sh
 
-set -euo pipefail
+set -eo pipefail
 
 echo "Checking for incompatible licenses..."
 
@@ -42992,7 +42992,7 @@ fi
 
 ```bash
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 
 # Detect project info
 PROJECTNAME=$(basename "$PWD")
@@ -43231,7 +43231,7 @@ echo "Docker tests completed successfully"
 
 ```bash
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 
 # Check if incus is available
 if ! command -v incus &>/dev/null; then
@@ -43497,7 +43497,7 @@ echo "Incus tests completed successfully"
 
 ```bash
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 
 # Detect available container runtime and run appropriate test
 if command -v incus &>/dev/null; then
@@ -43539,7 +43539,7 @@ fi
 | **Cleanup** | ALWAYS use `trap` for cleanup |
 | **Exit codes** | 0 = success, non-zero = failure |
 | **Output** | Clear progress messages with `echo` |
-| **Error handling** | `set -euo pipefail` at top |
+| **Error handling** | `set -eo pipefail` at top |
 
 ### Shell Completions (Built-in)
 
@@ -43577,7 +43577,7 @@ eval "$({project_name}-agent --shell init)"
 
 ```bash
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 
 echo '=== Admin Authentication Tests ==='
 
