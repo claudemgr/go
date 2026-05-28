@@ -664,9 +664,9 @@ Inject version, commit ID, build date, and official site via `-ldflags`:
 ```go
 // Version injected at build time via -ldflags
 var (
-    Version      = "dev"     // overridden by: -ldflags="-X main.Version=$(cat release.txt)"
-    CommitID     = "unknown" // overridden by: -ldflags="-X main.CommitID=$(git rev-parse --short HEAD)"
-    BuildDate    = "unknown" // overridden by: -ldflags="-X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    Version      = "devel"   // overridden by: -ldflags="-X main.Version=$(cat release.txt)"
+    CommitID     = "N/A"     // overridden by: -ldflags="-X main.CommitID=$(git rev-parse --short HEAD)"
+    BuildDate    = "N/A"     // overridden by: -ldflags="-X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     OfficialSite = ""        // overridden by: -ldflags="-X main.OfficialSite=$(cat site.txt)"
 )
 ```
@@ -925,17 +925,17 @@ Inject at build time via `-ldflags` `-X` flags:
 ```go
 // Version injected at build time via -ldflags
 var (
-    Version      = "dev"
-    CommitID     = "unknown"
-    BuildDate    = "unknown"
+    Version      = "devel"
+    CommitID     = "N/A"
+    BuildDate    = "N/A"
     OfficialSite = ""
 )
 ```
 
 **Makefile pattern for version injection:**
 ```makefile
-VERSION     := $(shell cat release.txt 2>/dev/null || echo "dev")
-COMMIT_ID   := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+VERSION     ?= $(shell cat release.txt 2>/dev/null || echo "devel")
+COMMIT_ID   := $(shell git rev-parse --short HEAD 2>/dev/null || echo "N/A")
 BUILD_DATE  := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 SITE        := $(shell cat site.txt 2>/dev/null || true)
 

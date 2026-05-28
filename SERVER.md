@@ -36730,12 +36730,12 @@ PROJECTNAME := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/
 PROJECTORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$$|\1|' || basename "$$(dirname "$$(pwd)")")
 
 # Version precedence: release.txt > env/default fallback
-VERSION := $(shell [ -f release.txt ] && cat release.txt || echo "${VERSION:-0.1.0}")
+VERSION ?= $(shell cat release.txt 2>/dev/null || echo "devel")
 
 # Build info — ISO 8601 / RFC 3339 UTC per version_conventions.md
 # Format: "2025-12-04T13:05:13Z"
 BUILD_DATE := $(shell date -u +"%%Y-%%m-%%dT%%H:%%M:%%SZ")
-COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "N/A")
 # COMMIT_ID used directly - no VCS_REF alias
 
 # Official site URL (OPTIONAL - never guess or assume)
@@ -36762,7 +36762,7 @@ GODIR := $(HOME)/.local/share/go
 GOCACHE := $(HOME)/.local/share/go/build
 
 # Build targets
-PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64
+PLATFORMS ?= linux/amd64,linux/arm64
 
 # Docker - Set REGISTRY based on your platform (ghcr.io, registry.gitlab.com, git.example.com)
 REGISTRY ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
@@ -36921,7 +36921,7 @@ docker:
 	@docker buildx create --name $(PROJECTNAME)-builder --use 2>/dev/null || \
 		docker buildx use $(PROJECTNAME)-builder
 
-	# Build and push multi-arch (multi-stage Dockerfile handles Go compilation)
+	# Build multi-arch locally (no push — pushing is CI/CD's responsibility)
 	@docker buildx build \
 		-f docker/Dockerfile \
 		--platform linux/amd64,linux/arm64 \
@@ -36930,10 +36930,9 @@ docker:
 		--build-arg COMMIT_ID="$(COMMIT_ID)" \
 		-t $(REGISTRY):$(VERSION) \
 		-t $(REGISTRY):latest \
-		--push \
 		.
 
-	@echo "Docker push complete: $(REGISTRY):$(VERSION)"
+	@echo "Docker build complete: $(REGISTRY):$(VERSION)"
 
 # =============================================================================
 # TEST - Run all tests with coverage enforcement (via Docker)
@@ -36996,9 +36995,9 @@ Every binary MUST have these values embedded at build time:
 ```go
 // Build info - set via -ldflags at build time
 var (
-    Version      = "dev"
-    CommitID     = "unknown"
-    BuildDate    = "unknown"
+    Version      = "devel"
+    CommitID     = "N/A"
+    BuildDate    = "N/A"
     OfficialSite = ""  // Empty = users must use --server flag
 )
 ```
