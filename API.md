@@ -703,7 +703,10 @@ Renovate covers `github-actions` SHA updates automatically via `pinDigests: true
 
 Every project ships workflow files for all five CI/CD providers. Same gates, different syntax — no vendor lock-in.
 
-**Workflow files are created last.** Never scaffold or commit a workflow file before all code is complete, `make test` passes, and the lint gate is clean. Pushing a workflow file with incomplete code triggers an immediate CI failure and wastes build minutes.
+**Workflow creation order — not all workflows carry the same risk:**
+1. **Security-only workflows** (secret scan, SHA/digest policy, dependency audit) — no build dependency; safe to add anytime
+2. **`build-toolchain.yml`** (`:build` image) — add once `docker/Dockerfile.build` builds successfully locally; required by all subsequent workflows
+3. **`ci.yml` and `release.yml`** — add **last**, only after all code is complete, `make test` passes, and the lint gate is clean; these trigger a full build on push and will fail immediately if the code is not ready
 
 | Provider | Workflow location | Syntax |
 |----------|------------------|--------|
