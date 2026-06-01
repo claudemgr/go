@@ -557,7 +557,7 @@ Prefer platform-standard user directories:
 |------|-------------|
 | Go version | Use the current stable Go version declared in `go.mod` and pinned in `.go-version` |
 | Version pin | Single-line `.go-version` file at project root (e.g., `go1.23.0`) — used by toolchain managers and CI |
-| Targets | Build targets set via `GOOS`/`GOARCH` env vars inside the Docker image; no toolchain installation beyond the base `golang:alpine` image is required |
+| Targets | Build targets set via `GOOS`/`GOARCH` env vars inside the Docker image; no toolchain installation beyond the base `casjaysdev/go:latest` image is required |
 | Formatting | `gofmt` (or `goimports`) is required |
 | Linting | `golangci-lint` is required |
 | Testing | `go test` is required |
@@ -743,7 +743,7 @@ Place Docker assets under `docker/`:
 ```text
 docker/
 ├── Dockerfile              # production runtime image — two-stage (builder + minimal Alpine); tagged :latest
-├── Dockerfile.build        # toolchain image — golang:alpine + all build/test/lint/scan tools; built monthly; tagged :build   (project-specific)
+├── Dockerfile.build        # toolchain image — casjaysdev/go:latest base; only when custom tools beyond the standard image are needed; tagged :build   (project-specific)
 ├── Dockerfile.dev          # devel image — same as release but binary runs in debug mode; tagged :devel   (project-specific)
 ├── rootfs/                 # build-time filesystem overlay copied into image at /   (project-specific)
 ├── docker-compose.yml      # production compose — HUMAN USE ONLY
@@ -759,7 +759,7 @@ docker/
 
 These properties apply to `docker/Dockerfile.build` — the toolchain image built monthly and pulled by all CI/CD workflows:
 
-- Base image: `golang:alpine` (rolling — never pinned to a specific version tag)
+- Base image: `casjaysdev/go:latest` (rolling — never pinned); includes golangci-lint, staticcheck, govulncheck, goreleaser, and more out of the box. Only create `Dockerfile.build` when the project needs tools beyond what this image provides
 - Go version matching `.go-version` is provided by the base image or set via `GOTOOLCHAIN` in the Dockerfile
 - `gofmt` and `go vet` are included in the Go toolchain (no extra install needed)
 - `golangci-lint`, `govulncheck`, `go-licenses`, and `cyclonedx-gomod` are pre-installed in the image
@@ -1416,7 +1416,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] `release.txt` exists if the project is using explicit release versioning
 - [ ] `site.txt` exists only if there is a real official site URL
 - [ ] `docker/Dockerfile`, `docker/Dockerfile.build`, `docker/docker-compose.yml`, `docker/docker-compose.dev.yml`, `docker/docker-compose.test.yml`, and `docker/entrypoint.sh` exist; `Dockerfile.build` builds the toolchain image; `Dockerfile` is the runtime image
-- [ ] `docker/Dockerfile.build` is based on `golang:alpine` (rolling); `golangci-lint`, `govulncheck`, `go-licenses`, and `cyclonedx-gomod` are pre-installed
+- [ ] If `docker/Dockerfile.build` exists, it is based on `casjaysdev/go:latest`; it is only present when the project needs tools beyond what the standard image provides (`golangci-lint`, `govulncheck`, `goreleaser`, and more are already in the base image)
 - [ ] `CGO_ENABLED=0` is set as default in the Docker image environment
 - [ ] X11 forwarding sample command is documented and works against a real Xorg/XWayland session
 - [ ] Wayland forwarding sample command is documented and works against a real Wayland compositor
