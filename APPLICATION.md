@@ -729,7 +729,7 @@ The `assets/` directory in the repo holds source files (fonts, icons, default th
 - No companion files (no `.so`, `.dylib`, `.dll`, no asset bundles, no font directories) ship next to the binary
 - Include SHA-256 checksums for every published artifact, named `{artifact}.sha256`
 - Include release notes that describe actual changes
-- Include an SBOM (always — generated via `cyclonedx-gomod`; see PART 10 → "Suggested CI Steps" for the invocation). Include provenance/attestation when the release platform supports it
+- Include an SBOM (always — generated via `cyclonedx-gomod`; see PART 10 → "Suggested CI Steps" for the invocation). Include provenance/attestation via `actions/attest-build-provenance` when the release platform supports it; always set `provenance: false` on `docker/build-push-action` steps
 - If GUI packaging exists (MSI, DMG, AppImage, deb, rpm, etc.), the package wraps the same single static binary plus desktop integration metadata; package metadata lives in `packaging/`
 
 ## Docker Rule
