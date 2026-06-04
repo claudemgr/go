@@ -3412,7 +3412,7 @@ db.Exec(query, id)
 | **CSS** | 2 spaces | 120 | Single `\n` | Manual or prettier |
 | **JavaScript** | 2 spaces | 120 | Single `\n` | Manual or prettier |
 | **Makefile** | Tabs (required) | Single `\n` | Manual |
-| **Shell scripts** | 2 spaces | Single `\n` | shellcheck/shfmt |
+| **Shell scripts** (bash/sh/zsh/fish) | 2 spaces | 180 | Single `\n` | shellcheck/shfmt |
 | **Text responses** | N/A | Single `\n` | `fmt.Fprintf(w, "%s\n", text)` |
 
 **Universal Rules:**
@@ -10488,37 +10488,37 @@ Usage:
   {project_name} [flags]
 
 Information:
-  -h, --help                        Show help (--help for any command shows its help)
-  -v, --version                     Show version
-      --status                      Show server status and health
+-h, --help                            - Show help (--help for any command shows its help)
+-v, --version                         - Show version
+--status                              - Show server status and health
 
 Shell Integration:
-      --shell completions [SHELL]   Print shell completions
-      --shell init [SHELL]          Print shell init command
-      --shell --help                Show shell help
+--shell completions [SHELL]           - Print shell completions
+--shell init [SHELL]                  - Print shell init command
+--shell help                          - Show shell help
 
 Server Configuration:
-      --mode {production|development}  Application mode (default: production)
-      --config DIR                  Config directory
-      --data DIR                    Data directory
-      --cache DIR                   Cache directory
-      --log DIR                     Log directory
-      --backup DIR                  Backup directory
-      --pid FILE                    PID file path
-      --address ADDR                Listen address (default: 0.0.0.0)
-      --port PORT                   Listen port (default: random 64xxx, 80 in container)
-      --baseurl PATH                URL path prefix (default: /)
-      --daemon                      Run as daemon (detach from terminal)
-      --debug                       Enable debug mode
-      --color {always|never|auto}   Color output (default: auto)
-      --lang CODE                   Language for output (default: auto)
+--mode {production|development}       - Application mode (default: production)
+--config DIR                          - Config directory
+--data DIR                            - Data directory
+--cache DIR                           - Cache directory
+--log DIR                             - Log directory
+--backup DIR                          - Backup directory
+--pid FILE                            - PID file path
+--address ADDR                        - Listen address (default: 0.0.0.0)
+--port PORT                           - Listen port (default: random 64xxx, 80 in container)
+--baseurl PATH                        - URL path prefix (default: /)
+--daemon                              - Run as daemon (detach from terminal)
+--debug                               - Enable debug mode
+--color {always|never|auto}           - Color output (default: auto)
+--lang CODE                           - Language for output (default: auto)
 
 Service Management:
-      --service CMD                 Service management (--service --help for details)
-      --maintenance CMD             Maintenance operations (--maintenance --help for details)
-      --update [CMD]                Check/perform updates (--update --help for details)
+--service CMD                         - Service management (run --service help for details)
+--maintenance CMD                     - Maintenance operations (run --maintenance help for details)
+--update [CMD]                        - Check/perform updates (run --update help for details)
 
-Run '{project_name} <command> --help' for detailed help on any command.
+Run '{project_name} <command> help' for detailed help on any command.
 ```
 
 ## Directory Flags
@@ -35453,14 +35453,13 @@ ON --service --disable:
 $ {project_name} --service --help
 Service management commands:
 
-  start       Start the service
-  stop        Stop the service
-  restart     Restart the service
-  reload      Reload configuration without restart
-
-  --install   Install, enable, and start service
-  --disable   Stop and disable service (keeps data)
-  --uninstall Stop, disable, and remove everything (keeps binary)
+start                                 - Start the service
+stop                                  - Stop the service
+restart                               - Restart the service
+reload                                - Reload configuration without restart
+--install                             - Install, enable, and start service
+--disable                             - Stop and disable service (keeps data)
+--uninstall                           - Stop, disable, and remove everything (keeps binary)
 
 Current status:
   Service:    installed / not installed
@@ -35475,23 +35474,19 @@ Current status:
 $ {project_name} --maintenance --help
 Maintenance commands:
 
-  backup [file]     Create backup of all data
-                    Default: {backup_dir}/{project_name}-{timestamp}.tar.gz
-
-  restore <file>    Restore from backup file
-                    Stops server, restores data, restarts server
-
-  update [cmd]      Manage updates
-                    check         - Check for available updates
-                    yes           - Download and install update
-                    branch <name> - Switch update branch (stable|beta|daily)
-
-  mode <mode>       Set application mode
-                    production    - Normal operation (default)
-                    development   - Debug logging, dev endpoints
-
-  setup             Run interactive setup wizard
-                    Creates primary Server Admin, configures server
+backup [file]                         - Create backup of all data
+                                        Default: {backup_dir}/{project_name}-{timestamp}.tar.gz
+restore <file>                        - Restore from backup file
+                                        Stops server, restores data, restarts server
+update [cmd]                          - Manage updates
+                                        check         - Check for available updates
+                                        yes           - Download and install update
+                                        branch <name> - Switch update branch (stable|beta|daily)
+mode <mode>                           - Set application mode
+                                        production    - Normal operation (default)
+                                        development   - Debug logging, dev endpoints
+setup                                 - Run interactive setup wizard
+                                        Creates primary Server Admin, configures server
 
 Examples:
   {project_name} --maintenance backup
@@ -35509,12 +35504,11 @@ Examples:
 $ {project_name} --shell --help
 Shell integration commands:
 
-  completions [SHELL]   Print shell completion script
-                        Auto-detects shell if SHELL omitted
-                        Supported: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
-
-  init [SHELL]          Print shell init command for eval
-                        Auto-detects shell if SHELL omitted
+completions [SHELL]                   - Print shell completion script
+                                        Auto-detects shell if SHELL omitted
+                                        Supported: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
+init [SHELL]                          - Print shell init command for eval
+                                        Auto-detects shell if SHELL omitted
 
 Usage:
   # Add to shell profile for persistent completions
@@ -35535,16 +35529,14 @@ Usage:
 $ {project_name} --update --help
 Update management:
 
-  check                 Check for available updates
-                        Compares current version with latest release
-
-  yes                   Download and install update
-                        Downloads latest release, replaces binary, restarts
-
-  branch <name>         Switch update branch
-                        stable - Stable releases (default)
-                        beta   - Beta/preview releases
-                        daily  - Daily builds (development)
+check                                 - Check for available updates
+                                        Compares current version with latest release
+yes                                   - Download and install update
+                                        Downloads latest release, replaces binary, restarts
+branch <name>                         - Switch update branch
+                                        stable - Stable releases (default)
+                                        beta   - Beta/preview releases
+                                        daily  - Daily builds (development)
 
 Examples:
   {project_name} --update check
@@ -35571,7 +35563,7 @@ AUTHENTICATION REQUIRED:
   Token must have admin scope (prefix: adm_). User tokens (usr_) will be rejected.
 
 Commands:
-  user                  User management (--admin user --help)
+user                                  - User management (--admin user --help)
     list                List all users
     get <username>      Get user details
     create <username>   Create new user (sends invite)
@@ -35581,7 +35573,7 @@ Commands:
     reset-password <username>  Send password reset email
     disable-2fa <username>     Disable user's 2FA
 
-  org                   Organization management (--admin org --help)
+org                                   - Organization management (--admin org --help)
     list                List all organizations
     get <orgname>       Get organization details
     create <orgname>    Create new organization
@@ -35590,16 +35582,16 @@ Commands:
     add-member <orgname> <username>     Add member to org
     remove-member <orgname> <username>  Remove member from org
 
-  token                 API token management (--admin token --help)
+token                                 - API token management (--admin token --help)
     list                List all tokens
     create <name>       Create new token
     revoke <token_id>   Revoke token
     info <token_id>     Get token details
 
 Global Flags:
-  --token TOKEN         API token for authentication
-  --format {table|json|yaml}  Output format (default: table)
-  --quiet               Suppress non-essential output
+--token TOKEN                         - API token for authentication
+--format {table|json|yaml}            - Output format (default: table)
+--quiet                               - Suppress non-essential output
 
 Examples:
   {project_name}-cli --admin user list
@@ -35614,31 +35606,29 @@ Examples:
 $ {project_name}-cli --admin user --help
 User management commands:
 
-  list                  List all users
+list                                  - List all users
     --limit N           Limit results (default: 100)
     --offset N          Offset for pagination
     --status STATUS     Filter by status (active|suspended|all)
 
-  get <username>        Get user details
+get <username>                        - Get user details
     --format FORMAT     Output format (table|json|yaml)
 
-  create <username>     Create new user
-                        Sends invite email, user sets own password
+create <username>                     - Create new user
+                                        Sends invite email, user sets own password
     --email EMAIL       User's email address (required)
     --role ROLE         User role (user|admin, default: user)
 
-  delete <username>     Delete user
+delete <username>                     - Delete user
     --force             Skip confirmation prompt
 
-  suspend <username>    Suspend user account
+suspend <username>                    - Suspend user account
 
-  unsuspend <username>  Unsuspend user account
+unsuspend <username>                  - Unsuspend user account
 
-  reset-password <username>
-                        Send password reset email to user
+reset-password <username>             - Send password reset email to user
 
-  disable-2fa <username>
-                        Disable two-factor authentication for user
+disable-2fa <username>                - Disable two-factor authentication for user
 
 Examples:
   {project_name}-cli --admin user list
@@ -35655,29 +35645,27 @@ Examples:
 $ {project_name}-cli --admin org --help
 Organization management commands:
 
-  list                  List all organizations
+list                                  - List all organizations
     --limit N           Limit results (default: 100)
     --offset N          Offset for pagination
 
-  get <orgname>         Get organization details
+get <orgname>                         - Get organization details
     --format FORMAT     Output format (table|json|yaml)
 
-  create <orgname>      Create new organization
+create <orgname>                      - Create new organization
     --display-name NAME Display name
     --description DESC  Organization description
 
-  delete <orgname>      Delete organization
+delete <orgname>                      - Delete organization
     --force             Skip confirmation prompt
 
-  members <orgname>     List organization members
+members <orgname>                     - List organization members
     --role ROLE         Filter by role (owner|admin|member)
 
-  add-member <orgname> <username>
-                        Add user to organization
+add-member <orgname> <username>       - Add user to organization
     --role ROLE         Member role (owner|admin|member, default: member)
 
-  remove-member <orgname> <username>
-                        Remove user from organization
+remove-member <orgname> <username>    - Remove user from organization
     --force             Skip confirmation prompt
 
 Examples:
@@ -35693,18 +35681,18 @@ Examples:
 $ {project_name}-cli --admin token --help
 API token management commands:
 
-  list                  List all tokens
+list                                  - List all tokens
     --limit N           Limit results (default: 100)
     --user USERNAME     Filter by user
 
-  create <name>         Create new API token
+create <name>                         - Create new API token
     --expires DURATION  Token expiration (e.g., 30d, 1y, never)
     --scopes SCOPES     Comma-separated scopes (read,write,admin)
 
-  revoke <token_id>     Revoke token immediately
+revoke <token_id>                     - Revoke token immediately
     --force             Skip confirmation prompt
 
-  info <token_id>       Get token details
+info <token_id>                       - Get token details
     --format FORMAT     Output format (table|json|yaml)
 
 Examples:
@@ -35729,25 +35717,25 @@ AUTHENTICATION REQUIRED:
   org tokens (org_) will be rejected.
 
 Commands:
-  config                Server configuration (--admin server config --help)
+config                                - Server configuration (--admin server config --help)
     get [key]           Get config value(s)
     set <key> <value>   Set config value
     list                List all config keys
     reset <key>         Reset config to default
 
-  admin                 Server admin management (--admin server admin --help)
+admin                                 - Server admin management (--admin server admin --help)
     list                List all server admins
     invite <username>   Invite new server admin
     remove <username>   Remove server admin
     reset-password <username>  Send password reset
 
-  stats                 Server statistics (--admin server stats --help)
+stats                                 - Server statistics (--admin server stats --help)
     overview            General server statistics
     users               User statistics
     storage             Storage usage
     performance         Performance metrics
 
-  blocklist             IP/domain blocklist management (--admin server blocklist --help)
+blocklist                             - IP/domain blocklist management (--admin server blocklist --help)
     list                List all blocklist sources with stats
     update [--source NAME]  Update all or specific blocklist
     check <IP>          Check if IP is in any blocklist
@@ -35756,7 +35744,7 @@ Commands:
     stats               Show aggregate blocklist statistics
 
 Global Flags:
-  --format {table|json|yaml}  Output format (default: table)
+--format {table|json|yaml}            - Output format (default: table)
 
 Examples:
   {project_name}-cli --admin server config list
@@ -35775,18 +35763,18 @@ Examples:
 $ {project_name}-cli --admin server config --help
 Server configuration commands:
 
-  get [key]             Get configuration value
-                        Without key: shows all config
+get [key]                             - Get configuration value
+                                        Without key: shows all config
     --format FORMAT     Output format (table|json|yaml)
 
-  set <key> <value>     Set configuration value
-                        Changes take effect immediately
+set <key> <value>                     - Set configuration value
+                                        Changes take effect immediately
     --no-reload         Don't reload config after change
 
-  list                  List all configuration keys
+list                                  - List all configuration keys
     --category CAT      Filter by category (server|auth|registration|email)
 
-  reset <key>           Reset configuration to default value
+reset <key>                           - Reset configuration to default value
     --force             Skip confirmation prompt
 
 Common Configuration Keys:
@@ -35812,20 +35800,19 @@ Examples:
 $ {project_name}-cli --admin server admin --help
 Server admin management commands:
 
-  list                  List all server admins
+list                                  - List all server admins
     --format FORMAT     Output format (table|json|yaml)
 
-  invite <username>     Invite new server admin
-                        Sends invite email, admin sets own password
+invite <username>                     - Invite new server admin
+                                        Sends invite email, admin sets own password
     --email EMAIL       Admin's email address (required)
 
-  remove <username>     Remove server admin
-                        Cannot remove Primary Admin
-                        Cannot remove yourself
+remove <username>                     - Remove server admin
+                                        Cannot remove Primary Admin
+                                        Cannot remove yourself
     --force             Skip confirmation prompt
 
-  reset-password <username>
-                        Send password reset email to server admin
+reset-password <username>             - Send password reset email to server admin
 
 Note: Primary server admin cannot be removed. Use --maintenance setup for recovery.
 
@@ -35842,21 +35829,18 @@ Examples:
 $ {project_name}-cli --admin server stats --help
 Server statistics commands:
 
-  overview              General server statistics
-                        Uptime, version, request counts, error rates
-
-  users                 User statistics
-                        Total users, active users, registrations over time
-
-  storage               Storage usage
-                        Database size, file storage, cache usage
-
-  performance           Performance metrics
-                        Response times, throughput, resource usage
+overview                              - General server statistics
+                                        Uptime, version, request counts, error rates
+users                                 - User statistics
+                                        Total users, active users, registrations over time
+storage                               - Storage usage
+                                        Database size, file storage, cache usage
+performance                           - Performance metrics
+                                        Response times, throughput, resource usage
 
 Flags:
-  --format FORMAT       Output format (table|json|yaml)
-  --period PERIOD       Time period (1h|24h|7d|30d, default: 24h)
+--format FORMAT                       - Output format (table|json|yaml)
+--period PERIOD                       - Time period (1h|24h|7d|30d, default: 24h)
 
 Examples:
   {project_name}-cli --admin server stats overview
@@ -50807,6 +50791,9 @@ Enter choice [1-4]:
 
 **Only `-h` and `-v` have short forms. Everything else is long-form only.**
 
+- **No root required** — `--help` and `--version` must never require escalation; they always run as the calling user regardless of service install state
+- **No escalation** — help at every level (main, subcommand, nested) must never call `sudo`, require root/admin, or check privilege state; exit immediately with the help text.
+
 ### Boolean/Truthy-Falsey Handling (CLI & Agent)
 
 **CLI and Agent binaries use the SAME truthy/falsey parsing as the server.**
@@ -51082,31 +51069,31 @@ Usage:
   {project_name}-cli                    # TUI mode (no args)
 
 Flags:
-  -h, --help                        Show help
-  -v, --version                     Show version
-      --shell completions [SHELL]   Print shell completions (auto-detect if SHELL omitted)
-      --shell init [SHELL]          Print shell init command (auto-detect if SHELL omitted)
-      --shell --help                Show shell integration help
+-h, --help                            - Show help
+-v, --version                         - Show version
+--shell completions [SHELL]           - Print shell completions (auto-detect if SHELL omitted)
+--shell init [SHELL]                  - Print shell init command (auto-detect if SHELL omitted)
+--shell help                          - Show shell integration help
 
-      --server URL                  Server URL (default: from config)
-      --token TOKEN                 API token for authentication
-      --token-file FILE             Read token from file
-      --user NAME                   Target user or org (auto-detect, @user, +org)
-      --config NAME                 Config profile name (default: cli.yml)
-      --debug                       Debug output
-      --color {always|never|auto}   Color output (default: auto)
-      --lang CODE                   Language for output (default: auto)
+--server URL                          - Server URL (default: from config)
+--token TOKEN                         - API token for authentication
+--token-file FILE                     - Read token from file
+--user NAME                           - Target user or org (auto-detect, @user, +org)
+--config NAME                         - Config profile name (default: cli.yml)
+--debug                               - Debug output
+--color {always|never|auto}           - Color output (default: auto)
+--lang CODE                           - Language for output (default: auto)
 
 Administration (requires admin token):
-      --admin CMD                   Admin operations (--admin --help for details)
-      --admin server CMD            Server admin operations (--admin server --help)
+--admin CMD                           - Admin operations (--admin --help for details)
+--admin server CMD                    - Server admin operations (--admin server --help)
 
   {project-specific flags listed here}
 
 Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
 
 Run without arguments for interactive TUI mode.
-Run '{project_name}-cli <command> --help' for detailed help on any command.
+Run '{project_name}-cli <command> help' for detailed help on any command.
 ```
 
 **If user renames binary:**
@@ -52434,31 +52421,31 @@ Usage:
   {project_name}-agent [command]
 
 Commands:
-  status                        Show agent status
-  test                          Test server connection
-  register                      Interactive registration
+status                                - Show agent status
+test                                  - Test server connection
+register                              - Interactive registration
 
 Flags:
-  -h, --help                        Show help
-  -v, --version                     Show version
-      --shell completions [SHELL]   Print shell completions (auto-detect if SHELL omitted)
-      --shell init [SHELL]          Print shell init command (auto-detect if SHELL omitted)
-      --shell --help                Show shell integration help
+-h, --help                            - Show help
+-v, --version                         - Show version
+--shell completions [SHELL]           - Print shell completions (auto-detect if SHELL omitted)
+--shell init [SHELL]                  - Print shell init command (auto-detect if SHELL omitted)
+--shell help                          - Show shell integration help
 
-      --config DIR                  Config directory
-      --data DIR                    Data directory
-      --log DIR                     Log directory
-      --server URL                  Server URL to connect to
-      --token TOKEN                 Authentication token
+--config DIR                          - Config directory
+--data DIR                            - Data directory
+--log DIR                             - Log directory
+--server URL                          - Server URL to connect to
+--token TOKEN                         - Authentication token
 
-      --mode {production|development}  Application mode
-      --debug                       Enable debug mode
-      --color {always|never|auto}   Color output (default: auto)
-      --lang CODE                   Language for output (default: auto)
-      --status                      Show agent health
+--mode {production|development}       - Application mode
+--debug                               - Enable debug mode
+--color {always|never|auto}           - Color output (default: auto)
+--lang CODE                           - Language for output (default: auto)
+--status                              - Show agent health
 
-      --service CMD                 Service management (install|uninstall|start|stop|restart)
-      --update [CMD]                Check/perform self-update
+--service CMD                         - Service management (install|uninstall|start|stop|restart)
+--update [CMD]                        - Check/perform self-update
 
 Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
 ```

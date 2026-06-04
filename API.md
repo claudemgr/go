@@ -3328,7 +3328,7 @@ db.Exec(query, id)
 | **CSS** | 2 spaces | 120 | Single `\n` | Manual or prettier |
 | **JavaScript** | 2 spaces | 120 | Single `\n` | Manual or prettier |
 | **Makefile** | Tabs (required) | Single `\n` | Manual |
-| **Shell scripts** | 2 spaces | Single `\n` | shellcheck/shfmt |
+| **Shell scripts** (bash/sh/zsh/fish) | 2 spaces | 180 | Single `\n` | shellcheck/shfmt |
 | **Text responses** | N/A | Single `\n` | `fmt.Fprintf(w, "%s\n", text)` |
 
 **Universal Rules:**
@@ -9943,37 +9943,37 @@ Usage:
   {project_name} [flags]
 
 Information:
-  -h, --help                        Show help (--help for any command shows its help)
-  -v, --version                     Show version
-      --status                      Show server status and health
+-h, --help                            - Show help (--help for any command shows its help)
+-v, --version                         - Show version
+--status                              - Show server status and health
 
 Shell Integration:
-      --shell completions [SHELL]   Print shell completions
-      --shell init [SHELL]          Print shell init command
-      --shell --help                Show shell help
+--shell completions [SHELL]           - Print shell completions
+--shell init [SHELL]                  - Print shell init command
+--shell help                          - Show shell help
 
 Server Configuration:
-      --mode {production|development}  Application mode (default: production)
-      --config DIR                  Config directory
-      --data DIR                    Data directory
-      --cache DIR                   Cache directory
-      --log DIR                     Log directory
-      --backup DIR                  Backup directory
-      --pid FILE                    PID file path
-      --address ADDR                Listen address (default: 0.0.0.0)
-      --port PORT                   Listen port (default: random 64xxx, 80 in container)
-      --baseurl PATH                URL path prefix (default: /)
-      --daemon                      Run as daemon (detach from terminal)
-      --debug                       Enable debug mode
-      --color {always|never|auto}   Color output (default: auto)
-      --lang CODE                   Language for output (default: auto)
+--mode {production|development}       - Application mode (default: production)
+--config DIR                          - Config directory
+--data DIR                            - Data directory
+--cache DIR                           - Cache directory
+--log DIR                             - Log directory
+--backup DIR                          - Backup directory
+--pid FILE                            - PID file path
+--address ADDR                        - Listen address (default: 0.0.0.0)
+--port PORT                           - Listen port (default: random 64xxx, 80 in container)
+--baseurl PATH                        - URL path prefix (default: /)
+--daemon                              - Run as daemon (detach from terminal)
+--debug                               - Enable debug mode
+--color {always|never|auto}           - Color output (default: auto)
+--lang CODE                           - Language for output (default: auto)
 
 Service Management:
-      --service CMD                 Service management (--service --help for details)
-      --maintenance CMD             Maintenance operations (--maintenance --help for details)
-      --update [CMD]                Check/perform updates (--update --help for details)
+--service CMD                         - Service management (run --service help for details)
+--maintenance CMD                     - Maintenance operations (run --maintenance help for details)
+--update [CMD]                        - Check/perform updates (run --update help for details)
 
-Run '{project_name} <command> --help' for detailed help on any command.
+Run '{project_name} <command> help' for detailed help on any command.
 ```
 
 ## Directory Flags
@@ -29128,14 +29128,14 @@ ON --service --disable:
 $ {project_name} --service --help
 Service management commands:
 
-  start       Start the service
-  stop        Stop the service
-  restart     Restart the service
-  reload      Reload configuration without restart
+start                                 - Start the service
+stop                                  - Stop the service
+restart                               - Restart the service
+reload                                - Reload configuration without restart
 
-  --install   Install, enable, and start service
-  --disable   Stop and disable service (keeps data)
-  --uninstall Stop, disable, and remove everything (keeps binary)
+--install                             - Install, enable, and start service
+--disable                             - Stop and disable service (keeps data)
+--uninstall                           - Stop, disable, and remove everything (keeps binary)
 
 Current status:
   Service:    installed / not installed
@@ -29150,22 +29150,22 @@ Current status:
 $ {project_name} --maintenance --help
 Maintenance commands:
 
-  backup [file]     Create backup of all data
-                    Default: {backup_dir}/{project_name}-{timestamp}.tar.gz
+backup [file]                         - Create backup of all data
+                                        Default: {backup_dir}/{project_name}-{timestamp}.tar.gz
 
-  restore <file>    Restore from backup file
-                    Stops server, restores data, restarts server
+restore <file>                        - Restore from backup file
+                                        Stops server, restores data, restarts server
 
-  update [cmd]      Manage updates
-                    check         - Check for available updates
-                    yes           - Download and install update
-                    branch <name> - Switch update branch (stable|beta|daily)
+update [cmd]                          - Manage updates
+  check                               - Check for available updates
+  yes                                 - Download and install update
+  branch <name>                       - Switch update branch (stable|beta|daily)
 
-  mode <mode>       Set application mode
-                    production    - Normal operation (default)
-                    development   - Debug logging, dev endpoints
+mode <mode>                           - Set application mode
+  production                          - Normal operation (default)
+  development                         - Debug logging, dev endpoints
 
-  setup             Reset server configuration (first-run or root only)
+setup                                 - Reset server configuration (first-run or root only)
 
 Examples:
   {project_name} --maintenance backup
@@ -29209,16 +29209,16 @@ Usage:
 $ {project_name} --update --help
 Update management:
 
-  check                 Check for available updates
-                        Compares current version with latest release
+check                                 - Check for available updates
+                                        Compares current version with latest release
 
-  yes                   Download and install update
-                        Downloads latest release, replaces binary, restarts
+yes                                   - Download and install update
+                                        Downloads latest release, replaces binary, restarts
 
-  branch <name>         Switch update branch
-                        stable - Stable releases (default)
-                        beta   - Beta/preview releases
-                        daily  - Daily builds (development)
+branch <name>                         - Switch update branch
+  stable                              - Stable releases (default)
+  beta                                - Beta/preview releases
+  daily                               - Daily builds (development)
 
 Examples:
   {project_name} --update check
@@ -42064,6 +42064,8 @@ Enter choice [1-4]:
 
 **Only `-h` and `-v` have short forms. Everything else is long-form only.**
 
+- **No escalation** — help at every level (main, subcommand, nested) must never call `sudo`, require root/admin, or check privilege state; exit immediately with the help text.
+
 ### Boolean/Truthy-Falsey Handling (CLI & Agent)
 
 **CLI and Agent binaries use the SAME truthy/falsey parsing as the server.**
@@ -42336,26 +42338,26 @@ Usage:
   {project_name}-cli                    # TUI mode (no args)
 
 Flags:
-  -h, --help                        Show help
-  -v, --version                     Show version
-      --shell completions [SHELL]   Print shell completions (auto-detect if SHELL omitted)
-      --shell init [SHELL]          Print shell init command (auto-detect if SHELL omitted)
-      --shell --help                Show shell integration help
+-h, --help                            - Show help
+-v, --version                         - Show version
+--shell completions [SHELL]           - Print shell completions (auto-detect if SHELL omitted)
+--shell init [SHELL]                  - Print shell init command (auto-detect if SHELL omitted)
+--shell help                          - Show shell integration help
 
-      --server URL                  Server URL (default: from config)
-      --token TOKEN                 API token for authentication
-      --token-file FILE             Read token from file
-      --config NAME                 Config profile name (default: cli.yml)
-      --debug                       Debug output
-      --color {always|never|auto}   Color output (default: auto)
-      --lang CODE                   Language for output (default: auto)
+--server URL                          - Server URL (default: from config)
+--token TOKEN                         - API token for authentication
+--token-file FILE                     - Read token from file
+--config NAME                         - Config profile name (default: cli.yml)
+--debug                               - Debug output
+--color {always|never|auto}           - Color output (default: auto)
+--lang CODE                           - Language for output (default: auto)
 
   {project-specific flags listed here}
 
 Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
 
 Run without arguments for interactive TUI mode.
-Run '{project_name}-cli <command> --help' for detailed help on any command.
+Run '{project_name}-cli <command> help' for detailed help on any command.
 ```
 
 **If user renames binary:**
