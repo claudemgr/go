@@ -9943,35 +9943,35 @@ Usage:
   {project_name} [flags]
 
 Information:
--h, --help                            - Show help (--help for any command shows its help)
--v, --version                         - Show version
---status                              - Show server status and health
+-h, --help                             - Show help (--help for any command shows its help)
+-v, --version                          - Show version
+--status                               - Show server status and health
 
 Shell Integration:
---shell completions [SHELL]           - Print shell completions
---shell init [SHELL]                  - Print shell init command
---shell help                          - Show shell help
+--shell completions [SHELL]            - Print shell completions
+--shell init [SHELL]                   - Print shell init command
+--shell help                           - Show shell help
 
 Server Configuration:
---mode {production|development}       - Application mode (default: production)
---config DIR                          - Config directory
---data DIR                            - Data directory
---cache DIR                           - Cache directory
---log DIR                             - Log directory
---backup DIR                          - Backup directory
---pid FILE                            - PID file path
---address ADDR                        - Listen address (default: 0.0.0.0)
---port PORT                           - Listen port (default: random 64xxx, 80 in container)
---baseurl PATH                        - URL path prefix (default: /)
---daemon                              - Run as daemon (detach from terminal)
---debug                               - Enable debug mode
---color {auto|yes|no}                 - Color output (default: auto)
---lang CODE                           - Language for output (default: auto)
+--mode {production|development}        - Application mode (default: production)
+--config DIR                           - Config directory
+--data DIR                             - Data directory
+--cache DIR                            - Cache directory
+--log DIR                              - Log directory
+--backup DIR                           - Backup directory
+--pid FILE                             - PID file path
+--address ADDR                         - Listen address (default: 0.0.0.0)
+--port PORT                            - Listen port (default: random 64xxx, 80 in container)
+--baseurl PATH                         - URL path prefix (default: /)
+--daemon                               - Run as daemon (detach from terminal)
+--debug                                - Enable debug mode
+--color {auto|yes|no}                  - Color output (default: auto)
+--lang CODE                            - Language for output (default: auto)
 
 Service Management:
---service CMD                         - Service management (run --service help for details)
---maintenance CMD                     - Maintenance operations (run --maintenance help for details)
---update [CMD]                        - Check/perform updates (run --update help for details)
+--service CMD                          - Service management (run --service help for details)
+--maintenance CMD                      - Maintenance operations (run --maintenance help for details)
+--update [CMD]                         - Check/perform updates (run --update help for details)
 
 Run '{project_name} <command> help' for detailed help on any command.
 ```
@@ -29133,9 +29133,9 @@ stop                                  - Stop the service
 restart                               - Restart the service
 reload                                - Reload configuration without restart
 
---install                             - Install, enable, and start service
---disable                             - Stop and disable service (keeps data)
---uninstall                           - Stop, disable, and remove everything (keeps binary)
+--install                              - Install, enable, and start service
+--disable                              - Stop and disable service (keeps data)
+--uninstall                            - Stop, disable, and remove everything (keeps binary)
 
 Current status:
   Service:    installed / not installed
@@ -42338,19 +42338,19 @@ Usage:
   {project_name}-cli                    # TUI mode (no args)
 
 Flags:
--h, --help                            - Show help
--v, --version                         - Show version
---shell completions [SHELL]           - Print shell completions (auto-detect if SHELL omitted)
---shell init [SHELL]                  - Print shell init command (auto-detect if SHELL omitted)
---shell help                          - Show shell integration help
+-h, --help                             - Show help
+-v, --version                          - Show version
+--shell completions [SHELL]            - Print shell completions (auto-detect if SHELL omitted)
+--shell init [SHELL]                   - Print shell init command (auto-detect if SHELL omitted)
+--shell help                           - Show shell integration help
 
---server URL                          - Server URL (default: from config)
---token TOKEN                         - API token for authentication
---token-file FILE                     - Read token from file
---config NAME                         - Config profile name (default: cli.yml)
---debug                               - Debug output
---color {auto|yes|no}                 - Color output (default: auto)
---lang CODE                           - Language for output (default: auto)
+--server URL                           - Server URL (default: from config)
+--token TOKEN                          - API token for authentication
+--token-file FILE                      - Read token from file
+--config NAME                          - Config profile name (default: cli.yml)
+--debug                                - Debug output
+--color {auto|yes|no}                  - Color output (default: auto)
+--lang CODE                            - Language for output (default: auto)
 
   {project-specific flags listed here}
 
