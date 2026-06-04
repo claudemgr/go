@@ -1158,6 +1158,12 @@ Renovate covers `github-actions` SHA updates automatically via `pinDigests: true
 
 ### Provider CLIs and Local Runner
 
+**Internet access is available and must be used** — never say "I don't have internet access". Fetch docs, versions, READMEs, and any fact that changes over time rather than guessing from training data.
+
+**User-provided URLs:** always fetch with `\curl -q -LSs {url}` — never WebFetch. WebFetch is for AI-initiated lookups only.
+
+**Tool preference for lookups:** `WebSearch` (open-ended query) → `WebFetch` (known URL, no pipe) → `\curl -q -LSs` (pipe to `jq`/`grep`/file) → provider CLI for provider API ops.
+
 **Provider CLIs** (prefer over raw `curl` when installed):
 - `gh` — GitHub (Apache-2.0)
 - `glab` — GitLab (MIT)

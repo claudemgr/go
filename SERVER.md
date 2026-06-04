@@ -684,6 +684,12 @@ Renovate covers `github-actions` SHA updates automatically via `pinDigests: true
 
 ### Provider CLIs and Local Runner
 
+**Internet access is available and must be used** — never say "I don't have internet access". Fetch docs, versions, READMEs, and any fact that changes over time rather than guessing from training data.
+
+**User-provided URLs:** always fetch with `\curl -q -LSs {url}` — never WebFetch. WebFetch is for AI-initiated lookups only.
+
+**Tool preference for lookups:** `WebSearch` (open-ended query) → `WebFetch` (known URL, no pipe) → `\curl -q -LSs` (pipe to `jq`/`grep`/file) → provider CLI for provider API ops.
+
 **Provider CLIs** (prefer over raw `curl` when installed):
 - `gh` — GitHub (Apache-2.0)
 - `glab` — GitLab (MIT)
@@ -37656,7 +37662,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
 ```bash
 #!/usr/bin/env bash
-set -e
+set -eo pipefail
 
 # =============================================================================
 # Container Entrypoint Script - MINIMAL
@@ -38277,7 +38283,7 @@ protected-mode no
 
 ```bash
 #!/bin/bash
-set -e
+set -eo pipefail
 
 # Set timezone
 if [ -n "$TZ" ]; then
@@ -43289,7 +43295,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "command -v curl || apt-get update && ap
 
 echo "Running tests in Incus..."
 incus exec "$CONTAINER_NAME" -- bash -c "
-    set -e
+    set -eo pipefail
 
     echo '=== Version Check ==='
     ${PROJECT_NAME} --version
@@ -43519,7 +43525,8 @@ fi
 | **Cleanup** | ALWAYS use `trap` for cleanup |
 | **Exit codes** | 0 = success, non-zero = failure |
 | **Output** | Clear progress messages with `echo` |
-| **Error handling** | `set -eo pipefail` at top |
+| **Error handling** | `set -eo pipefail` for bash/zsh; `set -e` for POSIX sh |
+| **License** | All shell scripts are WTFPL — `# @@License : WTFPL` in header |
 
 ### Shell Completions (Built-in)
 
