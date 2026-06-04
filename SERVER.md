@@ -376,7 +376,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
 | `go test ...` | `make test` |
 | `go run ...` | `make dev` then run binary in Docker |
 
-**Makefile targets use Docker internally (`casjaysdev/go:latest`) with the `go-state` named volume — local machine stays clean.**
+**Makefile targets use Docker internally (`casjaysdev/go:latest`) with host cache dirs (`GO_CACHE`/`GO_BUILD`) bind-mounted — local machine stays clean.**
 
 ### Debugging & Quick Tests (Docker with Tools)
 
@@ -422,7 +422,7 @@ docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | he
 - Consistent environment (same as CI/CD and production)
 - No Go installation required on local machine
 - No local machine contamination with test data
-- Reproducible builds (`go-state` named volume speeds up rebuilds)
+- Reproducible builds (host cache dirs `GO_CACHE`/`GO_BUILD` speed up rebuilds)
 
 **Local Development Workflow:**
 ```bash
@@ -36764,7 +36764,9 @@ BINDIR := binaries
 RELDIR := releases
 
 # Go directories (persistent across builds)
-# Go state is kept in the named Docker volume go-state:/usr/local/share/go
+# Go cache bind-mounted from host: GO_CACHE (mod) and GO_BUILD (build cache)
+GO_CACHE  ?= $(HOME)/go/pkg/mod
+GO_BUILD  ?= $(HOME)/.cache/go-build
 
 # Build targets
 PLATFORMS ?= linux/amd64,linux/arm64
@@ -36774,7 +36776,8 @@ REGISTRY ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
 GO_DOCKER := docker run --rm -it \
 	--name $(PROJECTNAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
 	-v $(PWD):/app \
-	-v go-state:/usr/local/share/go \
+	-v $(GO_CACHE):/usr/local/share/go/pkg/mod \
+	-v $(GO_BUILD):/usr/local/share/go/cache \
 	-w /app \
 	-e CGO_ENABLED=0 \
 	casjaysdev/go:latest
@@ -36785,7 +36788,7 @@ GO_DOCKER := docker run --rm -it \
 # BUILD - Build all platforms + local binary (via Docker with cached modules)
 # =============================================================================
 build: clean
-	@mkdir -p $(BINDIR)
+	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	@echo "Building version $(VERSION)..."
 
 	# Tidy and download modules
@@ -36844,7 +36847,7 @@ build: clean
 # LOCAL - Build local binaries only (fast development builds)
 # =============================================================================
 local: clean
-	@mkdir -p $(BINDIR)
+	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	@echo "Building local binaries version $(VERSION)..."
 
 	# Tidy and download modules
@@ -37013,7 +37016,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 | Cache | Local Path | Container Path |
 |-------|-----------|----------------|
 | Go directory | `~/.local/share/go` | `/go` |
-| Go state | `go-state` (named volume) | `/usr/local/share/go` |
+| Go state | host cache dirs (`GO_CACHE`/`GO_BUILD`) | `/usr/local/share/go/pkg/mod`, `/usr/local/share/go/cache` |
 
 **Benefits:**
 - First build downloads modules once
@@ -38835,7 +38838,7 @@ networks:
 | Aspect | Local Development | CI/CD Workflows |
 |--------|-------------------|-----------------|
 | **Go installation** | Docker `casjaysdev/go:latest` | Docker `casjaysdev/go:latest` |
-| **Caching** | Named volume `go-state:/usr/local/share/go` | CI-native cache mounted into `casjaysdev/go:latest` |
+| **Caching** | Host cache dirs (`GO_CACHE`/`GO_BUILD`) bind-mounted | CI-native cache mounted into `casjaysdev/go:latest` |
 | **Build command** | `make dev`, `make local`, `make build` | Direct `go build` with explicit flags |
 | **Testing** | Docker/Incus containers | `casjaysdev/go:latest` job container or explicit `docker run` |
 | **Makefile** | ALWAYS use Makefile targets | NEVER use Makefile (explicit commands) |
@@ -41330,7 +41333,7 @@ pipeline {
         PROJECTORG = '{project_org}'
         BINDIR = 'binaries'
         RELDIR = 'releases'
-        // Go state kept in named Docker volume go-state:/usr/local/share/go
+        // Go cache bind-mounted from host: GO_CACHE (mod) and GO_BUILD (build cache)
 
         // =========================================================================
         // GIT PROVIDER CONFIGURATION
@@ -41407,7 +41410,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=linux \
@@ -41424,7 +41428,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=linux \
@@ -41442,7 +41447,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=darwin \
@@ -41459,7 +41465,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=darwin \
@@ -41477,7 +41484,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=windows \
@@ -41494,7 +41502,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=windows \
@@ -41512,7 +41521,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=freebsd \
@@ -41529,7 +41539,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=freebsd \
@@ -41555,7 +41566,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=linux \
@@ -41572,7 +41584,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=linux \
@@ -41589,7 +41602,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=darwin \
@@ -41606,7 +41620,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=darwin \
@@ -41623,7 +41638,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=windows \
@@ -41640,7 +41656,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=windows \
@@ -41657,7 +41674,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=freebsd \
@@ -41674,7 +41692,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=freebsd \
@@ -41700,7 +41719,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=linux \
@@ -41717,7 +41737,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=linux \
@@ -41734,7 +41755,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=darwin \
@@ -41751,7 +41773,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=darwin \
@@ -41768,7 +41791,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=windows \
@@ -41785,7 +41809,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=windows \
@@ -41802,7 +41827,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=freebsd \
@@ -41819,7 +41845,8 @@ pipeline {
                             docker run --rm -it \
                                 --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                                 -v ${WORKSPACE}:/app \
-                                -v go-state:/usr/local/share/go \
+                                -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                                -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                                 -w /app \
                                 -e CGO_ENABLED=0 \
                                 -e GOOS=freebsd \
@@ -41839,7 +41866,8 @@ pipeline {
                     docker run --rm -it \
                         --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
                         -v ${WORKSPACE}:/app \
-                        -v go-state:/usr/local/share/go \
+                        -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
+                        -v ${GO_BUILD:-$HOME/.cache/go-build}:/usr/local/share/go/cache \
                         -w /app \
                         casjaysdev/go:latest \
                         go test -v -cover ./...
@@ -42943,7 +42971,7 @@ fi
 | `tests/incus.sh` | Beta testing with Incus | `debian:latest` | Full integration + systemd tests |
 
 **docker.sh and incus.sh MUST:**
-1. Named volume `go-state` provides persistent Go cache across builds
+1. Host cache dirs (`GO_CACHE`/`GO_BUILD`) provide persistent Go cache across builds
 2. Build all binaries using Docker (casjaysdev/go:latest) in temp directory:
    - Server (`./src`)
    - client (`./src/client`) if exists
@@ -42982,13 +43010,17 @@ BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
 trap "rm -rf $BUILD_DIR" EXIT
 
 # Go cache directories (same as Makefile)
-# Go state is kept in the named Docker volume go-state:/usr/local/share/go
+# Go cache bind-mounted from host: GO_CACHE (mod) and GO_BUILD (build cache)
+GO_CACHE="${GO_CACHE:-$HOME/go/pkg/mod}"
+GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build}"
+mkdir -p "$GO_CACHE" "$GO_BUILD"
 
 # Common docker run for Go builds
 GO_DOCKER="docker run --rm -it \
   --name \"${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)\" \
   -v $(pwd):/app \
-  -v go-state:/usr/local/share/go \
+  -v $GO_CACHE:/usr/local/share/go/pkg/mod \
+  -v $GO_BUILD:/usr/local/share/go/cache \
   -w /app \
   -e CGO_ENABLED=0 \
   casjaysdev/go:latest"
@@ -43228,13 +43260,17 @@ BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
 trap "rm -rf $BUILD_DIR; incus delete $CONTAINER_NAME --force 2>/dev/null || true" EXIT
 
 # Go cache directories (same as Makefile)
-# Go state is kept in the named Docker volume go-state:/usr/local/share/go
+# Go cache bind-mounted from host: GO_CACHE (mod) and GO_BUILD (build cache)
+GO_CACHE="${GO_CACHE:-$HOME/go/pkg/mod}"
+GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build}"
+mkdir -p "$GO_CACHE" "$GO_BUILD"
 
 # Common docker run for Go builds
 GO_DOCKER="docker run --rm -it \
   --name \"${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)\" \
   -v $(pwd):/app \
-  -v go-state:/usr/local/share/go \
+  -v $GO_CACHE:/usr/local/share/go/pkg/mod \
+  -v $GO_BUILD:/usr/local/share/go/cache \
   -w /app \
   -e CGO_ENABLED=0 \
   casjaysdev/go:latest"
@@ -43493,8 +43529,8 @@ fi
 |------|-------------|
 | **Location** | `tests/run_tests.sh`, `tests/docker.sh`, `tests/incus.sh` |
 | **Permissions** | Executable (`chmod +x tests/*.sh`) |
-| **Build method** | ALWAYS use Docker (casjaysdev/go:latest) with `go-state` named volume |
-| **Go cache** | Named volume `go-state:/usr/local/share/go` (no host directory needed) |
+| **Build method** | ALWAYS use Docker (casjaysdev/go:latest) with host cache dirs (`GO_CACHE`/`GO_BUILD`) |
+| **Go cache** | Host cache dirs (`GO_CACHE`/`GO_BUILD`) bind-mounted into container |
 | **Build location** | ALWAYS use temp directory |
 | **Build all components** | Build server, client (if `src/client/` exists), agent (if `src/agent/` exists) |
 | **Test container tools** | Docker alpine MUST install: `apk add --no-cache curl bash file jq` |
@@ -43722,13 +43758,17 @@ PROJECT_PATH="/root/Projects/github/apimgr/{project_name}"  # Example 1
 # PROJECT_PATH="/workspace/dev/myproject"                  # Example 4
 
 # Go cache directories (same as Makefile - speeds up builds significantly)
-# Go state is kept in the named Docker volume go-state:/usr/local/share/go
+# Go cache bind-mounted from host: GO_CACHE (mod) and GO_BUILD (build cache)
+GO_CACHE="${GO_CACHE:-$HOME/go/pkg/mod}"
+GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build}"
+mkdir -p "$GO_CACHE" "$GO_BUILD"
 
 # Common docker run for Go commands
 GO_DOCKER="docker run --rm -it \
   --name \"${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)\" \
   -v $PROJECT_PATH:/app \
-  -v go-state:/usr/local/share/go \
+  -v $GO_CACHE:/usr/local/share/go/pkg/mod \
+  -v $GO_BUILD:/usr/local/share/go/cache \
   -w /app \
   -e CGO_ENABLED=0"
 
@@ -43757,24 +43797,29 @@ $GO_DOCKER casjaysdev/go:latest go vet ./...
 docker run --rm -it \
   --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
   -v $PROJECT_PATH:/app \
-  -v go-state:/usr/local/share/go \
+  -v $GO_CACHE:/usr/local/share/go/pkg/mod \
+  -v $GO_BUILD:/usr/local/share/go/cache \
   -w /app \
   casjaysdev/go:latest sh
 ```
 
 ## Build and Test
 
-**Build outputs to `binaries/`, test by running in container. Named volume `go-state` keeps builds fast.**
+**Build outputs to `binaries/`, test by running in container. Host cache dirs (`GO_CACHE`/`GO_BUILD`) keep builds fast.**
 
 ```bash
 # Go cache directories (same as Makefile)
-# Go state is kept in the named Docker volume go-state:/usr/local/share/go
+# Go cache bind-mounted from host: GO_CACHE (mod) and GO_BUILD (build cache)
+GO_CACHE="${GO_CACHE:-$HOME/go/pkg/mod}"
+GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build}"
+mkdir -p "$GO_CACHE" "$GO_BUILD"
 
 # Build (with caching)
 docker run --rm -it \
   --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
   -v $(pwd):/app \
-  -v go-state:/usr/local/share/go \
+  -v $GO_CACHE:/usr/local/share/go/pkg/mod \
+  -v $GO_BUILD:/usr/local/share/go/cache \
   -w /app -e CGO_ENABLED=0 \
   casjaysdev/go:latest go build -o /app/binaries/{project_name} ./src
 
@@ -43796,7 +43841,10 @@ incus delete test-{project_name} --force
 
 ```bash
 # Go cache directories (same as Makefile)
-# Go state is kept in the named Docker volume go-state:/usr/local/share/go
+# Go cache bind-mounted from host: GO_CACHE (mod) and GO_BUILD (build cache)
+GO_CACHE="${GO_CACHE:-$HOME/go/pkg/mod}"
+GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build}"
+mkdir -p "$GO_CACHE" "$GO_BUILD"
 
 # Create prefixed temp dir for test data
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
@@ -43807,7 +43855,8 @@ mkdir -p $TEST_DIR/{config,data,logs}
 docker run --rm -it \
   --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
   -v $(pwd):/app \
-  -v go-state:/usr/local/share/go \
+  -v $GO_CACHE:/usr/local/share/go/pkg/mod \
+  -v $GO_BUILD:/usr/local/share/go/cache \
   -w /app -e CGO_ENABLED=0 \
   casjaysdev/go:latest go build -o /app/binaries/{project_name} ./src
 
@@ -59161,11 +59210,11 @@ maintainer_email: jane@example.com
 | `./binaries/{project_name}` locally | Run binary inside Docker/Incus container |
 | Go installed locally | Use Makefile targets (they use Docker internally) |
 
-**Go State (Named Volume):**
+**Go Cache (Host Bind-Mounts):**
 ```bash
-# Go state uses the named Docker volume go-state mounted at /usr/local/share/go
-# No host directories needed — Docker manages the volume automatically
-# Mount in Docker: -v go-state:/usr/local/share/go
+# Go cache bind-mounted from host: GO_CACHE (mod) and GO_BUILD (build cache)
+# Defaults: GO_CACHE=$HOME/go/pkg/mod, GO_BUILD=$HOME/.cache/go-build
+# Mount in Docker: -v $GO_CACHE:/usr/local/share/go/pkg/mod -v $GO_BUILD:/usr/local/share/go/cache
 ```
 
 **Temp Directory Workflow:**
