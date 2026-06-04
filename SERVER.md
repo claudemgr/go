@@ -6578,7 +6578,7 @@ require (
 | Purpose | Library | Notes |
 |---------|---------|-------|
 | **Embed** | `embed` (stdlib) | Embed static files |
-| **Cron** | `github.com/robfig/cron/v3` | Scheduler |
+| **Scheduler** | `github.com/go-co-op/gocron/v2` | In-process job scheduler |
 | **Rate Limit** | `golang.org/x/time/rate` | Rate limiting |
 | **Validation** | `github.com/go-playground/validator/v10` | Input validation |
 
@@ -6781,7 +6781,7 @@ require (
 	github.com/rs/cors v1.11.1                      // CORS middleware
 
 	// Utilities
-	github.com/robfig/cron/v3 v3.0.1                // Scheduler
+	github.com/go-co-op/gocron/v2 v2.x.x            // In-process job scheduler
 	golang.org/x/time v0.8.0                        // Rate limiting
 	github.com/go-playground/validator/v10 v10.23.0 // Validation
 )
@@ -10354,7 +10354,7 @@ When the `NO_COLOR` environment variable is set and not empty (value doesn't mat
 
 | Priority | Source | Example |
 |----------|--------|---------|
-| 1 | CLI flag | `--color=always`, `--color=never` |
+| 1 | CLI flag | `--color=yes`, `--color=no` |
 | 2 | Config file | `output.color: false` |
 | 3 | `NO_COLOR` env var | `NO_COLOR=1` |
 | 4 | Auto-detect | TTY check, `TERM` variable |
@@ -10438,10 +10438,10 @@ output:
 NO_COLOR=1 {project_name} --status
 
 # Colors forced on (overrides NO_COLOR for colors only)
-NO_COLOR=1 {project_name} --status --color=always
+NO_COLOR=1 {project_name} --status --color=yes
 
 # Colors forced off (explicit)
-{project_name} --status --color=never
+{project_name} --status --color=no
 
 # Verify no escape codes or emojis in output
 NO_COLOR=1 {project_name} --status | cat -v   # No ^[ sequences
@@ -10471,7 +10471,7 @@ NO_COLOR=1 {project_name} --status | grep -E '✅|❌|⚠️|🚀'  # Should fin
 --service {start,restart,stop,reload,--install,--uninstall,--disable,--help}
 --daemon                     # Daemonize (detach from terminal)
 --debug                      # Enable debug mode (verbose logging, debug endpoints)
---color {always|never|auto}  # Color output (default: auto, respects NO_COLOR)
+--color {auto|yes|no}  # Color output (default: auto, respects NO_COLOR)
 --lang {code}                # Language for output (default: auto, from LANG env)
 --maintenance {backup,restore,update,mode,setup,--help} [optional-file-or-setting]
 --update [check|yes|branch {stable|beta|daily}|--help]  # Check/perform updates
@@ -10510,7 +10510,7 @@ Server Configuration:
 --baseurl PATH                        - URL path prefix (default: /)
 --daemon                              - Run as daemon (detach from terminal)
 --debug                               - Enable debug mode
---color {always|never|auto}           - Color output (default: auto)
+--color {auto|yes|no}           - Color output (default: auto)
 --lang CODE                           - Language for output (default: auto)
 
 Service Management:
@@ -21493,7 +21493,7 @@ func PrintServerStartupBanner(appName, version, appMode string, urls []string, f
     useEmojis := output.EmojiEnabled()
     useColors := output.ColorEnabled(forceColor)
 
-    // Plain mode: no emojis (NO_COLOR, TERM=dumb, or --color=never)
+    // Plain mode: no emojis (NO_COLOR, TERM=dumb, or --color=no)
     if !useEmojis {
         printServerBannerPlain(appName, version, appMode, urls)
         return
@@ -21965,10 +21965,10 @@ This token will only be shown ONCE.
 **--color flag overrides (applies to all sizes):**
 ```bash
 # Force colors on (overrides NO_COLOR)
-{project_name} --color=always
+{project_name} --color=yes
 
 # Force colors off
-{project_name} --color=never
+{project_name} --color=no
 
 # Auto-detect (default) - respects NO_COLOR, TERM, TTY
 {project_name} --color=auto
@@ -50592,7 +50592,7 @@ auth:
 # Output preferences
 output:
   format: table                    # Default: table, json, yaml, plain, csv
-  color: auto                      # auto, always, never (match terminal detection)
+  color: auto                      # auto, yes, no (match terminal detection)
   pager: auto                      # auto, always, never (use less/more for long output)
   quiet: false                     # Suppress non-essential output
   verbose: false                   # Extra output (same as --verbose)
@@ -50786,7 +50786,7 @@ Enter choice [1-4]:
 |------|-------|-------------|
 | `--help` | `-h` | Show help |
 | `--version` | `-v` | Show version |
-| `--color {always\|never\|auto}` | — | Color output (default: auto, respects `NO_COLOR`) |
+| `--color {auto\|yes\|no}` | — | Color output (default: auto, respects `NO_COLOR`) |
 | `--lang CODE` | — | Language for output (default: auto-detect from `LANG` env) |
 
 **Only `-h` and `-v` have short forms. Everything else is long-form only.**
@@ -50847,7 +50847,7 @@ server:
 --expire=24h    OR  --expire 24h
 --limit=10      OR  --limit 10
 --output=json   OR  --output json
---color=always  OR  --color always
+--color=yes  OR  --color yes
 ```
 
 ### Project-Specific Flags (by service type)
@@ -51081,7 +51081,7 @@ Flags:
 --user NAME                           - Target user or org (auto-detect, @user, +org)
 --config NAME                         - Config profile name (default: cli.yml)
 --debug                               - Debug output
---color {always|never|auto}           - Color output (default: auto)
+--color {auto|yes|no}           - Color output (default: auto)
 --lang CODE                           - Language for output (default: auto)
 
 Administration (requires admin token):
@@ -52395,7 +52395,7 @@ Tags: production, web-tier
 # Runtime
 --mode {production|development}  # Force mode (auto-detected by default)
 --debug                       # Enable debug logging (implies development features)
---color {always|never|auto}   # Color output (default: auto, respects NO_COLOR)
+--color {auto|yes|no}   # Color output (default: auto, respects NO_COLOR)
 --lang {code}                 # Language for output (default: auto, from LANG env)
 
 # Commands (subcommands like server)
@@ -52440,7 +52440,7 @@ Flags:
 
 --mode {production|development}       - Application mode
 --debug                               - Enable debug mode
---color {always|never|auto}           - Color output (default: auto)
+--color {auto|yes|no}           - Color output (default: auto)
 --lang CODE                           - Language for output (default: auto)
 --status                              - Show agent health
 
@@ -60117,8 +60117,8 @@ make docker # Build Docker image
 
 - [ ] `NO_COLOR` env var respected (any non-empty value disables colors AND emojis)
 - [ ] `TERM=dumb` disables colors, emojis, and ANSI escape sequences
-- [ ] `--color=always` forces colors ON (overrides NO_COLOR)
-- [ ] `--color=never` forces colors OFF
+- [ ] `--color=yes` forces colors ON (overrides NO_COLOR)
+- [ ] `--color=no` forces colors OFF
 - [ ] `--color=auto` (default) uses priority detection
 - [ ] Priority order: CLI flag > config file > NO_COLOR env > auto-detect
 - [ ] Uses shared `ColorEnabled()` and `EmojiEnabled()` functions (PART 8)
@@ -60139,7 +60139,7 @@ make docker # Build Docker image
 - [ ] Both `--flag=value` and `--flag value` syntax accepted
 - [ ] `-h` (help) and `-v` (version) are the ONLY short flags
 - [ ] All other flags are long-form only (`--config`, `--port`, etc.)
-- [ ] `--color {always|never|auto}` available on all binaries
+- [ ] `--color {auto|yes|no}` available on all binaries
 - [ ] `--lang CODE` available on all binaries
 - [ ] `--debug` available on all binaries
 - [ ] Flag parsing consistent across server, client, agent
