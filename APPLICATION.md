@@ -983,6 +983,7 @@ All machine-dependent settings MUST be detected at runtime on the target machine
 - Respect non-TTY stdout/stderr
 - Provide machine-readable output when the app advertises it (`--json`, `--plain`, etc.)
 - Help/version output must show the **actual invoked binary name**
+- **No escalation** — help at every level (main, subcommand, nested) must never call `sudo`, require root/admin, or check privilege state; exit immediately with the help text.
 
 ## NO_COLOR Support
 
