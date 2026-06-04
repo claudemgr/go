@@ -3319,14 +3319,14 @@ db.Exec(query, id)
 
 **ALL code, responses, and files MUST be properly formatted.**
 
-| File Type | Indentation | Trailing Newline | Format Tool |
-|-----------|-------------|------------------|-------------|
-| **Go** | Tabs | Single `\n` | `gofmt`, `go fmt` |
-| **HTML** | 2 spaces | Single `\n` | Manual or prettier |
-| **JSON** | 2 spaces | Single `\n` | `json.MarshalIndent(data, "", "  ")` |
-| **YAML** | 2 spaces | Single `\n` | Manual |
-| **CSS** | 2 spaces | Single `\n` | Manual or prettier |
-| **JavaScript** | 2 spaces | Single `\n` | Manual or prettier |
+| File Type | Indentation | Line Width | Trailing Newline | Format Tool |
+|-----------|-------------|------------|------------------|-------------|
+| **Go** | Tabs | No limit (`gofmt` doesn't wrap; `lll` soft 120, hard 180) | Single `\n` | `gofmt`, `go fmt` |
+| **HTML** | 2 spaces | 120 | Single `\n` | Manual or prettier |
+| **JSON** | 2 spaces | 120 | Single `\n` | `json.MarshalIndent(data, "", "  ")` |
+| **YAML** | 2 spaces | 120 | Single `\n` | Manual |
+| **CSS** | 2 spaces | 120 | Single `\n` | Manual or prettier |
+| **JavaScript** | 2 spaces | 120 | Single `\n` | Manual or prettier |
 | **Makefile** | Tabs (required) | Single `\n` | Manual |
 | **Shell scripts** | 2 spaces | Single `\n` | shellcheck/shfmt |
 | **Text responses** | N/A | Single `\n` | `fmt.Fprintf(w, "%s\n", text)` |

@@ -558,7 +558,8 @@ Prefer platform-standard user directories:
 | Go version | Use the current stable Go version declared in `go.mod` and pinned in `.go-version` |
 | Version pin | Single-line `.go-version` file at project root (e.g., `go1.23.0`) — used by toolchain managers and CI |
 | Targets | Build targets set via `GOOS`/`GOARCH` env vars inside the Docker image; no toolchain installation beyond the base `casjaysdev/go:latest` image is required |
-| Formatting | `gofmt` (or `goimports`) is required |
+| Formatting | `gofmt` (or `goimports`) is required; no enforced line length — `gofmt` does not wrap lines |
+| Line width | No hard limit; `golangci-lint` `lll` soft guide at 120, hard fail over 180 |
 | Linting | `golangci-lint` is required |
 | Testing | `go test` is required |
 | CGO | `CGO_ENABLED=0` ALWAYS — pure Go, no C (PART 0 → "Go-Only Application") |
