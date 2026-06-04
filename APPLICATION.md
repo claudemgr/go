@@ -1270,6 +1270,7 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 
 ## README Minimum Sections
 
+- Badges (linked — see Badges rule below)
 - About
 - Features
 - Installation
@@ -1279,6 +1280,19 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 - Development (MUST document the Docker-based workflow — no host `go` invocations)
 - Testing (MUST show Docker-wrapped commands; GUI tests show X11 and Wayland forwarding)
 - License
+
+### Badges
+
+**Every badge MUST be a linked badge** — `[![alt](image_url)](link_url)` is the only valid form. A bare `![alt](image_url)` with no wrapping link is never acceptable. Each badge links to the resource it represents:
+
+| Badge | Links to |
+|-------|----------|
+| CI / build status | CI runs page — detect platform: `.github/workflows/*.yml` → GitHub Actions; `.gitea/workflows/*.yml` → Gitea/Forgejo; `.gitlab-ci.yml` → GitLab CI; `Jenkinsfile` → Jenkins |
+| Release / version | Releases page |
+| License | `LICENSE.md` |
+| Docs | Documentation site URL |
+
+Never use a GitHub Actions badge for a GitLab or Gitea project — the CI badge must match the actual hosting platform.
 
 ## LICENSE.md Requirements
 

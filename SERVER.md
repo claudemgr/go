@@ -4821,6 +4821,8 @@ IDEA.md (project spec - update as needed)
 
 #### CI/CD Badge Detection
 
+**Every badge MUST be a linked badge** — `[![alt](image_url)](link_url)` is the only valid form. A bare `![alt](image_url)` with no wrapping link is never acceptable. Each badge links to the resource it represents: CI badge → CI runs page; Release badge → releases page; License badge → `LICENSE.md`; Docs badge → documentation URL.
+
 **The build status badge MUST match the project's hosting platform.**
 
 Detect platform by checking for workflow files in this order:
