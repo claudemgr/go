@@ -1294,6 +1294,65 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 
 Never use a GitHub Actions badge for a GitLab or Gitea project — the CI badge must match the actual hosting platform.
 
+**Badge Templates by Platform:**
+
+```markdown
+# GitHub Actions
+[![CI](https://github.com/{project_org}/{project_name}/actions/workflows/ci.yml/badge.svg)](https://github.com/{project_org}/{project_name}/actions/workflows/ci.yml)
+
+# Gitea/Forgejo Actions
+[![CI](https://git.example.com/{project_org}/{project_name}/actions/workflows/ci.yml/badge.svg)](https://git.example.com/{project_org}/{project_name}/actions)
+
+# GitLab CI
+[![Build](https://gitlab.com/{project_org}/{project_name}/badges/main/pipeline.svg)](https://gitlab.com/{project_org}/{project_name}/-/pipelines)
+
+# Jenkins
+[![Build](https://jenkins.example.com/buildStatus/icon?job={project_org}/{project_name})](https://jenkins.example.com/job/{project_org}/job/{project_name}/)
+```
+
+**Release/License/Docs badges also adapt to platform:**
+
+```markdown
+# GitHub
+[![Release](https://img.shields.io/github/v/release/{project_org}/{project_name})](https://github.com/{project_org}/{project_name}/releases)
+[![License](https://img.shields.io/github/license/{project_org}/{project_name})](LICENSE.md)
+[![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
+
+# GitLab
+[![Release](https://gitlab.com/{project_org}/{project_name}/-/badges/release.svg)](https://gitlab.com/{project_org}/{project_name}/-/releases)
+[![License](https://img.shields.io/github/license/{project_org}/{project_name})](LICENSE.md)
+[![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
+
+# Gitea/Forgejo (use shields.io with custom endpoint or static badge)
+[![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/{api_version}/repos/{project_org}/{project_name}/releases/latest&query=$.tag_name&label=release)](https://git.example.com/{project_org}/{project_name}/releases)
+[![License](https://img.shields.io/github/license/{project_org}/{project_name})](LICENSE.md)
+[![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
+
+# {RTD_PROJECT} and {RTD_URL} - Use one of:
+#   {project_org}-{project_name} / {project_org}-{project_name}.readthedocs.io
+#   {project_name} / {project_name}.readthedocs.io
+#   Custom project name / {custom_rtd_address}
+```
+
+**License badge — use the GitHub API endpoint, not a static badge:**
+
+```markdown
+# ✅ CORRECT - GitHub can detect license
+[![License](https://img.shields.io/github/license/{project_org}/{project_name})](LICENSE.md)
+
+# ❌ WRONG - Static badge, GitHub cannot detect
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
+```
+
+**Docs badge — only add when documentation is actually deployed:**
+
+| Docs Platform | Badge |
+|---------------|-------|
+| ReadTheDocs | `[![Docs](https://readthedocs.org/projects/{project_org}-{project_name}/badge/?version=latest)](https://{project_org}-{project_name}.readthedocs.io)` |
+| GitHub Pages | `[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://{project_org}.github.io/{project_name})` |
+| Self-hosted | `[![Docs](https://img.shields.io/badge/docs-online-blue)]({docs_url})` |
+| None | **Do not add docs badge** |
+
 ## LICENSE.md Requirements
 
 `LICENSE.md` is the canonical attribution document. It MUST contain:
