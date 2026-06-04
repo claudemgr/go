@@ -5461,9 +5461,9 @@ For MIT/ISC/BSD licenses, a summary table is sufficient. Full text only needed f
 
 | Library | Version | License | Copyright |
 |---------|---------|---------|-----------|
-| github.com/go-chi/chi/v5 | v5.2.0 | MIT | 2015-present Peter Kieltyka, Google Inc. |
-| modernc.org/sqlite | v1.29.1 | BSD-3-Clause | 2017 The Sqlite Authors |
-| github.com/tursodatabase/libsql-client-go | v0.0.0-20240902231107-85af5b9d094d | MIT | 2023-2024 Turso Authors |
+| github.com/go-chi/chi/v5 | {version} | MIT | 2015-present Peter Kieltyka, Google Inc. |
+| modernc.org/sqlite | {version} | BSD-3-Clause | 2017 The Sqlite Authors |
+| github.com/tursodatabase/libsql-client-go | {version} | MIT | 2023-2024 Turso Authors |
 
 Full license texts available at: https://spdx.org/licenses/
 
@@ -5506,12 +5506,12 @@ This software includes the following third-party libraries:
 
 | Library | Version | License | Copyright |
 |---------|---------|---------|-----------|
-| github.com/go-chi/chi/v5 | v5.2.0 | MIT | 2015-present Peter Kieltyka, Google Inc. |
-| github.com/tursodatabase/libsql-client-go | v0.0.0-20240902231107-85af5b9d094d | MIT | 2023-2024 Turso Authors |
-| github.com/redis/go-redis/v9 | v9.7.0 | BSD-2-Clause | 2012-2024 The go-redis Authors |
-| modernc.org/sqlite | v1.29.1 | BSD-3-Clause | 2017 The Sqlite Authors |
-| golang.org/x/crypto | v0.31.0 | BSD-3-Clause | 2009 The Go Authors |
-| github.com/charmbracelet/bubbletea | v0.27.0 | MIT | 2020-2024 Charmbracelet Inc. |
+| github.com/go-chi/chi/v5 | {version} | MIT | 2015-present Peter Kieltyka, Google Inc. |
+| github.com/tursodatabase/libsql-client-go | {version} | MIT | 2023-2024 Turso Authors |
+| github.com/redis/go-redis/v9 | {version} | BSD-2-Clause | 2012-2024 The go-redis Authors |
+| modernc.org/sqlite | {version} | BSD-3-Clause | 2017 The Sqlite Authors |
+| golang.org/x/crypto | {version} | BSD-3-Clause | 2009 The Go Authors |
+| github.com/charmbracelet/bubbletea | {version} | MIT | 2020-2024 Charmbracelet Inc. |
 
 Full license texts: https://spdx.org/licenses/
 
@@ -5523,7 +5523,7 @@ Full license texts: https://spdx.org/licenses/
 For BSD-3-Clause, include the third clause since it has specific restrictions:
 
 ```markdown
-### modernc.org/sqlite v1.29.1 (BSD-3-Clause)
+### modernc.org/sqlite {version} (BSD-3-Clause)
 
 Copyright (c) 2017 The Sqlite Authors. All rights reserved.
 
@@ -6410,7 +6410,7 @@ func openDB(path string) (*sql.DB, error) {
 
 **go.mod:**
 ```
-require modernc.org/sqlite v1.29.1
+require modernc.org/sqlite {version}
 ```
 
 ### libSQL Driver
@@ -6477,7 +6477,7 @@ func openLibSQL(url, token string) (*sql.DB, error) {
 
 **go.mod:**
 ```
-require github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d094d
+require github.com/tursodatabase/libsql-client-go {version}
 ```
 
 **When to use libSQL vs SQLite:**
@@ -6513,28 +6513,28 @@ go 1.xx  // Use current latest stable version
 
 require (
 	// Database drivers
-	modernc.org/sqlite v1.34.5                      // SQLite (pure Go)
-	github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d094d  // libSQL/Turso (remote)
+	modernc.org/sqlite {version}                    // SQLite (pure Go)
+	github.com/tursodatabase/libsql-client-go {version}  // libSQL/Turso (remote)
 
 	// Cache
-	github.com/redis/go-redis/v9 v9.7.0             // Valkey/Redis
-	github.com/bradfitz/gomemcache v0.0.0-20230905024940-24af94b03874  // Memcache
+	github.com/redis/go-redis/v9 {version}          // Valkey/Redis
+	github.com/bradfitz/gomemcache {version}        // Memcache
 
 	// Core
-	gopkg.in/yaml.v3 v3.0.1                         // YAML config
-	github.com/google/uuid v1.6.0                   // UUID generation
-	golang.org/x/crypto v0.31.0                     // Argon2, Bcrypt
+	gopkg.in/yaml.v3 {version}                      // YAML config
+	github.com/google/uuid {version}                // UUID generation
+	golang.org/x/crypto {version}                   // Argon2, Bcrypt
 
 	// Network/HTTP
-	github.com/go-chi/chi/v5 v5.2.0                 // Router
-	github.com/cretz/bine v0.2.0                    // Tor controller
-	github.com/gorilla/websocket v1.5.3             // WebSocket
-	github.com/rs/cors v1.11.1                      // CORS middleware
+	github.com/go-chi/chi/v5 {version}              // Router
+	github.com/cretz/bine {version}                 // Tor controller
+	github.com/gorilla/websocket {version}          // WebSocket
+	github.com/rs/cors {version}                    // CORS middleware
 
 	// Utilities
-	github.com/go-co-op/gocron/v2 v2.x.x            // In-process job scheduler
-	golang.org/x/time v0.8.0                        // Rate limiting
-	github.com/go-playground/validator/v10 v10.23.0 // Validation
+	github.com/go-co-op/gocron/v2 {version}        // In-process job scheduler
+	golang.org/x/time {version}                     // Rate limiting
+	github.com/go-playground/validator/v10 {version} // Validation
 )
 ```
 
@@ -9591,14 +9591,14 @@ go 1.xx  // Use current latest stable version
 
 require (
     // Terminal/TUI
-    golang.org/x/term v0.27.0
-    github.com/charmbracelet/bubbletea v1.2.4
-    github.com/charmbracelet/bubbles v0.20.0
-    github.com/charmbracelet/lipgloss v1.0.0
+    golang.org/x/term {version}
+    github.com/charmbracelet/bubbletea {version}
+    github.com/charmbracelet/bubbles {version}
+    github.com/charmbracelet/lipgloss {version}
 
     // CLI
-    github.com/spf13/cobra v1.8.1
-    github.com/spf13/viper v1.19.0
+    github.com/spf13/cobra {version}
+    github.com/spf13/viper {version}
 
     // GUI (build tag: gui)
     // Linux: github.com/diamondburned/gotk4/pkg/gtk/v4
@@ -9606,8 +9606,8 @@ require (
     // Windows: uses cgo with Win32
 
     // Common
-    github.com/rs/zerolog v1.33.0
-    gopkg.in/yaml.v3 v3.0.1
+    github.com/rs/zerolog {version}
+    gopkg.in/yaml.v3 {version}
 )
 ```
 
@@ -9926,7 +9926,7 @@ NO_COLOR=1 {project_name} --status | grep -E '✅|❌|⚠️|🚀'  # Should fin
 --service {start,restart,stop,reload,--install,--uninstall,--disable,--help}
 --daemon                     # Daemonize (detach from terminal)
 --debug                      # Enable debug mode (verbose logging, debug endpoints)
---color {auto|yes|no}  # Color output (default: auto, respects NO_COLOR)
+--color {auto|yes|no}        # Color output (default: auto, respects NO_COLOR)
 --lang {code}                # Language for output (default: auto, from LANG env)
 --maintenance {backup,restore,update,mode,setup,--help} [optional-file-or-setting]
 --update [check|yes|branch {stable|beta|daily}|--help]  # Check/perform updates
@@ -9965,7 +9965,7 @@ Server Configuration:
 --baseurl PATH                        - URL path prefix (default: /)
 --daemon                              - Run as daemon (detach from terminal)
 --debug                               - Enable debug mode
---color {auto|yes|no}           - Color output (default: auto)
+--color {auto|yes|no}                 - Color output (default: auto)
 --lang CODE                           - Language for output (default: auto)
 
 Service Management:
@@ -12194,7 +12194,7 @@ func GetWildcardDomain() string
 
 **go.mod:**
 ```
-require golang.org/x/net v0.33.0
+require golang.org/x/net {version}
 ```
 
 This properly handles complex suffixes like `.co.uk`, `.com.au`, `.org.uk`, etc.
@@ -42349,7 +42349,7 @@ Flags:
 --token-file FILE                     - Read token from file
 --config NAME                         - Config profile name (default: cli.yml)
 --debug                               - Debug output
---color {auto|yes|no}           - Color output (default: auto)
+--color {auto|yes|no}                 - Color output (default: auto)
 --lang CODE                           - Language for output (default: auto)
 
   {project-specific flags listed here}
