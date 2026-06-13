@@ -744,7 +744,6 @@ Place Docker assets under `docker/`:
 ```text
 docker/
 ├── Dockerfile              # production runtime image — two-stage (builder + minimal Alpine); tagged :latest
-├── Dockerfile.build        # toolchain image — casjaysdev/go:latest base; only when custom tools beyond the standard image are needed; tagged :build   (project-specific)
 ├── Dockerfile.dev          # devel image — same as release but binary runs in debug mode; tagged :devel   (project-specific)
 ├── rootfs/                 # build-time filesystem overlay copied into image at /   (project-specific)
 ├── docker-compose.yml      # production compose — HUMAN USE ONLY
@@ -756,20 +755,22 @@ docker/
 
 `docker-compose.yml` always lives under `docker/` — never at the repo root. See `dockerfile_conventions.md` → "Docker Compose" for the canonical layout and the rule that `docker-compose.test.yml` is the only compose file AI is allowed to run directly.
 
-### Mandatory Image Properties
+### Standard Toolchain Image
 
-These properties apply to `docker/Dockerfile.build` — the toolchain image built monthly and pulled by all CI/CD workflows:
+**Most Go projects use `casjaysdev/go:latest` directly** — it includes golangci-lint, staticcheck, govulncheck, goreleaser, and more out of the box. CI workflows reference it directly as `image: casjaysdev/go:latest`; no `docker/Dockerfile.build` or `build-toolchain.yml` is needed.
 
-- Base image: `casjaysdev/go:latest` (rolling — never pinned); includes golangci-lint, staticcheck, govulncheck, goreleaser, and more out of the box. Only create `Dockerfile.build` when the project needs tools beyond what this image provides
+Only create `docker/Dockerfile.build` when the project genuinely needs tools not present in `casjaysdev/go:latest`. When it is created:
+
+- Base image: `casjaysdev/go:latest` (rolling — never pinned)
 - Go version matching `.go-version` is provided by the base image or set via `GOTOOLCHAIN` in the Dockerfile
 - `gofmt` and `go vet` are included in the Go toolchain (no extra install needed)
-- `golangci-lint`, `govulncheck`, `go-licenses`, and `cyclonedx-gomod` are pre-installed in the image
+- `golangci-lint`, `govulncheck`, `go-licenses`, and `cyclonedx-gomod` are pre-installed in the base image
 - A non-root user matching the host UID/GID by default (so files written into mounted volumes are not root-owned)
 - Go module cache and build cache mounted as named volumes for build speed
 - `CGO_ENABLED=0` set as a default environment variable in the image
 - The image requires no C dev libraries — `CGO_ENABLED=0` Go builds need no C toolchain at all
 
-CI/CD workflows pull this image via the `ensure-build-image` pre-flight job — they never install tools inline. See `cicd_conventions.md` for the full workflow pattern.
+When a `docker/Dockerfile.build` exists, CI/CD workflows pull it via the `ensure-build-image` pre-flight job and never install tools inline. See `cicd_conventions.md` for the full workflow pattern.
 
 ### OCI Annotations
 
@@ -779,11 +780,13 @@ Image metadata is applied as OCI annotations on the manifest index — never as 
 - All metadata is passed at build time via `--annotation` flags on `docker buildx build` (or via `docker/metadata-action` → `annotations:` output in GitHub Actions / Gitea / Forgejo).
 - See `dockerfile_conventions.md` → "OCI Annotations" for the full required annotation set (static + dynamic) and the canonical `docker/metadata-action` snippet.
 
-### CI/CD Workflow Pattern (ensure-build-image)
+### CI/CD Workflow Pattern
 
-Every CI workflow that needs build tools MUST pull the project toolchain image — never `apk add` / `go install` inline. The canonical pattern is the `ensure-build-image` pre-flight job; see `cicd_conventions.md` → "Toolchain Image (build-toolchain.yml)" for the full template.
+**Standard projects (no `docker/Dockerfile.build`):** reference `casjaysdev/go:latest` directly as the container image in each job — no `ensure-build-image` pre-flight needed, no `build-toolchain.yml`. Never `apk add` / `go install` inline.
 
-Minimum requirement for every downstream job in `ci.yml` / `release.yml` / `build-toolchain.yml`:
+**Projects with a custom `docker/Dockerfile.build`:** pull it via the `ensure-build-image` pre-flight job; see `cicd_conventions.md` → "Toolchain Image (build-toolchain.yml)" for the full template.
+
+Minimum requirement for every downstream job that uses the build image (`ci.yml` / `release.yml`):
 
 ```yaml
 jobs:
@@ -1191,9 +1194,9 @@ Renovate covers `github-actions` SHA updates automatically via `pinDigests: true
 
 - `ci.yml` — build, test, lint, coverage, and security jobs (push + PR + weekly schedule)
 - `release.yml` — tagged/manual release build and publish
-- `build-toolchain.yml` — monthly rebuild of the `:build` toolchain image
+- `build-toolchain.yml` — monthly rebuild of the `:build` toolchain image; **only required when the project has `docker/Dockerfile.build`**
 
-All three files are mandatory. A project without `build-toolchain.yml` has no mechanism to publish the toolchain image that `ci.yml` and `release.yml` require.
+`ci.yml` and `release.yml` are mandatory. `build-toolchain.yml` is only added when the project maintains a custom `docker/Dockerfile.build` — standard projects pull `casjaysdev/go:latest` directly and need no toolchain image workflow.
 
 Equivalent Gitea/Forgejo/GitLab/Jenkins pipelines must enforce the same gates, not a weaker subset.
 
@@ -1510,8 +1513,8 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] `CLAUDE.md` / `.claude/CLAUDE.md` are short loaders, not duplicate specs
 - [ ] `release.txt` exists if the project is using explicit release versioning
 - [ ] `site.txt` exists only if there is a real official site URL
-- [ ] `docker/Dockerfile`, `docker/Dockerfile.build`, `docker/docker-compose.yml`, `docker/docker-compose.dev.yml`, `docker/docker-compose.test.yml`, and `docker/entrypoint.sh` exist; `Dockerfile.build` builds the toolchain image; `Dockerfile` is the runtime image
-- [ ] If `docker/Dockerfile.build` exists, it is based on `casjaysdev/go:latest`; it is only present when the project needs tools beyond what the standard image provides (`golangci-lint`, `govulncheck`, `goreleaser`, and more are already in the base image)
+- [ ] `docker/Dockerfile`, `docker/docker-compose.yml`, `docker/docker-compose.dev.yml`, `docker/docker-compose.test.yml`, and `docker/entrypoint.sh` exist; `Dockerfile` is the runtime image
+- [ ] `docker/Dockerfile.build` is absent unless the project needs tools beyond `casjaysdev/go:latest` (which already includes golangci-lint, govulncheck, goreleaser, and more); when present it is based on `casjaysdev/go:latest`
 - [ ] `CGO_ENABLED=0` is set as default in the Docker image environment
 - [ ] X11 forwarding sample command is documented and works against a real Xorg/XWayland session
 - [ ] Wayland forwarding sample command is documented and works against a real Wayland compositor
@@ -1526,7 +1529,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 
 ## Implementation Checklist
 
-- [ ] Bootstrap order followed: `docker/Dockerfile.build` committed first → `build-toolchain.yml` triggered via `workflow_dispatch` → image verified in registry → then `ci.yml`/`release.yml` committed
+- [ ] If `docker/Dockerfile.build` exists: bootstrap order followed — `Dockerfile.build` committed first → `build-toolchain.yml` triggered via `workflow_dispatch` → image verified in registry → then `ci.yml`/`release.yml` committed; otherwise `ci.yml`/`release.yml` reference `casjaysdev/go:latest` directly
 - [ ] Core logic is shared across GUI/TUI/CLI
 - [ ] Runtime mode auto-detect follows GUI → TUI → CLI priority
 - [ ] GUI is not auto-selected in SSH/MOSH/remote-shell contexts
