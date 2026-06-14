@@ -1119,6 +1119,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | `AI.md` | ✓ | Project specification (HOW - implementation patterns) |
 | `IDEA.md` | ✓ | Project idea (WHAT - business logic, features) |
 | `CLAUDE.md` | ✓ | Claude Code quick loader - critical rules + references into `AI.md` |
+| `SPEC.md` | Optional | Project-specific rule overrides — SPEC.md > AI.md > global CLAUDE.md; created only when a rule must differ from the template or global; may be empty |
 | `PLAN.md` | Optional | Project plan — human edits/owns. AI reads, interprets, executes, and marks items done in place. Never rewrite or restructure |
 | `PLAN.AI.md` | Optional | Project plan — AI creates/updates. If it exists, this is THE plan |
 | `TODO.md` | Optional | Task list — human edits/owns. AI reads, interprets, executes, and marks items done in place. Never delete, empty, or restructure |
@@ -1912,6 +1913,7 @@ Instructions for how this agent should behave...
 | `IDEA.md` | ✓ | Project plan and features | No |
 | `CLAUDE.md` | ✓ | Claude Code project memory (primary location) | No |
 | `CLAUDE.local.md` | - | Personal Claude Code preferences | **Yes** |
+| `SPEC.md` | - | Project-specific rule overrides — SPEC.md > AI.md > global CLAUDE.md; created only when a rule must differ from template | No |
 | `README.md` | ✓ | Project documentation | No |
 | `LICENSE.md` | ✓ | MIT license + embedded third-party licenses | No |
 | `go.mod` | ✓ | Go module definition | No |
