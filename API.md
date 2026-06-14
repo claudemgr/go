@@ -3223,6 +3223,7 @@ Spec version: {line count or hash}
 | Running `gitcommit <command>` mid-task with files in an inconsistent state | Every commit is pushed — half-finished work goes public. Finish the unit of work first |
 | Subagent writing `.git/COMMIT_MESS` | Commit message must be written by the parent instance after reviewing the actual diff |
 | Subagent calling `gitcommit` | Only the parent (main) instance runs gitcommit — subagents complete edits and report back |
+| Bare `@name` in commit body | Any `@username` in a commit message creates a GitHub contributor notification/link — never use bare `@` unless intentionally crediting a real contributor; write names without `@` or wrap in backticks |
 | Deleting files without confirmation | Destructive action |
 | Changing NON-NEGOTIABLE sections | Specification violation |
 | Skipping validation | Security requirement |
