@@ -32217,11 +32217,11 @@ jobs:
       CGO_ENABLED: "0"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-      - run: go test -cover -coverprofile=coverage.out ./...
+      - run: go test -cover -coverprofile=/tmp/coverage.out ./...
       - name: Enforce coverage threshold
         run: |
           THRESHOLD=60
-          PCT=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print int($3)}')
+          PCT=$(go tool cover -func=/tmp/coverage.out | awk '/^total:/ {gsub("%","",$3); print int($3)}')
           if [ "$PCT" -lt "$THRESHOLD" ]; then
             echo "::error::coverage $PCT% < threshold $THRESHOLD%"
             exit 1
@@ -35695,6 +35695,9 @@ test:
 
     - name: Run tests with coverage
       run: |
+        # coverage.out goes to the mounted workspace (/app), not /tmp — two separate docker run
+        # invocations cannot share /tmp; the workspace mount is the only shared path between them.
+        # The runner workspace is ephemeral so this is safe.
         docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app casjaysdev/go:latest \
           go test -cover -coverprofile=coverage.out ./...
 
