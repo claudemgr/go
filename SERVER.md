@@ -36947,14 +36947,15 @@ docker:
 # =============================================================================
 test:
 	@echo "Running tests with coverage..."
-	@$(GO_DOCKER) go mod download
-	@$(GO_DOCKER) go test -v -cover -coverprofile=coverage.out ./...
-	@COVERAGE=$$($(GO_DOCKER) go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
-	if [ $$(echo "$$COVERAGE < 80" | bc -l) -eq 1 ]; then \
-		echo "ERROR: Coverage is $$COVERAGE%, must be >= 80%"; \
-		exit 1; \
-	fi
-	@echo "Tests complete - Coverage: $$COVERAGE% (>= 80% required) ✓"
+	@$(GO_DOCKER) sh -c " \
+		go mod download && \
+		go test -v -cover -coverprofile=/tmp/coverage.out ./... && \
+		COVERAGE=\$$(go tool cover -func=/tmp/coverage.out | grep total | awk '{print \$$3}' | sed 's/%//') && \
+		echo \"Coverage: \$$COVERAGE%\" && \
+		if [ \$$(echo \"\$$COVERAGE < 80\" | bc -l) -eq 1 ]; then \
+			echo \"ERROR: Coverage is \$$COVERAGE%, must be >= 80%\"; exit 1; \
+		fi && \
+		echo \"Tests complete - Coverage: \$$COVERAGE% (>= 80% required) ✓\""
 
 # =============================================================================
 # DEV - Quick build for local development/testing (to random temp dir)
