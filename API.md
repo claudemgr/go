@@ -30303,9 +30303,11 @@ docker:
 test:
 	@echo "Running tests with coverage..."
 	@$(GO_DOCKER) sh -c " \
+		mkdir -p \"/tmp/$(PROJECTORG)\" && \
+		COVDIR=\$$(mktemp -d \"/tmp/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX\") && \
 		go mod download && \
-		go test -v -cover -coverprofile=/tmp/coverage.out ./... && \
-		COVERAGE=\$$(go tool cover -func=/tmp/coverage.out | grep total | awk '{print \$$3}' | sed 's/%//') && \
+		go test -v -cover -coverprofile=\$$COVDIR/coverage.out ./... && \
+		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep total | awk '{print \$$3}' | sed 's/%//') && \
 		echo \"Coverage: \$$COVERAGE%\" && \
 		if [ \$$(echo \"\$$COVERAGE < 80\" | bc -l) -eq 1 ]; then \
 			echo \"ERROR: Coverage is \$$COVERAGE%, must be >= 80%\"; exit 1; \
@@ -32217,11 +32219,16 @@ jobs:
       CGO_ENABLED: "0"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-      - run: go test -cover -coverprofile=/tmp/coverage.out ./...
+      - name: Run tests with coverage
+        run: |
+          mkdir -p "/tmp/${{ github.repository_owner }}"
+          COVDIR=$(mktemp -d "/tmp/${{ github.repository_owner }}/$(basename "${{ github.repository }}")-XXXXXX")
+          echo "COVDIR=$COVDIR" >> "$GITHUB_ENV"
+          go test -cover -coverprofile="$COVDIR/coverage.out" ./...
       - name: Enforce coverage threshold
         run: |
           THRESHOLD=60
-          PCT=$(go tool cover -func=/tmp/coverage.out | awk '/^total:/ {gsub("%","",$3); print int($3)}')
+          PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
           if [ "$PCT" -lt "$THRESHOLD" ]; then
             echo "::error::coverage $PCT% < threshold $THRESHOLD%"
             exit 1
