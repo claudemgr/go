@@ -30141,7 +30141,7 @@ BINDIR := binaries
 RELDIR := releases
 
 # Go directories (persistent across builds)
-# Go cache bind-mounted from host: GO_CACHE (mod) and GO_BUILD (build cache)
+# GO_CACHE maps host module cache to GOPATH/pkg/mod; GO_BUILD maps to GOCACHE inside the image
 GO_CACHE  ?= $(HOME)/go/pkg/mod
 GO_BUILD  ?= $(HOME)/.cache/go-build
 
@@ -30159,6 +30159,7 @@ GO_DOCKER := docker run --rm -it \
 	-e CGO_ENABLED=0 \
 	-e GOFLAGS=-buildvcs=false \
 	casjaysdev/go:latest
+# CGO_ENABLED=0 and GOFLAGS=-buildvcs=false are casjaysdev/go:latest defaults; set explicitly for clarity
 
 .PHONY: build local release docker test dev clean
 
