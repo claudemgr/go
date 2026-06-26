@@ -1,70 +1,53 @@
-# AI.md Project Guide
+# 🐹 claudemgr/go
 
-`AI.md` is the project specification and the single source of truth for this project.
+Comprehensive Go project specification for Claude AI — `API.md` is the single source of truth for how any CasjaysDev Go project is built, structured, and deployed.
 
-`IDEA.md` contains the project-specific description, variables, and business logic. `TODO.AI.md` is optional task tracking only and never overrides `AI.md`.
+## 📄 What's in `API.md`
 
-## Overview
+A ~43,000-line spec covering the full project lifecycle across 34 PARTs:
 
-This project is driven by specification-first workflow.
+| Topic | Coverage |
+|-------|----------|
+| **Project layout** | All Go source under `src/`; singular package dirs (`handler/`, `model/`, `middleware/`) |
+| **Build system** | Makefile for local dev / AI use; CI/CD uses direct `go build` commands — never `make` |
+| **Docker** | `casjaysdev/go:latest` only; `CGO_ENABLED=0`; `-buildvcs=false`; module cache bind-mounts |
+| **Binary naming** | `{name}-{GOOS}-{GOARCH}` — Go terms only (`linux/darwin/windows`, `amd64/arm64`) |
+| **LDFLAGS** | `-s -w -trimpath` required on `build`, `release`, `docker` targets |
+| **Auth** | Sessions, API tokens, RBAC, password hashing, CSRF/XSS/SSRF guards |
+| **Server** | HTTP handlers, middleware chain, server-side Go templates (no client-side rendering) |
+| **CLI / TUI** | Flag standards (`--debug`, `--color auto/yes/no`), NO_COLOR, cobra/pflag |
+| **Config & logging** | `log/slog`, structured text handler, no ANSI in log files |
+| **CI/CD** | GitHub Actions, GitLab CI, Gitea/Forgejo — SHA-pinned, direct cargo/go commands |
+| **Release** | Cross-platform binaries, Docker image, SBOM, signed artifacts |
+| **Testing** | Docker + Incus patterns, coverage enforcement (≥ 80%) |
 
-- `./AI.md` defines how work must be done.
-- `./IDEA.md` defines what this specific project is supposed to do.
-- `./TODO.AI.md` tracks work when needed.
+## 🔑 Core Rules
 
-If any file conflicts with `./AI.md`, `./AI.md` wins.
+- **Makefile = local development and AI-driven work only.** Targets: `build`, `release`, `docker`, `test`, `dev`, `clean`.
+- **CI/CD never uses `make`.** All pipeline jobs run direct `go build`/`go test` inside `casjaysdev/go:latest`.
+- **Never build on the host.** All compilation happens inside Docker.
+- `CGO_ENABLED=0` on every `go build` invocation — no exceptions.
+- `-buildvcs=false` required inline on all `go build` calls (and via `-e GOFLAGS=-buildvcs=false` in `GO_DOCKER`).
 
-## Project Files
+## 📦 Module Cache
+
+| Variable | Local default | Container path |
+|----------|--------------|----------------|
+| `GO_CACHE` | `~/go/pkg/mod` | `/usr/local/share/go/pkg/mod` |
+| `GO_BUILD` | `~/.cache/go-build` | `/usr/local/share/go/cache` |
+
+## 📁 Files
 
 | File | Purpose |
 |------|---------|
-| `AI.md` | Project specification and source of truth |
-| `IDEA.md` | Project-specific description, variables, and business logic |
-| `TODO.AI.md` | Optional AI task tracking |
+| `API.md` | Full Go project specification — source of truth |
+| `IDEA.md` | Project-scope description and variables |
+| `CLAUDE.md` | Project loader — points Claude at `AI.md` and `IDEA.md` |
 
-## AI Quick Start
+## 👤 Author
 
-Use the block below as a copy/paste prompt for GitHub Copilot, Claude Code, or another AI tool.
+**Jason Hempstead** · [GitHub](https://github.com/casjay) · [Casjays Developments](https://casjaysdev.pro)
 
-```text
-You are working in the current project directory.
+## 📄 License
 
-The project specification is ./AI.md. It is the single source of truth.
-
-Before doing anything else:
-1. Fully read ./AI.md from the top through PART 5.
-2. Follow ./AI.md exactly as written.
-3. Do not guess or assume when ./AI.md says to detect, read, verify, or ask.
-4. If ./TODO.AI.md exists, review and update it as needed, but use ./AI.md for the actual rules and process.
-5. Commit all COMMIT, NEVER, and MUST rules from ./AI.md to memory.
-6. Before making changes, read the relevant sections of ./AI.md and follow them exactly.
-
-If any file conflicts with ./AI.md, ./AI.md wins.
-```
-
-## Workflow
-
-1. Read `./AI.md` through **PART 5** before starting work.
-2. Review the relevant sections of `./AI.md` before making changes.
-3. Use `./IDEA.md` for project-specific scope and business logic.
-4. Update `./TODO.AI.md` when task tracking is needed.
-5. Keep work aligned with the rules defined in `./AI.md`.
-
-## Operating Rules
-
-- Always treat `./AI.md` as authoritative.
-- Never guess or assume values when the spec says to detect, read, verify, or ask.
-- Read the relevant section of `./AI.md` before making changes.
-- Use `./TODO.AI.md` only for task tracking, never as the source of truth.
-
-## Disclaimer
-
-This project guidance is provided "as is" without warranty of any kind.
-
-- **No Warranty**: Use of the project and its instructions is at your own risk.
-- **Project Rules Apply**: Operational, implementation, and workflow decisions must follow `./AI.md`.
-- **Human Review Recommended**: Validate important changes before relying on them in production or other critical environments.
-
-## License
-
-MIT - See [LICENSE.md](LICENSE.md)
+MIT — see [LICENSE.md](LICENSE.md)
