@@ -30278,6 +30278,7 @@ docker:
 # TEST - Run all tests with coverage enforcement (via Docker)
 # =============================================================================
 test:
+	@mkdir -p $(GO_CACHE) $(GO_BUILD)
 	@echo "Running tests with coverage..."
 	@$(GO_DOCKER) sh -c " \
 		mkdir -p \"/tmp/$(PROJECTORG)\" && \
@@ -30308,14 +30309,15 @@ test:
 # Fast: local platform only, no ldflags, random temp dir for isolation
 # Builds server + CLI (if they exist)
 dev:
+	@mkdir -p $(GO_CACHE) $(GO_BUILD)
 	@$(GO_DOCKER) go mod tidy
 	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" && \
 		BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX") && \
 		echo "Quick dev build to $$BUILD_DIR..." && \
-		$(GO_DOCKER) go build -o $$BUILD_DIR/$(PROJECTNAME) ./src && \
+		$(GO_DOCKER) go build -buildvcs=false -o $$BUILD_DIR/$(PROJECTNAME) ./src && \
 		echo "Built: $$BUILD_DIR/$(PROJECTNAME)" && \
 		if [ -d "src/client" ]; then \
-			$(GO_DOCKER) go build -o $$BUILD_DIR/$(PROJECTNAME)-cli ./src/client && \
+			$(GO_DOCKER) go build -buildvcs=false -o $$BUILD_DIR/$(PROJECTNAME)-cli ./src/client && \
 			echo "Built: $$BUILD_DIR/$(PROJECTNAME)-cli"; \
 		fi && \
 		echo "Test:  docker run --rm -it --name $(PROJECTNAME)-test -v $$BUILD_DIR:/app alpine:latest /app/$(PROJECTNAME) --help"
@@ -30358,10 +30360,10 @@ var (
 
 All Docker builds use persistent Go module caching to avoid re-downloading dependencies:
 
-| Cache | Local Path | Container Path |
-|-------|-----------|----------------|
-| Go directory | `~/.local/share/go` | `/go` |
-| Go state | host cache dirs (`GO_CACHE`/`GO_BUILD`) | `/usr/local/share/go/pkg/mod`, `/usr/local/share/go/cache` |
+| Cache | Local Path (`?=` default) | Container Path |
+|-------|--------------------------|----------------|
+| Module cache (`GO_CACHE`) | `~/go/pkg/mod` | `/usr/local/share/go/pkg/mod` |
+| Build cache (`GO_BUILD`) | `~/.cache/go-build` | `/usr/local/share/go/cache` |
 
 **Benefits:**
 - First build downloads modules once
@@ -35001,8 +35003,8 @@ verify_all_endpoints_tested
 # 1. Build in Docker (always use Docker for builds)
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
 BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
-docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app -e CGO_ENABLED=0 \
-  casjaysdev/go:latest go build -o /app/binaries/{project_name} ./src
+docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest go build -buildvcs=false -o /app/binaries/{project_name} ./src
 
 # 2. Test (prefer Incus, fallback to Docker)
 if command -v incus &>/dev/null; then
@@ -35097,15 +35099,16 @@ GO_DOCKER="docker run --rm -it \
   -v $GO_BUILD:/usr/local/share/go/cache \
   -w /app \
   -e CGO_ENABLED=0 \
+  -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest"
 
 echo "Building server binary in Docker..."
-$GO_DOCKER go build -o "$BUILD_DIR/${PROJECT_NAME}" ./src
+$GO_DOCKER go build -buildvcs=false -o "$BUILD_DIR/${PROJECT_NAME}" ./src
 
 # Build client if exists
 if [ -d "src/client" ]; then
     echo "Building client in Docker..."
-    $GO_DOCKER go build -o "$BUILD_DIR/${PROJECT_NAME}-cli" ./src/client
+    $GO_DOCKER go build -buildvcs=false -o "$BUILD_DIR/${PROJECT_NAME}-cli" ./src/client
 fi
 
 
@@ -35274,15 +35277,16 @@ GO_DOCKER="docker run --rm -it \
   -v $GO_BUILD:/usr/local/share/go/cache \
   -w /app \
   -e CGO_ENABLED=0 \
+  -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest"
 
 echo "Building server binary in Docker..."
-$GO_DOCKER go build -o "$BUILD_DIR/${PROJECT_NAME}" ./src
+$GO_DOCKER go build -buildvcs=false -o "$BUILD_DIR/${PROJECT_NAME}" ./src
 
 # Build client if exists
 if [ -d "src/client" ]; then
     echo "Building client in Docker..."
-    $GO_DOCKER go build -o "$BUILD_DIR/${PROJECT_NAME}-cli" ./src/client
+    $GO_DOCKER go build -buildvcs=false -o "$BUILD_DIR/${PROJECT_NAME}-cli" ./src/client
 fi
 
 
@@ -35586,10 +35590,11 @@ GO_DOCKER="docker run --rm -it \
   -v $GO_CACHE:/usr/local/share/go/pkg/mod \
   -v $GO_BUILD:/usr/local/share/go/cache \
   -w /app \
-  -e CGO_ENABLED=0"
+  -e CGO_ENABLED=0 \
+  -e GOFLAGS=-buildvcs=false"
 
 # Build (outputs to binaries/ which can be mounted into test containers)
-$GO_DOCKER casjaysdev/go:latest go build -o /app/binaries/{project_name} ./src
+$GO_DOCKER casjaysdev/go:latest go build -buildvcs=false -o /app/binaries/{project_name} ./src
 
 # Run tests
 $GO_DOCKER casjaysdev/go:latest go test ./...
@@ -35636,8 +35641,8 @@ docker run --rm -it \
   -v $PWD:/app \
   -v $GO_CACHE:/usr/local/share/go/pkg/mod \
   -v $GO_BUILD:/usr/local/share/go/cache \
-  -w /app -e CGO_ENABLED=0 \
-  casjaysdev/go:latest go build -o /app/binaries/{project_name} ./src
+  -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest go build -buildvcs=false -o /app/binaries/{project_name} ./src
 
 # Test in Docker (quick) - install tools first
 docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD/binaries:/app alpine:latest sh -c "
@@ -35673,8 +35678,8 @@ docker run --rm -it \
   -v $PWD:/app \
   -v $GO_CACHE:/usr/local/share/go/pkg/mod \
   -v $GO_BUILD:/usr/local/share/go/cache \
-  -w /app -e CGO_ENABLED=0 \
-  casjaysdev/go:latest go build -o /app/binaries/{project_name} ./src
+  -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest go build -buildvcs=false -o /app/binaries/{project_name} ./src
 
 # Quick test in Docker (install tools first)
 docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD/binaries:/app alpine:latest sh -c "
@@ -35708,8 +35713,8 @@ TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
 mkdir -p $TEST_DIR/{config,data,logs}
 
 # Build
-docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app -e CGO_ENABLED=0 \
-  casjaysdev/go:latest go build -o /app/binaries/{project_name} ./src
+docker run --rm -it --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest go build -buildvcs=false -o /app/binaries/{project_name} ./src
 
 # Launch Incus container (use latest Debian stable)
 incus launch images:debian/trixie test-{project_name}
