@@ -38041,7 +38041,8 @@ networks:
 ```dockerfile
 # All-in-One Dockerfile - includes app + postgresql + valkey + tor
 # Build: casjaysdev/go:latest (static binary, CGO_ENABLED=0)
-# Runtime: debian:latest (stable, broad compatibility)
+# Runtime: debian:latest — Alpine (musl) is insufficient here; PostgreSQL, Valkey, and Tor
+#           require glibc and system libraries not available on Alpine. Use debian, not alpine.
 # Image name: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest-aio
 # PORTS: Only 80 exposed (db/cache are internal-only)
 
