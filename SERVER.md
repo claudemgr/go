@@ -15486,6 +15486,7 @@ Redirect to         │                    │
 | Path | Default | Required When | Source | Content-Type | Behavior |
 |------|---------|---------------|--------|--------------|----------|
 | `/.well-known/security.txt` | Enabled | All projects | Generated from config (or operator override for the same path) | `text/plain; charset=utf-8` | RFC 9116 security contact file |
+| `/.well-known/llms.txt` | Enabled | All projects | Generated from config + routes | `text/plain; charset=utf-8` | AI agent discovery file (also served at `/llms.txt`) |
 | `/.well-known/pgp-key.asc` | Feature-gated | Project security-report PGP keypair exists | Generated from stored public key | `application/pgp-keys` or `text/plain; charset=utf-8` | Public key download for secure report submission |
 | `/.well-known/acme-challenge/{token}` | Feature-gated | Let's Encrypt `http-01` is active | Dynamic handler only | `text/plain; charset=utf-8` | ACME challenge response; no auth, no HTML |
 | `/.well-known/change-password` | Enabled | Auth routes exist | Dynamic handler | Redirect response with no-store headers | If logged in, send user to `/users/security/password`; otherwise send to `/server/auth/password/forgot` |
@@ -15573,6 +15574,73 @@ web:
 |-------|----------|-------------|
 | `Contact` | YES | Email for reporting vulnerabilities (mailto: prefix added automatically) |
 | `Expires` | YES | Expiration date (auto-renewed yearly by default) |
+
+### llms.txt (AI Discovery)
+
+**ALL projects MUST serve an llms.txt file for AI agent discovery.**
+
+llms.txt tells AI agents (Claude, GPT, etc.) what the application does, what API endpoints are available, and how to interact with it programmatically. This is the AI equivalent of robots.txt.
+
+```
+# Served at /.well-known/llms.txt and /llms.txt (both paths)
+
+# {project_name}
+> {project_description}
+
+## API
+Base URL: {app_url}/api/{api_version}
+Authentication: Bearer token (obtain via /api/{api_version}/auth/token)
+Rate limit: {rate_limit} requests/minute
+
+## Endpoints
+- GET /health - Health check (no auth)
+- GET /server/info - Server information (no auth)
+- POST /auth/token - Obtain API token
+- GET /users/me - Current user profile
+- ... (auto-generated from route definitions)
+
+## Capabilities
+- {capability_1}
+- {capability_2}
+- ...
+
+## Contact
+API issues: {api_contact}
+Security: {security_contact}
+```
+
+**Configuration:**
+```yaml
+web:
+  llms:
+    enabled: true                    # Serve llms.txt (default: true)
+    include_endpoints: true          # Auto-generate endpoint list from routes
+    include_schemas: false           # Include request/response schemas (verbose)
+    custom_sections: []              # Additional custom sections
+```
+
+**Auto-Generation Rules:**
+- Project name and description from `IDEA.md` or config
+- API base URL from server config
+- Endpoints auto-discovered from route registrations (public + authenticated, not admin-only)
+- Capabilities derived from enabled features (auth, Tor, federation, etc.)
+- Contact info from `web.security.contact` and `web.api_contact`
+
+**Endpoint Inclusion Rules:**
+| Route Type | Included | Reason |
+|------------|----------|--------|
+| Public API (`/api/**`) | Yes | AI agents can use these |
+| Authenticated API (`/api/**` + auth) | Yes | Note auth requirement |
+| Admin routes (`/server/{admin_path}/**`) | No | Not for external agents |
+| Internal routes (`/internal/**`) | No | Server-to-server only |
+| Health/metrics (`/healthz`, `/metrics`) | Yes | Useful for monitoring agents |
+
+**Well-Known Support Matrix Update:**
+
+| Path | Default | Required When | Source | Content-Type |
+|------|---------|---------------|--------|--------------|
+| `/.well-known/llms.txt` | Enabled | All projects | Generated from config + routes | `text/plain; charset=utf-8` |
+| `/llms.txt` | Enabled | All projects | Alias to `/.well-known/llms.txt` | `text/plain; charset=utf-8` |
 
 ### Admin Panel (/server/{admin_path}/config/web)
 
