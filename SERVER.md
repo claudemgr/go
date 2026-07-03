@@ -3418,10 +3418,8 @@ registration:
 
 ```yaml
 # WRONG: Inline comments
-# Enable feature
-enabled: true
-# Server port
-port: 8080
+enabled: true  # Enable feature
+port: 8080     # Server port
 
 # CORRECT: Comments above
 # Enable feature
@@ -3433,10 +3431,8 @@ port: 8080
 
 ```go
 // WRONG: Inline comments
-// Server port
-var port = 8080
-// Delete user
-db.Exec(query, id)
+var port = 8080  // Server port
+db.Exec(query, id)  // Delete user
 
 // CORRECT: Comments above
 // Server port
@@ -3447,6 +3443,13 @@ db.Exec(query, id)
 ```
 
 **Rule: ALL comments go on lines ABOVE the code, NEVER inline. This prevents confusion and improves readability.**
+
+**Comment validity by language:**
+- **JSON has NO comment syntax** — never place comments in `.json` files or JSON examples; JSON must always parse valid
+- **CSS comments are `/* */` only** — `//` and `#` are invalid CSS and break the stylesheet; CSS must always parse valid
+- **JavaScript comments are `//` or `/* */`** — never `#`; JS must always parse valid
+
+**Exception:** GitHub Actions SHA-pin version annotations stay inline — `uses: owner/action@{40-char-sha}  # vX.Y.Z` — Renovate reads and rewrites the same-line comment when bumping pins; never move it above the `uses:` line.
 
 ### Formatting and Indentation
 
@@ -7167,10 +7170,8 @@ Before proceeding, confirm you understand:
 
 **WRONG:**
 ```yaml
-# Enable feature
-enabled: true
-# Server port
-port: 8080
+enabled: true  # Enable feature
+port: 8080     # Server port
 ```
 
 **CORRECT:**
@@ -7183,6 +7184,8 @@ port: 8080
 ```
 
 **Reason:** Inline comments create confusion, make YAML harder to parse visually, and can cause issues with some YAML parsers. Comments above are clear and unambiguous.
+
+**Exception:** GitHub Actions SHA-pin version annotations stay inline — `uses: owner/action@{40-char-sha}  # vX.Y.Z` — Renovate reads and rewrites the same-line comment when bumping pins; never move it above the `uses:` line.
 
 **This applies to:**
 - `server.yml` configuration
@@ -22378,7 +22381,7 @@ formatURL(host, 8443, true)
 - HTTPS adds overhead without additional security benefit
 - Only use HTTPS on overlays when HTTPS-only mode is required (port 443)
 
-**Footer timestamp format:** `%B %-d, %Y at %H:%M:%S` → `December 4, 2025 at 13:05:13`
+**Footer timestamp format:** `%B %-d, %Y at %H:%M:%S %Z` → `December 4, 2025 at 13:05:13 EST` — anything user-facing MUST use this format; use `%Y-%m-%dT%H:%M:%S%:z` (RFC 3339) only where machine-readability matters (API responses, logs, health endpoints)
 
 **"Last update" MUST use build date, NEVER hardcoded.** Use `{build_datetime}` template variable which comes from `BUILD_DATE` at compile time. This ensures the footer always shows when the binary was built, not a static date in the source code.
 
@@ -23270,6 +23273,11 @@ footer {
   text-align: center;
   padding: 1rem;
   font-size: 0.875rem;
+}
+
+/* Tight row spacing - rows are consecutive <p> elements, never <br /> spacers */
+footer p {
+  margin: 0.25rem 0;
 }
 
 @media (min-width: 768px) {
@@ -27786,13 +27794,23 @@ When admin edits `custom_html`, show:
 | `{project_name}` | Project name |
 | `{project_org}` | Organization name |
 | `{projectversion}` | Application version |
-| `{build_datetime}` | Build date/time |
+| `{build_datetime}` | Build date/time (`%B %-d, %Y at %H:%M:%S %Z`) |
+| `{onion_address}` | Tor `.onion` address (only when Tor enabled and running) |
 
 ### Default Application Footer (Always Shown)
 
 ```html
 <footer class="footer">
-  <!-- Standard page links (always first) -->
+  <!-- Onion address (only shown if Tor is enabled and running) -->
+  {{ if and .TorEnabled .TorRunning }}
+  <p class="footer-onion">
+    <a href="/server/help#tor-access" aria-label="Tor Support">🧅</a>
+    <code class="onion-address">{onion_address}</code>
+    <button type="button" class="copy-btn" data-copy="{onion_address}" aria-label="Copy onion address">📋</button>
+  </p>
+  {{ end }}
+
+  <!-- Standard page links -->
   <p>
     <a href="/server/about">About</a>
     <span>•</span>
@@ -27803,15 +27821,6 @@ When admin edits `custom_html`, show:
     <a href="/server/help">Help</a>
   </p>
 
-  <!-- Tor Support (only shown if Tor is enabled and running) -->
-  {{ if and .TorEnabled .TorRunning }}
-  <p>
-    <a href="/server/help#tor-access">Tor Support</a>
-  </p>
-  {{ end }}
-
-  <br />
-
   <!-- Application branding -->
   <p>
     <a href="{PLATFORM_REPO_URL}" target="_blank">Made with</a> ❤️
@@ -27819,11 +27828,14 @@ When admin edits `custom_html`, show:
     <span>{projectversion}</span>
   </p>
 
-  <br />
-
-  <a href="/server/healthz">Last update: {build_datetime}</a>
+  <!-- Build stamp -->
+  <p>
+    <a href="/server/healthz">Last update: {build_datetime}</a>
+  </p>
 </footer>
 ```
+
+**No `<br />` spacers between rows** — rows are consecutive `<p>` elements; vertical rhythm comes from CSS (`footer p { margin: 0.25rem 0; }`), kept tight. Row order is fixed: onion address (Tor only) → page links → branding → last update. A disabled feature drops its row entirely without leaving a gap.
 
 ### Default Admin Footer (Admin Panel)
 
