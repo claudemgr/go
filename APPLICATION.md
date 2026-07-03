@@ -759,9 +759,11 @@ docker/
 
 **All Go projects use `casjaysdev/go:latest` — never create `docker/Dockerfile.build` or `build-toolchain.yml` for Go.** The maintained image includes everything any Go project needs:
 
-- Latest stable Go toolchain (`go`, `gofmt`, `go vet`); `CGO_ENABLED=0` and `GOTOOLCHAIN=auto` set by default
+- Latest stable Go toolchain (`go`, `gofmt`, `go vet`); image defaults: `CGO_ENABLED=0`, `GOFLAGS=-buildvcs=false`, `GOTOOLCHAIN=auto`, `GOTELEMETRY=off`
 - `golangci-lint`, `staticcheck`, `gofumpt`, `goimports` — linting and formatting
 - `govulncheck` — vulnerability scanner
+- `go-licenses` — dependency license reporter
+- `cyclonedx-gomod` — CycloneDX SBOM generator
 - `goreleaser` — release automation
 - `gotestsum` — structured test runner
 - `gopls` — official Go language server

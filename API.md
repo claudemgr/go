@@ -717,6 +717,29 @@ Every project ships workflow files for all five CI/CD providers. Same gates, dif
 
 Go projects never have `build-toolchain.yml` — `casjaysdev/go:latest` is maintained externally and needs no per-project rebuild workflow.
 
+**Toolchain image — `casjaysdev/go:latest`.** All Go CI jobs and containerized builds use this maintained image; never create `docker/Dockerfile.build` for Go. Image defaults: `CGO_ENABLED=0`, `GOFLAGS=-buildvcs=false`, `GOTOOLCHAIN=auto`, `GOTELEMETRY=off`. Pre-installed tools:
+
+- Latest stable Go toolchain (`go`, `gofmt`, `go vet`)
+- `golangci-lint`, `staticcheck`, `gofumpt`, `goimports` — linting and formatting
+- `govulncheck` — vulnerability scanner
+- `go-licenses` — dependency license reporter
+- `cyclonedx-gomod` — CycloneDX SBOM generator
+- `goreleaser` — release automation
+- `gotestsum` — structured test runner
+- `gopls` — official Go language server
+- `dlv` (Delve) — source-level debugger
+- `ko` — build container images from Go source without a Dockerfile
+- `air` — live-reload dev server
+- `buf` — protobuf toolchain; `protoc-gen-go`, `protoc-gen-go-grpc`
+- `goose` — DB migration runner
+- `wire` — compile-time dependency injection
+- `mockgen` (uber/mock) — interface mock generator
+- `stringer` — `String()` method generator for iota types
+- `benchstat` — statistically sound benchmark comparison
+- `gops` — live Go process diagnostics
+
+CI workflows reference the image directly: `container: image: casjaysdev/go:latest`. No `apk add`, no `go install`, no `ensure-build-image` job.
+
 | Provider | Workflow location | Syntax |
 |----------|------------------|--------|
 | GitHub  | `.github/workflows/ci.yml` / `release.yml` | GitHub Actions |
@@ -1927,7 +1950,7 @@ Instructions for how this agent should behave...
   - where to send vulnerabilities instead of opening a public issue
 - `.github/SECURITY.md` MUST define:
   - supported versions or supported release policy
-  - the security reporting path
+  - the security reporting path — GitHub private vulnerability reporting (`https://github.com/{project_org}/{project_name}/security/advisories/new`, the repo's Security tab → "Report a vulnerability") is the PRIMARY channel; the security email is a secondary/CC contact only, never the main reporting path. On mirrors without private vulnerability reporting, point reporters at the GitHub origin repo first
   - that vulnerabilities are NOT filed as public bug reports
   - expected disclosure/response flow
   - links to `/.well-known/security.txt` and `/server/contact?security_id=...` when those project features exist
@@ -13992,7 +14015,10 @@ web:
 
 ```
 # Served at /.well-known/security.txt
+# Contact lines are listed in order of preference (RFC 9116)
 
+Contact: {report_url}
+Contact: https://{fqdn}/server/contact?security_id={security_id}
 Contact: mailto:{security_contact}
 Expires: {expiry_date}
 ```
@@ -14001,7 +14027,8 @@ Expires: {expiry_date}
 ```yaml
 web:
   security:
-    contact: "security@{fqdn}"    # Security contact email
+    report_url: "https://github.com/{project_org}/{project_name}/security/advisories/new"    # Primary contact — GitHub private vulnerability reporting
+    contact: "security@{fqdn}"    # Secondary/CC contact email — never the primary reporting channel
     expires: "{1year}"            # Auto-calculated 1 year from generation
   well_known:
     unsupported_behavior: 404     # Unknown entries never redirect
@@ -14020,7 +14047,7 @@ web:
 **Fields:**
 | Field | Required | Description |
 |-------|----------|-------------|
-| `Contact` | YES | Email for reporting vulnerabilities (mailto: prefix added automatically) |
+| `Contact` | YES | One or more lines in order of preference (RFC 9116): first the repo's GitHub private vulnerability reporting URL (`web.security.report_url`), then the instance security-report form (`/server/contact?security_id={id}`, auto-generated — see "Security Reports"), last the `mailto:` CC address (prefix added automatically) |
 | `Expires` | YES | Expiration date (auto-renewed yearly by default) |
 
 ### llms.txt (AI Discovery)
@@ -14111,6 +14138,8 @@ web:
 ## Security Reports — Coordinated Disclosure Pipeline
 
 **End-to-end flow for a security researcher reporting a vulnerability, integrated with the existing `/server/contact` form so researchers don't need to learn a new submission system.**
+
+Repo-level (source-code) vulnerabilities are reported primarily via GitHub private vulnerability reporting (see `.github/SECURITY.md` and `web.security.report_url`). This pipeline covers reports against a deployed instance; its email notifications are the CC path, never the primary channel.
 
 ### `{security_id}` — Rotating One-Shot Token
 
@@ -15398,6 +15427,9 @@ server:
     # ---- Security (vulnerability reports) ----
     # Recipient for incoming security reports. Public — surfaced in
     # security.txt's `Contact:` mailto and in the PGP keypair's UID.
+    # This email is the secondary/CC channel only: the primary
+    # reporting path is GitHub private vulnerability reporting
+    # (web.security.report_url), listed first in security.txt.
     # Default is "security@{fqdn}" per RFC 2142 (the canonical role
     # mailbox for security issues, also referenced by RFC 9116).
     # Operator can override to a personal address; if explicitly
@@ -15491,7 +15523,7 @@ if !subtle.ConstantTimeCompare([]byte(got), []byte(want)) {
 | Field | Public exposure | Notes |
 |-------|------------------|-------|
 | `server.contact.admin.email` | NEVER public | Server-internal recipient only. |
-| `server.contact.security.email` | Public (security.txt `Contact: mailto:` line) | Researchers need to reach you. Choose carefully. Suggest a role address (`security@{fqdn}`) over a personal one. |
+| `server.contact.security.email` | Public (security.txt `Contact: mailto:` line — the secondary/CC channel; GitHub private vulnerability reporting is primary) | Researchers need to reach you. Choose carefully. Suggest a role address (`security@{fqdn}`) over a personal one. |
 | `server.contact.general.email` | Public (contact form, footer "Contact us") | Same — role address recommended. |
 | Any `webhooks.*` | NEVER public | URLs contain secrets / chat IDs / etc. |
 
