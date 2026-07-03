@@ -8438,9 +8438,16 @@ server:
 
   rate_limit:
     enabled: true
-    # Project-specific default (define in IDEA.md based on expected usage)
-    requests: 0  # 0 = use project default
-    window: 60
+    read:
+      requests: 120    # per minute per IP
+      window: 60
+    write:
+      requests: 10     # per minute per IP
+      window: 60
+    health:
+      requests: 120    # per minute per IP (health/status endpoints)
+      window: 60
+    global_burst: 240  # per minute per IP (absolute ceiling across all endpoint types)
 
   # Database
   database:
@@ -11015,7 +11022,7 @@ The app automatically watches config files and hot-reloads what it can. Settings
 
 | Setting Category | Examples |
 |------------------|----------|
-| Rate limits | `ratelimit.*` |
+| Rate limits | `rate_limit.*` |
 | CORS settings | `cors.*` |
 | Branding/SEO | `branding.*`, `seo.*` |
 | Logging level | `logging.level` |
@@ -11372,7 +11379,7 @@ INSERT INTO config (key, value, type) VALUES
     ('ssl.key', '""', 'string'),                     -- Empty = auto-detect
     ('ssl.min_version', '"TLS1.2"', 'string'),
     ('cors.allowed_origins', '["https://example.com","https://api.example.com"]', 'array'),
-    ('ratelimit.requests_per_minute', '0', 'number'),  -- 0 = use project default from IDEA.md
+    ('rate_limit.read.requests', '120', 'number'),   -- per minute per IP (see server.rate_limit.*)
     ('branding.site_name', '"My App"', 'string'),
     ('server.token', '"tok_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"', 'string');  -- auto-generated if blank
 ```
@@ -14028,14 +14035,12 @@ llms.txt tells AI agents (Claude, GPT, etc.) what the application does, what API
 
 ## API
 Base URL: {app_url}/api/{api_version}
-Authentication: Bearer token (obtain via /api/{api_version}/auth/token)
+Authentication: Bearer token (server token from server.yml, or resource owner token issued on resource creation)
 Rate limit: {rate_limit} requests/minute
 
 ## Endpoints
-- GET /health - Health check (no auth)
-- GET /info - Server information (no auth)
-- POST /auth/token - Obtain API token
-- GET /users/me - Current user profile
+- GET /server/healthz - Health check (no auth)
+- GET /server/about - Server information (no auth)
 - ... (auto-generated from route definitions)
 
 ## Capabilities
@@ -14070,7 +14075,8 @@ web:
 |------------|----------|--------|
 | Public API (`/api/**`) | Yes | AI agents can use these |
 | Authenticated API (`/api/**` + auth) | Yes | Note auth requirement |
-| Health/metrics (`/healthz`, `/metrics`) | Yes | Useful for monitoring agents |
+| Health (`/server/healthz`) | Yes | Useful for monitoring agents |
+| Metrics (`/metrics`) | No | Operational/internal endpoint; never advertised |
 
 **Well-Known Support Matrix Update:**
 
@@ -20881,19 +20887,6 @@ function deleteItem(itemId) {
         }
     });
 }
-
-// MODAL - User input required
-function changePassword() {
-    showModal({
-        title: 'Change Password',
-        form: true,
-        fields: ['current_password', 'new_password', 'confirm_password'],
-        onSubmit: async (data) => {
-            await api.post('/users/security/password', data);
-            showToast('Password changed', 'success');  // Confirmation after action
-        }
-    });
-}
 ```
 
 ### Toast Notifications
@@ -26934,15 +26927,6 @@ server:
 |--------|---------|
 | `scheduler_task_duration_seconds` | 0.1, 0.5, 1, 5, 10, 30, 60, 300, 600 |
 
-### Rate Limit Metrics (REQUIRED)
-
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `rate_limit_hits_total` | Counter | `endpoint_class` | Rate limit triggers |
-| `rate_limit_blocked_total` | Counter | `endpoint_class` | Requests blocked by rate limit |
-
-**Cardinality note:** Never use `ip` as a metric label — unbounded cardinality is a memory-DoS vector. Log per-IP details to structured logs instead; metrics answer "how many?" while logs answer "which IPs?"
-
 ### System Metrics (if `include_system: true`)
 
 | Metric | Type | Labels | Description |
@@ -26987,6 +26971,8 @@ server:
 |-------|--------|-------|
 | `limit` | `global`, `per_ip`, `per_user`, `per_endpoint` | Rate limit type |
 | `status` | `allowed`, `limited` | Request outcome |
+
+**Cardinality note:** `per_ip` is a `limit` label *value*, never a per-address label. Never use a raw client IP as a metric label — per-IP labels are unbounded-cardinality and a memory-DoS vector. The rate limiter must cap the set of tracked IPs (e.g., a fixed-size LRU) or aggregate; never emit one label value per unique client IP. Log per-IP details to structured logs instead; metrics answer "how many?" while logs answer "which IPs?"
 
 ## Metrics Output Example
 

@@ -11561,7 +11561,7 @@ The app automatically watches config files and hot-reloads what it can. Settings
 
 | Setting Category | Examples |
 |------------------|----------|
-| Rate limits | `ratelimit.*` |
+| Rate limits | `rate_limit.*` |
 | CORS settings | `cors.*` |
 | Branding/SEO | `branding.*`, `seo.*` |
 | Logging level | `logging.level` |
@@ -12395,7 +12395,7 @@ INSERT INTO config (key, value, type) VALUES
     ('ssl.key', '""', 'string'),                     -- Empty = auto-detect
     ('ssl.min_version', '"TLS1.2"', 'string'),
     ('cors.allowed_origins', '["https://example.com","https://api.example.com"]', 'array'),
-    ('ratelimit.requests_per_minute', '0', 'number'),  -- 0 = use project default from IDEA.md
+    ('rate_limit.requests', '0', 'number'),          -- 0 = use project default from IDEA.md
     ('branding.site_name', '"My App"', 'string');
 ```
 
@@ -15589,14 +15589,14 @@ llms.txt tells AI agents (Claude, GPT, etc.) what the application does, what API
 
 ## API
 Base URL: {app_url}/api/{api_version}
-Authentication: Bearer token (obtain via /api/{api_version}/auth/token)
+Authentication: Bearer token (create via POST /api/{api_version}/users/tokens)
 Rate limit: {rate_limit} requests/minute
 
 ## Endpoints
-- GET /health - Health check (no auth)
-- GET /server/info - Server information (no auth)
-- POST /auth/token - Obtain API token
-- GET /users/me - Current user profile
+- GET /server/healthz - Health check (no auth)
+- GET /server/about - Server information (no auth)
+- POST /server/auth/login - User login
+- POST /users/tokens - Create API token (authenticated)
 - ... (auto-generated from route definitions)
 
 ## Capabilities
@@ -15633,7 +15633,8 @@ web:
 | Authenticated API (`/api/**` + auth) | Yes | Note auth requirement |
 | Admin routes (`/server/{admin_path}/**`) | No | Not for external agents |
 | Internal routes (`/internal/**`) | No | Server-to-server only |
-| Health/metrics (`/healthz`, `/metrics`) | Yes | Useful for monitoring agents |
+| Health (`/server/healthz`) | Yes | Useful for monitoring agents |
+| Metrics (`/metrics`) | No | Operational/internal endpoint; never advertised |
 
 **Well-Known Support Matrix Update:**
 
@@ -33065,6 +33066,8 @@ server:
 |-------|--------|-------|
 | `limit` | `global`, `per_ip`, `per_user`, `per_endpoint` | Rate limit type |
 | `status` | `allowed`, `limited` | Request outcome |
+
+**Cardinality note:** `per_ip` is a `limit` label *value*, never a per-address label. Never use a raw client IP as a metric label — per-IP labels are unbounded-cardinality and a memory-DoS vector. The rate limiter must cap the set of tracked IPs (e.g., a fixed-size LRU) or aggregate; never emit one label value per unique client IP. Log per-IP details to structured logs instead; metrics answer "how many?" while logs answer "which IPs?"
 
 ## Metrics Output Example
 
