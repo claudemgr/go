@@ -2074,7 +2074,7 @@ Instructions for how this agent should behave...
 |-------------|-------------|---------|
 | `{project_name}` | Project name (lowercase, no spaces/hyphens) | `jokes`, `echoip`, `pastebin` |
 | `{project_org}` | Organization/owner name (lowercase) | `sneak`, `acme`, `mycompany` |
-| `{projectversion}` | Current version (semver format) | `1.0.0`, `2.3.1` |
+| `{project_version}` | Current version (semver format) | `1.0.0`, `2.3.1` |
 | `{PROJECT_NAME}` | Uppercase project name (for constants, env vars) | `JOKES`, `ECHOIP` |
 | `{official_site}` | Official project website | `https://jokes.example.com` |
 | `{fqdn}` | Fully qualified domain name | `api.example.com` |
@@ -10663,7 +10663,7 @@ NO_COLOR=1 {project_name} --status | grep -E '✅|❌|⚠️|🚀'
 
 ```bash
 $ {project_name} --help
-{project_name} {projectversion} - {project description}
+{project_name} {project_version} - {project description}
 
 Usage:
   {project_name} [flags]
@@ -19990,7 +19990,7 @@ When not in cluster mode:
 ### --version Output
 
 ```
-{project_name} {projectversion}
+{project_name} {project_version}
 Built: {build_date}
 Go: {go_version}
 OS/Arch: {GOOS}/{GOARCH}
@@ -22390,7 +22390,7 @@ formatURL(host, 8443, true)
 **Example (Production with SSL + Tor on 443):**
 ```
 ╭───────────────────────────────────────────────────────────╮
-│  🚀 {PROJECT_NAME} · 📦 {projectversion}                   │
+│  🚀 {PROJECT_NAME} · 📦 {project_version}                  │
 ├───────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production                           │
 ├───────────────────────────────────────────────────────────┤
@@ -22405,7 +22405,7 @@ formatURL(host, 8443, true)
 **Example (Full Banner with Tor + I2P + SMTP):**
 ```
 ╭───────────────────────────────────────────────────────────╮
-│  🚀 {PROJECT_NAME} · 📦 {projectversion}                   │
+│  🚀 {PROJECT_NAME} · 📦 {project_version}                  │
 ├───────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: {app_mode}                           │
 ├───────────────────────────────────────────────────────────┤
@@ -22424,7 +22424,7 @@ formatURL(host, 8443, true)
 **Example (Production on port 8080):**
 ```
 ╭───────────────────────────────────────────────────────────╮
-│  🚀 {PROJECT_NAME} · 📦 {projectversion}                   │
+│  🚀 {PROJECT_NAME} · 📦 {project_version}                  │
 ├───────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production                           │
 ├───────────────────────────────────────────────────────────┤
@@ -22438,7 +22438,7 @@ formatURL(host, 8443, true)
 **Example (Development on port 8080):**
 ```
 ╭───────────────────────────────────────────────────────────╮
-│  🚀 {PROJECT_NAME} · 📦 {projectversion}                   │
+│  🚀 {PROJECT_NAME} · 📦 {project_version}                  │
 ├───────────────────────────────────────────────────────────┤
 │  🔧 Running in mode: development                          │
 ├───────────────────────────────────────────────────────────┤
@@ -22452,7 +22452,7 @@ formatURL(host, 8443, true)
 **Example (Development IPv6 on port 8080):**
 ```
 ╭───────────────────────────────────────────────────────────╮
-│  🚀 {PROJECT_NAME} · 📦 {projectversion}                   │
+│  🚀 {PROJECT_NAME} · 📦 {project_version}                  │
 ├───────────────────────────────────────────────────────────┤
 │  🔧 Running in mode: development                          │
 ├───────────────────────────────────────────────────────────┤
@@ -22466,7 +22466,7 @@ formatURL(host, 8443, true)
 **Example (Production on port 80):**
 ```
 ╭───────────────────────────────────────────────────────────╮
-│  🚀 {PROJECT_NAME} · 📦 {projectversion}                   │
+│  🚀 {PROJECT_NAME} · 📦 {project_version}                  │
 ├───────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production                           │
 ├───────────────────────────────────────────────────────────┤
@@ -22480,7 +22480,7 @@ formatURL(host, 8443, true)
 **Example (Production with debugging enabled):**
 ```
 ╭───────────────────────────────────────────────────────────╮
-│  🚀 {PROJECT_NAME} · 📦 {projectversion}                   │
+│  🚀 {PROJECT_NAME} · 📦 {project_version}                  │
 ├───────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: {app_mode} [debugging]               │
 ├───────────────────────────────────────────────────────────┤
@@ -22494,7 +22494,7 @@ formatURL(host, 8443, true)
 **Example (First Run - Setup Required):**
 ```
 ╭───────────────────────────────────────────────────────────╮
-│  🚀 {PROJECT_NAME} · 📦 {projectversion}                   │
+│  🚀 {PROJECT_NAME} · 📦 {project_version}                  │
 ├───────────────────────────────────────────────────────────┤
 │  🔧 Running in mode: {app_mode}                           │
 ├───────────────────────────────────────────────────────────┤
@@ -22526,7 +22526,7 @@ formatURL(host, 8443, true)
 
 **60-79 cols (Compact - no ASCII art, icons + text):**
 ```
-🚀 {PROJECT_NAME} v{projectversion}
+🚀 {PROJECT_NAME} v{project_version}
 🔒 Mode: {app_mode}
 🌐 {proto}://{fqdn}
 📡 Listening: {proto}://{address}:{port}
@@ -22535,7 +22535,7 @@ formatURL(host, 8443, true)
 
 **60-79 cols (Compact - First Run):**
 ```
-🚀 {PROJECT_NAME} v{projectversion}
+🚀 {PROJECT_NAME} v{project_version}
 🔧 Mode: {app_mode}
 🌐 {proto}://{address}:{port}
 📡 Listening: {proto}://{address}:{port}
@@ -22549,14 +22549,14 @@ Go to: {proto}://{fqdn}/server/{admin_path}/config/setup
 
 **40-59 cols (Minimal - abbreviated, no icons):**
 ```
-{PROJECT_NAME} {projectversion}
+{PROJECT_NAME} {project_version}
 {app_mode}
 {fqdn}:{port}
 ```
 
 **40-59 cols (Minimal - First Run):**
 ```
-{PROJECT_NAME} {projectversion}
+{PROJECT_NAME} {project_version}
 {app_mode}
 {address}:{port}
 SETUP: {setup_token}
@@ -22574,7 +22574,7 @@ SETUP: {setup_token}
 
 **NO_COLOR / TERM=dumb (Plain text - no emojis, no box drawing, no colors):**
 ```
-{PROJECT_NAME} v{projectversion}
+{PROJECT_NAME} v{project_version}
 Mode: {app_mode}
 URL: {proto}://{fqdn}
 Listening: {proto}://{address}:{port}
@@ -22583,7 +22583,7 @@ Started: {startup_datetime}
 
 **NO_COLOR / TERM=dumb (Plain - First Run):**
 ```
-{PROJECT_NAME} v{projectversion}
+{PROJECT_NAME} v{project_version}
 Mode: {app_mode}
 URL: {proto}://{address}:{port}
 Listening: {proto}://{address}:{port}
@@ -26068,7 +26068,7 @@ src/server/template/
 │                                                                 │
 │                                                                 │
 ├─────────────────────────────────────────────────────────────────┤
-│        About · Privacy · Contact · GitHub · {projectversion}    │  ← Footer (centered)
+│        About · Privacy · Contact · GitHub · {project_version}   │  ← Footer (centered)
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -26119,7 +26119,7 @@ src/server/template/
 │              │                                                  │
 │  Sidebar     │                                                  │
 ├──────────────┴──────────────────────────────────────────────────┤
-│                    {projectversion} · Docs · Status             │  ← Footer
+│                    {project_version} · Docs · Status            │  ← Footer
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -27815,7 +27815,7 @@ When admin edits `custom_html`, show:
 | `{current_year}` | Current year (e.g., 2025) |
 | `{project_name}` | Project name |
 | `{project_org}` | Organization name |
-| `{projectversion}` | Application version |
+| `{project_version}` | Application version |
 | `{build_datetime}` | Build date/time (`%B %-d, %Y at %H:%M:%S %Z`) |
 | `{onion_address}` | Tor `.onion` address (only when Tor enabled and running) |
 
@@ -27847,7 +27847,7 @@ When admin edits `custom_html`, show:
   <p>
     <a href="{PLATFORM_REPO_URL}" target="_blank">Made with</a> ❤️
     <span>•</span>
-    <span>{projectversion}</span>
+    <span>{project_version}</span>
   </p>
 
   <!-- Build stamp -->
@@ -27868,7 +27868,7 @@ When admin edits `custom_html`, show:
   <div class="admin-footer-content">
     <!-- Version info -->
     <span class="admin-footer-version">
-      <a href="/server/{admin_path}/config/info">{project_name} {projectversion}</a>
+      <a href="/server/{admin_path}/config/info">{project_name} {project_version}</a>
     </span>
 
     <span class="admin-footer-separator">•</span>
@@ -29590,7 +29590,7 @@ func RegisterAdminRoutes(r *mux.Router) {
 
 ```
 ╭───────────────────────────────────────────────────────────╮
-│  🚀 {PROJECT_NAME} · 📦 {projectversion}                   │
+│  🚀 {PROJECT_NAME} · 📦 {project_version}                  │
 ├───────────────────────────────────────────────────────────┤
 │  🔧 Running in mode: {app_mode}                           │
 ├───────────────────────────────────────────────────────────┤
@@ -30094,7 +30094,7 @@ Admin Panel Header:
 │         │                   │           │
 │         └───────────────────┘           │
 │                                         │
-│              {projectversion}           │
+│              {project_version}          │
 └─────────────────────────────────────────┘
 ```
 
@@ -36329,7 +36329,7 @@ Examples:
   {project_name} --update branch beta
 
 Current:
-  Version:  {projectversion}
+  Version:  {project_version}
   Branch:   stable
   Latest:   {latest_version} (if different)
 ```
@@ -46676,7 +46676,7 @@ var localeFS embed.FS
   },
 
   "cli": {
-    "description": "{project_name} {projectversion} - {project_description}",
+    "description": "{project_name} {project_version} - {project_description}",
     "usage": "Uso:",
     "information": "Información:",
     "shell_integration": "Integración de shell:",
@@ -46718,7 +46718,7 @@ var localeFS embed.FS
   },
 
   "agent": {
-    "description": "{project_name}-agent {projectversion} - Agente para {project_name}",
+    "description": "{project_name}-agent {project_version} - Agente para {project_name}",
     "usage": "Uso:",
     "commands": "Comandos:",
     "flags": "Opciones:",
@@ -46760,7 +46760,7 @@ var localeFS embed.FS
   },
 
   "version": {
-    "name_version": "{project_name} {projectversion}",
+    "name_version": "{project_name} {project_version}",
     "built": "Compilado: {build_date}",
     "go": "Go: {go_version}",
     "os_arch": "SO/Arq: {goos}/{goarch}"
@@ -51934,7 +51934,7 @@ func printInit(shell, binaryName string) {
 
 ```bash
 $ {project_name}-cli --help
-{project_name}-cli {projectversion} - CLI for {project_name}
+{project_name}-cli {project_version} - CLI for {project_name}
 
 Usage:
   {project_name}-cli [args] [flags]
@@ -51973,7 +51973,7 @@ Run '{project_name}-cli <command> help' for detailed help on any command.
 ```bash
 $ mypaste --help
 # Shows actual binary name
-mypaste {projectversion} - client for {project_name} API
+mypaste {project_version} - client for {project_name} API
 
 Usage:
   # Shows actual binary name
@@ -51987,18 +51987,18 @@ Usage:
 
 ```bash
 $ {project_name}-cli --version
-{project_name}-cli {projectversion} ({commit_sha}) built {build_date}
+{project_name}-cli {project_version} ({commit_sha}) built {build_date}
 
 # If renamed:
 $ mypaste --version
 # Shows actual name
-mypaste {projectversion} ({commit_sha}) built {build_date}
+mypaste {project_version} ({commit_sha}) built {build_date}
 ```
 
 Same format as server:
 ```bash
 $ pastebin --version
-pastebin {projectversion} ({commit_sha}) built {build_date}
+pastebin {project_version} ({commit_sha}) built {build_date}
 ```
 
 ## Commands
@@ -52842,10 +52842,10 @@ When server is reachable, `--version` can show extended info:
 
 ```bash
 $ {project_name}-cli --version
-{project_name}-cli {projectversion} ({commit_sha}) built {build_date}
+{project_name}-cli {project_version} ({commit_sha}) built {build_date}
 
 Server: https://{project_name}.example.com
-Server Version: {projectversion} (compatible)
+Server Version: {project_version} (compatible)
 
 Build Info:
   Go: {go_version}
@@ -53330,7 +53330,7 @@ register
 
 ```bash
 $ {project_name}-agent --help
-{project_name}-agent {projectversion} - Agent for {project_name}
+{project_name}-agent {project_version} - Agent for {project_name}
 
 Usage:
   {project_name}-agent [flags]
@@ -61179,7 +61179,7 @@ make docker
 - [ ] `{startup_datetime}` - Server start timestamp
 - [ ] `{setup_token}` - First-run setup token (shown ONCE)
 - [ ] `{PROJECT_NAME}` - Project name (uppercase for display)
-- [ ] `{projectversion}` - Current version
+- [ ] `{project_version}` - Current version
 
 ### Client TUI/GUI Dynamic Sizing
 
