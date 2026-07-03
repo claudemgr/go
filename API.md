@@ -35748,7 +35748,7 @@ make build    # → binaries/{project_name}
 # If no Makefile exists yet (bootstrap or manual equivalent)
 # GO_CACHE="${GO_CACHE:-$HOME/go/pkg/mod}"; GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build}"
 # mkdir -p "$GO_CACHE" "$GO_BUILD" binaries
-# docker run --rm -v $PWD:/app -v $GO_CACHE:/usr/local/share/go/pkg/mod \
+# docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -v $GO_CACHE:/usr/local/share/go/pkg/mod \
 #   -v $GO_BUILD:/usr/local/share/go/cache -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
 #   casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/binaries/{project_name} ./src
 
@@ -35792,7 +35792,7 @@ mkdir -p $TEST_DIR/{config,data,logs}
 # If Makefile exists (standard for all bootstrapped projects)
 make build    # → binaries/{project_name}
 # If no Makefile exists yet:
-# docker run --rm -v $PWD:/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+# docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
 #   casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/binaries/{project_name} ./src
 
 # Launch Incus container (use latest Debian stable)
@@ -36457,7 +36457,7 @@ pymdown-extensions>=10.0
 
 ```bash
 # Docker
-docker run -p 172.17.0.1:64580:80 {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
+docker run --name "{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -p 172.17.0.1:64580:80 {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
 
 # Binary
 ./{project_name}-linux-amd64 --config server.yml
