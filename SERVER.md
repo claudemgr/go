@@ -7829,7 +7829,7 @@ _cache:
 | `ssl.enabled` | `true` | 2025-01-15 09:00:00 |
 | `ssl.letsencrypt.enabled` | `true` | 2025-01-15 09:00:00 |
 | `rate_limit.enabled` | `true` | 2025-01-14 15:00:00 |
-| `rate_limit.requests` | `0` | 2025-01-14 15:00:00 |
+| `rate_limit.read.requests` | `120` | 2025-01-14 15:00:00 |
 
 **Cluster State Table:**
 
@@ -8973,9 +8973,27 @@ server:
 
   rate_limit:
     enabled: true
-    # Project-specific default (define in IDEA.md based on expected usage)
-    requests: 0  # 0 = use project default
-    window: 60
+    read:
+      requests: 120    # per minute per IP
+      window: 60
+    write:
+      requests: 10     # per minute per IP
+      window: 60
+    health:
+      requests: 120    # per minute per IP (health/status endpoints)
+      window: 60
+    global_burst: 240  # per minute per IP (absolute ceiling across all endpoint types)
+    # Auth endpoints — stricter limits, applied independently of the general limits above
+    auth:
+      login:
+        requests: 5
+        window: 900    # 15 minutes
+      password_reset:
+        requests: 3
+        window: 3600   # 1 hour
+      registration:
+        requests: 5
+        window: 3600   # 1 hour
 
   # Database
   database:
@@ -12395,7 +12413,7 @@ INSERT INTO config (key, value, type) VALUES
     ('ssl.key', '""', 'string'),                     -- Empty = auto-detect
     ('ssl.min_version', '"TLS1.2"', 'string'),
     ('cors.allowed_origins', '["https://example.com","https://api.example.com"]', 'array'),
-    ('rate_limit.requests', '0', 'number'),          -- 0 = use project default from IDEA.md
+    ('rate_limit.read.requests', '120', 'number'),   -- per minute per IP (see server.rate_limit.*)
     ('branding.site_name', '"My App"', 'string');
 ```
 
@@ -29629,8 +29647,11 @@ Admin Panel Header:
 |---------|---------|---------|---------|-------------|
 | `admin_path` | Text | `admin` | Reload | Custom admin panel path (see PART 17) |
 | `rate_limit.enabled` | Toggle | On | No | Enable rate limiting |
-| `rate_limit.requests` | Number | `0` | No | Requests per window (0 = project default) |
-| `rate_limit.window` | Duration | `1 minute` | No | Rate limit window |
+| `rate_limit.read.requests` | Number | `120` | No | Read (GET/HEAD) requests per window, per IP |
+| `rate_limit.write.requests` | Number | `10` | No | Write (POST/PUT/PATCH/DELETE) requests per window, per IP |
+| `rate_limit.health.requests` | Number | `120` | No | Health/status requests per window, per IP |
+| `rate_limit.global_burst` | Number | `240` | No | Absolute per-IP ceiling across all endpoint types |
+| `rate_limit.{class}.window` | Duration | `1 minute` | No | Per-class rate limit window |
 | `cors.enabled` | Toggle | On | No | Enable CORS |
 | `cors.origins` | Tags | `*` | No | Allowed origins |
 | `cors.methods` | Checkbox group | GET,POST,etc | No | Allowed methods |
