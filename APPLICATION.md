@@ -48,8 +48,10 @@ Example:
 
     project_name:  notes
     project_org:   casjay
-    internal_name: notes        # FROZEN — set once at first-time setup, never edit
-    internal_org:  casjay       # FROZEN — set once at first-time setup, never edit
+    # FROZEN — set once at first-time setup, never edit
+    internal_name: notes
+    # FROZEN — set once at first-time setup, never edit
+    internal_org:  casjay
     app_name:      Notes
     module_path:   github.com/casjay/notes
     official_site: https://notes.example.com
@@ -665,10 +667,14 @@ Inject version, commit ID, build date, and official site via `-ldflags`:
 ```go
 // Version injected at build time via -ldflags
 var (
-    Version      = "devel"   // overridden by: -ldflags="-X main.Version=$(cat release.txt)"
-    CommitID     = "N/A"     // overridden by: -ldflags="-X main.CommitID=$(git rev-parse --short HEAD)"
-    BuildDate    = "N/A"     // overridden by: -ldflags="-X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    OfficialSite = ""        // overridden by: -ldflags="-X main.OfficialSite=$(cat site.txt)"
+    // overridden by: -ldflags="-X main.Version=$(cat release.txt)"
+    Version      = "devel"
+    // overridden by: -ldflags="-X main.CommitID=$(git rev-parse --short HEAD)"
+    CommitID     = "N/A"
+    // overridden by: -ldflags="-X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    BuildDate    = "N/A"
+    // overridden by: -ldflags="-X main.OfficialSite=$(cat site.txt)"
+    OfficialSite = ""
 )
 ```
 
@@ -812,7 +818,8 @@ GUI and display-aware test runs use the `gui` compose service (or equivalent `do
 **X11 forwarding (host running Xorg or XWayland):**
 
 ```bash
-xhost +SI:localuser:$(id -un)        # grant access to current user only; revoke when done
+# grant access to current user only; revoke when done
+xhost +SI:localuser:$(id -un)
 
 docker run --rm \
   --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
@@ -824,7 +831,8 @@ docker run --rm \
   -v "$PWD":/work -w /work \
   "$PROJECT_IMAGE" go run . -- --ui gui
 
-xhost -SI:localuser:$(id -un)        # revoke after the session
+# revoke after the session
+xhost -SI:localuser:$(id -un)
 ```
 
 **Wayland forwarding (host running a Wayland compositor):**
@@ -1117,10 +1125,14 @@ jobs:
   release:
     needs: build
     permissions:
-      contents: write      # create GitHub release + upload assets
-      packages: write      # push to ghcr.io
-      id-token: write      # OIDC token for cosign signing
-      attestations: write  # GitHub artifact attestations (SBOM, provenance)
+      # create GitHub release + upload assets
+      contents: write
+      # push to ghcr.io
+      packages: write
+      # OIDC token for cosign signing
+      id-token: write
+      # GitHub artifact attestations (SBOM, provenance)
+      attestations: write
     ...
 ```
 
@@ -1616,8 +1628,10 @@ solves. Free-form prose, 1–3 paragraphs.}
 
 project_name:     {project_name}
 project_org:      {project_org}
-internal_name:    {project_name}        # FROZEN — equals project_name on first install, never changes
-internal_org:     {project_org}         # FROZEN — equals project_org on first install, never changes
+# FROZEN — equals project_name on first install, never changes
+internal_name:    {project_name}
+# FROZEN — equals project_org on first install, never changes
+internal_org:     {project_org}
 app_name:         {App Display Name}
 module_path:      github.com/{project_org}/{project_name}
 official_site:    {full URL with scheme, e.g., https://example.com — or empty}
