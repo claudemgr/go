@@ -7989,7 +7989,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 | `--maintenance setup` | Resets server configuration to defaults | First-run only OR root |
 | `--maintenance restore` | Overwrites ALL data | `server.token` OR root OR empty database |
 | `--maintenance mode` | Changes server behavior | `server.token` OR root |
-| `--maintenance pgp export-priv` / `import` / `delete` | Exposes, replaces, or destroys the security private key | `server.token` OR root + typed confirmation |
+| `--maintenance pgp export private` / `import` / `delete` | Exposes, replaces, or destroys the security private key | `server.token` OR root + typed confirmation |
 
 **Setup authorization flow:**
 
@@ -14191,8 +14191,8 @@ web:
 | **Generate** | `--maintenance pgp generate` | Generates an Ed25519 (signing) + Curve25519 (encryption) keypair. Identity is `{app_name} Security <{security_contact}>`. Expires 2 years from generation. Private key is encrypted with a key derived from `installation_secret` and stored in `{config_dir}/security/pgp.priv.asc.enc`. Public key stored at `{config_dir}/security/pgp.pub.asc` (also served at `/.well-known/pgp-key.asc`). |
 | **Rotate** | `--maintenance pgp rotate` | Generates a new keypair, signs the new pubkey with the old key, publishes the rotation to configured keyservers. Old key stays valid for 30 days for in-flight reports. |
 | **Publish to keyservers** | `--maintenance pgp publish` | POST the public key to each entry in `web.security.keyservers`. Uses the keyserver's HTTP submission endpoint (`https://keys.openpgp.org/vks/v1/upload` for keys.openpgp.org, similar for ubuntu). Triggered automatically on generate/rotate; manually via `--maintenance pgp publish`. Failures are logged + retried with exponential backoff. |
-| **Export public key** | `--maintenance pgp export [path]` | Use the public URL `/.well-known/pgp-key.asc`, copy `{config_dir}/security/pgp.pub.asc` directly, or write it to `[path]` (stdout if omitted) via the CLI. |
-| **Export private key** | `--maintenance pgp export-priv <path>` | **Full export, ASCII-armored, decrypted with the operator's confirmation password.** Triggers a sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt operator password, log to `audit.log` as `security.private_key_exported`, write the key to `<path>` with mode 0600. **The export is rate-limited to 1 per hour per operator and the audit entry includes operator IP and reason text the operator must type.** |
+| **Export public key** | `--maintenance pgp export public [path]` | Use the public URL `/.well-known/pgp-key.asc`, copy `{config_dir}/security/pgp.pub.asc` directly, or write it to `[path]` (stdout if omitted) via the CLI. |
+| **Export private key** | `--maintenance pgp export private <path>` | **Full export, ASCII-armored, decrypted with the operator's confirmation password.** Triggers a sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt operator password, log to `audit.log` as `security.private_key_exported`, write the key to `<path>` with mode 0600. **The export is rate-limited to 1 per hour per operator and the audit entry includes operator IP and reason text the operator must type.** |
 | **Import private key** | `--maintenance pgp import <file>` | Import an existing `pgp.priv.asc` from a local file (e.g., restoring from backup, migrating from another instance). Same sensitive-operation gate. Validates the key's identity matches the project's expected identity (warns on mismatch — operator can override). |
 | **Delete** | `--maintenance pgp delete` | Sensitive-operation flow. Deletes both keys, sets `web.security.publish_pgp_key: false`, removes `Encryption:` line from security.txt. In-flight encrypted reports become un-decryptable — operator warned and must type confirmation. |
 
