@@ -2011,7 +2011,7 @@ Instructions for how this agent should behave...
   - the security reporting path — GitHub private vulnerability reporting (`https://github.com/{project_org}/{project_name}/security/advisories/new`, the repo's Security tab → "Report a vulnerability") is the PRIMARY channel; the security email is a secondary/CC contact only, never the main reporting path. On mirrors without private vulnerability reporting, point reporters at the GitHub origin repo first
   - that vulnerabilities are NOT filed as public bug reports
   - expected disclosure/response flow
-  - links to `/.well-known/security.txt` and `/server/contact?security_id=...` when those project features exist
+  - links to `/server/security`, `/.well-known/security.txt`, and `/server/contact?security_id=...` when those project features exist
 - `.github/CODEOWNERS` MUST define:
   - a catch-all owner for the repo
   - explicit owners for security-sensitive areas such as workflows, Docker/release files, and auth/crypto/update code paths
@@ -15992,6 +15992,7 @@ web:
 Contact: {report_url}
 Contact: https://{fqdn}/server/contact?security_id={security_id}
 Contact: mailto:{security_contact}
+Policy: https://{fqdn}/server/security
 Expires: {expiry_date}
 ```
 
@@ -16030,6 +16031,7 @@ web:
 |-------|----------|-------------|
 | `Contact` | YES | One or more lines in order of preference (RFC 9116): first the repo's GitHub private vulnerability reporting URL (`web.security.report_url`), then the instance security-report form (`/server/contact?security_id={id}`, auto-generated — see "Security Reports"), last the `mailto:` CC address (prefix added automatically) |
 | `Expires` | YES | Expiration date (auto-renewed yearly by default) |
+| `Policy` | YES | Human-readable security page at `/server/security` — renders the same information as this file plus plain-language reporting instructions. See "Security Reports" → "Public Pages". |
 
 ### llms.txt (AI Discovery)
 
@@ -16196,6 +16198,7 @@ Repo-level (source-code) vulnerabilities are reported primarily via GitHub priva
 |----------|--------|------|---------|
 | `/.well-known/security.txt` | GET | None | RFC 9116 file — see above |
 | `/.well-known/pgp-key.asc` | GET | None | Project's PGP public key (ASCII-armored). 404 if no keypair generated yet. |
+| `/server/security` | GET | None | Security overview page (HTML). Human-readable rendering of everything in `/.well-known/security.txt` — contact channels in RFC 9116 preference order (GitHub private vulnerability reporting, `/server/contact?security_id={id}`, `mailto:` CC address), `Expires`, and the `Encryption` key when a keypair exists — plus plain-language instructions for reporting a vulnerability. Links to `/server/security/policy`, `/server/security/thanks`, `/.well-known/pgp-key.asc`, and the machine-readable `/.well-known/security.txt`. Rendered from live config — nothing to edit. |
 | `/server/security/policy` | GET | None | Disclosure policy page (HTML). Default content provided; editable from admin panel. Lists the coordinated-disclosure window, in-scope domains, out-of-scope behaviors, safe-harbor language. |
 | `/server/security/thanks` | GET | None | Acknowledgments page. Lists researchers who opted in (real name, handle, or anonymized "Anonymous Researcher #n") with the year and short credit. |
 | `/server/security/report/{tracking_id}` | GET | One-shot token in URL | Researcher status page — shows triage state (Received / Triaged / Confirmed / Patching / Disclosed / Won't Fix), maintainer comments visible to researcher, expected disclosure date. Token is single-use-per-day; expires after the report is closed for 30 days. |
@@ -28802,6 +28805,13 @@ func trackingScript(r *http.Request) template.HTML {
 | Captcha | Captcha | Yes | Spam prevention |
 
 **Submission sends to `server.contact.general.email` (or falls back to `server.contact.admin.email` if general is empty).**
+
+**Below the form, the page MUST render exactly two informational sections — the content is spec'd here; never improvise it:**
+
+| Section | Content |
+|---------|---------|
+| Security Issues | "To report a security vulnerability, consult our security policy at `/server/security`." — rendered as a link to `/server/security`. Never point users at the raw `/.well-known/security.txt` file from this page. |
+| Abuse Reports | "To report abusive content or policy violations, use this contact form." — append " or email {general_email}" only when `server.contact.general.email` is explicitly set. NEVER render `server.contact.admin.email` here (it is never public). |
 
 ### /server/help
 
@@ -45414,6 +45424,7 @@ Programmatic access via `/api/{api_version}/server/{admin_path}/` with bearer to
 - `/.well-known/security.txt`
 - `/.well-known/pgp-key.asc` (when enabled)
 - `/.well-known/change-password`
+- `/server/security`
 - `/server/healthz`
 - `/api/{api_version}/server/healthz`
 
@@ -45421,6 +45432,7 @@ Programmatic access via `/api/{api_version}/server/{admin_path}/` with bearer to
 
 - Explain how researchers use `/.well-known/security.txt`
 - Explain `/server/contact?security_id=...`
+- Link to `/server/security` (human-readable overview of security.txt + how to report)
 - Link to `/server/security/policy`
 
 ## Well-Known Namespace
@@ -56209,6 +56221,7 @@ PATCH /api/{api_version}/users/settings
 | `/api/autodiscover` | GET | None | Public client/agent auto-config |
 | `/api/{api_version}/server/healthz` | GET | None | Public JSON health |
 | `/api/{api_version}/server/reports/*` | POST | None | Public reports sink (CSP, NEL, deprecation, intervention, crash, error, default). See PART 14 → "Public Reports Scope". Browsers cannot present credentials when emitting these reports. Rate-limited per-IP. |
+| `/server/security` | GET | None | Security overview page (HTML) — human-readable security.txt + reporting instructions. See PART 11 → "Security Reports". |
 | `/server/security/policy` | GET | None | Disclosure policy page (HTML). See PART 11 → "Security Reports". |
 | `/server/security/thanks` | GET | None | Acknowledgments / hall-of-fame (HTML). See PART 11. |
 | `/server/security/report/{tracking_id}` | GET | One-shot tracking token (in URL) | Researcher status page. Token is single-use-per-day, expires 30 days after report closes. See PART 11. |
