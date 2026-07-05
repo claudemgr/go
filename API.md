@@ -4974,14 +4974,14 @@ For code that runs in the application, NEVER use bare `/path`. Always use `{fqdn
 // ❌ WRONG - Bare path
 link := "/api/" + apiVersion + "/items/" + itemID
 
-// ✅ CORRECT - Using FQDN
+// ❌ WRONG — hardcodes https; ignores reverse proxy headers; breaks behind a proxy
 link := fmt.Sprintf("https://%s/api/%s/items/%s", cfg.FQDN, apiVersion, itemID)
 
-// ✅ CORRECT - Helper function
-func BuildURL(path string) string {
-    return fmt.Sprintf("https://%s%s", cfg.FQDN, path)
-}
-link := BuildURL("/api/" + apiVersion + "/items/" + itemID)
+// ❌ WRONG — proxy-blind helper; physically cannot read X-Forwarded-* headers
+// See PART 12 → BuildURL / URL Variable Resolution for the full request-aware implementation.
+
+// ✅ CORRECT — request-aware; reverse-proxy headers first (PART 12 → "BuildURL")
+link := BuildURL(r, "/api/"+apiVersion+"/items/"+itemID)
 ```
 
 **JavaScript examples:**
@@ -5003,8 +5003,11 @@ fetch(`${config.apiBaseUrl}/api/${apiVersion}/items`)
 <!-- ❌ WRONG - Bare path (breaks in emails, notifications) -->
 <a href="/server/security/report/{{.Token}}">View Report</a>
 
-<!-- ✅ CORRECT - Full URL using FQDN -->
+<!-- ❌ WRONG — hardcodes https; ignores proxy headers; breaks behind a proxy -->
 <a href="https://{{.FQDN}}/server/security/report/{{.Token}}">View Report</a>
+
+<!-- ✅ CORRECT — handler computes full URL via BuildURL(r, ...) and passes it to the template -->
+<a href="{{.ReportURL}}">View Report</a>
 ```
 
 **Exception - Internal routing only:**
@@ -7649,7 +7652,7 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 
 **URL Variable Resolution (Reverse Proxy Preferred):**
 - `{fqdn}`: Reverse Proxy Headers → `DOMAIN` → `os.Hostname()` → `$HOSTNAME` → Global IP → `localhost`
-- `{proto}`: `X-Forwarded-Proto` → `X-Forwarded-Ssl` → TLS detection → `http`
+- `{proto}`: `X-Forwarded-Proto` → `X-Forwarded-Ssl` → `X-Url-Scheme` → TLS detection → `http`
 - `{port}`: `X-Forwarded-Port` → Host header → Server port → Proto default
 - `{baseurl}`: `X-Forwarded-Prefix` → `X-Forwarded-Path` → `X-Script-Name` → `server.baseurl` → `/`
 
@@ -15624,7 +15627,17 @@ server:
     additional: []
 ```
 
-**Used by `X-Forwarded-*` trust gate.** Every header-based detection chain in the spec — `BuildURL(r, ...)` (PART 12 → "Resolution Order"), CORS allow-list resolution (PART 16), CSP `connect-src` learning, domain-learning algorithm — only honors `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-Port`, `X-Real-IP`, `X-Original-Host` when the **immediate peer's IP** is in `trusted_proxies` (private ranges + the `additional` allow-list). Headers from non-trusted peers are dropped before resolution runs, so an attacker reaching the binary directly cannot inject a forged Host into the learned-origins list.
+**Used by `X-Forwarded-*` trust gate.** Every header-based detection chain in the spec — `BuildURL(r, ...)` (PART 12 → "Resolution Order"), CORS allow-list resolution (PART 16), CSP `connect-src` learning, domain-learning algorithm — only honors the following proxy headers when the **immediate peer's IP** is in `trusted_proxies` (private ranges + the `additional` allow-list):
+
+| Category | Trusted headers |
+|----------|----------------|
+| **FQDN** | `X-Forwarded-Host`, `X-Real-Host`, `X-Original-Host` |
+| **Proto** | `X-Forwarded-Proto`, `X-Forwarded-Ssl`, `X-Url-Scheme` |
+| **Port** | `X-Forwarded-Port` |
+| **Base path** | `X-Forwarded-Prefix`, `X-Forwarded-Path`, `X-Script-Name` |
+| **Client IP** | `X-Real-IP`, `X-Forwarded-For`, `CF-Connecting-IP`, `True-Client-IP`, `X-Client-IP` |
+
+All of these headers are supported regardless of proxy vendor (Nginx, Caddy, HAProxy, Traefik, Apache, Cloudflare Tunnels, AWS ALB, etc.). Headers from non-trusted peers are dropped before resolution runs, so an attacker reaching the binary directly cannot inject a forged Host into the learned-origins list.
 
 | Always trusted (no config required) | Reason |
 |--------------------------------------|--------|
