@@ -21467,7 +21467,7 @@ dismissAllToasts();
 
 ### Notification Bell
 
-**Built-in notification center accessible via bell icon in header. Follows GitHub/GitLab patterns.**
+**Built-in notification center accessible via bell icon in header. Follows GitHub/GitLab patterns. Entirely client-side — history, unread state, and badge count live in `localStorage` (API projects have no user accounts and no server-side notification storage — see PART 17 → "Notification Storage").**
 
 **Bell Icon Behavior:**
 
@@ -21488,7 +21488,7 @@ dismissAllToasts();
 | **Max height** | 400px (scrollable) |
 | **Empty state** | "No notifications" message |
 | **Header** | "Notifications" title + "Mark all read" link |
-| **Footer** | "View all notifications" link to `/users/notifications` |
+| **Footer** | "View all" expands the dropdown to the full client-side history (no dedicated page — there are no per-user routes) |
 
 **Notification Item:**
 
@@ -21516,23 +21516,23 @@ dismissAllToasts();
         <button class="mark-all-read">Mark all read</button>
       </div>
       <div class="notification-list">
-        <a href="/users/settings" class="notification-item unread">
+        <button class="notification-item unread">
           <span class="notification-dot"></span>
           <span class="notification-icon">ℹ</span>
           <div class="notification-content">
-            <span class="notification-title">Settings updated</span>
-            <span class="notification-message">Your preferences were saved</span>
+            <span class="notification-title">Preferences saved</span>
+            <span class="notification-message">Theme set to dark</span>
             <span class="notification-time">2m ago</span>
           </div>
-        </a>
+        </button>
         <!-- More items... -->
       </div>
-      <a href="/users/notifications" class="dropdown-footer">View all</a>
+      <button class="dropdown-footer show-all">View all</button>
     </div>
   </div>
 
-  <!-- Profile Icon -->
-  <div class="profile-menu"><!-- See below --></div>
+  <!-- Theme Toggle -->
+  <button class="theme-toggle" aria-label="Toggle theme"><!-- See "Theme Toggle" below --></button>
 </div>
 ```
 
@@ -21568,11 +21568,11 @@ dismissAllToasts();
   gap: 1rem;
 }
 
-.notification-bell, .profile-menu {
+.notification-bell {
   position: relative;
 }
 
-.bell-button, .profile-button {
+.bell-button, .theme-toggle {
   background: none;
   border: none;
   cursor: pointer;
@@ -26430,50 +26430,26 @@ Templates are stored as files on disk. Override any built-in template by placing
 
 ## Notification Systems
 
-**Two notification systems available. WebUI is always available. Email requires SMTP.**
+**Three notification channels. The public WebUI serves visitors; operators are reached via logs and email — API projects have no admin UI, so operator events NEVER render in the WebUI.**
 
-| System | Availability | Use When |
-|--------|--------------|----------|
-| **WebUI (Toast/Banner)** | Always available | User is actively using the app |
-| **Email** | Requires valid SMTP | User is away, needs permanent record, critical alerts |
+| System | Audience | Availability | Use When |
+|--------|----------|--------------|----------|
+| **Public WebUI (Toast/Banner/Center)** | Visitors | Always (client-side) | Feedback for the visitor's own actions and service announcements |
+| **Logs** | Operators | Always | Every operator event gets a structured, leveled log line |
+| **Email** | Operators | Requires valid SMTP | Failures, security events, anything needing a permanent record or attention while away |
 
-## WebUI Notification System
+## Public WebUI Notification System
 
-**The WebUI has a built-in notification system. Toast and banner notifications are ALWAYS available regardless of SMTP configuration.**
+**The public frontend has a built-in notification system. It is entirely client-side — state lives in `localStorage`, the same mechanism as theme/language preferences (see "Client-Side Preferences") — and it NEVER shows operator or server-internal events (version, backups, SSL, disk — Tier 3 information, Public Endpoint Safety Principle, PART 11). Toast and banner notifications are ALWAYS available regardless of SMTP configuration.**
 
 ### How It Works
 
 | Component | Description |
 |-----------|-------------|
-| **Toast** | Pop-up notifications in corner of screen |
+| **Toast** | Pop-up notifications in corner of screen (see PART 16 → "Toast Notifications") |
 | **Banner** | Persistent bar at top of page |
-| **Notification Center** | Bell icon with history of notifications |
+| **Notification Center** | Bell icon with the visitor's OWN notification history — stored in `localStorage`, never server-side (see PART 16 → "Notification Bell") |
 | **Badge Count** | Unread notification count on bell icon |
-
-### Notification Center
-
-**Notification center accessible via bell icon in the header.**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Header                                    🔔 (3)  [User]   │
-└─────────────────────────────────────────────────────────────┘
-                                               │
-                                               ▼
-                              ┌────────────────────────────────┐
-                              │  Notifications                 │
-                              ├────────────────────────────────┤
-                              │  🔴 SSL certificate expiring   │
-                              │     in 3 days                  │
-                              │     2 hours ago                │
-                              ├────────────────────────────────┤
-                              │  ✅ Backup completed           │
-                              │     backup_2025-01-15.tar.gz   │
-                              │     5 hours ago                │
-                              ├────────────────────────────────┤
-                              │  [Mark all read]  [Clear all]  │
-                              └────────────────────────────────┘
-```
 
 ### WebUI Notification Types
 
@@ -26489,119 +26465,88 @@ Templates are stored as files on disk. Override any built-in template by placing
 
 | Element | Use For | Behavior |
 |---------|---------|----------|
-| **Toast** | Immediate feedback for user actions | Auto-dismiss, stacks in corner |
-| **Banner** | Persistent alerts requiring attention | Stays until dismissed or resolved |
-| **Notification Center** | History of all notifications | Persists across sessions, stored in DB |
+| **Toast** | Immediate feedback for visitor actions | Auto-dismiss, stacks in corner |
+| **Banner** | Persistent notices requiring attention | Stays until dismissed; dismissal stored in `localStorage` |
+| **Notification Center** | The visitor's own notification history | Client-side only (`localStorage`), capped, visitor-clearable |
 
-**When to Use Each:**
+**When to Use Each (visitor-facing events only):**
 
 | Scenario | Toast | Banner | Center |
 |----------|:-----:|:------:|:------:|
-| Settings saved | ✓ | | |
+| Preferences saved (theme/language) | ✓ | | |
 | Form validation error | ✓ | | |
-| Backup complete | ✓ | | ✓ |
-| SSL expiring soon | | ✓ | ✓ |
-| Update available | | ✓ | ✓ |
-| SMTP not configured | | ✓ | |
-| Scheduler task failed | ✓ | | ✓ |
-| Rate limit hit | ✓ | | ✓ |
-| IP blocked | ✓ | | ✓ |
+| Copied to clipboard | ✓ | | |
+| Resource created/updated/deleted | ✓ | | ✓ |
+| Rate limit hit (the visitor's own 429) | ✓ | | ✓ |
+| Cookie consent | | ✓ | |
+| Scheduled maintenance announcement | | ✓ | ✓ |
+| PWA update available (new frontend assets — service-worker banner, discloses no server version) | | ✓ | |
+
+**Operator events (backups, SSL, updates, scheduler failures, abuse detection) never appear here — see "Operator Notifications" below.**
 
 ## Operator Notifications
 
-**Notifications shown to operators.**
+**API projects have no admin UI — operator events surface via structured logs (always), email (when SMTP is configured), and CLI output (`--status`, `--update check`). Never via the public WebUI.**
 
-| Event | Toast | Banner | Center | Description |
-|-------|:-----:|:------:|:------:|-------------|
-| Settings saved | ✓ | | | Confirmation of config save |
-| Config validation error | ✓ | | | Invalid config value |
-| Backup started | ✓ | | | Backup in progress |
-| Backup complete | ✓ | | ✓ | Backup finished |
-| Backup failed | ✓ | | ✓ | Backup error |
-| SSL expiring (7+ days) | | | ✓ | Warning in center only |
-| SSL expiring (<3 days) | | ✓ | ✓ | Urgent banner |
-| SSL renewed | ✓ | | ✓ | Certificate renewed |
-| SSL renewal failed | ✓ | ✓ | ✓ | Critical - needs attention |
-| Update available | | ✓ | ✓ | New version available |
-| Scheduler task failed | ✓ | | ✓ | Task error |
-| Rate limit exceeded | | | ✓ | Abuse detection notice |
-| SMTP not configured | | ✓ | | Persistent warning |
-| Database connection issue | | ✓ | ✓ | Critical warning |
-| Disk space low | | ✓ | ✓ | System warning |
-| GeoIP database outdated | | | ✓ | Update needed |
-| Tor address ready | ✓ | | | Onion address generated |
+| Event | Log Level | Email | Description |
+|-------|-----------|:-----:|-------------|
+| Config validation error | ERROR | ✗ | Invalid config value (also fails fast at startup) |
+| Config reloaded | INFO | ✗ | Config file change applied |
+| Backup started | INFO | ✗ | Backup in progress |
+| Backup complete | INFO | Optional | Backup finished |
+| Backup failed | ERROR | ✓ | Critical - needs attention |
+| SSL expiring (7+ days) | WARN | ✗ | Early warning, not urgent |
+| SSL expiring (<3 days) | WARN | ✓ | Urgent - needs action |
+| SSL renewed | INFO | ✗ | Certificate renewed |
+| SSL renewal failed | ERROR | ✓ | Critical - needs attention |
+| Update available | WARN | Optional | New version available (`update_check` task) |
+| Update installed | INFO | ✓ | Important change record |
+| Scheduler task failed | ERROR | ✓ | Needs attention when away |
+| Scheduler task success | — | ✗ | No notification needed (task log only) |
+| Rate limit exceeded | WARN | ✗ | Abuse detection notice |
+| IP blocked | WARN | Optional | Abuse detection |
+| Security alert | ERROR | ✓ | Critical - needs record |
+| SMTP not configured | WARN | — | Logged at startup (email impossible by definition) |
+| Database connection issue | ERROR | ✓ | Critical warning |
+| Disk space low | WARN | ✓ | System warning |
+| GeoIP database outdated | WARN | ✗ | Update needed |
+| Tor address ready | INFO | ✗ | Onion address generated |
 
+## Log vs Email Decision Matrix
 
-## Notification vs Email Decision Matrix
-
-**WebUI notifications are ALWAYS used when the user is active. Email is ONLY used when:**
+**Every operator event is logged — structured and leveled. Email is ONLY added when:**
 1. SMTP is configured AND working
 2. The event warrants a permanent record OR
-3. The user may be away and needs to be alerted
-
-| Event | WebUI | Email | Reason |
-|-------|:-----:|:-----:|--------|
-| Settings saved | ✓ | ✗ | Immediate feedback only |
-| Backup complete | ✓ | Optional | Quick confirmation |
-| Backup failed | ✓ | ✓ | Critical - needs attention |
-| SSL expiring (7+ days) | ✓ | ✗ | Warning, not urgent |
-| SSL expiring (<3 days) | ✓ | ✓ | Urgent - needs action |
-| SSL renewed | ✓ | ✗ | Informational |
-| Rate limit exceeded | ✓ | ✗ | Informational |
-| IP blocked | ✓ | Optional | Abuse detection |
-| Security alert | ✓ | ✓ | Critical - needs record |
-| Scheduler task failed | ✓ | ✓ | Needs attention when away |
-| Scheduler task success | ✗ | ✗ | No notification needed |
-| Tor address regenerated | ✓ | ✗ | Operator initiated |
-| Update available | ✓ | Optional | Informational |
-| Update installed | ✓ | ✓ | Important change record |
+3. The operator may be away and needs to be alerted
 
 ### Decision Logic
 
 ```
-1. Is user actively using the app?
-   → Always show WebUI notification (toast/center)
+1. Log the event (always - structured, leveled)
 
 2. Is SMTP configured?
-   → No: WebUI only, no email attempt
-   → Yes: Continue to step 3
+   → No: log only, no email attempt
+   → Yes: continue to step 3
 
 3. Is it critical (failure, security, urgent)?
    → Send email
 
-4. Does user need a record when away?
+4. Does the operator need a record when away?
    → Send email
 
-5. Is it just confirmation of user action?
-   → WebUI only (no email)
-
-6. Is it routine success?
-   → No notification needed
+5. Is it routine success?
+   → Log only, no email
 ```
 
 ## Notification Storage
 
-**WebUI notifications are stored in the database for persistence.**
+**There is no server-side notification storage. API projects have no `notifications` table, no per-operator notification state, and no WebSocket notification sync.**
 
-| Storage | Details |
-|---------|---------|
-| Table | `notifications` |
-| Retention | 30 days (configurable) |
-| Max stored | 100 per operator |
-| Sync | Real-time via WebSocket |
-
-**Notification Record:**
-```json
-{
-  "id": "notif_01HQXYZ",
-  "type": "warning",
-  "title": "SSL Certificate Expiring",
-  "message": "Certificate expires in 3 days",
-  "link": "/server/help#ssl",
-  "read": false,
-  "created_at": "2025-01-15T10:30:00Z"
-}
-```
+| Data | Where |
+|------|-------|
+| Visitor toasts | Ephemeral (DOM only, gone on dismiss) |
+| Banner dismissals, center history, badge state | `localStorage` (client-side, capped, visitor-clearable — same store as theme/language preferences) |
+| Operator record | Structured logs + email (SMTP) |
 
 ## Sane Defaults
 
@@ -26610,24 +26555,18 @@ Templates are stored as files on disk. Override any built-in template by placing
 | Toast position | `top-right` | Corner for toast notifications |
 | Toast duration | `5` seconds | Auto-dismiss time (0 = manual) |
 | Error dismiss | `manual` | Errors require manual dismiss |
-| Notification retention | `30` days | How long to keep in center |
-| Max notifications | `100` | Per operator limit |
-| Real-time updates | `enabled` | WebSocket for instant updates |
+| Center history cap | `50` entries | `localStorage` entries per visitor (oldest evicted first) |
 
 ## Operator Notification Preferences
 
-| Category | Events | Default | Can Disable? |
-|----------|--------|---------|--------------|
-| **Server** | SSL expiring, updates available, disk space | All ON | Yes |
-| **Backup** | Backup complete, backup failed | Failed ON, Complete OFF | Yes |
-| **Scheduler** | Task failed, task manual run | Failed ON | Yes |
+**No UI toggles — operator notification preferences ARE the config file. Per-event email switches live under `server.notifications.email.events` (below); log output follows the global logging configuration.**
 
 ## Configuration
 
 ```yaml
 server:
   notifications:
-    # WebUI notifications (always enabled)
+    # Public WebUI notifications (client-side, visitor-facing only)
     webui:
       position: top-right
       # top-right, top-left, bottom-right, bottom-left
@@ -29207,10 +29146,10 @@ server:
 | `auto_install: false` (default) | Notify only — fires the `update_available` event; never touches the binary |
 | `auto_install: true` | Runs the full `--update yes` flow during the task run — eligible releases only |
 
-**Surfacing rules (API projects have no admin UI — only the operator WebUI):**
+**Surfacing rules (API projects have no admin UI — operator events never render in the public WebUI):**
 
-- "Update available" surfaces ONLY to operators: Banner + Notification Center in the operator WebUI (see "Operator Notifications"), plus the `update_available` email event (off by default) and a WARN log line
-- Fires once per version — emitted when a new eligible version is first seen, not re-sent on every task run; dismissing suppresses that version only
+- "Update available" surfaces ONLY to operators: a WARN log line, the `update_available` email event (off by default), and `--update check` / `--status` CLI output (see "Operator Notifications", PART 17)
+- Fires once per version — the WARN log and email are emitted when a new eligible version is first seen, not re-sent on every task run
 - NEVER inject update notices into API responses, headers, or any public endpoint — running-version and update status are Tier 3 information (Public Endpoint Safety Principle, PART 11), and update prompts are operator concerns, not client concerns
 
 ## Self-Update Implementation

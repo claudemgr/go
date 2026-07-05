@@ -33166,6 +33166,7 @@ In cluster mode, tasks are distributed to prevent duplicate execution:
 - `ssl_renewal`
 - `geoip_update`
 - `blocklist_update`
+- `cve_update`
 - `backup_daily`
 - `update_check` (the check and notification run once; with `auto_install: true` the install is rolled out node-by-node — never all nodes at once, so the cluster stays available)
 
