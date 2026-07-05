@@ -23519,7 +23519,7 @@ Mobile:
 - Slides LEFT to open (right-to-left)
 - Slides RIGHT to close (left-to-right)
 - Overlay dims background, click to close
-- User icon stays in header (NOT in menu) - keeps menu clean
+- Theme toggle stays in header (NOT in menu) - keeps menu clean
 
 **Smart Menu :**
 - If all nav links fit on screen → show inline links, NO hamburger
@@ -23573,7 +23573,7 @@ Mobile:
 
 **Mobile Responsive Rules:**
 - Nav row below header: inline links or hamburger
-- User icon ALWAYS in header (never in menu)
+- Theme toggle ALWAYS in header (never in menu)
 - Menu slides from right edge
 - Touch-friendly: minimum 44x44px tap targets
 - Overlay closes menu on tap (CSS label toggles checkbox - no JS)
