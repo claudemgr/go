@@ -7312,7 +7312,7 @@ Self-Healing Successful?                        │
 ```json
 {
   "ok": false,
-  "error": "MAINTENANCE_MODE",
+  "error": "MAINTENANCE",
   "message": "Server is in maintenance mode due to: Database connection failed",
   "details": {
     "reason": "database_connection",
