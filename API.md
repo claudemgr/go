@@ -21465,75 +21465,82 @@ dismissToast(toastId);
 dismissAllToasts();
 ```
 
-### Notification Bell
+### Site Banner
 
-**Built-in notification center accessible via bell icon in header. Follows GitHub/GitLab patterns. Entirely client-side — history, unread state, and badge count live in `localStorage` (API projects have no user accounts and no server-side notification storage — see PART 17 → "Notification Storage").**
+**Site-wide announcements (scheduled maintenance, service notices) are a server-rendered banner — the FIRST element inside `<body>`, before `<main>`. No notification center, no bell icon — API projects have no user accounts and no server-side notification storage (see PART 17 → "Notification Storage"). The banner renders without JavaScript; JS is only used for dismissal.**
 
-**Bell Icon Behavior:**
-
-| Feature | Description |
-|---------|-------------|
-| **Position** | Header, right side, before profile icon |
-| **Icon** | Bell outline (empty = no unread), filled (has unread) |
-| **Badge** | Red dot or count (1-9, then "9+") for unread |
-| **Click** | Opens dropdown panel below bell |
-| **Keyboard** | Enter/Space opens dropdown, Escape closes |
-
-**Dropdown Panel:**
+**Banner Behavior:**
 
 | Feature | Description |
 |---------|-------------|
-| **Position** | Below bell icon, right-aligned |
-| **Width** | 320-400px |
-| **Max height** | 400px (scrollable) |
-| **Empty state** | "No notifications" message |
-| **Header** | "Notifications" title + "Mark all read" link |
-| **Footer** | "View all" expands the dropdown to the full client-side history (no dedicated page — there are no per-user routes) |
-
-**Notification Item:**
-
-| Element | Description |
-|---------|-------------|
-| **Icon** | Type indicator (info, success, warning, error) |
-| **Title** | Brief notification title |
-| **Message** | Short description (truncated if long) |
-| **Timestamp** | Relative time ("2m ago", "1h ago", "Yesterday") |
-| **Unread indicator** | Blue dot on left side |
-| **Click behavior** | Mark as read + navigate to related page |
+| **Source** | `server.banner` config block (see PART 17 → "Configuration"); empty `text` = no banner rendered |
+| **Placement** | Immediately after `<body>`, before `<main>` — rendered server-side in the base template, so there is no layout shift and no JS dependency |
+| **Types** | `info`, `warning`, `maintenance` |
+| **ARIA** | `role="status"` for `info`; `role="alert"` for `warning` and `maintenance` |
+| **Dismissal** | X button; dismissal key in `localStorage` is a hash of `type + text`, so an EDITED banner reappears for everyone |
+| **Expiry** | Optional `expires` (RFC 3339, UTC); past timestamp = banner not rendered |
+| **Stacking** | At most one config banner at a time; cookie consent and the PWA update banner use the same slot, ordered: cookie consent → config banner → PWA update |
 
 **HTML Structure:**
 ```html
-<div class="header-actions">
-  <!-- Notification Bell -->
-  <div class="notification-bell" aria-label="Notifications">
-    <button class="bell-button" aria-haspopup="true" aria-expanded="false">
-      <svg class="bell-icon"><!-- bell SVG --></svg>
-      <span class="badge" aria-label="3 unread">3</span>
-    </button>
-    <div class="notification-dropdown" role="menu" hidden>
-      <div class="dropdown-header">
-        <span>Notifications</span>
-        <button class="mark-all-read">Mark all read</button>
-      </div>
-      <div class="notification-list">
-        <button class="notification-item unread">
-          <span class="notification-dot"></span>
-          <span class="notification-icon">ℹ</span>
-          <div class="notification-content">
-            <span class="notification-title">Preferences saved</span>
-            <span class="notification-message">Theme set to dark</span>
-            <span class="notification-time">2m ago</span>
-          </div>
-        </button>
-        <!-- More items... -->
-      </div>
-      <button class="dropdown-footer show-all">View all</button>
-    </div>
+<body>
+  <div class="site-banner site-banner-maintenance" role="alert">
+    <span class="site-banner-icon" aria-hidden="true">⚠</span>
+    <span class="site-banner-text">Scheduled maintenance: 2026-07-06 02:00–04:00 UTC</span>
+    <button class="site-banner-close" aria-label="Dismiss announcement">&times;</button>
   </div>
 
-  <!-- Theme Toggle -->
-  <button class="theme-toggle" aria-label="Toggle theme"><!-- See "Theme Toggle" below --></button>
-</div>
+  <main>
+    <!-- Page content -->
+  </main>
+</body>
+```
+
+**CSS:**
+```css
+.site-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.site-banner-warning, .site-banner-maintenance {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.site-banner-text {
+  flex: 1;
+  text-align: center;
+}
+
+.site-banner-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+```
+
+**Dismissal JavaScript:**
+```javascript
+// Dismissal is keyed on banner content — editing the banner text or type resets dismissals
+const banner = document.querySelector(".site-banner");
+if (banner) {
+  const key = "banner_dismissed";
+  const sig = banner.className + "|" + banner.querySelector(".site-banner-text").textContent;
+  if (localStorage.getItem(key) === sig) banner.remove();
+  banner.querySelector(".site-banner-close").addEventListener("click", () => {
+    localStorage.setItem(key, sig);
+    banner.remove();
+  });
+}
 ```
 
 ### Theme Toggle
@@ -21568,68 +21575,13 @@ dismissAllToasts();
   gap: 1rem;
 }
 
-.notification-bell {
-  position: relative;
-}
-
-.bell-button, .theme-toggle {
+.theme-toggle {
   background: none;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 0.25rem;
-}
-
-.badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  background: var(--color-danger);
-  color: white;
-  font-size: 0.75rem;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.notification-dropdown, .profile-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 0.5rem;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  z-index: 1000;
-}
-
-.dropdown-item {
-  display: block;
-  padding: 0.5rem 1rem;
-  color: inherit;
-  text-decoration: none;
-}
-
-.dropdown-item:hover {
-  background: var(--color-hover);
-}
-
-.dropdown-divider {
-  height: 1px;
-  background: var(--color-border);
-  margin: 0.5rem 0;
 }
 ```
 
@@ -21644,7 +21596,6 @@ dismissAllToasts();
 | No search results | "No results found for '{query}'" | Suggest clearing filters or different search |
 | Empty list | "No {items} yet" | "Create your first {item}" button |
 | Empty table | Friendly message in table body | Action button or instructions |
-| No notifications | "No notifications" | - |
 | Failed to load | Error message | "Retry" button |
 | No permissions | "You don't have access to this" | Link to request access or go back |
 
@@ -26434,22 +26385,20 @@ Templates are stored as files on disk. Override any built-in template by placing
 
 | System | Audience | Availability | Use When |
 |--------|----------|--------------|----------|
-| **Public WebUI (Toast/Banner/Center)** | Visitors | Always (client-side) | Feedback for the visitor's own actions and service announcements |
+| **Public WebUI (Toast/Banner)** | Visitors | Always (client-side) | Feedback for the visitor's own actions and service announcements |
 | **Logs** | Operators | Always | Every operator event gets a structured, leveled log line |
 | **Email** | Operators | Requires valid SMTP | Failures, security events, anything needing a permanent record or attention while away |
 
 ## Public WebUI Notification System
 
-**The public frontend has a built-in notification system. It is entirely client-side — state lives in `localStorage`, the same mechanism as theme/language preferences (see "Client-Side Preferences") — and it NEVER shows operator or server-internal events (version, backups, SSL, disk — Tier 3 information, Public Endpoint Safety Principle, PART 11). Toast and banner notifications are ALWAYS available regardless of SMTP configuration.**
+**The public frontend has exactly two visitor-facing mechanisms: toasts for immediate action feedback and a server-rendered site banner for site-wide announcements. There is NO notification center, NO bell icon, and NO notification history — API projects have no user accounts, so there is nothing to accumulate. Dismissal state lives in `localStorage`, the same mechanism as theme/language preferences (see "Client-Side Preferences"). Neither ever shows operator or server-internal events (version, backups, SSL, disk — Tier 3 information, Public Endpoint Safety Principle, PART 11), and both work regardless of SMTP configuration.**
 
 ### How It Works
 
 | Component | Description |
 |-----------|-------------|
 | **Toast** | Pop-up notifications in corner of screen (see PART 16 → "Toast Notifications") |
-| **Banner** | Persistent bar at top of page |
-| **Notification Center** | Bell icon with the visitor's OWN notification history — stored in `localStorage`, never server-side (see PART 16 → "Notification Bell") |
-| **Badge Count** | Unread notification count on bell icon |
+| **Banner** | Server-rendered bar immediately after `<body>`, before `<main>` — config-driven (see PART 16 → "Site Banner") |
 
 ### WebUI Notification Types
 
@@ -26461,26 +26410,25 @@ Templates are stored as files on disk. Override any built-in template by placing
 | `error` | ❌ | Failures, critical issues | Manual dismiss |
 | `security` | 🔒 | Security-related alerts | Manual dismiss |
 
-### Toast vs Banner vs Notification Center
+### Toast vs Banner
 
 | Element | Use For | Behavior |
 |---------|---------|----------|
-| **Toast** | Immediate feedback for visitor actions | Auto-dismiss, stacks in corner |
-| **Banner** | Persistent notices requiring attention | Stays until dismissed; dismissal stored in `localStorage` |
-| **Notification Center** | The visitor's own notification history | Client-side only (`localStorage`), capped, visitor-clearable |
+| **Toast** | Immediate feedback for visitor actions | Auto-dismiss, stacks in corner; ephemeral (DOM only) |
+| **Banner** | Site-wide notices requiring attention | Server-rendered from config; stays until dismissed; dismissal stored in `localStorage`, keyed on banner content |
 
 **When to Use Each (visitor-facing events only):**
 
-| Scenario | Toast | Banner | Center |
-|----------|:-----:|:------:|:------:|
-| Preferences saved (theme/language) | ✓ | | |
-| Form validation error | ✓ | | |
-| Copied to clipboard | ✓ | | |
-| Resource created/updated/deleted | ✓ | | ✓ |
-| Rate limit hit (the visitor's own 429) | ✓ | | ✓ |
-| Cookie consent | | ✓ | |
-| Scheduled maintenance announcement | | ✓ | ✓ |
-| PWA update available (new frontend assets — service-worker banner, discloses no server version) | | ✓ | |
+| Scenario | Toast | Banner |
+|----------|:-----:|:------:|
+| Preferences saved (theme/language) | ✓ | |
+| Form validation error | ✓ | |
+| Copied to clipboard | ✓ | |
+| Resource created/updated/deleted | ✓ | |
+| Rate limit hit (the visitor's own 429) | ✓ | |
+| Cookie consent | | ✓ |
+| Scheduled maintenance announcement | | ✓ |
+| PWA update available (new frontend assets — service-worker banner, discloses no server version) | | ✓ |
 
 **Operator events (backups, SSL, updates, scheduler failures, abuse detection) never appear here — see "Operator Notifications" below.**
 
@@ -26545,7 +26493,7 @@ Templates are stored as files on disk. Override any built-in template by placing
 | Data | Where |
 |------|-------|
 | Visitor toasts | Ephemeral (DOM only, gone on dismiss) |
-| Banner dismissals, center history, badge state | `localStorage` (client-side, capped, visitor-clearable — same store as theme/language preferences) |
+| Banner dismissals | `localStorage` (client-side, keyed on banner content, visitor-clearable — same store as theme/language preferences) |
 | Operator record | Structured logs + email (SMTP) |
 
 ## Sane Defaults
@@ -26555,7 +26503,7 @@ Templates are stored as files on disk. Override any built-in template by placing
 | Toast position | `top-right` | Corner for toast notifications |
 | Toast duration | `5` seconds | Auto-dismiss time (0 = manual) |
 | Error dismiss | `manual` | Errors require manual dismiss |
-| Center history cap | `50` entries | `localStorage` entries per visitor (oldest evicted first) |
+| Banner type | `info` | Default banner type when `server.banner.type` is unset |
 
 ## Operator Notification Preferences
 
@@ -26565,8 +26513,17 @@ Templates are stored as files on disk. Override any built-in template by placing
 
 ```yaml
 server:
+  # Site-wide announcement banner (server-rendered after <body>, before <main> — see PART 16)
+  banner:
+    # Empty = no banner rendered
+    text: ""
+    # info, warning, maintenance
+    type: info
+    # Optional RFC 3339 UTC timestamp; past = banner not rendered
+    expires: ""
+
   notifications:
-    # Public WebUI notifications (client-side, visitor-facing only)
+    # Public WebUI toasts (client-side, visitor-facing only)
     webui:
       position: top-right
       # top-right, top-left, bottom-right, bottom-left
