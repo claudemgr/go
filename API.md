@@ -21713,7 +21713,7 @@ if (banner) {
 
 ## PWA Support
 
-**Progressive Web App = Native-like web app (installable, offline, push notifications, GPS)**
+**Progressive Web App = Native-like web app (installable, offline, GPS)**
 
 **Goal: Indistinguishable from native app** - same UX, capabilities, and performance.
 
@@ -21721,10 +21721,9 @@ if (banner) {
 |---------|----------------|-------|
 | **Manifest** | `/manifest.json` with app metadata | Required for install |
 | **Icons** | Multiple sizes including maskable | For all platforms |
-| **Service Worker** | Cache, push, background sync, offline | Core of PWA |
+| **Service Worker** | Cache, background sync, offline | Core of PWA |
 | **Installable** | Meets PWA install criteria | Add to home screen |
 | **HTTPS** | Required for service workers | Non-negotiable |
-| **Push Notifications** | Web Push API via Service Worker | User opt-in required |
 | **Geolocation** | GPS access via Geolocation API | User permission required |
 | **Background Sync** | Queue actions when offline, sync when online | Seamless offline |
 | **App Updates** | Detect new SW version, prompt user | Keep app current |
@@ -21986,102 +21985,6 @@ function isInstalledPWA() {
 | iOS Safari (no prompt event) | ✅ Yes (manual instructions) |
 | Desktop browser | ✅ Yes (if supported) |
 
-### Push Notifications (PWA)
-
-**Push notifications work even when app is closed (like native apps).**
-
-| Component | Purpose |
-|-----------|---------|
-| **Service Worker** | Receives push events, shows notifications |
-| **Push API** | Subscribe to push service |
-| **Notifications API** | Display system notifications |
-| **VAPID Keys** | Server authentication for push |
-
-**User must grant permission** - prompt on first relevant action, not page load.
-
-```javascript
-// Request permission and subscribe
-async function subscribeToPush() {
-  // Check support
-  if (!('PushManager' in window)) {
-    console.log('Push not supported');
-    return null;
-  }
-
-  // Request permission
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') {
-    console.log('Notification permission denied');
-    return null;
-  }
-
-  // Subscribe
-  const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-  });
-
-  // Send subscription to server
-  await fetch('/api/push/subscribe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(subscription)
-  });
-
-  return subscription;
-}
-
-// Helper: Convert VAPID key
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
-}
-```
-
-**Service Worker - handle push:**
-```javascript
-// sw.js
-self.addEventListener('push', event => {
-  const data = event.data?.json() || {};
-  const options = {
-    body: data.body || 'New notification',
-    icon: '/static/icons/icon-192.png',
-    badge: '/static/icons/badge-72.png',
-    vibrate: [100, 50, 100],
-    data: { url: data.url || '/' },
-    actions: data.actions || []
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(data.title || '{App Name}', options)
-  );
-});
-
-// Handle notification click
-self.addEventListener('notificationclick', event => {
-  event.notification.close();
-
-  const url = event.notification.data?.url || '/';
-  event.waitUntil(
-    clients.matchAll({ type: 'window' }).then(windowClients => {
-      // Focus existing window if open
-      for (const client of windowClients) {
-        if (client.url === url && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      // Open new window
-      return clients.openWindow(url);
-    })
-  );
-});
-```
-
-**Push notification settings** are configured via `server.notifications` config keys.
-
 ### Background Sync
 
 **Queue actions when offline, automatically sync when back online:**
@@ -22290,13 +22193,6 @@ async function revokeLocalToken() {
     if (db.name.includes('private') || db.name.includes('token')) {
       indexedDB.deleteDatabase(db.name);
     }
-  }
-
-  // Unsubscribe from push (was associated with token)
-  const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.getSubscription();
-  if (subscription) {
-    await subscription.unsubscribe();
   }
 
   // Reload page — public content still accessible
@@ -22553,7 +22449,6 @@ if (new URLSearchParams(window.location.search).get('source') === 'pwa') {
 
 | Feature | Android | iOS |
 |---------|---------|-----|
-| Push notifications | ✅ Yes | ✅ Yes (iOS 16.4+) |
 | Background sync | ✅ Yes | ❌ No |
 | `beforeinstallprompt` | ✅ Yes | ❌ No |
 | Persistent storage | ✅ Yes | ⚠️ Limited (7 days without use) |
@@ -22703,8 +22598,7 @@ async function requestPersistentStorage() {
 │   │   ├── icon-384.png
 │   │   ├── icon-512.png
 │   │   ├── icon-maskable-192.png # Maskable (Android adaptive)
-│   │   ├── icon-maskable-512.png
-│   │   └── badge-72.png          # Notification badge
+│   │   └── icon-maskable-512.png
 │   ├── splash/                   # iOS splash screens
 │   │   ├── iphone-1179x2556.png
 │   │   └── iphone-1284x2778.png
@@ -22730,7 +22624,6 @@ async function requestPersistentStorage() {
 | Install prompt handled | ◻️ | Custom UI |
 | Update notification | ◻️ | New SW prompt |
 | Offline indicator | ◻️ | Connection status |
-| Push notifications | ◻️ | If needed |
 | Background sync | ◻️ | If needed |
 | Geolocation | ◻️ | If needed |
 | Lighthouse score 100 | ◻️ | All audits pass |
@@ -23249,8 +23142,6 @@ src/server/template/
 **Public nav contains (project-specific):**
 - Home (`/`)
 - App-specific feature pages (e.g., API docs, features, pricing)
-- Login link (if authentication is a project feature)
-- User menu (if logged in): Settings, Logout
 
 **Public nav NEVER contains:**
 - ❌ Any link to server-administration paths (there is no admin web UI)
@@ -23548,15 +23439,12 @@ partial/
 
 | Element | Position | Purpose | Contents |
 |---------|----------|---------|----------|
-| `<nav>` | TOP | Navigation | Links to app sections, user menu |
+| `<nav>` | TOP | Navigation | Links to app sections |
 | `<footer>` | BOTTOM | Information | About, Privacy, Contact, Help, GitHub, version |
 
 **Nav contains (app navigation):**
 - Home link
 - App-specific sections (project-defined)
-- User menu (right side):
-  - If logged in: Username dropdown → Profile, Settings, Logout
-  - If logged out: Login link
 
 **Nav does NOT contain:**
 - API link (users access via `/server/docs/swagger` if needed)
@@ -23567,14 +23455,14 @@ partial/
 ```
 Desktop:
 ┌─────────────────────────────────────────────────────────────────┐
-│  {project_name}                                      [User Icon] │  ← Header
+│  {project_name}                                          [Theme] │  ← Header
 ├─────────────────────────────────────────────────────────────────┤
 │  Home  |  [App Section 1]  |  [App Section 2]  |  ...           │  ← Nav
 └─────────────────────────────────────────────────────────────────┘
 
 Mobile:
 ┌─────────────────────────────────────────────────────────────────┐
-│  {project_name}                                      [User Icon] │  ← Header
+│  {project_name}                                          [Theme] │  ← Header
 ├─────────────────────────────────────────────────────────────────┤
 │                                                      [☰ Menu]   │  ← Nav row
 └─────────────────────────────────────────────────────────────────┘
@@ -23587,7 +23475,7 @@ Mobile:
 ```
 
 ```html
-<!-- Header bar: site name + user icon -->
+<!-- Header bar: site name + theme toggle -->
 <header class="header">
   <a href="/" class="site-brand">{project_name}</a>
 
@@ -24568,49 +24456,6 @@ if err != nil {
 | All others | Empty |
 
 **Rule:** If `title` is empty, fall back to `{project_name}`. Other fields are optional.
-
-## Announcements
-
-**Operator messages (configured in `server.yml`) shown in UI for downtime notices, updates, etc.**
-
-### Configuration
-
-```yaml
-web:
-  announcements:
-    enabled: true
-    # List of announcement messages
-    messages: []
-```
-
-### Announcement Structure
-
-```yaml
-messages:
-  - id: "maintenance-2025-01"
-    type: warning
-    # warning, info, error, success
-    title: "Scheduled Maintenance"
-    message: "The server will be down for maintenance on Jan 15, 2025 from 2-4 AM UTC."
-    start: "2025-01-14T00:00:00Z"
-    # When to start showing
-    end: "2025-01-15T04:00:00Z"
-    # When to stop showing
-    dismissible: true
-    # User can dismiss
-```
-
-### Announcements Configuration (config file)
-
-| Element | Config Key | Description |
-|---------|------------|-------------|
-| Enable announcements | `announcements.enabled` | Turn announcements on/off |
-| Type | `announcements[].type` | warning, info, error, success |
-| Title | `announcements[].title` | Short title |
-| Message | `announcements[].message` | Full message content |
-| Start date | `announcements[].start` | When to start showing (ISO 8601) |
-| End date | `announcements[].end` | When to stop showing (ISO 8601) |
-| Dismissible | `announcements[].dismissible` | Allow users to dismiss |
 
 ## CORS
 
@@ -42548,7 +42393,7 @@ func BuildAPIURL(baseURL, path string, pathParams map[string]string, queryParams
 }
 
 // EncodePathSegment encodes a single path segment
-// Use for: usernames, org names, resource IDs, filenames
+// Use for: slugs, org names, resource IDs, filenames
 func EncodePathSegment(segment string) string {
     return url.PathEscape(segment)
 }
