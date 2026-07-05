@@ -32985,6 +32985,7 @@ Every project MUST include these scheduled tasks:
 | `geoip_update` | Weekly (Sunday 03:00) | Download/update ip-location-db GeoIP databases | Yes |
 | `blocklist_update` | Daily at 04:00 | Download/update IP/domain blocklists | Yes |
 | `cve_update` | Daily at 05:00 | Download/update CVE/security databases | Yes |
+| `update_check` | Daily at 06:00 | Check release channel for a newer version — notify-only unless `update.auto_install: true` (default false); honors `update.defer_days` | Yes |
 | `session_cleanup` | Every 15 minutes | Remove expired sessions | No |
 | `token_cleanup` | Every 15 minutes | Remove expired tokens | No |
 | `log_rotation` | Daily at 00:00 | Rotate and compress old logs | No |
@@ -33033,6 +33034,11 @@ server:
         enabled: true
         retry_on_fail: true
         retry_delay: 1h
+
+      # Daily at 06:00 (after cve_update at 05:00) - check-only unless update.auto_install is true
+      update_check:
+        schedule: "0 6 * * *"
+        enabled: true
 
       # Every 15 minutes
       session_cleanup:
@@ -33161,6 +33167,7 @@ In cluster mode, tasks are distributed to prevent duplicate execution:
 - `geoip_update`
 - `blocklist_update`
 - `backup_daily`
+- `update_check` (the check and notification run once; with `auto_install: true` the install is rolled out node-by-node — never all nodes at once, so the cluster stays available)
 
 **Local Tasks (run on each node):**
 - `session_cleanup`
@@ -35721,6 +35728,62 @@ POST /api/{api_version}/server/{admin_path}/config/backup/restore
 {project_name} --update branch daily
 {project_name} --update branch stable
 ```
+
+## Update Configuration
+
+```yaml
+server:
+  update:
+    # Release channel: stable | beta | daily (also settable via --update branch)
+    branch: stable
+
+    # Auto-install updates found by the update_check task
+    # Default OFF: the task only notifies; installing is always an explicit operator decision
+    auto_install: false
+
+    # Defer window in days (0-365): a release is only eligible once it is this many days old
+    # 30 = adopt releases only after they have been public for 30 days; 0 = immediately
+    defer_days: 0
+```
+
+**`--update branch {name}` writes `update.branch` to the config file — the config is the single source of truth; there is no separate CLI-side state.**
+
+### Channel Semantics
+
+**Channels are cumulative — a less-stable channel never leaves you older than a more-stable one.**
+
+| Channel | Considers | Selection |
+|---------|-----------|-----------|
+| `stable` (default) | Full releases only (`v*`, `*.*.*`) | Newest stable |
+| `beta` | Beta pre-releases (`*-beta`) + all stable releases | Newest of both — beta users are never stuck behind a stable release |
+| `daily` | Daily pre-releases (`YYYYMMDDHHMMSS`) + beta + stable | Newest overall |
+
+### Defer Semantics (`defer_days`)
+
+**A release is eligible only once `now - published_at >= defer_days` (GitHub Releases `published_at`, UTC).**
+
+| Rule | Behavior |
+|------|----------|
+| Gates the scheduled task only | `update_check` skips ineligible releases for BOTH notification and auto-install; manual `--update check` / `--update yes` always see and install the true latest — an explicit operator action overrides the defer window |
+| Eligibility is per-release | The task selects the NEWEST eligible release that is newer than the running version. A brand-new release does not reset the clock for older, already-eligible releases |
+| Rolling delay, never deadlock | Rapid release cadence (e.g. `daily` channel + `defer_days: 30`) still converges: each run adopts the newest release that has aged past the window |
+| Example | Running v1.2.2; v1.2.3 published 40 days ago, v1.2.4 published 5 days ago, `defer_days: 30` → task notifies/installs v1.2.3; v1.2.4 becomes eligible 25 days later |
+
+### Scheduled Check (update_check Task)
+
+**The `update_check` scheduler task (built-in task list, daily at 06:00, skippable) runs the equivalent of `--update check` against the configured channel, filtered by `defer_days`.**
+
+| Setting | Behavior |
+|---------|----------|
+| `auto_install: false` (default) | Notify only — fires the "Update available" event; never touches the binary |
+| `auto_install: true` | Runs the full `--update yes` flow during the task run — eligible releases only |
+
+**Surfacing rules:**
+
+- "Update available" surfaces ONLY to Server Admins: Banner + Notification Center on `/server/{admin_path}/*` routes, plus the `update_available` email event (off by default)
+- Fires once per version — the banner persists until updated or dismissed; dismissing suppresses that version only, the next release notifies again
+- NEVER on public pages — running-version and update status are Tier 3 information (Public Endpoint Safety Principle, PART 11), and update prompts are operator concerns, not visitor concerns
+- PWA exception: the service-worker "A new version is available" banner is allowed on app pages — an installed PWA is an app updating its own frontend assets; it discloses no server version
 
 ## Self-Update Implementation
 
