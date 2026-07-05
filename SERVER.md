@@ -4101,8 +4101,8 @@ User preferences like theme, language, and UI settings can be stored client-side
 
 | Storage | Use Case | Persistence |
 |---------|----------|-------------|
-| `localStorage` | Theme, language, UI preferences | Until cleared |
-| Cookies | Session preferences, consent flags | Configurable expiry |
+| Cookies | Theme, language, UI preferences, consent flags | Configurable expiry; server-readable, so pages render correctly without JS |
+| `localStorage` | Client-only state the server never needs (e.g. draft form text) | Until cleared |
 
 These work for anonymous visitors and don't require user accounts. Server-side user preferences (stored in `user_preferences` table) require PART 34.
 
@@ -19001,8 +19001,9 @@ type ConsentState struct {
     Timestamp   int64 `json:"timestamp"`
 }
 
-// Stored in localStorage as JSON:
-// cookieConsent = {"essential":true,"preferences":true,"analytics":false,"timestamp":1704067200}
+// Stored in the cookie_consent COOKIE as JSON so the server (ConsentMiddleware,
+// getConsentFromRequest) can read it - never localStorage, which the server cannot see:
+// cookie_consent = {"essential":true,"preferences":true,"analytics":false,"timestamp":1704067200}
 ```
 
 ### Granular Consent UI (Manage Preferences)
@@ -21377,15 +21378,14 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 **Theme Implementation Requirements:**
 
 1. **Theme Detection:**
-   - Check `localStorage` or cookie for user preference
-   - Fall back to `prefers-color-scheme` media query if auto mode
+   - Read the `theme` cookie server-side (logged-in users: per-user preference from the DB) and render the theme class on the root element
+   - `auto` mode is pure CSS via the `prefers-color-scheme` media query - no JS detection needed
    - Default to dark if no preference set
 
 2. **Theme Switching:**
-   - Provide theme toggle in UI (light/dark/auto)
-   - Store preference in `localStorage` or cookie
+   - Provide theme toggle in UI (light/dark/auto) as a small POST form that sets the `theme` cookie server-side - works without JS
+   - External JS enhancement intercepts the toggle to apply the theme class without a page reload
    - Apply theme class to root element (`theme-light`, `theme-dark`)
-   - NO page reload required
 
 3. **Accessibility:**
    - Both themes MUST pass WCAG AA contrast requirements
@@ -23971,14 +23971,19 @@ html.theme-light {
 | Download | Downloading... |
 
 ```html
-<!-- Submit button with loading state -->
-<button type="submit" id="save-btn" onclick="this.disabled=true; this.textContent='Saving...';">
+<!-- Submit button with loading state (no inline handler - CSP blocks on* attributes) -->
+<button type="submit" id="save-btn">
   Save
 </button>
 ```
 
 ```javascript
-// Re-enable after response
+// External JS (app.js): disable on submit, re-enable after response
+const btn = document.getElementById('save-btn');
+btn.form.addEventListener('submit', () => {
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+});
 fetch('/api/save', { method: 'POST', body: data })
   .then(response => { /* handle success */ })
   .catch(error => { /* handle error */ })
@@ -24033,21 +24038,21 @@ fetch('/api/save', { method: 'POST', body: data })
 | **Screen reader** | Announce modal title on open |
 
 ```html
-<!-- Modal structure using native <dialog> -->
+<!-- Modal structure using native <dialog> - no JS needed to close -->
 <dialog id="confirm-modal" aria-labelledby="modal-title">
   <header>
     <h2 id="modal-title">Modal Title</h2>
-    <button type="button" aria-label="Close" onclick="this.closest('dialog').close()">✕</button>
+    <form method="dialog"><button aria-label="Close">✕</button></form>
   </header>
   <main>Modal content here</main>
   <footer>
-    <button type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <form method="dialog"><button>Cancel</button></form>
     <button type="submit" autofocus>Confirm</button>
   </footer>
 </dialog>
 ```
 
-**Note:** Native `<dialog>` element handles focus trap and backdrop automatically. Use `showModal()` to open with backdrop, `close()` to close.
+**Note:** Native `<dialog>` element handles focus trap, Escape key, and backdrop automatically. `<form method="dialog">` closes the dialog with zero JavaScript - never use inline `onclick` handlers (blocked by CSP). Use `showModal()` (external JS) to open with backdrop.
 
 ### Toast vs Modal: When to Use Which
 
@@ -24236,6 +24241,11 @@ function changePassword() {
 
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } }
 @keyframes countdown { from { width: 100%; } to { width: 0%; } }
+
+/* Pause on hover is pure CSS - pause the countdown animation, no JS timers */
+.toast:hover .toast-progress {
+  animation-play-state: paused;
+}
 ```
 
 **JavaScript Toast API:**
@@ -24256,6 +24266,10 @@ dismissToast(toastId);
 // Dismiss all
 dismissAllToasts();
 ```
+
+**Server-Rendered Flash Messages (no-JS fallback):**
+
+Toasts require JavaScript. For standard (non-AJAX) form POSTs, the server MUST use the POST-redirect-GET pattern with a one-shot flash message (stored in the session or a short-lived cookie, cleared after render) and display it as a static dismissible alert at the top of the next page. Toasts are the JS enhancement layered on top of this - never the only feedback channel.
 
 ### Notification Bell
 
@@ -24494,9 +24508,11 @@ dismissAllToasts();
 
 **All forms MUST provide clear, inline validation feedback.**
 
+**Layering:** HTML5 constraint attributes first (`required`, `pattern`, `type=`, `minlength`, `min`/`max`) - they validate with zero JS. CSS `:user-invalid` styles invalid fields only after the user has interacted (same effect as a blur handler, no JS). External JS only mirrors the field's `validationMessage` into the inline error span. Server-side validation remains authoritative and re-renders errors for no-JS submits.
+
 | Rule | Implementation |
 |------|----------------|
-| **Validate on blur** | Show error when user leaves field (not while typing) |
+| **Validate on blur** | CSS `:user-invalid` shows the error state after the user leaves the field (not while typing) - no blur-handler JS needed for styling |
 | **Inline errors** | Error message directly below the field, not in alert/modal |
 | **Highlight field** | Red border on invalid fields, green on valid (optional) |
 | **Clear on fix** | Remove error immediately when user corrects input |
@@ -24540,6 +24556,10 @@ dismissAllToasts();
 
 **CSS for Validation States:**
 ```css
+/* Native validation styling - fires only after user interaction, no JS required */
+input:user-invalid,
+select:user-invalid,
+textarea:user-invalid,
 .form-group.error input,
 .form-group.error select,
 .form-group.error textarea {
@@ -24775,11 +24795,15 @@ setInterval(() => {
 function showUpdateNotification() {
   const banner = document.createElement('div');
   banner.className = 'update-banner';
-  banner.innerHTML = `
-    <span>A new version is available</span>
-    <button onclick="updateApp()">Update Now</button>
-    <button onclick="this.parentElement.remove()">Later</button>
-  `;
+  const label = document.createElement('span');
+  label.textContent = 'A new version is available';
+  const updateBtn = document.createElement('button');
+  updateBtn.textContent = 'Update Now';
+  updateBtn.addEventListener('click', updateApp);
+  const laterBtn = document.createElement('button');
+  laterBtn.textContent = 'Later';
+  laterBtn.addEventListener('click', () => banner.remove());
+  banner.append(label, updateBtn, laterBtn);
   document.body.appendChild(banner);
 }
 
@@ -25897,7 +25921,7 @@ Quick reference: Default allows all origins (`*`). Configure via `web.cors` in s
 | Collapsible sections | `<details>/<summary>` | Need animation or programmatic control |
 | Tabs | CSS `:target` or radio button hack | Need deep linking or state management |
 | Tooltips | CSS `::after` with `data-tooltip` | Need dynamic positioning |
-| Modals | CSS `:target` selector | Need focus trap, escape key, backdrop click |
+| Modals | Native `<dialog>` + `<form method="dialog">` - focus trap, Escape key, and `::backdrop` are built in | Opening with backdrop needs a `showModal()` call (external JS) |
 | Hover effects | CSS `:hover`, `:focus`, `:active` | Never - always CSS |
 | Animations | CSS `@keyframes`, `transition` | Complex sequenced animations |
 | Responsive design | CSS media queries | Never - always CSS |
@@ -25926,26 +25950,52 @@ Quick reference: Default allows all origins (`*`). Configure via `web.cors` in s
 - **Required for**: API calls, dynamic content loading, complex state, WebSockets
 - **Size matters** - keep JS minimal, no large libraries for simple tasks
 
-**Inline JavaScript - Allowed for simple operations:**
+**Simple Operations - Native HTML First, External JS Second (NEVER Inline):**
+
+Inline `onclick` handlers are blocked by the CSP (`on*` attributes are not covered by `'unsafe-inline'` script-src) and violate the NO Inline CSS/JS rule. Many "one-liner" buttons need no JS at all:
+
 ```html
-<!-- Navigation -->
-<button onclick="history.back()">Go Back</button>
-<button onclick="history.forward()">Go Forward</button>
-<button onclick="location.reload()">Refresh</button>
+<!-- Reset form - native, zero JS -->
+<button type="reset">Reset Form</button>
 
-<!-- Print -->
-<button onclick="window.print()">Print</button>
-
-<!-- Scroll -->
-<button onclick="window.scrollTo(0,0)">Back to Top</button>
-
-<!-- Form helpers -->
-<button onclick="document.getElementById('myform').reset()">Reset Form</button>
-<button onclick="document.getElementById('field').select()">Select All</button>
+<!-- Back to top - anchor link, zero JS; smoothness is CSS -->
+<a href="#top" class="back-to-top">Back to Top</a>
 ```
 
-**Rule:** Inline JS is fine for one-liner operations that cannot be done with CSS/HTML5.
-Move to `static/js/app.js` if logic needs feedback, reuse, or exceeds one statement.
+```css
+/* Smooth scrolling for anchor links - respect reduced-motion preference */
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+```
+
+Operations that genuinely need JS (history, print, text selection) are bound in `static/js/app.js` by `data-action` attribute:
+
+```html
+<button data-action="back">Go Back</button>
+<button data-action="forward">Go Forward</button>
+<button data-action="reload">Refresh</button>
+<button data-action="print">Print</button>
+<button data-action="select-all" data-target="field">Select All</button>
+```
+
+```javascript
+// static/js/app.js - one delegated listener, no inline handlers
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  switch (btn.dataset.action) {
+    case 'back': history.back(); break;
+    case 'forward': history.forward(); break;
+    case 'reload': location.reload(); break;
+    case 'print': window.print(); break;
+    case 'select-all': document.getElementById(btn.dataset.target).select(); break;
+  }
+});
+```
+
+**Rule:** No inline JS, ever - even one-liners live in `static/js/app.js`.
 See **JavaScript Rules** section below for `app.js` structure.
 
 **CSS-First Patterns (use these instead of JS):**
@@ -26217,24 +26267,29 @@ html.theme-light {
 **Theme preference source:**
 | Context | Preference Source | Fallback |
 |---------|-------------------|----------|
-| Public (guest) | `localStorage.theme` | `dark` |
+| Public (guest) | `theme` cookie (server-readable) | `dark` |
 | Public (user) | `user_preferences.theme` | `dark` |
 | Admin | `admin_preferences.theme` | `dark` |
 
-**JavaScript theme switching (shared):**
+**Theme switching (shared):**
 
-**Note:** Per "HTML5 & CSS Over JavaScript" rules - CSS does all theming via variables. JavaScript ONLY handles preference detection and class switching (cannot be done in pure CSS).
+**Note:** Per "HTML5 & CSS Over JavaScript" rules - the SERVER reads the theme preference (cookie or DB) and renders the `theme-*` class on `<html>`, so every page loads with the correct theme and zero JS. `auto` renders `theme-auto`, which is pure CSS via `prefers-color-scheme` - no `matchMedia` detection needed. The toggle itself is a small POST form that sets the cookie / saves the preference; external JS only enhances it to swap the class without a reload.
+
+```css
+/* theme-auto follows the OS preference - pure CSS, no JS detection */
+@media (prefers-color-scheme: light) {
+  html.theme-auto { /* same variables as html.theme-light */ }
+}
+@media (prefers-color-scheme: dark) {
+  html.theme-auto { /* same variables as html.theme-dark */ }
+}
+```
 
 ```javascript
-// Same function works for both public and admin
-// JS only sets the class - CSS does all the actual styling
+// No-reload enhancement only - the POST form + theme cookie is the source of truth
 function setTheme(theme) {
-  if (theme === 'auto') {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    theme = prefersDark ? 'dark' : 'light';
-  }
   document.documentElement.className = `theme-${theme}`;
-  localStorage.setItem('theme', theme);
+  document.cookie = `theme=${theme}; path=/; max-age=31536000; SameSite=Lax`;
 }
 ```
 
@@ -26362,12 +26417,14 @@ function closeModal(id) {
 }
 
 // ============================================================================
-// Form helpers
+// Form helpers - NO native confirm() (forbidden); use a native <dialog>
 // ============================================================================
-function confirmDelete(form, message = 'Are you sure?') {
-  if (confirm(message)) {
-    form.submit();
-  }
+function confirmDelete(form, dialogId = 'confirm-modal') {
+  const dialog = document.getElementById(dialogId);
+  dialog.addEventListener('close', () => {
+    if (dialog.returnValue === 'confirm') form.submit();
+  }, { once: true });
+  dialog.showModal();
 }
 ```
 
@@ -26378,11 +26435,12 @@ function confirmDelete(form, message = 'Are you sure?') {
 - Form validation (complex only)
 - Dynamic content loading (AJAX)
 - WebSocket connections
+- `data-action` bindings for history/print/select helpers (see "Simple Operations" above)
 
-**What stays inline (simple one-liners):**
-- `onclick="history.back()"`
-- `onclick="window.print()"`
-- `onclick="this.closest('dialog').close()"`
+**What never needs JS at all (native HTML/CSS):**
+- Closing a dialog: `<form method="dialog"><button>Cancel</button></form>`
+- Resetting a form: `<button type="reset">`
+- Back to top: `<a href="#top">` + `scroll-behavior: smooth`
 
 ### Template Rules
 
@@ -26858,9 +26916,9 @@ var staticFS embed.FS
 
 | NEVER Use | ALWAYS Use Instead |
 |-----------|---------------------|
-| `alert()` | Custom modal with CSS classes |
-| `confirm()` | Custom confirmation modal |
-| `prompt()` | Custom input modal or inline form |
+| `alert()` | Native `<dialog>` styled with CSS classes |
+| `confirm()` | Native `<dialog>` confirmation with `<form method="dialog">` buttons |
+| `prompt()` | Native `<dialog>` with an input, or inline form |
 | Plain text inputs for options | Dropdowns (`<select>`) |
 | Plain text for yes/no | Checkboxes or toggle switches |
 | Plain text for multiple options | Radio buttons or dropdown |
@@ -26942,7 +27000,7 @@ var staticFS embed.FS
 - **Theme switching MUST work seamlessly** without page reload
 - **All interactive elements MUST be clearly visible** in both themes
 - **Syntax highlighting MUST adapt** to theme (use appropriate colors for each theme)
-- **User preference persisted** in localStorage or cookie
+- **User preference persisted** in the `theme` cookie (guests) or per-user DB preference (logged-in users) - server-readable, so pages render themed without JS
 - **Default to dark** if no preference set
 
 **Theme Implementation Location:**
@@ -27012,20 +27070,19 @@ var ThemePaletteLight = ThemePalette{
 
 **Theme Detection Flow:**
 ```
-1. Check user preference in localStorage/cookie
+1. Server reads user preference: theme cookie (guests) or DB preference (logged-in)
 2. If no preference OR preference is "auto":
-   - Check system preference via prefers-color-scheme media query
-   - Apply matching theme (light or dark)
+   - Server renders theme-auto class; CSS prefers-color-scheme media query
+     applies light or dark - no JS detection
 3. If preference is "light" or "dark":
-   - Apply selected theme directly
+   - Server renders theme-light / theme-dark on <html> directly
 4. Default to dark if all detection fails
 ```
 
 **Theme Switching:**
-- Provide theme toggle in UI (☀️ Light / 🌙 Dark / 🔄 Auto)
-- Store preference in `localStorage.theme` or cookie
-- Apply theme class to `<html>` element: `theme-light`, `theme-dark`
-- NO page reload required - instant switching via CSS classes
+- Provide theme toggle in UI (☀️ Light / 🌙 Dark / 🔄 Auto) as a POST form that sets the `theme` cookie (or saves the DB preference) - works without JS
+- Apply theme class to `<html>` element: `theme-light`, `theme-dark`, `theme-auto`
+- NO page reload required when JS is available - external JS intercepts the toggle and swaps the CSS class instantly
 - All components (Swagger, GraphQL, admin) switch simultaneously
 
 **Accessibility Requirements:**
@@ -28050,17 +28107,19 @@ When admin edits `custom_html`, show:
 | **Buttons (mobile)** | Centered below message, side-by-side |
 | **Decline button** | Text/outline style, no background |
 | **"I Agree" button** | Filled white background, purple text |
-| **Persistence** | Remember choice in localStorage, don't show again |
+| **Persistence** | Remember choice in the `cookie_consent` COOKIE (server-readable), don't render again |
 | **Z-index** | Above all content, below modals |
 
 ### Banner Behavior
 
+**The server decides whether to render the banner: no `cookie_consent` cookie → render it; cookie present → skip it entirely.** Accept/Decline/Save are standard `<form method="post">` submits handled server-side (set the cookie, redirect back) - the banner works fully without JavaScript. External JS is a no-reload enhancement only.
+
 | Action | Result |
 |--------|--------|
-| **I Agree** | Set `cookieConsent=accepted` in localStorage, hide banner, enable all cookies + tracking |
-| **Decline** | Set `cookieConsent=declined` in localStorage, hide banner, session cookies only |
-| **Already set** | Don't show banner if localStorage has cookieConsent |
-| **First visit** | Always show banner until user responds |
+| **I Agree** | POST to `/server/consent` sets `cookie_consent` cookie (all categories), redirect back; enable all cookies + tracking |
+| **Decline** | POST to `/server/consent` sets `cookie_consent` cookie (essential only), redirect back; session cookies only |
+| **Already set** | Server does not render the banner when the `cookie_consent` cookie exists |
+| **First visit** | Server renders the banner (no cookie yet) until user responds |
 
 ### Implementation
 
@@ -28084,169 +28143,92 @@ message := cfg.Privacy.GetConsentMessage()
 ```
 
 ```html
-<!-- Cookie Consent Banner - ALWAYS shown until user responds (we use cookies) -->
+<!-- Cookie Consent Banner - server renders it ONLY when no cookie_consent cookie exists -->
+<!-- No hidden-by-default + JS reveal: the server decides, so it works without JS -->
 <!-- {message} is dynamically selected based on server.privacy.data.sold -->
-<div id="cookie-consent" class="cookie-banner cookie-banner--hidden" data-sold="{data_sold}">
+{{ if not .HasConsentCookie }}
+<div id="cookie-consent" class="cookie-banner" data-sold="{data_sold}">
   <div class="cookie-banner-content">
     <span class="cookie-message">
       {message} - <a href="{policy_url}" class="policy-link">{policy_text}</a>
     </span>
     <div class="cookie-buttons">
-      <button class="btn-decline" onclick="declineCookies()">{decline_text}</button>
-      <button class="btn-accept" onclick="acceptCookies()">{accept_text}</button>
+      <!-- Plain POST forms - the server sets the cookie_consent cookie and redirects back -->
+      <form method="post" action="/server/consent">
+        <input type="hidden" name="choice" value="decline">
+        <button class="btn-decline" type="submit">{decline_text}</button>
+      </form>
+      <form method="post" action="/server/consent">
+        <input type="hidden" name="choice" value="accept">
+        <button class="btn-accept" type="submit">{accept_text}</button>
+      </form>
     </div>
   </div>
 </div>
+{{ end }}
+```
 
-<script>
-// Granular consent state (matches server.privacy.cookies structure)
-const defaultConsent = {
-  // Always true, cannot be disabled
-  essential: true,
-  // Default from server.privacy.cookies.preferences.enabled
-  preferences: true,
-  // Default from server.privacy.cookies.analytics.enabled
-  analytics: true,
-  timestamp: 0
-};
+**Server-side consent handler:**
 
-// Show banner if no prior consent (we always use cookies)
-(function() {
-  const stored = localStorage.getItem('cookieConsent');
-  const banner = document.getElementById('cookie-consent');
-
-  // No consent yet - show banner
-  if (!stored && banner) {
-    banner.classList.remove('cookie-banner--hidden');
-  }
-
-  // Has consent - apply settings
-  if (stored) {
-    try {
-      const consent = JSON.parse(stored);
-      applyConsent(consent);
-    } catch (e) {
-      // Legacy format or corrupted - show banner again
-      localStorage.removeItem('cookieConsent');
-      if (banner) banner.classList.remove('cookie-banner--hidden');
+```go
+// POST /server/consent - sets the cookie_consent cookie and redirects back.
+// The banner works with zero JavaScript; JS only removes the reload.
+func handleConsent(w http.ResponseWriter, r *http.Request) {
+    choice := r.FormValue("choice")
+    consent := ConsentState{Essential: true, Timestamp: time.Now().Unix()}
+    switch choice {
+    case "accept":
+        consent.Preferences = true
+        consent.Analytics = true
+    case "decline":
+        // Essential only
+    case "save":
+        // Granular preferences from the Manage Preferences form
+        consent.Preferences = r.FormValue("preferences") == "on"
+        consent.Analytics = r.FormValue("analytics") == "on"
     }
-  }
-})();
-
-function acceptCookies() {
-  // Accept all cookies
-  const consent = {
-    essential: true,
-    preferences: true,
-    analytics: true,
-    timestamp: Date.now()
-  };
-  saveAndApplyConsent(consent);
+    b, _ := json.Marshal(consent)
+    http.SetCookie(w, &http.Cookie{
+        Name: "cookie_consent", Value: url.QueryEscape(string(b)),
+        Path: "/", MaxAge: 31536000, SameSite: http.SameSiteLaxMode,
+    })
+    http.Redirect(w, r, safeReferrer(r), http.StatusSeeOther)
 }
+```
 
-function declineCookies() {
-  // Essential only
-  const consent = {
-    essential: true,
-    preferences: false,
-    analytics: false,
-    timestamp: Date.now()
-  };
-  saveAndApplyConsent(consent);
-}
+**External JS enhancement (`static/js/app.js`) - no-reload only, consent state lives in the cookie:**
 
-function showCookiePreferences() {
-  // Show granular preferences modal (see Granular Consent UI in PART 12)
-  document.getElementById('cookie-preferences-modal').style.display = 'block';
-}
+```javascript
+// Enhance the consent forms: submit via fetch, hide the banner without a reload.
+// The cookie is still set server-side; nothing is stored in localStorage.
+document.querySelectorAll('#cookie-consent form').forEach((form) => {
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await fetch(form.action, { method: 'POST', body: new FormData(form) });
+    document.getElementById('cookie-consent').remove();
+    // Analytics for an "accept" choice loads on next page view via the
+    // server-side {{ trackingScript }} template function
+  });
+});
 
-function savePreferences() {
-  // Called from preferences modal
-  const consent = {
-    // Always true
-    essential: true,
-    preferences: document.getElementById('pref-preferences').checked,
-    analytics: document.getElementById('pref-analytics').checked,
-    timestamp: Date.now()
-  };
-  saveAndApplyConsent(consent);
-  document.getElementById('cookie-preferences-modal').style.display = 'none';
-}
+// Manage Preferences opens a native <dialog> (focus trap, Esc, backdrop built in);
+// its Save button is a normal POST to /server/consent with choice=save.
+// The no-JS fallback is the /server/privacy page, which renders the same form inline.
+document.querySelectorAll('[data-action="cookie-preferences"]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.getElementById('cookie-preferences-modal').showModal();
+  });
+});
+```
 
-function saveAndApplyConsent(consent) {
-  localStorage.setItem('cookieConsent', JSON.stringify(consent));
-  document.getElementById('cookie-consent').classList.add('cookie-banner--hidden');
-  applyConsent(consent);
-}
+**CCPA "Do Not Sell" (only when `server.privacy.data.sold = true`):**
 
-function applyConsent(consent) {
-  // Essential cookies always work (sessions, CSRF)
+The opt-out is a POST form on the privacy page; the server sets the `ccpa_opt_out=true` cookie (and downgrades `cookie_consent` to essential-only) and reads it on every request - see `privacyData()` in PART 12. No localStorage, no JS required; external JS may enhance the form for no-reload feedback.
 
-  // Preference cookies (theme, language)
-  if (consent.preferences) {
-    document.cookie = "preferencesEnabled=true; path=/; max-age=31536000";
-  }
+**Banner CSS (`static/css/components.css` - never inline):**
 
-  // Analytics (only if enabled AND server.tracking configured)
-  if (consent.analytics) {
-    loadTracking();
-  }
-}
-
-function loadTracking() {
-  // Load analytics if server.tracking is configured
-  // Tracking script is injected server-side via {{ trackingScript }} template function
-  // This function is called after user accepts cookies
-}
-
-// CCPA "Do Not Sell" - only shown when server.privacy.data.sold = true
-function initCCPA() {
-  const banner = document.getElementById('cookie-consent');
-  const dataSold = banner?.dataset.sold === 'true';
-
-  if (dataSold) {
-    // Check for existing "Do Not Sell" preference
-    const doNotSell = localStorage.getItem('ccpaDoNotSell') === 'true';
-    if (doNotSell) {
-      // Apply immediately - no third-party data sharing
-      applyCCPAOptOut();
-    }
-  }
-}
-
-function ccpaDoNotSell() {
-  // User opted out of data sales (CCPA right)
-  localStorage.setItem('ccpaDoNotSell', 'true');
-  applyCCPAOptOut();
-
-  // Also decline non-essential cookies
-  const consent = {
-    essential: true,
-    preferences: false,
-    analytics: false,
-    timestamp: Date.now(),
-    ccpaOptOut: true
-  };
-  saveAndApplyConsent(consent);
-}
-
-function applyCCPAOptOut() {
-  // Disable any third-party data sharing
-  // - Block analytics if configured
-  // - Set GPC (Global Privacy Control) signal
-  document.cookie = "ccpa_opt_out=true; path=/; max-age=31536000";
-}
-
-// Initialize CCPA on page load
-initCCPA();
-</script>
-
-<style>
+```css
 /* Cookie Consent Banner - matches reference design */
-.cookie-banner--hidden {
-  display: none;
-}
-
 .cookie-banner {
   position: fixed;
   bottom: 0;
@@ -28331,16 +28313,15 @@ initCCPA();
     padding: 0.5rem 1.25rem;
   }
 }
-</style>
 ```
 
 ### Consent Logic (Granular)
 
-**Consent stored as JSON:** `{"essential":true,"preferences":true,"analytics":false,"timestamp":1704067200}`
+**Consent stored as JSON in the `cookie_consent` cookie:** `{"essential":true,"preferences":true,"analytics":false,"timestamp":1704067200}`
 
 | Condition | Show Banner | Essential | Preferences | Analytics |
 |-----------|-------------|-----------|-------------|-----------|
-| No localStorage (first visit) | **Yes** | Yes (always) | Wait | Wait |
+| No `cookie_consent` cookie (first visit) | **Yes** | Yes (always) | Wait | Wait |
 | Accept All clicked | No | Yes | **Yes** | **Yes** (if `server.tracking` configured) |
 | Decline clicked | No | Yes | No | No |
 | Custom preferences saved | No | Yes | User choice | User choice |
@@ -28364,7 +28345,7 @@ initCCPA();
 | **Analytics/Tracking** | **NEVER loaded** | No tracking scripts injected, no data sent to analytics providers |
 | **Preference cookies** | **NOT set** | Theme defaults to system/dark, language defaults to browser/en |
 | **Essential cookies** | **Still work** | Session, CSRF, auth tokens required for app to function |
-| **localStorage** | **Minimal** | Only `cookieConsent` stored to remember decline |
+| **localStorage** | **Nothing** | Consent choice lives in the `cookie_consent` cookie (essential) - localStorage is never used for consent |
 | **Third-party scripts** | **NOT loaded** | No Google Analytics, Matomo, etc. |
 | **Embedded content** | **Placeholder shown** | YouTube, social embeds show "Content blocked" placeholder |
 
@@ -28372,7 +28353,7 @@ initCCPA();
 ```
 ✓ Session cookie (required for login/auth)
 ✓ CSRF token cookie (required for form security)
-✓ Remember decline choice (localStorage)
+✓ Remember decline choice (`cookie_consent` cookie - itself essential)
 ✓ Basic functionality (browse, view content)
 ```
 
@@ -28420,10 +28401,11 @@ func trackingScript(r *http.Request) template.HTML {
 {{ end }}
 
 <!-- Show placeholder for blocked embeds -->
+<!-- Link works without JS; external JS upgrades it to open the preferences <dialog> -->
 {{ if not preferencesAllowed }}
   <div class="embed-blocked">
     <p>External content blocked due to cookie preferences.</p>
-    <button onclick="showCookiePreferences()">Manage Preferences</button>
+    <a href="/server/privacy#cookie-preferences" data-action="cookie-preferences">Manage Preferences</a>
   </div>
 {{ else }}
   <!-- Actual embed -->
@@ -28584,8 +28566,15 @@ func trackingScript(r *http.Request) template.HTML {
     <p>We do not use analytics tracking on this site.</p>
     {{ end }}
 
-    <div class="manage-cookies">
-      <button onclick="showCookiePreferences()">Manage Cookie Preferences</button>
+    <!-- Granular preferences rendered inline - plain POST form, works without JS -->
+    <div class="manage-cookies" id="cookie-preferences">
+      <form method="post" action="/server/consent">
+        <input type="hidden" name="choice" value="save">
+        <label><input type="checkbox" checked disabled> Essential cookies (always on)</label>
+        <label><input type="checkbox" name="preferences" {{ if .Consent.Preferences }}checked{{ end }}> Preference cookies</label>
+        <label><input type="checkbox" name="analytics" {{ if .Consent.Analytics }}checked{{ end }}> Analytics cookies</label>
+        <button type="submit">Save Cookie Preferences</button>
+      </form>
     </div>
   </section>
 
@@ -28678,7 +28667,7 @@ func trackingScript(r *http.Request) template.HTML {
       <li><strong>Deletion:</strong> Delete your account and all associated data permanently.</li>
       {{ end }}
       <li><strong>Correction:</strong> Update or correct your personal information anytime.</li>
-      <li><strong>Cookie Control:</strong> <a href="#" onclick="showCookiePreferences()">Manage your cookie preferences</a></li>
+      <li><strong>Cookie Control:</strong> <a href="/server/privacy#cookie-preferences">Manage your cookie preferences</a></li>
     </ul>
   </section>
 
@@ -28697,14 +28686,21 @@ func trackingScript(r *http.Request) template.HTML {
     <div class="ccpa-opt-out-box">
       <h3>Do Not Sell My Personal Information</h3>
       <p>Click the button below to opt out of the sale of your personal information.</p>
+      <!-- Plain POST forms - server sets/clears the ccpa_opt_out cookie, works without JS -->
       {{ if .CCPAOptedOut }}
       <div class="ccpa-status opted-out">
         <span class="status-icon">✓</span>
         <span>You have opted out of data sales.</span>
       </div>
-      <button class="btn-secondary" onclick="ccpaOptIn()">Opt Back In</button>
+      <form method="post" action="/server/ccpa">
+        <input type="hidden" name="choice" value="opt-in">
+        <button class="btn-secondary" type="submit">Opt Back In</button>
+      </form>
       {{ else }}
-      <button class="btn-primary btn-ccpa-opt-out" onclick="ccpaDoNotSell()">Do Not Sell My Personal Information</button>
+      <form method="post" action="/server/ccpa">
+        <input type="hidden" name="choice" value="opt-out">
+        <button class="btn-primary btn-ccpa-opt-out" type="submit">Do Not Sell My Personal Information</button>
+      </form>
       {{ end }}
     </div>
 
@@ -28795,7 +28791,7 @@ func trackingScript(r *http.Request) template.HTML {
 - `content.consent_message`: From `GetConsentMessage()` (returns sold/not-sold message)
 - `content.data_usage`: From `GetDataUsageContent()` (returns sold/not-sold content)
 - `ccpa.applicable`: `true` only when `data.sold = true`
-- `ccpa` object: only included in the response when `data.sold = true`; `ccpa.user_opted_out` reflects the client's localStorage/cookie opt-out check
+- `ccpa` object: only included in the response when `data.sold = true`; `ccpa.user_opted_out` reflects the server-side check of the `ccpa_opt_out` cookie
 
 **Note:** The `tracking` and `third_party.services` fields are populated based on `server.tracking` config. If no tracking is configured, they remain empty.
 
@@ -45752,11 +45748,23 @@ func LanguageMiddleware(next http.Handler) http.Handler {
 **Language selector UI (in header/footer):**
 
 ```html
-<select onchange="window.location.search='?lang='+this.value" aria-label="{{t .Lang `common.select_language`}}">
-  {{range .AvailableLanguages}}
-    <option value="{{.Code}}" {{if eq .Code $.Lang}}selected{{end}}>{{.NativeName}}</option>
-  {{end}}
-</select>
+<!-- GET form - works without JS; the middleware reads ?lang= and sets the cookie -->
+<form method="get" class="lang-select">
+  <select name="lang" aria-label="{{t .Lang `common.select_language`}}">
+    {{range .AvailableLanguages}}
+      <option value="{{.Code}}" {{if eq .Code $.Lang}}selected{{end}}>{{.NativeName}}</option>
+    {{end}}
+  </select>
+  <button type="submit">{{t .Lang `common.submit`}}</button>
+</form>
+```
+
+```javascript
+// Enhancement in static/js/app.js: auto-submit on change, hide the Go button
+document.querySelectorAll('.lang-select select').forEach((sel) => {
+  sel.closest('form').querySelector('button').hidden = true;
+  sel.addEventListener('change', () => sel.form.submit());
+});
 ```
 
 **Shareable links:** Users can share `https://example.com/page?lang=fr` to force French for the recipient. After the first visit, the cookie persists and `?lang=` is no longer needed.
@@ -60518,7 +60526,7 @@ make docker
 - [ ] Theme system: light, dark, auto
 - [ ] Dark theme is DEFAULT
 - [ ] Theme toggle in UI
-- [ ] Theme persisted in localStorage
+- [ ] Theme persisted in `theme` cookie (guests) or per-user DB preference - server renders the theme class
 - [ ] NO inline CSS - external stylesheets only
 - [ ] NO JavaScript alerts - toast notifications
 - [ ] Mobile-first responsive design
@@ -61169,8 +61177,8 @@ make docker
 
 - [ ] Dark theme is DEFAULT
 - [ ] Light theme available
-- [ ] Auto theme (system preference)
-- [ ] Theme persisted in localStorage
+- [ ] Auto theme (system preference via CSS `prefers-color-scheme`)
+- [ ] Theme persisted in `theme` cookie (guests) or per-user DB preference - server renders the theme class
 - [ ] Theme toggle in UI
 - [ ] Same theme system everywhere
 
