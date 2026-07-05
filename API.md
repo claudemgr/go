@@ -14810,6 +14810,8 @@ server:
 | `backup.deleted` | Backup deleted | Filename |
 | `backup.failed` | Backup failed | Error message |
 | `server.started` | Application started | Version, mode |
+
+> **Suppression:** `scheduler.task_failed` is not emitted when `backup.failed` fires for the same execution — both would describe the same event. `scheduler.task_failed` fires only for tasks that produce no subsystem-specific audit event.
 | `server.stopped` | Application stopped | Reason, uptime |
 | `server.maintenance_entered` | Maintenance mode enabled | Reason |
 | `server.maintenance_exited` | Maintenance mode disabled | Duration |
@@ -26364,6 +26366,8 @@ Next run: {next_run}
 | `{size}` | Backup file size |
 | `{error}` | Error message (failed only) |
 
+**Suppression:** When `backup_failed` fires from a scheduled run, it suppresses the `scheduler_error` notification for the same execution. One notification, not two.
+
 ### ssl_expiring / ssl_renewed
 | Variable | Description |
 |----------|-------------|
@@ -26378,6 +26382,8 @@ Next run: {next_run}
 | `{task_name}` | Failed task name |
 | `{error}` | Error message |
 | `{next_run}` | Next scheduled run |
+
+**Suppression:** `scheduler_error` fires only for tasks that have no dedicated failure event of their own. It is suppressed when a subsystem emits a more specific failure notification for the same execution: `backup_failed` suppresses it for backup tasks. For `ssl_renewal` failures the UI emits `SSL renewal failed` (which suppresses the UI `Scheduler task failed` entry) but `scheduler_error` email still fires because there is no dedicated `ssl_renewal_failed` email template.
 
 ## Email Template Configuration
 
@@ -26498,7 +26504,7 @@ Templates are stored as files on disk. Override any built-in template by placing
 | SSL renewal failed | ERROR | ✓ | Critical - needs attention |
 | Update available | WARN | Optional | New version available (`update_check` task) |
 | Update installed | INFO | ✓ | Important change record |
-| Scheduler task failed | ERROR | ✓ | Needs attention when away |
+| Scheduler task failed | ERROR | ✓ | Needs attention when away (suppressed when `Backup failed` or `SSL renewal failed` fires for the same execution) |
 | Scheduler task success | — | ✗ | No notification needed (task log only) |
 | Rate limit exceeded | WARN | ✗ | Abuse detection notice |
 | IP blocked | WARN | Optional | Abuse detection |
