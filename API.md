@@ -14205,7 +14205,7 @@ func extractContextFromPath(path string) (*Context, error) {
 
 **`/.well-known/**` is a root-owned protocol/discovery namespace. It is NOT a general static-file bucket.**
 
-- `/.well-known/**` is reserved to the server and can NEVER be claimed by users, orgs, vanity routes, or operator-configured path settings
+- `/.well-known/**` is reserved to the server and can NEVER be claimed by user-supplied slugs, vanity routes, or operator-configured path settings
 - Well-known endpoints live only at the root `/.well-known/...` namespace, never under `/server/*` or `/api/*`
 - Only documented, allowlisted well-known entries may be served; unsupported entries MUST return `404 Not Found`
 - `GET` and `HEAD` are the only valid methods for `/.well-known/**`; other methods MUST return `405 Method Not Allowed`
@@ -21473,18 +21473,18 @@ dismissAllToasts();
 
 | Feature | Description |
 |---------|-------------|
-| **Source** | `server.banner` config block (see PART 17 → "Configuration"); empty `text` = no banner rendered |
+| **Source** | `web.announcements` config (see "Announcements"); each message whose `start`–`end` window is active renders as a banner; disabled or empty list = no banner |
 | **Placement** | Immediately after `<body>`, before `<main>` — rendered server-side in the base template, so there is no layout shift and no JS dependency |
-| **Types** | `info`, `warning`, `maintenance` |
-| **ARIA** | `role="status"` for `info`; `role="alert"` for `warning` and `maintenance` |
-| **Dismissal** | X button; dismissal key in `localStorage` is a hash of `type + text`, so an EDITED banner reappears for everyone |
-| **Expiry** | Optional `expires` (RFC 3339, UTC); past timestamp = banner not rendered |
-| **Stacking** | At most one config banner at a time; cookie consent and the PWA update banner use the same slot, ordered: cookie consent → config banner → PWA update |
+| **Types** | `info`, `warning`, `error`, `success` |
+| **ARIA** | `role="status"` for `info` and `success`; `role="alert"` for `warning` and `error` |
+| **Dismissal** | X button (only when `dismissible: true`); dismissal key in `localStorage` is the announcement `id`, so changing the `id` reshows the banner for everyone |
+| **Expiry** | Per-announcement `start`/`end` (ISO 8601, UTC); outside the window = banner not rendered |
+| **Stacking** | Multiple active announcements stack in config order; cookie consent and the PWA update banner share the slot, ordered: cookie consent → announcements → PWA update |
 
 **HTML Structure:**
 ```html
 <body>
-  <div class="site-banner site-banner-maintenance" role="alert">
+  <div class="site-banner site-banner-warning" role="alert" data-announcement-id="maintenance-2025-01">
     <span class="site-banner-icon" aria-hidden="true">⚠</span>
     <span class="site-banner-text">Scheduled maintenance: 2026-07-06 02:00–04:00 UTC</span>
     <button class="site-banner-close" aria-label="Dismiss announcement">&times;</button>
@@ -21508,7 +21508,7 @@ dismissAllToasts();
   color: var(--color-info-text);
 }
 
-.site-banner-warning, .site-banner-maintenance {
+.site-banner-warning, .site-banner-error {
   background: var(--color-warning-bg);
   color: var(--color-warning-text);
 }
@@ -21530,17 +21530,18 @@ dismissAllToasts();
 
 **Dismissal JavaScript:**
 ```javascript
-// Dismissal is keyed on banner content — editing the banner text or type resets dismissals
-const banner = document.querySelector(".site-banner");
-if (banner) {
-  const key = "banner_dismissed";
-  const sig = banner.className + "|" + banner.querySelector(".site-banner-text").textContent;
-  if (localStorage.getItem(key) === sig) banner.remove();
-  banner.querySelector(".site-banner-close").addEventListener("click", () => {
-    localStorage.setItem(key, sig);
+// Dismissal is keyed on the announcement id — changing the id resets dismissals
+document.querySelectorAll(".site-banner").forEach((banner) => {
+  const key = "announcement_dismissed:" + banner.dataset.announcementId;
+  if (localStorage.getItem(key)) {
+    banner.remove();
+    return;
+  }
+  banner.querySelector(".site-banner-close")?.addEventListener("click", () => {
+    localStorage.setItem(key, "1");
     banner.remove();
   });
-}
+});
 ```
 
 ### Theme Toggle
@@ -24457,6 +24458,51 @@ if err != nil {
 
 **Rule:** If `title` is empty, fall back to `{project_name}`. Other fields are optional.
 
+## Announcements
+
+**Operator messages (configured in `server.yml`) shown in UI for downtime notices, updates, etc.**
+
+Active announcements are rendered by the Site Banner (see PART 16 → "Site Banner") — multiple active announcements stack in config order.
+
+### Configuration
+
+```yaml
+web:
+  announcements:
+    enabled: true
+    # List of announcement messages
+    messages: []
+```
+
+### Announcement Structure
+
+```yaml
+messages:
+  - id: "maintenance-2025-01"
+    type: warning
+    # warning, info, error, success
+    title: "Scheduled Maintenance"
+    message: "The server will be down for maintenance on Jan 15, 2025 from 2-4 AM UTC."
+    start: "2025-01-14T00:00:00Z"
+    # When to start showing
+    end: "2025-01-15T04:00:00Z"
+    # When to stop showing
+    dismissible: true
+    # User can dismiss
+```
+
+### Announcements Configuration (config file)
+
+| Element | Config Key | Description |
+|---------|------------|-------------|
+| Enable announcements | `announcements.enabled` | Turn announcements on/off |
+| Type | `announcements[].type` | warning, info, error, success |
+| Title | `announcements[].title` | Short title |
+| Message | `announcements[].message` | Full message content |
+| Start date | `announcements[].start` | When to start showing (ISO 8601) |
+| End date | `announcements[].end` | When to stop showing (ISO 8601) |
+| Dismissible | `announcements[].dismissible` | Allow users to dismiss |
+
 ## CORS
 
 **Default CORS policy allows all origins (`*`).**
@@ -26338,7 +26384,7 @@ Templates are stored as files on disk. Override any built-in template by placing
 | Data | Where |
 |------|-------|
 | Visitor toasts | Ephemeral (DOM only, gone on dismiss) |
-| Banner dismissals | `localStorage` (client-side, keyed on banner content, visitor-clearable — same store as theme/language preferences) |
+| Banner dismissals | `localStorage` (client-side, keyed on announcement id, visitor-clearable — same store as theme/language preferences) |
 | Operator record | Structured logs + email (SMTP) |
 
 ## Sane Defaults
@@ -26348,7 +26394,7 @@ Templates are stored as files on disk. Override any built-in template by placing
 | Toast position | `top-right` | Corner for toast notifications |
 | Toast duration | `5` seconds | Auto-dismiss time (0 = manual) |
 | Error dismiss | `manual` | Errors require manual dismiss |
-| Banner type | `info` | Default banner type when `server.banner.type` is unset |
+| Banner type | `info` | Default announcement type when `announcements[].type` is unset |
 
 ## Operator Notification Preferences
 
@@ -26358,14 +26404,8 @@ Templates are stored as files on disk. Override any built-in template by placing
 
 ```yaml
 server:
-  # Site-wide announcement banner (server-rendered after <body>, before <main> — see PART 16)
-  banner:
-    # Empty = no banner rendered
-    text: ""
-    # info, warning, maintenance
-    type: info
-    # Optional RFC 3339 UTC timestamp; past = banner not rendered
-    expires: ""
+  # Site-wide announcement banners are configured under web.announcements (see "Announcements")
+  # and rendered server-side after <body>, before <main> — see PART 16 → "Site Banner"
 
   notifications:
     # Public WebUI toasts (client-side, visitor-facing only)
@@ -42393,7 +42433,7 @@ func BuildAPIURL(baseURL, path string, pathParams map[string]string, queryParams
 }
 
 // EncodePathSegment encodes a single path segment
-// Use for: slugs, org names, resource IDs, filenames
+// Use for: slugs, resource IDs, filenames
 func EncodePathSegment(segment string) string {
     return url.PathEscape(segment)
 }
