@@ -43284,7 +43284,7 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
 | Phase | Files | Run With | Tests |
 |-------|-------|----------|-------|
 | **Phase 1 — Toolchain Gate** | `*_test.go` | `make test` | Source-code logic via `go test`; pre-commit gate |
-| **Phase 2 — Binary Validation** | `./tests/*.sh` | `./tests/run_tests.sh` | Compiled binary behavior — routes, auth, debugging |
+| **Phase 2 — Binary Validation** | `./tests/*.sh` | `./tests/run_tests.sh` | Compiled binary behavior — routes, auth, debugging — **manual, developer-initiated** |
 
 **Phase 1 — Toolchain Gate (`*_test.go`):**
 - Tests individual functions and packages via `go test` inside Docker
@@ -43293,7 +43293,7 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
 - Create or update the matching `*_test.go` immediately when you add or change package logic
 - Run with `make test`
 
-**Phase 2 — Binary Validation (`./tests/*.sh`):**
+**Phase 2 — Binary Validation (`./tests/*.sh`) — manual, developer-initiated:**
 - Tests the complete running server binary
 - Tests API endpoints, .txt extension, Accept headers
 - Tests authentication, admin routes
@@ -43325,7 +43325,7 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
 **Both test phases are REQUIRED for all projects:**
 
 1. **Phase 1 — Toolchain Gate** (`make test`) — source-code logic via `go test`, pre-commit gate
-2. **Phase 2 — Binary Validation** (`./tests/*.sh`) — compiled binary behavior, debugging
+2. **Phase 2 — Binary Validation** (`./tests/*.sh`) — compiled binary behavior, debugging — **manual, developer-initiated**
 
 **Integration tests MUST be comprehensive:**
 - ✓ Test ALL project-specific endpoints (IDEA.md)
@@ -43789,8 +43789,8 @@ verify_all_endpoints_tested
 |------|----------|---------|
 | **During development** | `make test` (Phase 1 — toolchain gate) | Fast feedback, verify source logic |
 | **Before committing** | `make test` (Phase 1 required) | Toolchain gate must pass before every commit |
-| **Before release** | `make test` + `./tests/incus.sh` | Phase 1 + Phase 2 binary validation |
-| **In CI/CD** | Phase 1 + Phase 2 | Toolchain gate + binary verification |
+| **Before release** | `make test` + `./tests/incus.sh` | Phase 1 + Phase 2 binary validation (manual) |
+| **In CI/CD** | Phase 1 only | Toolchain gate; Phase 2 is manual |
 
 **Test Execution Order:**
 ```bash
