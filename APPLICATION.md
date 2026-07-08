@@ -341,42 +341,35 @@ internal/
 
 **Binary naming rules:**
 
-Distribution artifact names follow the schema:
+Distribution artifact names use Go's native GOOS/GOARCH terms directly — no mapping or normalization:
 
 ```
-{project_name}-{platform}-{arch}{.ext}
+{project_name}-{GOOS}-{GOARCH}{.ext}
 ```
 
 | Token | Allowed values |
 |-------|----------------|
-| `{platform}` | `linux`, `windows`, `macos`, `freebsd`, `netbsd`, `openbsd` (lowercase, normalized OS name — never the raw `GOOS` value where it differs, e.g., `darwin` maps to `macos`) |
-| `{arch}` | `x86_64`, `aarch64`, `armv7`, `i686`, `riscv64`, … (architecture name normalized to match the `GOARCH` output) |
+| `{GOOS}` | `linux`, `darwin`, `windows`, `freebsd` (raw Go GOOS value — never aliases like `macos`) |
+| `{GOARCH}` | `amd64`, `arm64` (raw Go GOARCH value — never aliases like `x86_64` or `aarch64`) |
 | `{.ext}` | `.exe` on Windows; empty everywhere else |
-
-**Normalization rules:**
-- No `-musl` suffix on artifact names. `CGO_ENABLED=0` Go binaries are fully static on Linux without needing a musl target triple — there is nothing to call out in the filename.
-- `GOOS=darwin` maps to platform token `macos`.
-- `GOOS=windows` maps to platform token `windows`.
-- `GOOS=linux` maps to platform token `linux`.
-- Strip any OS suffix that does not correspond to a meaningful user-facing distinction.
 
 **Worked examples:**
 
 | GOOS / GOARCH | Artifact name |
 |---------------|---------------|
-| `linux` / `amd64` | `{project_name}-linux-x86_64` |
-| `linux` / `arm64` | `{project_name}-linux-aarch64` |
-| `linux` / `arm` (GOARM=7) | `{project_name}-linux-armv7` |
-| `windows` / `amd64` | `{project_name}-windows-x86_64.exe` |
-| `windows` / `arm64` | `{project_name}-windows-aarch64.exe` |
-| `darwin` / `amd64` | `{project_name}-macos-x86_64` |
-| `darwin` / `arm64` | `{project_name}-macos-aarch64` |
-| `freebsd` / `amd64` | `{project_name}-freebsd-x86_64` |
+| `linux` / `amd64` | `{project_name}-linux-amd64` |
+| `linux` / `arm64` | `{project_name}-linux-arm64` |
+| `darwin` / `amd64` | `{project_name}-darwin-amd64` |
+| `darwin` / `arm64` | `{project_name}-darwin-arm64` |
+| `windows` / `amd64` | `{project_name}-windows-amd64.exe` |
+| `windows` / `arm64` | `{project_name}-windows-arm64.exe` |
+| `freebsd` / `amd64` | `{project_name}-freebsd-amd64` |
+| `freebsd` / `arm64` | `{project_name}-freebsd-arm64` |
 
 **Other rules:**
 - Local (in-tree) primary binary name: `{project_name}` (no platform/arch suffix during local development inside the Docker image)
-- If optional helper binaries exist, use `{project_name}-{tool}` for the in-tree name and `{project_name}-{tool}-{platform}-{arch}{.ext}` for distribution
-- Checksum files mirror the artifact name plus `.sha256` (e.g., `{project_name}-linux-x86_64.sha256`)
+- If optional helper binaries exist, use `{project_name}-{tool}` for the in-tree name and `{project_name}-{tool}-{GOOS}-{GOARCH}{.ext}` for distribution
+- Checksum files mirror the artifact name plus `.sha256` (e.g., `{project_name}-linux-amd64.sha256`)
 
 **Single-binary rule:** the default user experience is "download one file, run it." The primary binary MUST be self-sufficient (PART 0 → "Self-Contained Assets"). Helper binaries are not a substitute for putting features into the primary binary; if a feature can live behind a CLI subcommand of the primary binary, it MUST.
 
@@ -609,7 +602,7 @@ This list is not exhaustive; treat it as the starting point. When introducing a 
 
 ## Go Commands
 
-**All Go invocations execute inside the project Docker container — never on the host.** The table below shows the *logical* command; the **actual** invocation is wrapped (e.g., `docker compose run --rm dev <cmd>` or `docker run --rm --name "{project_name}-XXXX" -v "$PWD":/work -w /work <image> <cmd>`). See "Docker Rule" below.
+**All Go invocations execute inside the project Docker container — never on the host.** The table below shows the *logical* command; the **actual** invocation is wrapped via the `GO_DOCKER` macro (see "Makefile Section" in PART 6 for the full macro definition). See "Docker Rule" below.
 
 | Logical Command | Purpose |
 |-----------------|---------|
@@ -624,28 +617,28 @@ This list is not exhaustive; treat it as the starting point. When introducing a 
 | `govulncheck ./...` | Vulnerability scanning |
 | `go run . -- [args]` | Execution (in container; with X11/Wayland forwarding if GUI) |
 
-**Examples of the actual wrapped form:**
+**Examples of the actual wrapped form (using the `GO_DOCKER` macro from the Makefile):**
 
 ```bash
 # Format check
-docker compose run --rm dev gofmt -l .
+$(GO_DOCKER) gofmt -l .
 
 # Lint
-docker compose run --rm dev golangci-lint run ./...
+$(GO_DOCKER) golangci-lint run ./...
 
 # Tests
-docker compose run --rm dev go test ./...
+$(GO_DOCKER) go test ./...
 
-# Release build (artifacts land in a mounted dist/ inside the container)
-docker compose run --rm \
-  -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=amd64 \
-  dev go build -ldflags="-s -w -X main.Version=$(cat release.txt)" \
-  -o dist/{project_name}-linux-x86_64 .
+# Release build (artifacts land in binaries/ via the mounted workspace)
+$(GO_DOCKER) \
+  sh -c "GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
+    -ldflags=\"-s -w -X main.Version=\$(cat release.txt)\" \
+    -o binaries/{project_name}-linux-amd64 ./src"
 
 # Run with display forwarding via the `gui` compose service, which mounts
 # the X11 / Wayland sockets and exports DISPLAY / WAYLAND_DISPLAY (see
 # "Docker Rule" → "X11 and Wayland Forwarding" for socket/env wiring).
-docker compose run --rm gui go run . -- --ui gui
+docker compose run --rm gui go run ./src -- --ui gui
 ```
 
 Bare `go …` invocations on the host are forbidden by PART 0 → "No Host Toolchain or Binary Execution."
@@ -681,12 +674,13 @@ var (
 **Full release build command (logical form — run inside the Docker container, not on the host):**
 ```bash
 go build \
+  -buildvcs=false -trimpath \
   -ldflags="-s -w \
     -X main.Version=$(cat release.txt) \
     -X main.CommitID=$(git rev-parse --short HEAD) \
     -X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
     -X main.OfficialSite=$(cat site.txt 2>/dev/null || true)" \
-  -o dist/{project_name}-linux-x86_64 .
+  -o binaries/{project_name}-linux-amd64 ./src
 ```
 
 ## Project Layout
@@ -695,9 +689,8 @@ go build \
 go.mod
 go.sum
 .go-version                 # single-line Go version pin, e.g. "go1.23.0"
-main.go                     # entry point — auto-detects GUI/TUI/CLI mode
-                            # (or cmd/{project_name}/main.go for multi-binary workspaces)
-internal/
+src/
+├── main.go                 # entry point — auto-detects GUI/TUI/CLI mode
 ├── app/                    # shared domain/application logic
 ├── config/                 # configuration loading + defaults
 ├── platform/               # OS/platform integration
@@ -730,8 +723,8 @@ The `assets/` directory in the repo holds source files (fonts, icons, default th
 
 ## Release Artifacts
 
-- Primary binary follows the naming schema `{project_name}-{platform}-{arch}{.ext}` defined in PART 2 → "Binary Model" — single statically linked file, no OS suffix artifacts
-- Each release MUST publish artifacts for at minimum: `{project_name}-linux-x86_64`, `{project_name}-linux-aarch64`, `{project_name}-windows-x86_64.exe`, `{project_name}-windows-aarch64.exe`, `{project_name}-macos-x86_64`, `{project_name}-macos-aarch64` (subset acceptable only when IDEA.md narrows platform scope)
+- Primary binary follows the naming schema `{project_name}-{GOOS}-{GOARCH}{.ext}` (Go's native GOOS/GOARCH terms: `linux/darwin/windows/freebsd`, `amd64/arm64`; `.exe` for windows) — single statically linked file, no platform-alias translations
+- Each release MUST publish artifacts for at minimum: `{project_name}-linux-amd64`, `{project_name}-linux-arm64`, `{project_name}-darwin-amd64`, `{project_name}-darwin-arm64`, `{project_name}-windows-amd64.exe`, `{project_name}-windows-arm64.exe`, `{project_name}-freebsd-amd64`, `{project_name}-freebsd-arm64` (subset acceptable only when IDEA.md narrows platform scope)
 - A static-linkage verification step is part of release: `ldd` / `otool -L` / `dumpbin /dependents` output is captured and checked against an allowlist (kernel vDSO, Apple system frameworks, Windows kernel32/user32 etc.) — anything outside the allowlist fails the release
 - No companion files (no `.so`, `.dylib`, `.dll`, no asset bundles, no font directories) ship next to the binary
 - Include SHA-256 checksums for every published artifact, named `{artifact}.sha256`
@@ -915,8 +908,13 @@ var (
 )
 ```
 
-**Makefile pattern for version injection:**
+**Makefile pattern for version injection and Docker build macro:**
 ```makefile
+PROJECTNAME := {project_name}
+PROJECTORG  := {project_org}
+BINDIR      := binaries
+RELDIR      := releases
+
 VERSION     ?= $(shell cat release.txt 2>/dev/null || echo "devel")
 COMMIT_ID   := $(shell git rev-parse --short HEAD 2>/dev/null || echo "N/A")
 BUILD_DATE  := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -928,8 +926,39 @@ LDFLAGS := -s -w \
   -X main.BuildDate=$(BUILD_DATE) \
   -X main.OfficialSite=$(SITE)
 
+GO_CACHE  ?= $(HOME)/go/pkg/mod
+GO_BUILD  ?= $(HOME)/.cache/go-build/$(PROJECTNAME)
+
+DOCKER_MEM  ?= 4g
+DOCKER_CPUS ?= 2
+
+GO_DOCKER := docker run --rm \
+	--name $(PROJECTNAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
+	--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) \
+	-v $(PWD):/app \
+	-v $(GO_CACHE):/usr/local/share/go/pkg/mod \
+	-v $(GO_BUILD):/usr/local/share/go/cache \
+	-w /app \
+	-e CGO_ENABLED=0 \
+	-e GOFLAGS=-buildvcs=false \
+	casjaysdev/go:latest
+
 build:
-	go build -ldflags="$(LDFLAGS)" -o dist/{project_name} .
+	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
+	$(GO_DOCKER) go build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BINDIR)/$(PROJECTNAME) ./src
+
+test:
+	@mkdir -p $(GO_CACHE) $(GO_BUILD)
+	@$(GO_DOCKER) sh -c " \
+		mkdir -p \"/tmp/$(PROJECTORG)\" && \
+		COVDIR=\$$(mktemp -d \"/tmp/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX\") && \
+		go test -v -cover -coverprofile=\$$COVDIR/coverage.out ./... && \
+		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep total | awk '{print \$$3}' | sed 's/%//') && \
+		echo \"Coverage: \$$COVERAGE%\" && \
+		if [ \$$(echo \"\$$COVERAGE < 60\" | bc -l) -eq 1 ]; then \
+			echo \"ERROR: Coverage is \$$COVERAGE%, must be >= 60%\"; exit 1; \
+		fi && \
+		echo \"Tests complete - Coverage: \$$COVERAGE% (>= 60% required) ✓\""
 ```
 
 ---
@@ -1003,11 +1032,11 @@ All gates execute inside the project Docker container (PART 5 → "Docker Rule")
 
 | Gate | Logical Command | Wrapped Form (example) |
 |------|-----------------|------------------------|
-| Formatting | `gofmt -l .` | `docker compose run --rm dev gofmt -l .` |
-| Linting | `golangci-lint run ./...` | `docker compose run --rm dev golangci-lint run ./...` |
-| Tests | `go test ./...` | `docker compose run --rm dev go test ./...` |
-| Vet | `go vet ./...` | `docker compose run --rm dev go vet ./...` |
-| Vulnerability scan | `govulncheck ./...` | `docker compose run --rm dev govulncheck ./...` |
+| Formatting | `gofmt -l .` | `$(GO_DOCKER) gofmt -l .` |
+| Linting | `golangci-lint run ./...` | `$(GO_DOCKER) golangci-lint run ./...` |
+| Tests | `go test ./...` | `$(GO_DOCKER) go test ./...` |
+| Vet | `go vet ./...` | `$(GO_DOCKER) go vet ./...` |
+| Vulnerability scan | `govulncheck ./...` | `$(GO_DOCKER) govulncheck ./...` |
 | License enumeration | `go-licenses report ./...` | see PART 10 → "Suggested CI Steps" |
 | Attribution drift | `go-licenses report ./...` (output diffed against the GENERATED region of `LICENSE.md`) | see PART 10 → "Suggested CI Steps" |
 | GUI smoke (X11) | `go run . -- --ui gui` against an X11 socket | see PART 5 → "X11 and Wayland Forwarding" |
@@ -1183,70 +1212,68 @@ Equivalent Gitea/Forgejo/GitLab/Jenkins pipelines must enforce the same gates, n
 
 ## Suggested CI Steps
 
-CI runs every Go step inside the project's Docker image. CI MUST NOT install a Go toolchain on the runner and call `go` directly — it builds the project image (or pulls a cached one) and executes commands inside it.
+CI runs every Go step inside `casjaysdev/go:latest`. CI MUST NOT install a Go toolchain on the runner and call `go` directly — and MUST NOT run quality-gate commands inside the runtime image (`docker/Dockerfile`), which contains only the final binary. Use `casjaysdev/go:latest` for all build, test, lint, and vet steps.
 
 ```bash
 # Prepare output directory for release artifacts (binaries, checksums, SBOM)
-mkdir -p dist
+mkdir -p binaries
 
-# Build (or pull) the dev/build/test image
-docker build -t "$PROJECT_IMAGE" -f docker/Dockerfile .
-
-# Run quality gates inside the image
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" gofmt -l .
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" golangci-lint run ./...
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" go test ./...
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" go vet ./...
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" govulncheck ./...
+# Run quality gates inside casjaysdev/go:latest
+docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest gofmt -l .
+docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest golangci-lint run ./...
+docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest go test ./...
+docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest go vet ./...
+docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest govulncheck ./...
 
 # License enumeration and attribution-drift check:
 # Regenerate the GENERATED region and compare to committed.
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" \
-  go-licenses report ./... > LICENSE.generated.md
+docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest go-licenses report ./... > LICENSE.generated.md
 sed -n '/<!-- GENERATED:/,$p' LICENSE.md > LICENSE.committed-generated.md
 diff LICENSE.committed-generated.md LICENSE.generated.md
 
 # Build statically linked release binaries (one per supported target).
-for TARGET in "linux/amd64" "linux/arm64" "windows/amd64" "windows/arm64" "darwin/amd64" "darwin/arm64"; do
+for TARGET in "linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows/amd64" "windows/arm64" "freebsd/amd64" "freebsd/arm64"; do
   GOOS="${TARGET%/*}"
   GOARCH="${TARGET#*/}"
-
-  # Map GOOS/GOARCH → artifact name
-  case "$GOOS" in
-    linux)   PLATFORM=linux ;;
-    windows) PLATFORM=windows ;;
-    darwin)  PLATFORM=macos ;;
-  esac
-  case "$GOARCH" in
-    amd64) ARCH=x86_64 ;;
-    arm64) ARCH=aarch64 ;;
-  esac
   EXT=""
   [ "$GOOS" = "windows" ] && EXT=".exe"
-
-  ARTIFACT="{project_name}-${PLATFORM}-${ARCH}${EXT}"
+  ARTIFACT="{project_name}-${GOOS}-${GOARCH}${EXT}"
 
   docker run --rm \
     --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
-    -v "$PWD":/work -w /work \
-    -e CGO_ENABLED=0 -e GOOS="$GOOS" -e GOARCH="$GOARCH" \
-    "$PROJECT_IMAGE" \
-    go build \
+    -v "$PWD":/app -w /app \
+    -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false -e GOOS="$GOOS" -e GOARCH="$GOARCH" \
+    casjaysdev/go:latest \
+    go build -buildvcs=false -trimpath \
       -ldflags="-s -w -X main.Version=$(cat release.txt) -X main.CommitID=$(git rev-parse --short HEAD) -X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      -o "dist/$ARTIFACT" .
+      -o "binaries/$ARTIFACT" ./src
 
-  sha256sum "dist/$ARTIFACT" > "dist/$ARTIFACT.sha256"
+  sha256sum "binaries/$ARTIFACT" > "binaries/$ARTIFACT.sha256"
 
   # Verify static linkage on Linux
   if [ "$GOOS" = "linux" ]; then
-    docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" \
-      sh -c "ldd dist/$ARTIFACT 2>&1 | grep -qE 'not a dynamic executable|statically linked'"
+    docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+      -v "$PWD":/app -w /app casjaysdev/go:latest \
+      sh -c "ldd binaries/$ARTIFACT 2>&1 | grep -qE 'not a dynamic executable|statically linked'"
   fi
 done
 
 # Generate the SBOM (CycloneDX JSON) — published alongside the release artifacts.
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$PWD":/work -w /work "$PROJECT_IMAGE" \
-  cyclonedx-gomod app -json -output "dist/{project_name}-bom.json"
+docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest cyclonedx-gomod app -json -output "binaries/{project_name}-bom.json"
 ```
 
 For GUI smoke tests in CI, use a virtual X server (e.g., `Xvfb`) and a headless Wayland compositor (e.g., `cage`, `weston --backend=headless`) **inside** the container or as a sidecar service — both backends MUST be exercised, not just one.
@@ -1562,7 +1589,7 @@ All gates run inside the project Docker image — never on the host.
 - [ ] `LICENSE.md` regenerated and committed if `go.sum` changed; CI license-drift check is green
 - [ ] Distributed binary's actual license matches what README and "About" claim (no silent GPL/LGPL relicensing via a transitive module)
 - [ ] Artifact filenames follow `{project_name}-{platform}-{arch}{.ext}` with no OS suffix tokens
-- [ ] Artifacts cover the supported target matrix declared in IDEA.md (defaults: `{project_name}-linux-{x86_64,aarch64}`, `{project_name}-windows-{x86_64,aarch64}.exe`, `{project_name}-macos-{x86_64,aarch64}`)
+- [ ] Artifacts cover the supported target matrix declared in IDEA.md (defaults: `{project_name}-linux-{amd64,arm64}`, `{project_name}-darwin-{amd64,arm64}`, `{project_name}-windows-{amd64,arm64}.exe`, `{project_name}-freebsd-{amd64,arm64}`)
 - [ ] SBOM generated via `cyclonedx-gomod` and published with the release; provenance/attestation included when the platform supports it
 - [ ] Packaging metadata matches supported GUI/TUI/CLI surfaces
 

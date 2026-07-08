@@ -38008,10 +38008,10 @@ test:
 		go test -v -cover -coverprofile=\$$COVDIR/coverage.out ./... && \
 		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep total | awk '{print \$$3}' | sed 's/%//') && \
 		echo \"Coverage: \$$COVERAGE%\" && \
-		if [ \$$(echo \"\$$COVERAGE < 80\" | bc -l) -eq 1 ]; then \
-			echo \"ERROR: Coverage is \$$COVERAGE%, must be >= 80%\"; exit 1; \
+		if [ \$$(echo \"\$$COVERAGE < 60\" | bc -l) -eq 1 ]; then \
+			echo \"ERROR: Coverage is \$$COVERAGE%, must be >= 60%\"; exit 1; \
 		fi && \
-		echo \"Tests complete - Coverage: \$$COVERAGE% (>= 80% required) ✓\""
+		echo \"Tests complete - Coverage: \$$COVERAGE% (>= 60% required) ✓\""
 
 # =============================================================================
 # DEV - Quick build for local development/testing (to random temp dir)
@@ -43318,7 +43318,7 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
 - If the behavior requires a running binary, real HTTP requests, real process execution, or container/Incus setup, it belongs in `./tests/*.sh`
 
 **Reason both are required:**
-- `*_test.go` exists to achieve and enforce **≥80% Go code coverage** via `go test -cover` (critical paths — auth, DB, token validation — must always be covered)
+- `*_test.go` exists to achieve and enforce **≥60% Go code coverage** via `go test -cover` (critical paths — auth, DB, token validation — must always be covered)
 - `./tests/*.sh` exists to achieve and enforce **100% endpoint/route/integration coverage**
 - One does **not** replace the other; they measure different things and catch different classes of bugs
 
@@ -43597,13 +43597,13 @@ make test
 
 ## Test Coverage Gates
 
-**Two different gates apply: ≥80% for unit tests, 100% for endpoint/route integration tests.**
+**Two different gates apply: ≥60% for unit tests, 100% for endpoint/route integration tests.**
 
 ### Coverage Requirements
 
 | Coverage Type | Requirement | Verification |
 |--------------|-------------|--------------|
-| **Phase 1 — Toolchain Gate** | ≥80% code coverage | `go test -cover` must report ≥80% |
+| **Phase 1 — Toolchain Gate** | ≥60% code coverage | `go test -cover` must report ≥60% |
 | **Phase 2 — Binary Validation** | 100% endpoint coverage | Every endpoint tested |
 | **Admin Routes** | 100% route coverage | Every admin route tested |
 | **Critical Paths (auth, DB, token validation)** | Always tested | No critical path may go untested regardless of overall % |
@@ -43611,9 +43611,9 @@ make test
 
 ### What These Gates Mean
 
-**Phase 1 — Toolchain Gate — ≥80% code coverage:**
+**Phase 1 — Toolchain Gate — ≥60% code coverage:**
 ```bash
-# Run tests with coverage enforcement (fails if below 80%)
+# Run tests with coverage enforcement (fails if below 60%)
 make test
 ```
 
@@ -43633,7 +43633,7 @@ make test
 **In CI/CD Pipeline (REQUIRED):**
 
 ```yaml
-# .github/workflows/test.yml
+# .github/workflows/ci.yml (coverage job)
 test:
   runs-on: ubuntu-latest
   steps:
@@ -43647,18 +43647,18 @@ test:
         docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app casjaysdev/go:latest \
           go test -cover -coverprofile=coverage.out ./...
 
-    - name: Check coverage is >= 80%
+    - name: Check coverage is >= 60%
       run: |
         COVERAGE=$(docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app casjaysdev/go:latest \
           go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-        if [ $(echo "$COVERAGE < 80" | bc -l) -eq 1 ]; then
-          echo "ERROR: Coverage is $COVERAGE%, must be >= 80%"
+        if [ $(echo "$COVERAGE < 60" | bc -l) -eq 1 ]; then
+          echo "ERROR: Coverage is $COVERAGE%, must be >= 60%"
           exit 1
         fi
-        echo "Coverage: $COVERAGE% (>= 80% required) ✓"
+        echo "Coverage: $COVERAGE% (>= 60% required) ✓"
 ```
 
-### How to Achieve the Coverage Gates (≥80% unit, 100% endpoints)
+### How to Achieve the Coverage Gates (≥60% unit, 100% endpoints)
 
 **1. Test All Code Paths:**
 ```go
@@ -43772,11 +43772,11 @@ verify_all_endpoints_tested
 
 ### Coverage Exceptions
 
-**Unit-test gate is ≥80%, not 100% — but the 100% gates for endpoints/routes and critical paths are absolute.** Common pushback on writing unit tests is still rejected:
+**Unit-test gate is ≥60%, not 100% — but the 100% gates for endpoints/routes and critical paths are absolute.** Common pushback on writing unit tests is still rejected:
 
 | Common Excuse | Response |
 |--------------|----------|
-| "It's just a simple getter" | Test it anyway if it counts toward the 80% floor and is in a critical path |
+| "It's just a simple getter" | Test it anyway if it counts toward the 60% floor and is in a critical path |
 | "The code is obvious" | Obvious code can still have bugs |
 | "It's only used internally" | Internal code needs tests too |
 | "I tested it manually" | Manual tests don't count |

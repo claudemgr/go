@@ -1,53 +1,31 @@
 # 🐹 claudemgr/go
 
-Comprehensive Go project specification for Claude AI — `API.md` is the single source of truth for how any CasjaysDev Go project is built, structured, and deployed.
+Template specifications for CasjaysDev Go projects. Each file is a master template — copied into a generated project as `AI.md` — covering the full project lifecycle from layout and build system through CI/CD, testing, and release.
 
-## 📄 What's in `API.md`
+## Templates
 
-A ~43,000-line spec covering the full project lifecycle across 34 PARTs:
+| File | App type | When to use |
+|------|----------|-------------|
+| `API.md` | REST / JSON API server | HTTP services that expose a structured API; may include a companion CLI client |
+| `APPLICATION.md` | Native GUI / TUI / CLI application | Single-binary desktop or terminal applications (Gio, Bubble Tea, Cobra) with no server component |
+| `SERVER.md` | Full-stack web server | Server-side rendered HTML with optional REST endpoints; similar to API but ships a frontend |
 
-| Topic | Coverage |
-|-------|----------|
-| **Project layout** | All Go source under `src/`; singular package dirs (`handler/`, `model/`, `middleware/`) |
-| **Build system** | Makefile for local dev / AI use; CI/CD uses direct `go build` commands — never `make` |
-| **Docker** | `casjaysdev/go:latest` only; `CGO_ENABLED=0`; `-buildvcs=false`; module cache bind-mounts |
-| **Binary naming** | `{name}-{GOOS}-{GOARCH}` — Go terms only (`linux/darwin/windows`, `amd64/arm64`) |
-| **LDFLAGS** | `-s -w -trimpath` required on `build`, `release`, `docker` targets |
-| **Auth** | Sessions, API tokens, RBAC, password hashing, CSRF/XSS/SSRF guards |
-| **Server** | HTTP handlers, middleware chain, server-side Go templates (no client-side rendering) |
-| **CLI / TUI** | Flag standards (`--debug`, `--color auto/yes/no`), NO_COLOR, cobra/pflag |
-| **Config & logging** | `log/slog`, structured text handler, no ANSI in log files |
-| **CI/CD** | GitHub Actions, GitLab CI, Gitea/Forgejo — SHA-pinned, direct cargo/go commands |
-| **Release** | Cross-platform binaries, Docker image, SBOM, signed artifacts |
-| **Testing** | Docker + Incus patterns, coverage enforcement (≥ 80%) |
-
-## 🔑 Core Rules
-
-- **Makefile = local development and AI-driven work only.** Targets: `build`, `release`, `docker`, `test`, `dev`, `clean`.
-- **CI/CD never uses `make`.** All pipeline jobs run direct `go build`/`go test` inside `casjaysdev/go:latest`.
-- **Never build on the host.** All compilation happens inside Docker.
-- `CGO_ENABLED=0` on every `go build` invocation — no exceptions.
-- `-buildvcs=false` required inline on all `go build` calls (and via `-e GOFLAGS=-buildvcs=false` in `GO_DOCKER`).
-
-## 📦 Module Cache
-
-| Variable | Local default | Container path |
-|----------|--------------|----------------|
-| `GO_CACHE` | `~/go/pkg/mod` | `/usr/local/share/go/pkg/mod` |
-| `GO_BUILD` | `~/.cache/go-build` | `/usr/local/share/go/cache` |
-
-## 📁 Files
+## Files
 
 | File | Purpose |
 |------|---------|
-| `API.md` | Full Go project specification — source of truth |
-| `IDEA.md` | Project-scope description and variables |
-| `CLAUDE.md` | Project loader — points Claude at `AI.md` and `IDEA.md` |
+| `API.md` | Go API server template — source of truth for API projects |
+| `APPLICATION.md` | Go application template — source of truth for GUI/TUI/CLI projects |
+| `SERVER.md` | Go web server template — source of truth for full-stack server projects |
+| `README.md` | This file |
+| `LICENSE.md` | Repository license (WTFPL) |
 
-## 👤 Author
+## Related
 
-**Jason Hempstead** · [GitHub](https://github.com/casjay) · [Casjays Developments](https://casjaysdev.pro)
+`IDEA.md` and `CLAUDE.md` are not stored here — they are generated inside each project that uses one of these templates. Global implementation conventions live in `~/.claude/memory/` (go_conventions.md, makefile_conventions.md, testing_conventions.md, etc.).
 
-## 📄 License
+## License
 
-MIT — see [LICENSE.md](LICENSE.md)
+This repository (the templates themselves) is licensed under **WTFPL** — see [LICENSE.md](LICENSE.md).
+
+Projects generated from these templates are licensed under **MIT** (each generated project ships its own `LICENSE.md`).
