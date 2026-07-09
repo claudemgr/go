@@ -801,7 +801,7 @@ jobs:
       image: casjaysdev/go:latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-      - run: make build
+      - run: go build -buildvcs=false -trimpath ./src
 ```
 
 ### X11 and Wayland Forwarding (Mandatory for GUI/Display Testing)
@@ -943,6 +943,11 @@ GO_DOCKER := docker run --rm \
 	-e GOFLAGS=-buildvcs=false \
 	casjaysdev/go:latest
 
+PLATFORMS ?= linux/amd64 linux/arm64
+REGISTRY  ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
+
+.PHONY: build release docker test dev clean
+
 build:
 	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	$(GO_DOCKER) go build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BINDIR)/$(PROJECTNAME) ./src
@@ -950,8 +955,8 @@ build:
 test:
 	@mkdir -p $(GO_CACHE) $(GO_BUILD)
 	@$(GO_DOCKER) sh -c " \
-		mkdir -p \"/tmp/$(PROJECTORG)\" && \
-		COVDIR=\$$(mktemp -d \"/tmp/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX\") && \
+		mkdir -p \"\$${TMPDIR:-/tmp}/$(PROJECTORG)\" && \
+		COVDIR=\$$(mktemp -d \"\$${TMPDIR:-/tmp}/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX\") && \
 		go test -v -cover -coverprofile=\$$COVDIR/coverage.out ./... && \
 		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep total | awk '{print \$$3}' | sed 's/%//') && \
 		echo \"Coverage: \$$COVERAGE%\" && \
@@ -959,6 +964,35 @@ test:
 			echo \"ERROR: Coverage is \$$COVERAGE%, must be >= 60%\"; exit 1; \
 		fi && \
 		echo \"Tests complete - Coverage: \$$COVERAGE% (>= 60% required) ✓\""
+
+release:
+	@mkdir -p $(BINDIR) $(RELDIR) $(GO_CACHE) $(GO_BUILD)
+	@for platform in $(PLATFORMS); do \
+		OS=$${platform%/*}; ARCH=$${platform#*/}; \
+		OUTPUT=$(BINDIR)/$(PROJECTNAME)-$$OS-$$ARCH; \
+		[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
+		echo "Building $$OS/$$ARCH..."; \
+		$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
+			go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" \
+			-o $$OUTPUT ./src" || exit 1; \
+	done
+	@cp $(BINDIR)/$(PROJECTNAME)-* $(RELDIR)/
+	@echo "$(VERSION)" > $(RELDIR)/version.txt
+
+docker:
+	docker buildx build \
+		--platform $(shell echo $(PLATFORMS) | tr ' ' ',') \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT_ID=$(COMMIT_ID) \
+		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		-t $(REGISTRY):$(VERSION) -t $(REGISTRY):latest \
+		-f docker/Dockerfile .
+
+dev: build
+	$(BINDIR)/$(PROJECTNAME)
+
+clean:
+	rm -rf $(BINDIR) $(RELDIR)
 ```
 
 ---

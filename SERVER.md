@@ -38006,8 +38006,8 @@ docker:
 test:
 	@echo "Running tests with coverage..."
 	@$(GO_DOCKER) sh -c " \
-		mkdir -p \"/tmp/$(PROJECTORG)\" && \
-		COVDIR=\$$(mktemp -d \"/tmp/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX\") && \
+		mkdir -p \"\$${TMPDIR:-/tmp}/$(PROJECTORG)\" && \
+		COVDIR=\$$(mktemp -d \"\$${TMPDIR:-/tmp}/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX\") && \
 		go mod download && \
 		go test -v -cover -coverprofile=\$$COVDIR/coverage.out ./... && \
 		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep total | awk '{print \$$3}' | sed 's/%//') && \
