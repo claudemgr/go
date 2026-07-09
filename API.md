@@ -3944,8 +3944,8 @@ User preferences like theme, language, and UI settings can be stored client-side
 
 | Storage | Use Case | Persistence |
 |---------|----------|-------------|
-| Cookies | Theme, language, consent flags — anything the server reads to render pages | Configurable expiry |
-| `localStorage` | Client-only state the server must never receive (e.g. API tokens) | Until cleared |
+| Cookies | Theme, language, consent flags — anything the server reads to render pages; plus the `owner_token` cookie (HttpOnly + Secure + SameSite=Strict) set on web-form resource creation so token-gated web management works with JS disabled | Configurable expiry |
+| `localStorage` | Optional JS-enhancement copy of the resource-owner API token, and pure client-only state — never load-bearing; every flow must also work via the `owner_token` cookie with JS disabled | Until cleared |
 
 ## AI Implementation Process
 
@@ -11714,7 +11714,7 @@ POST /pastes
     }
   }
 ```
-The server generates the token, stores `SHA-256(token)` in `api_tokens` with `resource_type="paste"` and `resource_id="abc123"`, then returns the raw token **once**. It is never retrievable again. The client stores it in `localStorage`.
+The server generates the token, stores `SHA-256(token)` in `api_tokens` with `resource_type="paste"` and `resource_id="abc123"`, then returns the raw token **once**. It is never retrievable again. API clients store it themselves (config file, env var). Browsers get **dual delivery**: the web-form create response shows the token once (copy button) AND sets an `owner_token` cookie (HttpOnly + Secure + SameSite=Strict + Path=/, Max-Age matching the token lifetime), so web management works with JS disabled; JS may additionally save it to `localStorage` as a convenience copy — never load-bearing.
 
 **Ownership check (every write/delete on a resource):**
 1. Extract `Authorization: Bearer tok_...` header
@@ -11723,6 +11723,8 @@ The server generates the token, stores `SHA-256(token)` in `api_tokens` with `re
 4. Verify hash matches, `revoked_at IS NULL`, `expires_at > now()` or NULL
 5. Verify `resource_type` + `resource_id` match the target resource
 6. Update `last_used_at`
+
+**Cookie auth scope:** the EXISTING web management forms (plain `POST`: edit, delete — no new routes) MAY fall back to the `owner_token` cookie when no `Authorization` header is present — same hash + constant-time match + revoked/expiry/resource checks as the Bearer path. API routes (`/api/...`) accept the `Authorization` header ONLY and MUST ignore cookies — no ambient authority for programmatic endpoints. `SameSite=Strict` plus POST-only mutations keeps the web fallback CSRF-safe.
 
 **Anonymous access** (no `Authorization` header): allowed for all public GET endpoints, subject to default rate limits.
 
@@ -22351,21 +22353,21 @@ async function checkLocationPermission() {
 
 | Storage | Use Case | Cleared |
 |---------|----------|---------|
-| **localStorage** | API token (optional) | Manual/revocation |
+| **Cookies** | `owner_token` (HttpOnly + Secure + SameSite=Strict) — primary browser storage; enables no-JS web management. UI preferences (theme, lang) | Expiry/revocation |
+| **localStorage** | API token — optional JS convenience copy (copy button, pre-fill); never load-bearing | Manual/revocation |
 | **IndexedDB** | Offline data, cached responses | Manual/revocation |
-| **Cookies** | Bearer token (httpOnly fallback), UI preferences (theme, lang) | Expiry/revocation |
 
 **Token persists when:**
 - App is closed and reopened
 - Device is restarted
 - Switching between browser and installed PWA
 
-**Token revocation clears credentials** (UI preferences are kept — they are not sensitive):
+**Token revocation clears credentials** (UI preferences are kept — they are not sensitive). No dedicated route: the `owner_token` cookie simply expires via its Max-Age, and uninstalling the PWA or clearing site data removes the cookie and all local copies. The JS enhancement clears local copies without waiting for that:
 
 ```javascript
-// Revoke local token — keeps UI preferences (theme, lang) intact
+// Clear local token copies — keeps UI preferences (theme, lang) intact
 async function revokeLocalToken() {
-  // Remove stored API token
+  // Remove the optional localStorage copy; the owner_token cookie expires via Max-Age
   localStorage.removeItem('api_token');
 
   // Clear any cached private/token-scoped data from IndexedDB
@@ -22383,7 +22385,7 @@ async function revokeLocalToken() {
 
 ### Client-Side Preferences (cookies)
 
-**User preferences are stored in cookies — the server reads them to render pages (theme class, language) with zero server persistence and zero user account needed. localStorage is reserved for values the server must never receive automatically (the API token).**
+**User preferences are stored in cookies — the server reads them to render pages (theme class, language) with zero server persistence and zero user account needed. The `owner_token` cookie is HttpOnly and read only by WEB management routes — API routes ignore it entirely. localStorage holds only optional JS convenience copies; nothing stored there is load-bearing.**
 
 | Cookie | Values | Default |
 |--------|--------|---------|
