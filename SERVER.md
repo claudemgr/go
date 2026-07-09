@@ -24757,7 +24757,7 @@ textarea:user-invalid,
 | **HTTPS** | Required for service workers | Non-negotiable |
 | **Push Notifications** | Web Push API via Service Worker | User opt-in required |
 | **Geolocation** | GPS access via Geolocation API | User permission required |
-| **User Sessions** | Tokens in localStorage/IndexedDB | Persists across restarts |
+| **User Sessions** | HttpOnly session cookie (server-side) | Persists across restarts |
 | **Background Sync** | Queue actions when offline, sync when online | Seamless offline |
 | **App Updates** | Detect new SW version, prompt user | Keep app current |
 
@@ -25302,27 +25302,31 @@ async function checkLocationPermission() {
 
 ### User Sessions in PWA
 
-**PWA maintains user login across app restarts.**
+**PWA maintains user login across app restarts — via the server-side session cookie, never JS-held tokens.**
+
+The session lives in an `HttpOnly` + `Secure` + `SameSite` cookie. The browser sends it automatically on every request, it persists across app restarts natively, and JS cannot read it — no token-handling JavaScript exists. Session tokens NEVER go in localStorage or IndexedDB: anything XSS-readable is not a place for credentials.
 
 | Storage | Use Case | Cleared |
 |---------|----------|---------|
-| **localStorage** | Session token, user preferences | Manual/logout |
+| **Cookie (HttpOnly + Secure + SameSite)** | Session — sent automatically; unreadable by JS | Expiry/logout |
 | **IndexedDB** | Offline data, cached responses | Manual/logout |
-| **Cookies** | Server-side session (fallback) | Expiry/logout |
+| **localStorage** | Pure client-only state only (e.g. collapsed-panel state) — never session or auth data | Manual |
 
 **Session persists when:**
 - App is closed and reopened
 - Device is restarted
 - Switching between browser and installed PWA
 
-**Logout clears all:** localStorage, IndexedDB, service worker cache of user data.
+The cookie must set `Max-Age`/`Expires` (persistent cookie) — a session-scoped cookie is dropped when the app closes and login would not survive a restart.
+
+**Logout is a plain `POST /logout` form — works with zero JS.** The server destroys the session and expires the cookie. External JS enhances logout by also clearing client-side offline data:
 
 ```javascript
-// Complete logout - clear all user data
-async function logout() {
-  // Clear localStorage
-  localStorage.removeItem('auth_token');
-  localStorage.removeItem('user_prefs');
+// Logout enhancement - the server already destroyed the session and expired the
+// cookie via POST /logout; this only clears client-side offline data
+async function clearClientData() {
+  // Clear client-only state (the session was never stored here)
+  localStorage.clear();
 
   // Clear IndexedDB
   const databases = await indexedDB.databases();
