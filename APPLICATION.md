@@ -1021,6 +1021,73 @@ All machine-dependent settings MUST be detected at runtime on the target machine
 - CLI override wins over env; env wins over config; config wins over defaults
 - Secrets must not be stored in world-readable files
 
+## Logging & Log Rotation
+
+Applications write `app.log` and `error.log` to the platform log directory. Rotation is built in — no external logrotate needed. Same `rotate`/`keep` schema as the SERVER template.
+
+### Rotation Options
+
+| Option | Description |
+|--------|-------------|
+| `never` | Never rotate |
+| `daily` | Rotate daily |
+| `weekly` | Rotate weekly |
+| `monthly` | Rotate monthly |
+| `yearly` | Rotate yearly |
+| `NMB` | Rotate at N megabytes (e.g., `50MB`) |
+| `NGB` | Rotate at N gigabytes (e.g., `1GB`) |
+| Combined | Time + size, whichever first (e.g., `weekly,50MB`) |
+
+### Retention Options
+
+| Option | Description |
+|--------|-------------|
+| `none` | Do not keep old logs (delete after rotation) |
+| `N` | Keep N old log files |
+| `Nd` | Keep logs for N days |
+| `Nw` | Keep logs for N weeks |
+| `Nm` | Keep logs for N months |
+| `forever` | Keep forever (no automatic deletion) |
+
+### Configuration
+
+```yaml
+logging:
+  # Global log level: debug, info, warn, error
+  level: warn
+
+  # All log types share these options:
+  #   filename: name of log file
+  #   format: output format (text, json)
+  #   rotate: rotation policy
+  #   keep: retention policy
+  #   compress: compress rotated logs (only useful if keep > 0)
+
+  app:
+    filename: app.log
+    format: text
+    rotate: weekly,50MB
+    keep: none
+    compress: false
+
+  error:
+    filename: error.log
+    format: text
+    rotate: weekly,50MB
+    keep: none
+    compress: false
+```
+
+### Defaults
+
+| Log Type | Rotation | Keep |
+|----------|----------|------|
+| app.log | weekly,50MB | none |
+| error.log | weekly,50MB | none |
+
+- `weekly,50MB` = rotate on weekly OR 50MB, whichever comes first
+- `keep: none` = do not retain old logs (default) — deleted immediately after rotation
+
 ## Standard CLI Flags
 
 ### Universal Flags (ALL Binaries)

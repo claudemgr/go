@@ -9063,8 +9063,7 @@ server:
         enabled: true
         # Daily: midnight
         schedule: "0 0 * * *"
-        max_age: 30d
-        max_size: 100MB
+        # Size/age limits come from each log's rotate/keep policy (server.logs)
       session_cleanup:
         enabled: true
         # Hourly
@@ -11121,7 +11120,7 @@ PHASE 5: Server startup (actual server start)
 14. Reconfigure logging from config:
     ├─ Set log level from server.logging.level
     ├─ Set log format from server.logging.format
-    └─ Configure rotation (max_size, max_files)
+    └─ Configure rotation (per-log rotate/keep policies)
 
 15. Initialize database:
     ├─ Connect to database (SQLite: {data_dir}/db/server.db)
@@ -33212,11 +33211,7 @@ server:
       log_rotation:
         schedule: "0 0 * * *"
         enabled: true
-        # Delete logs older than 30 days
-        max_age: 30d
-        # Rotate when log exceeds 100MB
-        max_size: 100MB
-        compress: true
+        # Applies each log's rotate/keep/compress policy from server.logs
 
       # Daily backup at 02:00 (admin can disable)
       backup_daily:
