@@ -38843,8 +38843,8 @@ exec $APP_BIN $FLAGS "$@"
 ### Docker Compose Structure
 
 ```yaml
-# {project_name} - {brief description}
 # nginx proxy address - http://172.17.0.1:{port}
+# {project_name} - {brief description}
 
 name: {project_name}
 
@@ -38926,8 +38926,8 @@ services:
 ### Multi-Service Example
 
 ```yaml
-# {project_name} - with PostgreSQL + Valkey
 # nginx proxy address - http://172.17.0.1:64580
+# {project_name} - with PostgreSQL + Valkey
 
 name: {project_name}
 
@@ -39062,8 +39062,8 @@ networks:
 **All-in-One docker-compose (`docker/all-in-one.yml`):**
 
 ```yaml
-# {project_name} - All-in-One (app + embedded DB)
 # nginx proxy address - http://172.17.0.1:64580
+# {project_name} - All-in-One (app + embedded DB)
 # Usage: docker compose -f all-in-one.yml up -d
 
 name: {project_name}
