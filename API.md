@@ -2202,14 +2202,14 @@ server:
 
 ## How to Read This Large File
 
-**AI.md is ~1.7MB and ~45,610 lines. You CANNOT read it all at once. Follow these procedures.**
+**AI.md is ~1.7MB and ~45,620 lines. You CANNOT read it all at once. Follow these procedures.**
 
 ### File Size Reality
 
 | Constraint | Value |
 |------------|-------|
 | File size | ~1.7MB |
-| Line count | ~45,610 lines |
+| Line count | ~45,620 lines |
 | Read limit | ~500 lines per read |
 | Full reads needed | ~92 reads (impractical) |
 
@@ -2230,31 +2230,31 @@ server:
 | 6 | ~8601 | Application Modes | Mode handling, debug endpoints |
 | 7 | ~9210 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
 | 8 | ~9941 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color/--lang flags** |
-| 9 | ~12816 | Error Handling & Caching | Error/cache patterns |
-| 10 | ~13171 | Database | Database work |
-| 11 | ~13577 | Security & Logging | Security features, **Resource Owner Tokens**, **Context Detection** |
-| 12 | ~15603 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
-| 13 | ~16977 | Health & Versioning | Health endpoints |
-| 14 | ~17603 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
-| 15 | ~19297 | SSL/TLS & Let's Encrypt | SSL certificates |
-| 16 | ~20244 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~26261 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 18 | ~26827 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 19 | ~27252 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
-| 20 | ~27361 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 21 | ~28750 | Backup & Restore | Backup features, **Compliance encryption** |
-| 22 | ~29300 | Update Command | Update feature |
-| 23 | ~29839 | Privilege Escalation & Service | Service/privilege work |
-| 24 | ~30455 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 25 | ~30768 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 26 | ~31550 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 27 | ~32641 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 28 | ~35151 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 29 | ~36830 | ReadTheDocs Documentation | Documentation |
-| 30 | ~37624 | I18N & A11Y | Internationalization, **Translation parity (both binaries)**, **--lang flag** |
-| 31 | ~39027 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 32 | ~40386 | Client | Client **REQUIRED** — CLI/TUI/GUI, **Resource Owner Tokens**, **Smart Context**, **First-Run Wizard** |
-| 33 | ~43652 | IDEA.md Reference | **Examples only** - NEVER modify |
+| 9 | ~12825 | Error Handling & Caching | Error/cache patterns |
+| 10 | ~13180 | Database | Database work |
+| 11 | ~13586 | Security & Logging | Security features, **Resource Owner Tokens**, **Context Detection** |
+| 12 | ~15612 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
+| 13 | ~16986 | Health & Versioning | Health endpoints |
+| 14 | ~17612 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
+| 15 | ~19306 | SSL/TLS & Let's Encrypt | SSL certificates |
+| 16 | ~20253 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
+| 17 | ~26270 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 18 | ~26836 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 19 | ~27261 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
+| 20 | ~27370 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 21 | ~28759 | Backup & Restore | Backup features, **Compliance encryption** |
+| 22 | ~29309 | Update Command | Update feature |
+| 23 | ~29848 | Privilege Escalation & Service | Service/privilege work |
+| 24 | ~30464 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 25 | ~30777 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 26 | ~31559 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 27 | ~32650 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 28 | ~35160 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 29 | ~36839 | ReadTheDocs Documentation | Documentation |
+| 30 | ~37633 | I18N & A11Y | Internationalization, **Translation parity (both binaries)**, **--lang flag** |
+| 31 | ~39036 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 32 | ~40395 | Client | Client **REQUIRED** — CLI/TUI/GUI, **Resource Owner Tokens**, **Smart Context**, **First-Run Wizard** |
+| 33 | ~43661 | IDEA.md Reference | **Examples only** - NEVER modify |
 | FINAL | — | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
 
 ### How to Read This File
@@ -10261,6 +10261,8 @@ func EnsurePIDFile(path string, isRoot bool) error {
 
 **Stale PID detection is REQUIRED.** A crash or kill -9 leaves stale PID files.
 
+**Containers: no PID file.** When `isContainer()` is true, skip PID file creation and checking entirely (the `pidfile: true` config default is ignored). The container runtime supervises the process, and PIDs are namespace-local - a PID file on a mounted volume read from the host or another container points at the wrong process or produces a false "already running".
+
 ```go
 // CheckPIDFile checks if PID file exists and if the process is still running
 // Returns: (isRunning bool, pid int, err error)
@@ -10385,6 +10387,12 @@ func isOurProcess(pid int) bool {
 
 // WritePIDFile writes current process PID to file
 func WritePIDFile(pidPath string) error {
+    // Containers: skip entirely - the runtime supervises the process, and a
+    // namespace-local pid in a PID file is wrong when read across namespaces
+    if isContainer() {
+        return nil
+    }
+
     // Check for existing running instance first
     running, existingPID, err := CheckPIDFile(pidPath)
     if err != nil {
@@ -10408,6 +10416,7 @@ func RemovePIDFile(pidPath string) error {
 **Startup Flow:**
 
 ```
+0. Running in a container (isContainer()) -> skip PID file entirely
 1. Check if PID file exists
    ├─► No  → Create PID file, start server
    └─► Yes → Read PID from file
