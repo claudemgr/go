@@ -13807,11 +13807,17 @@ func IsValidSSLHost(host string) bool {
 - `X-Real-Port` - nginx alternative
 
 **Client IP Detection (for logging, rate limiting, GeoIP):**
-- `X-Forwarded-For` - Standard: may contain chain "client, proxy1, proxy2"
-- `X-Real-IP` - nginx: single IP
-- `CF-Connecting-IP` - Cloudflare
-- `True-Client-IP` - Akamai/Cloudflare Enterprise
-- `X-Client-IP` - Alternative
+
+| Priority | Source | Notes |
+|----------|--------|-------|
+| 1 | `CF-Connecting-IP` | Cloudflare — single IP |
+| 2 | `True-Client-IP` | Akamai / Cloudflare Enterprise — single IP |
+| 3 | `X-Real-IP` | nginx — single IP |
+| 4 | `X-Forwarded-For` | Standard chain "client, proxy1, proxy2" — take the leftmost entry |
+| 5 | `X-Client-IP` | Alternative — single IP |
+| 6 | `r.RemoteAddr` | Fallback — always used when the immediate peer is not in `trusted_proxies` |
+
+Headers 1–5 are only honored when the immediate TCP peer passes the `trusted_proxies` gate (PART 12 → "Trusted Proxies"); otherwise resolution skips straight to `r.RemoteAddr`. The resolved client IP feeds access logs, rate limiting, blocklists, and GeoIP — never trust evaluation (see "Middleware ordering" below).
 
 **Request ID (for tracing):**
 - `X-Request-ID` - Standard
@@ -18069,6 +18075,8 @@ server:
 | **Client IP** | `X-Real-IP`, `X-Forwarded-For`, `CF-Connecting-IP`, `True-Client-IP`, `X-Client-IP` |
 
 All of these headers are supported regardless of proxy vendor (Nginx, Caddy, HAProxy, Traefik, Apache, Cloudflare Tunnels, AWS ALB, etc.). Headers from non-trusted peers are dropped before resolution runs, so an attacker reaching the binary directly cannot inject a forged Host into the learned-origins list.
+
+**Middleware ordering — preserve the original TCP peer.** Any real-IP middleware that rewrites `r.RemoteAddr` with the resolved client IP MUST first store the original TCP peer address in the request context. `isTrustedPeer()` — and every `trusted_proxies` gate in the spec (`BuildURL(r, ...)`, `X-Forwarded-Prefix` handling, domain learning, CORS/CSP origin learning) — MUST evaluate that preserved original peer, never the rewritten value. Client-IP consumers (rate limiting, blocklists, access logs, GeoIP) use the resolved client IP. Rewriting first and trust-checking later makes every later gate judge the end client's public IP: proxy headers are silently dropped and `{proto}` downgrades to `http` behind a working proxy.
 
 **Tor exception:** Tor requests bypass this gate entirely. When `tor.onion_address` is set and the incoming `Host` matches it, FQDN/proto/port are resolved from `tor.*` config — no proxy header inspection, no IP check. See "Tor Hidden Service Configuration" below.
 
