@@ -14421,7 +14421,7 @@ web:
 | `Expires` | YES | Expiration date (auto-renewed yearly by default) |
 | `Policy` | YES | Human-readable security page at `/server/security` — renders the same information as this file plus plain-language reporting instructions. See "Security Reports" → "Public Pages". |
 
-**URL resolution:** every `{proto}`/`{fqdn}` in this file — and in the generated `llms.txt` and the `/server/security` page — is resolved **per request** via `BuildURL(r, ...)` (PART 12 → "Resolution Order": reverse-proxy headers first, gated by `trusted_proxies`). Never build these URLs from values cached at startup: the URLs a client sees MUST match the Host/proto that client actually used, so `security.txt`, `/server/security`, and every other rendered URL can never disagree behind a reverse proxy.
+**URL resolution:** every `{proto}`/`{fqdn}` in this file — and in the generated `llms.txt` and the `/server/security` page — is resolved **per request** via `BuildURL(r, ...)` (PART 8 → "Resolution Order": reverse-proxy headers first, gated by `trusted_proxies`). Never build these URLs from values cached at startup: the URLs a client sees MUST match the Host/proto that client actually used, so `security.txt`, `/server/security`, and every other rendered URL can never disagree behind a reverse proxy.
 
 ### llms.txt (AI Discovery)
 
@@ -15731,7 +15731,7 @@ server:
     additional: []
 ```
 
-**Used by `X-Forwarded-*` trust gate.** Every header-based detection chain in the spec — `BuildURL(r, ...)` (PART 12 → "Resolution Order"), CORS allow-list resolution (PART 16), CSP `connect-src` learning, domain-learning algorithm — only honors the following proxy headers when the **immediate peer's IP** is in `trusted_proxies` (private ranges + the `additional` allow-list):
+**Used by `X-Forwarded-*` trust gate.** Every header-based detection chain in the spec — `BuildURL(r, ...)` (PART 8 → "Resolution Order"), CORS allow-list resolution (PART 16), CSP `connect-src` learning, domain-learning algorithm — only honors the following proxy headers when the **immediate peer's IP** is in `trusted_proxies` (private ranges + the `additional` allow-list):
 
 | Category | Trusted headers |
 |----------|----------------|
