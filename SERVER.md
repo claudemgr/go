@@ -2306,14 +2306,14 @@ server:
 
 ## How to Read This Large File
 
-**AI.md is ~2.4MB and ~62,270 lines. You CANNOT read it all at once. Follow these procedures.**
+**AI.md is ~2.4MB and ~62,280 lines. You CANNOT read it all at once. Follow these procedures.**
 
 ### File Size Reality
 
 | Constraint | Value |
 |------------|-------|
 | File size | ~2.4MB |
-| Line count | ~62,270 lines |
+| Line count | ~62,280 lines |
 | Read limit | ~500 lines per read |
 | Full reads needed | ~125 reads (impractical) |
 
@@ -2340,30 +2340,30 @@ server:
 | 12 | ~17925 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
 | 13 | ~19404 | Health & Versioning | Health endpoints |
 | 14 | ~20204 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
-| 15 | ~21943 | SSL/TLS & Let's Encrypt | SSL certificates |
-| 16 | ~22915 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~29287 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API**, **Blocklists**, **Allowlist**, **GeoIP** |
-| 18 | ~31767 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 19 | ~33110 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 20 | ~33608 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
-| 21 | ~33707 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 22 | ~35154 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
-| 23 | ~35925 | Update Command | Update feature |
-| 24 | ~36465 | Privilege Escalation & Service | Service/privilege work |
-| 25 | ~37374 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 26 | ~37687 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 27 | ~38485 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 28 | ~39992 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 29 | ~43108 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 30 | ~45046 | ReadTheDocs Documentation | Documentation |
-| 31 | ~45876 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
-| 32 | ~47860 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 33 | ~49644 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
-| 34 | ~54412 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
-| 35 | ~58460 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
-| 36 | ~59145 | Custom Domains | **OPTIONAL** - user/org branded domains |
-| 37 | ~60193 | IDEA.md Reference | **Examples only** - NEVER modify |
-| FINAL | ~60425 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
+| 15 | ~21948 | SSL/TLS & Let's Encrypt | SSL certificates |
+| 16 | ~22920 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
+| 17 | ~29292 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API**, **Blocklists**, **Allowlist**, **GeoIP** |
+| 18 | ~31772 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 19 | ~33115 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 20 | ~33613 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
+| 21 | ~33712 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 22 | ~35159 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
+| 23 | ~35930 | Update Command | Update feature |
+| 24 | ~36470 | Privilege Escalation & Service | Service/privilege work |
+| 25 | ~37379 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 26 | ~37692 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 27 | ~38490 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 28 | ~39997 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 29 | ~43113 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 30 | ~45051 | ReadTheDocs Documentation | Documentation |
+| 31 | ~45881 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
+| 32 | ~47865 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 33 | ~49649 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
+| 34 | ~54417 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
+| 35 | ~58465 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
+| 36 | ~59150 | Custom Domains | **OPTIONAL** - user/org branded domains |
+| 37 | ~60198 | IDEA.md Reference | **Examples only** - NEVER modify |
+| FINAL | ~60430 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
 
 **When Implementing OPTIONAL PARTs (34-36, Agent from 33):**
 1. Change PART title from `OPTIONAL` → `NON-NEGOTIABLE` in AI.md
@@ -20207,6 +20207,11 @@ OS/Arch: {GOOS}/{GOARCH}
 - Admin Web Routes: PART 17 (Admin Panel)
 - Admin API Routes: PART 17 (Admin Panel → API Routes)
 - Project-specific Routes: IDEA.md
+
+## Authentication & CORS (Cross-References)
+
+- **Auth token extraction:** every auth-protected API endpoint MUST accept a valid token from ANY header in PART 8 → "Auth Token Headers (All Headers Supported)", plus the `?token=` query param, following the PART 8 priority order (first found wins). A valid token grants access regardless of which header carried it.
+- **CORS policy:** browser cross-origin rules for these endpoints — headers table, allow-list resolution order, and preflight caveats — are defined in PART 16 → "CORS".
 
 ## Legacy vs Compatibility Endpoints
 
