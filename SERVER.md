@@ -1580,7 +1580,7 @@ On EVERY new conversation or after "context compacted" message:
 - AI behavior: `.claude/rules/ai-rules.md` (PART 0, 1)
 - Project structure: `.claude/rules/project-rules.md` (PART 2, 3, 4)
 - Frontend/WebUI: `.claude/rules/frontend-rules.md` (PART 16, 17)
-- Full spec: `AI.md` (~55k lines) ← **SOURCE OF TRUTH**
+- Full spec: `AI.md` (~62k lines) ← **SOURCE OF TRUTH**
 
 ## Current Project State
 [AI updates this section as work progresses]
@@ -2306,16 +2306,16 @@ server:
 
 ## How to Read This Large File
 
-**AI.md is ~2.0MB and ~55,580 lines. You CANNOT read it all at once. Follow these procedures.**
+**AI.md is ~2.4MB and ~62,270 lines. You CANNOT read it all at once. Follow these procedures.**
 
 ### File Size Reality
 
 | Constraint | Value |
 |------------|-------|
-| File size | ~2.0MB |
-| Line count | ~55,580 lines |
+| File size | ~2.4MB |
+| Line count | ~62,270 lines |
 | Read limit | ~500 lines per read |
-| Full reads needed | ~110 reads (impractical) |
+| Full reads needed | ~125 reads (impractical) |
 
 **Use the PART index to find relevant sections, then read each section COMPLETELY.**
 
@@ -2325,45 +2325,45 @@ server:
 
 | PART | Line | Topic | When to Read |
 |------|------|-------|--------------|
-| 0 | ~1957 | AI Assistant Rules | **AI Behavior Rules**, **Translation Rule** |
-| 1 | ~3895 | Critical Rules | Read before implementing features |
-| 2 | ~5146 | License & Attribution | License requirements |
-| 3 | ~5480 | Project Structure | Setting up new project, **CI/CD badge detection** |
-| 4 | ~6441 | OS-Specific Paths | Path handling |
-| 5 | ~6635 | Configuration | Config file work, **Path Security**, **Privileged Ports**, **Escalation** |
-| 6 | ~8551 | Application Modes | Mode handling, debug endpoints |
-| 7 | ~9159 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
-| 8 | ~9808 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color/--lang flags** |
-| 9 | ~12985 | Error Handling & Caching | Error/cache patterns |
-| 10 | ~13362 | Database & Cluster | Database work |
-| 11 | ~13908 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
-| 12 | ~15944 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
-| 13 | ~17071 | Health & Versioning | Health endpoints |
-| 14 | ~17822 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
-| 15 | ~19455 | SSL/TLS & Let's Encrypt | SSL certificates |
-| 16 | ~20426 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~26599 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API**, **Blocklists**, **Allowlist**, **GeoIP** |
-| 18 | ~29010 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 19 | ~30333 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 20 | ~30818 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
-| 21 | ~30915 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 22 | ~32360 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
-| 23 | ~33089 | Update Command | Update feature |
-| 24 | ~33568 | Privilege Escalation & Service | Service/privilege work |
-| 25 | ~34477 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 26 | ~34661 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 27 | ~35438 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 28 | ~36946 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 29 | ~39880 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 30 | ~41719 | ReadTheDocs Documentation | Documentation |
-| 31 | ~42451 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
-| 32 | ~44413 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 33 | ~46165 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
-| 34 | ~50588 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
-| 35 | ~54240 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
-| 36 | ~54881 | Custom Domains | **OPTIONAL** - user/org branded domains |
-| 37 | ~55904 | IDEA.md Reference | **Examples only** - NEVER modify |
-| FINAL | ~56158 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
+| 0 | ~2458 | AI Assistant Rules | **AI Behavior Rules**, **Translation Rule** |
+| 1 | ~4315 | Critical Rules | Read before implementing features |
+| 2 | ~5626 | License & Attribution | License requirements |
+| 3 | ~5954 | Project Structure | Setting up new project, **CI/CD badge detection** |
+| 4 | ~6969 | OS-Specific Paths | Path handling |
+| 5 | ~7165 | Configuration | Config file work, **Path Security**, **Privileged Ports**, **Escalation** |
+| 6 | ~9161 | Application Modes | Mode handling, debug endpoints |
+| 7 | ~9770 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
+| 8 | ~10510 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color/--lang flags** |
+| 9 | ~13919 | Error Handling & Caching | Error/cache patterns |
+| 10 | ~14308 | Database & Cluster | Database work |
+| 11 | ~14919 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
+| 12 | ~17925 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
+| 13 | ~19404 | Health & Versioning | Health endpoints |
+| 14 | ~20204 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
+| 15 | ~21943 | SSL/TLS & Let's Encrypt | SSL certificates |
+| 16 | ~22915 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
+| 17 | ~29283 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API**, **Blocklists**, **Allowlist**, **GeoIP** |
+| 18 | ~31763 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 19 | ~33106 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 20 | ~33604 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
+| 21 | ~33703 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 22 | ~35150 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
+| 23 | ~35921 | Update Command | Update feature |
+| 24 | ~36461 | Privilege Escalation & Service | Service/privilege work |
+| 25 | ~37370 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 26 | ~37683 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 27 | ~38481 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 28 | ~39988 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 29 | ~43104 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 30 | ~45042 | ReadTheDocs Documentation | Documentation |
+| 31 | ~45872 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
+| 32 | ~47856 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 33 | ~49640 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
+| 34 | ~54408 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
+| 35 | ~58456 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
+| 36 | ~59141 | Custom Domains | **OPTIONAL** - user/org branded domains |
+| 37 | ~60189 | IDEA.md Reference | **Examples only** - NEVER modify |
+| FINAL | ~60421 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
 
 **When Implementing OPTIONAL PARTs (34-36, Agent from 33):**
 1. Change PART title from `OPTIONAL` → `NON-NEGOTIABLE` in AI.md
@@ -13966,7 +13966,7 @@ Error with structured context (validation, etc.):
 
 ### Error Codes
 
-**Standard error codes (see PART 16 for full list):**
+**Standard error codes (see PART 14 for full list):**
 
 | Code | HTTP | Message |
 |------|------|---------|
@@ -14492,7 +14492,7 @@ if err != nil && !isColumnExistsError(err) {
 | Term | What it is | Where it runs | Auth |
 |------|-----------|----------------|------|
 | **Cluster node** | Another instance of THIS server binary, sharing the same DB and cache, behind the same admin namespace | Anywhere reachable from the primary node | Internal — joins via the cluster join token; subsequent traffic uses the shared DB |
-| **Agent** (PART 33) | A separate, purpose-built `{project_name}-agent` binary on a remote machine reporting INTO the server | Customer / operator machines (web hosts, build runners, monitored machines) | Bearer token (`adm_agt_` / `usr_agt_` / `org_agt_`) — see PART 14 → Token Types |
+| **Agent** (PART 33) | A separate, purpose-built `{project_name}-agent` binary on a remote machine reporting INTO the server | Customer / operator machines (web hosts, build runners, monitored machines) | Bearer token (`adm_agt_` / `usr_agt_` / `org_agt_`) — see PART 34 → Token Types |
 
 Agents are NEVER cluster nodes; they don't share the DB; they don't get `app_secrets` distributed to them. Cluster nodes are NEVER agents; they don't register via `/agents/register`.
 
@@ -14991,7 +14991,7 @@ func isSerializationError(err error) bool {
 
 **Debug mode response shape:**
 
-When `DEBUG=true` is active and an error occurs, the canonical error body (PART 16 → "Error Response") gets an additional `_debug` field:
+When `DEBUG=true` is active and an error occurs, the canonical error body (PART 14 → "Error Response") gets an additional `_debug` field:
 
 ```json
 {
@@ -15028,7 +15028,7 @@ When `DEBUG=true` is active and an error occurs, the canonical error body (PART 
 | Timing oracles | n/a | `subtle.ConstantTimeCompare` for all secret comparisons | Identical response time for success/fail by adding artificial sleep when faster than threshold | n/a |
 | Credential stuffing | Rate limit per IP + per username + global | Argon2id on every login attempt (no "fast path" for unknown users) | Generic "invalid credentials" message | Account lockout after N failures |
 | Path traversal | Validate paths, reject `..` / null bytes | `filepath.Clean()` + base-dir confinement | n/a | OS-level read perms restrict reachable files |
-| Token / credential leakage | n/a | Never `slog.Info("token=", t)` — log token ID hash only | Sanitization layer strips known sensitive query params from URL fields in reports / logs / error contexts (see PART 14 → "Public Reports Scope") | TLS in transit (PART 15) |
+| Token / credential leakage | n/a | Never `slog.Info("token=", t)` — log token ID hash only | Sanitization layer strips known sensitive query params from URL fields in reports / logs / error contexts (see PART 34 → "Public Reports Scope") | TLS in transit (PART 15) |
 | CSRF | Validate Origin + same-origin check | n/a | CSRF token on cookie-authenticated state-changing requests (PART 16 → CSRF) | `SameSite=Strict` cookies (browser-level enforcement) |
 
 **Rule:** when implementing a feature, walk every layer. Don't assume "the input validator caught it" or "the output template will escape it" — write the code as if every other layer is broken.
@@ -15283,7 +15283,7 @@ web:
     # Per-feature config — see "Permissions-Policy Configuration" below.
 
   reports:
-    # Public reports endpoints (PART 14 → "Public Reports Scope").
+    # Public reports endpoints (PART 34 → "Public Reports Scope").
     # max reports/min/IP across all report types
     rate_limit_per_minute: 60
     # short-burst allowance
@@ -15392,7 +15392,7 @@ NEL: {"report_to":"default","max_age":2592000,"include_subdomains":true}
 
 **Network Error Logging (NEL — RFC draft, Chrome/Edge):** browser POSTs `application/reports+json` to `/api/{api_version}/server/reports/nel` for TLS handshake failures, DNS failures, TCP resets, HTTP errors. Sample rate `1.0` by default — drop to `0.1` on busy sites via `web.headers.nel.sample_rate`.
 
-**All report endpoints share the same Public Reports Scope** (PART 14) — same rate limits, same Output Sanitization Pipeline (PART 11), same Tier 2 visibility (no PII echoed back).
+**All report endpoints share the same Public Reports Scope** (PART 34) — same rate limits, same Output Sanitization Pipeline (PART 11), same Tier 2 visibility (no PII echoed back).
 
 ## Server-Timing (Debug Mode Only)
 
@@ -15421,7 +15421,7 @@ Server-Timing: db;dur=12.4, render;dur=3.1, total;dur=18.7
 
 **No declarations** = "everyone" defaults stay loose. The spec never tightens silently — every auto-tighten is logged to the setup audit so operators know what changed and why.
 
-**Strictest-wins:** when multiple compliances apply (e.g., `gdpr + hipaa + pci-dss`), the per-header strictest value wins, mirroring PART 12 → "Strictest-Wins Resolution".
+**Strictest-wins:** when multiple compliances apply (e.g., `gdpr + hipaa + pci-dss`), the per-header strictest value wins, mirroring PART 11 → "Compliance Requirements Matrix".
 
 ## Deprecated / Legacy Headers
 
@@ -15533,7 +15533,7 @@ Sends `Content-Security-Policy-Report-Only` instead of the enforcing header. Vio
 
 ### Reports Endpoint
 
-**See PART 14 → "Public Reports Scope" for the canonical reports endpoint pattern (`/api/{api_version}/server/reports/{name}`). All browser-emitted reports — CSP, NEL, deprecation, intervention, crash, default — share the same scope and shape.**
+**See PART 34 → "Public Reports Scope" for the canonical reports endpoint pattern (`/api/{api_version}/server/reports/{name}`). All browser-emitted reports — CSP, NEL, deprecation, intervention, crash, default — share the same scope and shape.**
 
 Server-side handling:
 - Accept `application/csp-report` (legacy) and `application/reports+json` (Reporting API)
@@ -27831,6 +27831,17 @@ web:
 | `cors: "https://a.com,https://b.com"` | Allow listed origins, credentials allowed |
 | `cors: ""` | No CORS headers (same-origin only) |
 | Preflight (OPTIONS) | Return CORS headers, 204 No Content |
+
+### CORS Allow-list Resolution Order
+
+The effective CORS allow-list is resolved from these sources in order; the request `Origin` is matched against the combined list:
+
+1. **Explicit config** — origins listed in `web.cors` (comma-separated). `""` disables CORS entirely and stops resolution.
+2. **DOMAIN env entries** — every hostname from the `DOMAIN` environment variable is added as an `https://` origin.
+3. **Reverse-proxy-learned hosts** — hostnames observed via `X-Forwarded-Host` from trusted proxies only (gated on `trusted_proxies` — see PART 12 → "Trusted Proxies") are appended at runtime.
+4. **Default** — if no source produced a list, fall back to `*` (credentials NOT allowed).
+
+Credentials (`Access-Control-Allow-Credentials: true`) are sent only when the resolved list is explicit — never with `*`. CSP `connect-src` `{learned_origins}` (PART 11 → "Content Security Policy") uses this same resolved list.
 
 ### Mode-Specific Behavior
 
@@ -56558,7 +56569,7 @@ PATCH /api/{api_version}/users/settings
 | `/api/graphql`, `/api/{api_version}/server/graphql` | POST | None for introspection; per-operation otherwise | GraphQL — see PART 14 GraphQL section for resolver-level auth |
 | `/api/autodiscover` | GET | None | Public client/agent auto-config |
 | `/api/{api_version}/server/healthz` | GET | None | Public JSON health |
-| `/api/{api_version}/server/reports/*` | POST | None | Public reports sink (CSP, NEL, deprecation, intervention, crash, error, default). See PART 14 → "Public Reports Scope". Browsers cannot present credentials when emitting these reports. Rate-limited per-IP. |
+| `/api/{api_version}/server/reports/*` | POST | None | Public reports sink (CSP, NEL, deprecation, intervention, crash, error, default). See PART 34 → "Public Reports Scope". Browsers cannot present credentials when emitting these reports. Rate-limited per-IP. |
 | `/server/security` | GET | None | Security overview page (HTML) — human-readable security.txt + reporting instructions. See PART 11 → "Security Reports". |
 | `/server/security/policy` | GET | None | Disclosure policy page (HTML). See PART 11 → "Security Reports". |
 | `/server/security/thanks` | GET | None | Acknowledgments / hall-of-fame (HTML). See PART 11. |
@@ -60027,7 +60038,7 @@ The discovered public IPs are safe to include in `/server/healthz` - same info a
 
 ## Error Handling
 
-**Uses standard error format (see PART 16). Domain-specific error codes:**
+**Uses standard error format (see PART 14). Domain-specific error codes:**
 
 | Error Code | HTTP | Description |
 |------------|------|-------------|
