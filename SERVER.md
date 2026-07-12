@@ -2307,14 +2307,14 @@ server:
 
 ## How to Read This Large File
 
-**AI.md is ~2.4MB and ~62,280 lines. You CANNOT read it all at once. Follow these procedures.**
+**AI.md is ~2.4MB and ~62,290 lines. You CANNOT read it all at once. Follow these procedures.**
 
 ### File Size Reality
 
 | Constraint | Value |
 |------------|-------|
 | File size | ~2.4MB |
-| Line count | ~62,280 lines |
+| Line count | ~62,290 lines |
 | Read limit | ~500 lines per read |
 | Full reads needed | ~125 reads (impractical) |
 
@@ -2335,36 +2335,36 @@ server:
 | 6 | ~9164 | Application Modes | Mode handling, debug endpoints |
 | 7 | ~9773 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
 | 8 | ~10513 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color/--lang flags** |
-| 9 | ~13922 | Error Handling & Caching | Error/cache patterns |
-| 10 | ~14311 | Database & Cluster | Database work |
-| 11 | ~14922 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
-| 12 | ~17928 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
-| 13 | ~19407 | Health & Versioning | Health endpoints |
-| 14 | ~20207 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
-| 15 | ~21951 | SSL/TLS & Let's Encrypt | SSL certificates |
-| 16 | ~22923 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~29295 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API**, **Blocklists**, **Allowlist**, **GeoIP** |
-| 18 | ~31775 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 19 | ~33118 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 20 | ~33616 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
-| 21 | ~33715 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 22 | ~35162 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
-| 23 | ~35933 | Update Command | Update feature |
-| 24 | ~36473 | Privilege Escalation & Service | Service/privilege work |
-| 25 | ~37382 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 26 | ~37695 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 27 | ~38493 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 28 | ~40000 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 29 | ~43116 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 30 | ~45054 | ReadTheDocs Documentation | Documentation |
-| 31 | ~45884 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
-| 32 | ~47868 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 33 | ~49652 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
-| 34 | ~54420 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
-| 35 | ~58468 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
-| 36 | ~59153 | Custom Domains | **OPTIONAL** - user/org branded domains |
-| 37 | ~60201 | IDEA.md Reference | **Examples only** - NEVER modify |
-| FINAL | ~60433 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
+| 9 | ~13930 | Error Handling & Caching | Error/cache patterns |
+| 10 | ~14319 | Database & Cluster | Database work |
+| 11 | ~14930 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
+| 12 | ~17936 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
+| 13 | ~19415 | Health & Versioning | Health endpoints |
+| 14 | ~20215 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
+| 15 | ~21959 | SSL/TLS & Let's Encrypt | SSL certificates |
+| 16 | ~22931 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
+| 17 | ~29303 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API**, **Blocklists**, **Allowlist**, **GeoIP** |
+| 18 | ~31783 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 19 | ~33126 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 20 | ~33624 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
+| 21 | ~33723 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 22 | ~35170 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
+| 23 | ~35941 | Update Command | Update feature |
+| 24 | ~36481 | Privilege Escalation & Service | Service/privilege work |
+| 25 | ~37390 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 26 | ~37703 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 27 | ~38501 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 28 | ~40008 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 29 | ~43124 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 30 | ~45062 | ReadTheDocs Documentation | Documentation |
+| 31 | ~45892 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
+| 32 | ~47876 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 33 | ~49660 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
+| 34 | ~54428 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
+| 35 | ~58476 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
+| 36 | ~59161 | Custom Domains | **OPTIONAL** - user/org branded domains |
+| 37 | ~60209 | IDEA.md Reference | **Examples only** - NEVER modify |
+| FINAL | ~60441 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
 
 **When Implementing OPTIONAL PARTs (34-36, Agent from 33):**
 1. Change PART title from `OPTIONAL` → `NON-NEGOTIABLE` in AI.md
@@ -10886,7 +10886,11 @@ func isProcessRunning(pid int) bool {
     }
     // On Unix, FindProcess always succeeds - need to send signal 0
     err = process.Signal(syscall.Signal(0))
-    return err == nil
+    if err == nil {
+        return true
+    }
+    // EPERM means the process exists but belongs to another user - it IS running
+    return errors.Is(err, syscall.EPERM)
 }
 
 // isOurProcess verifies the process is actually our binary (Unix)
@@ -10897,7 +10901,8 @@ func isOurProcess(pid int) bool {
         // On macOS/BSD, use ps command
         return isOurProcessDarwin(pid)
     }
-    return strings.Contains(filepath.Base(exePath), "{project_name}")
+    // Exact match - substring matching would also match {project_name}-cli
+    return filepath.Base(exePath) == "{project_name}"
 }
 
 // isOurProcessDarwin checks process on macOS/BSD
@@ -10907,7 +10912,8 @@ func isOurProcessDarwin(pid int) bool {
     if err != nil {
         return false
     }
-    return strings.Contains(string(output), "{project_name}")
+    // Exact match - substring matching would also match {project_name}-cli
+    return strings.TrimSpace(string(output)) == "{project_name}"
 }
 
 // --- pid_windows.go ---
@@ -10946,7 +10952,9 @@ func isOurProcess(pid int) bool {
         return false
     }
     exePath := windows.UTF16ToString(buf[:size])
-    return strings.Contains(strings.ToLower(filepath.Base(exePath)), "{project_name}")
+    // Exact match (case-insensitive) - substring matching would also match {project_name}-cli.exe
+    base := filepath.Base(exePath)
+    return strings.EqualFold(base, "{project_name}.exe") || strings.EqualFold(base, "{project_name}")
 }
 
 // WritePIDFile writes current process PID to file

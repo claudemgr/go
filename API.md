@@ -2230,31 +2230,31 @@ server:
 | 6 | ~8601 | Application Modes | Mode handling, debug endpoints |
 | 7 | ~9210 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
 | 8 | ~9941 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color/--lang flags** |
-| 9 | ~12808 | Error Handling & Caching | Error/cache patterns |
-| 10 | ~13163 | Database | Database work |
-| 11 | ~13569 | Security & Logging | Security features, **Resource Owner Tokens**, **Context Detection** |
-| 12 | ~15595 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
-| 13 | ~16969 | Health & Versioning | Health endpoints |
-| 14 | ~17595 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
-| 15 | ~19289 | SSL/TLS & Let's Encrypt | SSL certificates |
-| 16 | ~20236 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~26253 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 18 | ~26819 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 19 | ~27244 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
-| 20 | ~27353 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 21 | ~28742 | Backup & Restore | Backup features, **Compliance encryption** |
-| 22 | ~29292 | Update Command | Update feature |
-| 23 | ~29831 | Privilege Escalation & Service | Service/privilege work |
-| 24 | ~30447 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 25 | ~30760 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 26 | ~31542 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 27 | ~32633 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 28 | ~35143 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 29 | ~36822 | ReadTheDocs Documentation | Documentation |
-| 30 | ~37616 | I18N & A11Y | Internationalization, **Translation parity (both binaries)**, **--lang flag** |
-| 31 | ~39019 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 32 | ~40378 | Client | Client **REQUIRED** — CLI/TUI/GUI, **Resource Owner Tokens**, **Smart Context**, **First-Run Wizard** |
-| 33 | ~43644 | IDEA.md Reference | **Examples only** - NEVER modify |
+| 9 | ~12816 | Error Handling & Caching | Error/cache patterns |
+| 10 | ~13171 | Database | Database work |
+| 11 | ~13577 | Security & Logging | Security features, **Resource Owner Tokens**, **Context Detection** |
+| 12 | ~15603 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
+| 13 | ~16977 | Health & Versioning | Health endpoints |
+| 14 | ~17603 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
+| 15 | ~19297 | SSL/TLS & Let's Encrypt | SSL certificates |
+| 16 | ~20244 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
+| 17 | ~26261 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 18 | ~26827 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 19 | ~27252 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
+| 20 | ~27361 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 21 | ~28750 | Backup & Restore | Backup features, **Compliance encryption** |
+| 22 | ~29300 | Update Command | Update feature |
+| 23 | ~29839 | Privilege Escalation & Service | Service/privilege work |
+| 24 | ~30455 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 25 | ~30768 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 26 | ~31550 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 27 | ~32641 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 28 | ~35151 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 29 | ~36830 | ReadTheDocs Documentation | Documentation |
+| 30 | ~37624 | I18N & A11Y | Internationalization, **Translation parity (both binaries)**, **--lang flag** |
+| 31 | ~39027 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 32 | ~40386 | Client | Client **REQUIRED** — CLI/TUI/GUI, **Resource Owner Tokens**, **Smart Context**, **First-Run Wizard** |
+| 33 | ~43652 | IDEA.md Reference | **Examples only** - NEVER modify |
 | FINAL | — | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
 
 ### How to Read This File
@@ -10312,7 +10312,11 @@ func isProcessRunning(pid int) bool {
     }
     // On Unix, FindProcess always succeeds - need to send signal 0
     err = process.Signal(syscall.Signal(0))
-    return err == nil
+    if err == nil {
+        return true
+    }
+    // EPERM means the process exists but belongs to another user - it IS running
+    return errors.Is(err, syscall.EPERM)
 }
 
 // isOurProcess verifies the process is actually our binary (Unix)
@@ -10323,7 +10327,8 @@ func isOurProcess(pid int) bool {
         // On macOS/BSD, use ps command
         return isOurProcessDarwin(pid)
     }
-    return strings.Contains(filepath.Base(exePath), "{project_name}")
+    // Exact match - substring matching would also match {project_name}-cli
+    return filepath.Base(exePath) == "{project_name}"
 }
 
 // isOurProcessDarwin checks process on macOS/BSD
@@ -10333,7 +10338,8 @@ func isOurProcessDarwin(pid int) bool {
     if err != nil {
         return false
     }
-    return strings.Contains(string(output), "{project_name}")
+    // Exact match - substring matching would also match {project_name}-cli
+    return strings.TrimSpace(string(output)) == "{project_name}"
 }
 
 // --- pid_windows.go ---
@@ -10372,7 +10378,9 @@ func isOurProcess(pid int) bool {
         return false
     }
     exePath := windows.UTF16ToString(buf[:size])
-    return strings.Contains(strings.ToLower(filepath.Base(exePath)), "{project_name}")
+    // Exact match (case-insensitive) - substring matching would also match {project_name}-cli.exe
+    base := filepath.Base(exePath)
+    return strings.EqualFold(base, "{project_name}.exe") || strings.EqualFold(base, "{project_name}")
 }
 
 // WritePIDFile writes current process PID to file
