@@ -2342,28 +2342,28 @@ server:
 | 14 | ~20204 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
 | 15 | ~21943 | SSL/TLS & Let's Encrypt | SSL certificates |
 | 16 | ~22915 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~29283 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API**, **Blocklists**, **Allowlist**, **GeoIP** |
-| 18 | ~31763 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 19 | ~33106 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 20 | ~33604 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
-| 21 | ~33703 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 22 | ~35150 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
-| 23 | ~35921 | Update Command | Update feature |
-| 24 | ~36461 | Privilege Escalation & Service | Service/privilege work |
-| 25 | ~37370 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 26 | ~37683 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 27 | ~38481 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 28 | ~39988 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 29 | ~43104 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 30 | ~45042 | ReadTheDocs Documentation | Documentation |
-| 31 | ~45872 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
-| 32 | ~47856 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 33 | ~49640 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
-| 34 | ~54408 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
-| 35 | ~58456 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
-| 36 | ~59141 | Custom Domains | **OPTIONAL** - user/org branded domains |
-| 37 | ~60189 | IDEA.md Reference | **Examples only** - NEVER modify |
-| FINAL | ~60421 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
+| 17 | ~29285 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API**, **Blocklists**, **Allowlist**, **GeoIP** |
+| 18 | ~31765 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 19 | ~33108 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 20 | ~33606 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
+| 21 | ~33705 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 22 | ~35152 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
+| 23 | ~35923 | Update Command | Update feature |
+| 24 | ~36463 | Privilege Escalation & Service | Service/privilege work |
+| 25 | ~37372 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 26 | ~37685 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 27 | ~38483 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 28 | ~39990 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 29 | ~43106 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 30 | ~45044 | ReadTheDocs Documentation | Documentation |
+| 31 | ~45874 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
+| 32 | ~47858 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 33 | ~49642 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
+| 34 | ~54410 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
+| 35 | ~58458 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
+| 36 | ~59143 | Custom Domains | **OPTIONAL** - user/org branded domains |
+| 37 | ~60191 | IDEA.md Reference | **Examples only** - NEVER modify |
+| FINAL | ~60423 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
 
 **When Implementing OPTIONAL PARTs (34-36, Agent from 33):**
 1. Change PART title from `OPTIONAL` → `NON-NEGOTIABLE` in AI.md
@@ -27818,9 +27818,11 @@ web:
 |--------|-------|
 | `Access-Control-Allow-Origin` | Configured origin(s) or `*` |
 | `Access-Control-Allow-Methods` | `GET, POST, PUT, PATCH, DELETE, OPTIONS` |
-| `Access-Control-Allow-Headers` | `*` |
+| `Access-Control-Allow-Headers` | `Content-Type, Accept, X-Requested-With, Authorization, X-API-Key, X-Api-Key, API-Key, ApiKey, X-Auth-Token, X-Access-Token, X-Token, Token, X-CSRF-Token, X-XSRF-Token, X-Session-ID, X-Service-Token, X-Internal-Token` |
 | `Access-Control-Allow-Credentials` | `true` (only when specific origin, not `*`) |
 | `Access-Control-Max-Age` | `86400` (24 hours) |
+
+**Never `*` here:** the Fetch spec's `Access-Control-Allow-Headers: *` wildcard does NOT cover `Authorization`, and wildcards are invalid when credentials are allowed. Every supported auth header is listed by name — keep in sync with PART 8 → "Auth Token Headers (All Headers Supported)".
 
 ### Behavior
 
