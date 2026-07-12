@@ -2237,23 +2237,23 @@ server:
 | 14 | ~17592 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
 | 15 | ~19281 | SSL/TLS & Let's Encrypt | SSL certificates |
 | 16 | ~20228 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~26243 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 18 | ~26809 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 19 | ~27234 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
-| 20 | ~27343 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 21 | ~28732 | Backup & Restore | Backup features, **Compliance encryption** |
-| 22 | ~29282 | Update Command | Update feature |
-| 23 | ~29821 | Privilege Escalation & Service | Service/privilege work |
-| 24 | ~30437 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 25 | ~30750 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 26 | ~31532 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 27 | ~32623 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 28 | ~35133 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 29 | ~36812 | ReadTheDocs Documentation | Documentation |
-| 30 | ~37606 | I18N & A11Y | Internationalization, **Translation parity (both binaries)**, **--lang flag** |
-| 31 | ~39009 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 32 | ~40368 | Client | Client **REQUIRED** — CLI/TUI/GUI, **Resource Owner Tokens**, **Smart Context**, **First-Run Wizard** |
-| 33 | ~43634 | IDEA.md Reference | **Examples only** - NEVER modify |
+| 17 | ~26245 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 18 | ~26811 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 19 | ~27236 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
+| 20 | ~27345 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 21 | ~28734 | Backup & Restore | Backup features, **Compliance encryption** |
+| 22 | ~29284 | Update Command | Update feature |
+| 23 | ~29823 | Privilege Escalation & Service | Service/privilege work |
+| 24 | ~30439 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 25 | ~30752 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 26 | ~31534 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 27 | ~32625 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 28 | ~35135 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 29 | ~36814 | ReadTheDocs Documentation | Documentation |
+| 30 | ~37608 | I18N & A11Y | Internationalization, **Translation parity (both binaries)**, **--lang flag** |
+| 31 | ~39011 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 32 | ~40370 | Client | Client **REQUIRED** — CLI/TUI/GUI, **Resource Owner Tokens**, **Smart Context**, **First-Run Wizard** |
+| 33 | ~43636 | IDEA.md Reference | **Examples only** - NEVER modify |
 | FINAL | — | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
 
 ### How to Read This File
@@ -24818,6 +24818,8 @@ web:
 | `Access-Control-Max-Age` | `86400` (24 hours) |
 
 **Never `*` here:** the Fetch spec's `Access-Control-Allow-Headers: *` wildcard does NOT cover `Authorization`, and wildcards are invalid when credentials are allowed. Every supported auth header is listed by name — keep in sync with PART 8 → "Auth Token Headers (All Headers Supported)".
+
+**Query param bypass:** `?token=` auth (last in the PART 8 priority order) travels in the URL, not a header — it never triggers a CORS preflight and works from any origin regardless of the Allow-Headers list.
 
 ### Behavior
 
