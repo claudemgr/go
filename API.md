@@ -2263,33 +2263,33 @@ server:
 | 4 | ~6650 | OS-Specific Paths | Path handling |
 | 5 | ~6846 | Configuration | Config file work, **Path Security**, **Privileged Ports**, **Escalation** |
 | 6 | ~8636 | Application Modes | Mode handling, debug endpoints |
-| 7 | ~9245 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
-| 8 | ~9976 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color/--lang flags** |
-| 9 | ~12860 | Error Handling & Caching | Error/cache patterns |
-| 10 | ~13215 | Database | Database work |
-| 11 | ~13621 | Security & Logging | Security features, **Resource Owner Tokens**, **Context Detection** |
-| 12 | ~15647 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
-| 13 | ~17021 | Health & Versioning | Health endpoints |
-| 14 | ~17647 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
-| 15 | ~19341 | SSL/TLS & Let's Encrypt | SSL certificates |
-| 16 | ~20288 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~26305 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 18 | ~26871 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 19 | ~27296 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
-| 20 | ~27405 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 21 | ~28794 | Backup & Restore | Backup features, **Compliance encryption** |
-| 22 | ~29344 | Update Command | Update feature |
-| 23 | ~29883 | Privilege Escalation & Service | Service/privilege work |
-| 24 | ~30499 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 25 | ~30812 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 26 | ~31594 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 27 | ~32685 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 28 | ~35195 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 29 | ~36874 | ReadTheDocs Documentation | Documentation |
-| 30 | ~37668 | I18N & A11Y | Internationalization, **Translation parity (both binaries)**, **--lang flag** |
-| 31 | ~39071 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 32 | ~40430 | Client | Client **REQUIRED** — CLI/TUI/GUI, **Resource Owner Tokens**, **Smart Context**, **First-Run Wizard** |
-| 33 | ~43696 | IDEA.md Reference | **Examples only** - NEVER modify |
+| 7 | ~9254 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
+| 8 | ~9985 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color/--lang flags** |
+| 9 | ~12869 | Error Handling & Caching | Error/cache patterns |
+| 10 | ~13224 | Database | Database work |
+| 11 | ~13630 | Security & Logging | Security features, **Resource Owner Tokens**, **Context Detection** |
+| 12 | ~15656 | Server Configuration | Server settings, **Allowlist**, **Blocklists**, **GeoIP** |
+| 13 | ~17030 | Health & Versioning | Health endpoints |
+| 14 | ~17656 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
+| 15 | ~19350 | SSL/TLS & Let's Encrypt | SSL certificates |
+| 16 | ~20297 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
+| 17 | ~26314 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 18 | ~26880 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 19 | ~27305 | GeoIP | GeoIP features, **Country blocking (deny/allow)** |
+| 20 | ~27414 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 21 | ~28803 | Backup & Restore | Backup features, **Compliance encryption** |
+| 22 | ~29353 | Update Command | Update feature |
+| 23 | ~29892 | Privilege Escalation & Service | Service/privilege work |
+| 24 | ~30508 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 25 | ~30821 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 26 | ~31603 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 27 | ~32694 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 28 | ~35204 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 29 | ~36883 | ReadTheDocs Documentation | Documentation |
+| 30 | ~37677 | I18N & A11Y | Internationalization, **Translation parity (both binaries)**, **--lang flag** |
+| 31 | ~39080 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 32 | ~40439 | Client | Client **REQUIRED** — CLI/TUI/GUI, **Resource Owner Tokens**, **Smart Context**, **First-Run Wizard** |
+| 33 | ~43705 | IDEA.md Reference | **Examples only** - NEVER modify |
 | FINAL | — | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
 
 ### How to Read This File
@@ -8645,9 +8645,12 @@ Before proceeding, confirm you understand:
 **Debug:**
 1. `--debug` CLI flag (highest priority)
 2. `DEBUG` environment variable (truthy values)
-3. Default: `false`
+3. `--mode debug` / `MODE=debug` alias
+4. Default: `false`
 
-## Three Operational States
+**`debug` mode alias:** `--mode debug` / `MODE=debug` expands to mode `development` + debug `on`. An explicit `--debug` flag or `DEBUG` env var still wins — `MODE=debug DEBUG=false` runs development mode with debug off.
+
+## Four Operational States
 
 | State | Mode | Debug | Use Case |
 |-------|------|-------|----------|
@@ -8721,6 +8724,7 @@ Before proceeding, confirm you understand:
 | `--mode development` | development |
 | `--mode prod` | production |
 | `--mode production` | production |
+| `--mode debug` | development + debug on |
 
 ## Debug Endpoints (`--debug` / `DEBUG=true` Only)
 
@@ -9175,6 +9179,11 @@ func SetAppMode(m string) {
     switch strings.ToLower(m) {
     case "dev", "devel", "development":
         currentMode = Development
+    case "debug":
+        // Alias: development mode + debug on
+        // (an explicit --debug flag or DEBUG env var still wins)
+        currentMode = Development
+        SetDebugEnabled(true)
     default:
         currentMode = Production
     }
@@ -44154,7 +44163,7 @@ make docker
 - [ ] Production mode: Default, optimized, no debug
 - [ ] Development mode: Verbose logging (does NOT enable debug endpoints)
 - [ ] Mode priority: `--mode` CLI flag > `MODE` env var > default production
-- [ ] Debug priority: `--debug` CLI flag > `DEBUG` env var (truthy) > default off
+- [ ] Debug priority: `--debug` CLI flag > `DEBUG` env var (truthy) > `MODE=debug` alias > default off
 - [ ] `/debug/*` endpoints (pprof, expvar) enabled only by debug flag, never by mode
 
 ### Phase 2: Binary Core (PARTS 7-9)
@@ -44181,7 +44190,7 @@ make docker
 - [ ] `--address {addr}` - Listen address
 - [ ] `--port {port}` - Listen port
 - [ ] `--baseurl {path}` - URL path prefix (default: /)
-- [ ] `--mode {production|development}` - Application mode (aliases: prod, dev, devel)
+- [ ] `--mode {production|development}` - Application mode (aliases: prod, dev, devel; `debug` = development + debug on)
 - [ ] `--status` - Show running status
 - [ ] `--daemon` - Daemonize (detach)
 - [ ] `--debug` - Enable debug mode
