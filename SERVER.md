@@ -2391,15 +2391,15 @@ server:
 | 27 | ~38545 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
 | 28 | ~40052 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
 | 29 | ~43168 | Testing & Development | Testing/dev workflow, **Host Safety in tests**, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 30 | ~45106 | ReadTheDocs Documentation | Documentation |
-| 31 | ~45936 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
-| 32 | ~47920 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 33 | ~49704 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
-| 34 | ~54472 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
-| 35 | ~58520 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
-| 36 | ~59205 | Custom Domains | **OPTIONAL** - user/org branded domains |
-| 37 | ~60253 | IDEA.md Reference | **Examples only** - NEVER modify |
-| FINAL | ~60485 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
+| 30 | ~45103 | ReadTheDocs Documentation | Documentation |
+| 31 | ~45933 | I18N & A11Y | Internationalization, **Translation parity (all binaries)**, **--lang flag** |
+| 32 | ~47917 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 33 | ~49701 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
+| 34 | ~54469 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
+| 35 | ~58517 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
+| 36 | ~59202 | Custom Domains | **OPTIONAL** - user/org branded domains |
+| 37 | ~60250 | IDEA.md Reference | **Examples only** - NEVER modify |
+| FINAL | ~60482 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist**, **I18N Checklist**, **Host Safety Checklist** |
 
 **When Implementing OPTIONAL PARTs (34-36, Agent from 33):**
 1. Change PART title from `OPTIONAL` → `NON-NEGOTIABLE` in AI.md
@@ -9255,11 +9255,11 @@ Before proceeding, confirm you understand:
 
 ## Debug Flag (`--debug` / `DEBUG=true`)
 
-**Enables ALL debug features regardless of mode. Use sparingly in production.**
+**Enables ALL debug diagnostics regardless of mode. Debug mode affects verbosity and diagnostics ONLY — it NEVER disables authentication or security checks, in any mode, including production. Use sparingly in production.**
 
 | Setting | Behavior |
 |---------|----------|
-| **Admin authentication** | **BYPASSED** (for manual dev only - NOT for automated tests) |
+| **Admin authentication** | **NEVER bypassed** — all auth and security checks remain fully enforced |
 | Debug endpoints | **Enabled** (`/debug/*`) |
 | pprof endpoints | **Enabled** (`/debug/pprof/*`) |
 | expvar endpoints | **Enabled** (`/debug/vars`) |
@@ -44744,23 +44744,20 @@ wait $SERVER_PID 2>/dev/null || true
 echo '=== All admin authentication tests passed ==='
 ```
 
-### Debug Mode - ONLY for Manual Development
+### Debug Mode - Never an Auth Bypass
 
-**Debug mode auth bypass exists ONLY for quick manual testing during development:**
+**Debug mode NEVER bypasses authentication — not for manual development, not for anything. All auth and security checks remain fully enforced with debug on:**
 
 ```go
 // In admin middleware
 func AdminAuthMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // Debug mode: bypass authentication ONLY for manual dev work
-        // NEVER use this in automated tests!
-        if os.Getenv("DEBUG") == "true" || config.IsDebug() {
-            log.Println("[DEBUG] Admin auth bypassed (debug mode - manual dev only)")
-            next.ServeHTTP(w, r)
-            return
+        // Debug mode adds verbose logging ONLY - auth is ALWAYS enforced
+        if config.IsDebug() {
+            log.Println("[DEBUG] Admin auth check:", r.URL.Path)
         }
 
-        // Normal: require valid admin session
+        // Always: require valid admin session
         session := validateAdminSession(r)
         if session == nil {
             http.Redirect(w, r, cfg.AdminPath+"/login", http.StatusSeeOther)
@@ -44772,16 +44769,15 @@ func AdminAuthMiddleware(next http.Handler) http.Handler {
 }
 ```
 
-**Debug bypass is for:**
-- ✓ Quick manual UI testing during development
-- ✓ Exploring admin panel while coding
-- ✓ Debugging admin routes interactively
+**For manual dev access, use real credentials:**
+- ✓ First-run setup token to create an admin account
+- ✓ A local dev admin account created via the setup flow
+- ✓ The normal login flow — it must work anyway
 
-**Debug bypass is NOT for:**
-- ✗ Automated test scripts
-- ✗ Beta testing
-- ✗ CI/CD pipelines
-- ✗ Verifying authentication works
+**Never acceptable, in any mode:**
+- ✗ Auth bypass flags, backdoors, or debug-gated skips
+- ✗ Hardcoded dev credentials in code
+- ✗ Bypassing auth in automated tests, beta testing, or CI/CD
 
 ### Admin Testing Rules
 
@@ -44792,7 +44788,7 @@ func AdminAuthMiddleware(next http.Handler) http.Handler {
 | **Create test admin** | Create admin account via setup API |
 | **Test login flow** | Verify credentials, sessions, and access control |
 | **Test rejection** | Verify unauthenticated and invalid credentials are rejected |
-| **Debug mode** | ONLY for manual development, NEVER in automated tests |
+| **Debug mode** | Verbosity/diagnostics only — NEVER bypasses auth, in any mode |
 
 ### Container Images
 
@@ -60704,7 +60700,7 @@ make docker
 - [ ] Config file: `server.yml` (not .yaml, not .json)
 - [ ] Hierarchy: CLI flags > env vars > file > defaults
 - [ ] Environment prefix: `{PROJECT_NAME}_`
-- [ ] Boolean values: true/false, yes/no, 1/0, on/off all work
+- [ ] Boolean values: true/false, yes/no, 1/0, on/off, enable/disable all work
 - [ ] All config values have sane defaults
 - [ ] Unknown config keys are ERRORS, not ignored
 - [ ] Config validation on load
@@ -60712,10 +60708,10 @@ make docker
 
 **PART 6: Application Modes**
 - [ ] Production mode: Default, optimized, no debug
-- [ ] Development mode: Verbose logging, debug endpoints
-- [ ] Mode detection: env var, CLI flag, config file
-- [ ] Debug endpoints disabled in production
-- [ ] `/debug/pprof/` only in development mode
+- [ ] Development mode: Verbose logging (does NOT enable debug endpoints)
+- [ ] Mode priority: `--mode` CLI flag > `MODE` env var > default production
+- [ ] Debug priority: `--debug` CLI flag > `DEBUG` env var (truthy) > default off
+- [ ] `/debug/*` endpoints (pprof, expvar) enabled only by debug flag, never by mode
 
 ### Phase 2: Binary Core (PARTS 7-9)
 
@@ -60741,7 +60737,7 @@ make docker
 - [ ] `--address {addr}` - Listen address
 - [ ] `--port {port}` - Listen port
 - [ ] `--baseurl {path}` - URL path prefix (default: /)
-- [ ] `--mode {production|development}` - Application mode
+- [ ] `--mode {production|development}` - Application mode (aliases: prod, dev, devel)
 - [ ] `--status` - Show running status
 - [ ] `--daemon` - Daemonize (detach)
 - [ ] `--debug` - Enable debug mode
@@ -61448,6 +61444,9 @@ make docker
 - [ ] Environment variables for configuration
 - [ ] Single process per container
 - [ ] Stateless (data in volumes)
+- [ ] HTTP listener mapped `172.17.0.1:{64xxx}:80` (prod)
+- [ ] Raw protocol listeners mapped 1:1 to their standard port — never `64xxx`
+- [ ] No raw protocol routed through an HTTP proxy/vhost
 
 ---
 
