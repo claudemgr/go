@@ -747,12 +747,12 @@ docker/
 ├── rootfs/                 # build-time filesystem overlay copied into image at /   (project-specific)
 ├── docker-compose.yml      # production compose — HUMAN USE ONLY
 ├── docker-compose.dev.yml  # development compose — runs `:devel` image in debug mode; HUMAN USE ONLY
-├── docker-compose.test.yml # automated test compose — the only compose AI may run
+├── docker-compose.test.yml # automated test compose — AI prefers the tests/ scripts over running this directly
 ├── entrypoint.sh           # sets non-root UID/GID, prepares cache dirs
 └── README.md               # how to build the image, run tests, run GUI with display forwarding
 ```
 
-`docker-compose.yml` always lives under `docker/` — never at the repo root. See `dockerfile_conventions.md` → "Docker Compose" for the canonical layout and the rule that `docker-compose.test.yml` is the only compose file AI is allowed to run directly.
+`docker-compose.yml` always lives under `docker/` — never at the repo root. See `dockerfile_conventions.md` → "Docker Compose" for the canonical layout: `docker-compose.yml` and `docker-compose.dev.yml` are human-only, and AI's preferred interface for `docker-compose.test.yml` is the project's `tests/` scripts rather than a direct invocation.
 
 ### Toolchain Image
 
