@@ -248,6 +248,8 @@ The single binary contains **everything the app needs to function**. The user is
 | Before task completion | Full compliance check | Ensure correctness |
 | When uncertain about a spec requirement | Read that specific section — never guess, never rely on prior-session memory | Accuracy without waste |
 
+**Hook-enforced:** `spec-guard.sh` blocks Edit/Write on project files until AI.md/SPEC.md has been Read this session; the gate re-arms after every compaction.
+
 ## Self-Validation Loop
 
 **AI MUST verify its own work with real tools before reporting a task as done. Do not rely on "the code looks right."**

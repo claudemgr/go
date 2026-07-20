@@ -2905,6 +2905,8 @@ Purpose: {inferred from code/config}
 
 **Read the spec sections relevant to the current task before implementing. Do NOT rely on memory; do NOT pre-load the whole spec speculatively.**
 
+**Hook-enforced:** `spec-guard.sh` blocks Edit/Write on project files until AI.md/SPEC.md has been Read this session; the gate re-arms after every compaction.
+
 ## Before Starting Work
 
 1. **Read the AI.md PART(s) relevant to the first task** - do not load the entire file speculatively

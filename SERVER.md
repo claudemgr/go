@@ -3036,6 +3036,8 @@ See IDEA.md for the full project breakdown.
 
 **Read the parts of the spec directly relevant to the current task. Do NOT load the spec speculatively or pre-load sections you may not need.**
 
+**Hook-enforced:** `spec-guard.sh` blocks Edit/Write on project files until AI.md/SPEC.md has been Read this session; the gate re-arms after every compaction.
+
 ## Before Starting Work
 
 1. **Read the PART(s) of AI.md relevant to the current task** - not the whole file speculatively
