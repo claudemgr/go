@@ -56034,131 +56034,136 @@ server:
           # Invalidate all active sessions for this provider when it is removed
           revoke_sessions_on_delete: true
 
-      ldap:
-        enabled: false
-        providers:
-          - name: corp
-            display_name: "Corporate LDAP"
-            server: "ldap://ldap.example.com:389"
-            bind_dn: "cn=readonly,dc=example,dc=com"
-            bind_password: "{ldap_password}"
-            base_dn: "dc=example,dc=com"
-            user_filter: "(uid={username})"
-            # Auto-create regular user on first login (ONLY if multi-user is enabled)
-            auto_register: true
-            # Map LDAP attributes to user fields
-            attributes:
-              username: "uid"
-              email: "mail"
-              name: "cn"
-              groups: "memberOf"
-            username_resolution:
-              # prompt_on_first_login | prompt_if_conflict | reject_if_conflict
-              mode: prompt_on_first_login
-              allow_custom_on_first_login: true
-            # Map LDAP groups to Server Admin role
-            admin_groups:
+    ldap:
+      enabled: false
+      providers:
+        - name: corp
+          display_name: "Corporate LDAP"
+          server: "ldap://ldap.example.com:389"
+          bind_dn: "cn=readonly,dc=example,dc=com"
+          bind_password: "{ldap_password}"
+          base_dn: "dc=example,dc=com"
+          user_filter: "(uid={username})"
+          # Auto-create regular user on first login (ONLY if multi-user is enabled)
+          auto_register: true
+          # Map LDAP attributes to user fields
+          attributes:
+            username: "uid"
+            email: "mail"
+            name: "cn"
+            groups: "memberOf"
+          username_resolution:
+            # prompt_on_first_login | prompt_if_conflict | reject_if_conflict
+            mode: prompt_on_first_login
+            allow_custom_on_first_login: true
+          # Map LDAP groups to Server Admin role
+          admin_groups:
+            - "cn=admins,ou=groups,dc=example,dc=com"
+            - "cn=administrators,ou=groups,dc=example,dc=com"
+            - "cn=server-admins,ou=groups,dc=example,dc=com"
+            - "cn=app-administrators,ou=groups,dc=example,dc=com"
+            - "cn=platform-admins,ou=groups,dc=example,dc=com"
+            - "cn=infra-admins,ou=groups,dc=example,dc=com"
+          # Map LDAP groups to user roles (if multi-user enabled)
+          role_mapping:
+            admin:
               - "cn=admins,ou=groups,dc=example,dc=com"
               - "cn=administrators,ou=groups,dc=example,dc=com"
-              - "cn=server-admins,ou=groups,dc=example,dc=com"
+              - "cn=app-admins,ou=groups,dc=example,dc=com"
               - "cn=app-administrators,ou=groups,dc=example,dc=com"
-              - "cn=platform-admins,ou=groups,dc=example,dc=com"
-              - "cn=infra-admins,ou=groups,dc=example,dc=com"
-            # Map LDAP groups to user roles (if multi-user enabled)
-            role_mapping:
-              admin:
-                - "cn=admins,ou=groups,dc=example,dc=com"
-                - "cn=administrators,ou=groups,dc=example,dc=com"
-                - "cn=app-admins,ou=groups,dc=example,dc=com"
-                - "cn=app-administrators,ou=groups,dc=example,dc=com"
-              moderator:
-                - "cn=moderators,ou=groups,dc=example,dc=com"
-                - "cn=support,ou=groups,dc=example,dc=com"
-                - "cn=support-staff,ou=groups,dc=example,dc=com"
-                - "cn=helpdesk,ou=groups,dc=example,dc=com"
-              user:
-                - "cn=users,ou=groups,dc=example,dc=com"
-                - "cn=members,ou=groups,dc=example,dc=com"
-                - "cn=employees,ou=groups,dc=example,dc=com"
-                - "cn=staff,ou=groups,dc=example,dc=com"
-                - "cn=developers,ou=groups,dc=example,dc=com"
-                - "cn=engineering,ou=groups,dc=example,dc=com"
-            # Transport security: ldaps | starttls | none
-            # Plaintext ldap:// with tls_mode none is BLOCKED unless the host
-            # resolves to localhost/127.0.0.1 for local testing
-            tls_mode: starttls
-            # Verify the directory server certificate (never disable in prod)
-            tls_verify: true
-            # Connection, bind, and search timeouts
-            connect_timeout: 5s
-            request_timeout: 10s
-            # Connection pool for the service (bind) account
-            pool:
-              max_conns: 10
-              max_idle: 5
-              # Reconnect and retry the next server on connection failure
-              reconnect: true
-            # Optional failover directory servers (tried in order)
-            failover_servers:
-              - "ldap://ldap2.example.com:389"
-            # Chase LDAP referrals returned by the directory
-            follow_referrals: false
-            # Paged search for large group/member result sets (RFC 2696)
-            page_size: 500
-            # Resolve nested group membership (AD LDAP_MATCHING_RULE_IN_CHAIN)
-            nested_groups: false
-            # Bind-failure backoff/lockout window for the service account
-            bind_failure_backoff: 30s
+            moderator:
+              - "cn=moderators,ou=groups,dc=example,dc=com"
+              - "cn=support,ou=groups,dc=example,dc=com"
+              - "cn=support-staff,ou=groups,dc=example,dc=com"
+              - "cn=helpdesk,ou=groups,dc=example,dc=com"
+            user:
+              - "cn=users,ou=groups,dc=example,dc=com"
+              - "cn=members,ou=groups,dc=example,dc=com"
+              - "cn=employees,ou=groups,dc=example,dc=com"
+              - "cn=staff,ou=groups,dc=example,dc=com"
+              - "cn=developers,ou=groups,dc=example,dc=com"
+              - "cn=engineering,ou=groups,dc=example,dc=com"
+          # Transport security: ldaps | starttls | none
+          # Plaintext ldap:// with tls_mode none is BLOCKED unless the host
+          # resolves to localhost/127.0.0.1 for local testing
+          tls_mode: starttls
+          # Verify the directory server certificate (never disable in prod)
+          tls_verify: true
+          # Connection, bind, and search timeouts
+          connect_timeout: 5s
+          request_timeout: 10s
+          # Connection pool for the service (bind) account
+          pool:
+            max_conns: 10
+            max_idle: 5
+            # Reconnect and retry the next server on connection failure
+            reconnect: true
+          # Optional failover directory servers (tried in order)
+          failover_servers:
+            - "ldap://ldap2.example.com:389"
+          # Chase LDAP referrals returned by the directory
+          follow_referrals: false
+          # Paged search for large group/member result sets (RFC 2696)
+          page_size: 500
+          # Resolve nested group membership (AD LDAP_MATCHING_RULE_IN_CHAIN)
+          nested_groups: false
+          # Bind-failure backoff/lockout window for the service account
+          bind_failure_backoff: 30s
 
-      saml:
-        enabled: false
-        providers:
-          - name: okta
-            display_name: "Login with Okta"
-            # IdP metadata: fetch by URL (preferred) OR paste inline XML
-            idp_metadata_url: "https://example.okta.com/app/abc123/sso/saml/metadata"
-            # idp_metadata_xml: |
-            #   <EntityDescriptor ...>...</EntityDescriptor>
-            # SP identity advertised to the IdP (defaults to FQDN-derived value)
-            sp_entity_id: "https://app.example.com/server/auth/saml/okta/metadata"
-            # Assertion Consumer Service URL (where the IdP POSTs the assertion)
-            acs_url: "https://app.example.com/server/auth/saml/okta/acs"
-            # Auto-create regular user on first login (ONLY if multi-user enabled)
-            auto_register: true
-            # Map SAML assertion attributes to user fields
-            attribute_mapping:
-              username: "urn:oid:0.9.2342.19200300.100.1.1"
-              email: "urn:oid:0.9.2342.19200300.100.1.3"
-              name: "urn:oid:2.16.840.1.113730.3.1.241"
-              # Attribute carrying group memberships
-              groups: "groups"
-            username_resolution:
-              # prompt_on_first_login | prompt_if_conflict | reject_if_conflict
-              mode: prompt_on_first_login
-              allow_custom_on_first_login: true
-            # Map SAML group assertions to Server Admin role
-            admin_groups:
-              - "admins"
-              - "administrators"
-              - "server-admins"
-              - "app-administrators"
-              - "platform-admins"
-            # Map SAML group assertions to user roles (if multi-user enabled)
-            role_mapping:
-              admin: ["admins", "administrators", "app-admins", "app-administrators", "platform-admins"]
-              moderator: ["moderators", "support", "support-staff", "helpdesk", "reviewers"]
-              user: ["users", "user", "members", "member", "employees", "staff", "developers", "engineering"]
-            # Requested NameID format returned in the assertion Subject
-            nameid_format: "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"
-            # SP signing/encryption keypair. Leave sp_cert_path/sp_key_path empty
-            # to auto-generate a self-signed keypair on provider creation
-            # (zero-config default); set both to supply your own certificate
-            auto_generate_cert: true
-            sp_cert_path: ""
-            sp_key_path: ""
-            # Single Logout (SLO) — SP-initiated and IdP-initiated
-            slo_enabled: true
-            idp_slo_url: "https://example.okta.com/app/abc123/slo/saml"
+    saml:
+      enabled: false
+      providers:
+        - name: okta
+          display_name: "Login with Okta"
+          # IdP metadata: fetch by URL (preferred) OR paste inline XML
+          idp_metadata_url: "https://example.okta.com/app/abc123/sso/saml/metadata"
+          # idp_metadata_xml: |
+          #   <EntityDescriptor ...>...</EntityDescriptor>
+          # SP identity advertised to the IdP (defaults to FQDN-derived value)
+          sp_entity_id: "https://app.example.com/server/auth/saml/okta/metadata"
+          # Assertion Consumer Service URL (where the IdP POSTs the assertion)
+          acs_url: "https://app.example.com/server/auth/saml/okta/acs"
+          # Auto-create regular user on first login (ONLY if multi-user enabled)
+          auto_register: true
+          # Map SAML assertion attributes to user fields
+          attribute_mapping:
+            username: "urn:oid:0.9.2342.19200300.100.1.1"
+            email: "urn:oid:0.9.2342.19200300.100.1.3"
+            name: "urn:oid:2.16.840.1.113730.3.1.241"
+            # Attribute carrying group memberships
+            groups: "groups"
+          username_resolution:
+            # prompt_on_first_login | prompt_if_conflict | reject_if_conflict
+            mode: prompt_on_first_login
+            allow_custom_on_first_login: true
+          # Map SAML group assertions to Server Admin role
+          admin_groups:
+            - "admins"
+            - "administrators"
+            - "server-admins"
+            - "app-administrators"
+            - "platform-admins"
+          # Map SAML group assertions to user roles (if multi-user enabled)
+          role_mapping:
+            admin: ["admins", "administrators", "app-admins", "app-administrators", "platform-admins"]
+            moderator: ["moderators", "support", "support-staff", "helpdesk", "reviewers"]
+            user: ["users", "user", "members", "member", "employees", "staff", "developers", "engineering"]
+          # Requested NameID format returned in the assertion Subject
+          nameid_format: "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"
+          # SP signing/encryption keypair. Leave sp_cert_path/sp_key_path empty
+          # to auto-generate a self-signed keypair on provider creation
+          # (zero-config default); set both to supply your own certificate
+          auto_generate_cert: true
+          sp_cert_path: ""
+          sp_key_path: ""
+          # Single Logout (SLO) — SP-initiated and IdP-initiated
+          slo_enabled: true
+          idp_slo_url: "https://example.okta.com/app/abc123/slo/saml"
+          # Accept unsolicited (IdP-initiated) login for this provider.
+          # Off by default: unsolicited assertions have no InResponseTo to
+          # match against a stored AuthnRequest, which weakens CSRF
+          # guarantees. Enable only if the IdP requires IdP-initiated SSO.
+          allow_idp_initiated: false
 ```
 
 ### OIDC Provider Expectations & Common Providers
@@ -56166,6 +56171,10 @@ server:
 **OIDC support applies to BOTH regular users and Server Admins.** The difference is role mapping:
 - regular users: created/synced via `auto_register`, `claims_mapping`, and `role_mapping`
 - server admins: granted by `admin_groups`
+
+**OIDC logout behavior:**
+- **RP-initiated logout:** when `rp_initiated_logout: true` and the provider publishes an `end_session_endpoint` in discovery, local logout ends the local session AND redirects to the IdP end-session endpoint (with `id_token_hint` + `post_logout_redirect_uri`) so the IdP session is also ended. If the provider lacks the endpoint, only the local session is ended and this is noted in the `oidc.logout` audit event.
+- **Back-channel logout:** off by default (`backchannel_logout: false`) — it requires a persisted session index keyed by `sid`/`sub` and a publicly reachable receiver endpoint, which conflicts with "first-run works with zero config." When `backchannel_logout: true`, the server exposes a logout-token receiver; a validated OIDC Back-Channel Logout token (correct `iss`/`aud`, `events` claim, and `sid`/`sub`) revokes the matching local session server-side even if the browser never returns.
 
 ### External Identity Provider Requirements
 
@@ -56231,6 +56240,7 @@ server:
 - Assertions MUST be signature-validated against the IdP signing certificate from metadata; unsigned or mis-signed assertions MUST be rejected
 - The SP MUST enforce assertion conditions: `NotBefore`/`NotOnOrAfter` (with a small clock skew), `AudienceRestriction` matching `sp_entity_id`, and `Recipient` matching `acs_url`
 - The SP MUST reject replayed assertions by tracking the assertion `ID`/`InResponseTo` for the assertion validity window
+- **IdP-initiated login:** the IdP POSTs an unsolicited `Response` to the ACS with no stored `InResponseTo`. This is accepted ONLY when the provider is explicitly configured to allow it (`allow_idp_initiated: true`; unsolicited assertions weaken CSRF guarantees), and is rejected by default. Signature, audience, and replay checks are unchanged.
 - If the IdP does not emit a groups attribute, group-based admin mapping is unavailable for that provider and this MUST be documented, exactly as for OIDC/LDAP
 - With a `persistent` NameID format, the NameID becomes the stable `external_id`; with a transient format the SP MUST fall back to a documented stable attribute for `external_id`
 - SP signing/encryption keys MUST be auto-generated (self-signed) on provider creation when `auto_generate_cert: true` (zero-config default), or supplied by the admin via `sp_cert_path`/`sp_key_path`; the private key MUST be stored encrypted and included in backups
