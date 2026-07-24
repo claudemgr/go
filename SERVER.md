@@ -1620,7 +1620,7 @@ On EVERY new conversation or after "context compacted" message:
 6. Built-in scheduler, GeoIP, metrics, email, backup, update
 7. Full admin panel with ALL settings
 8. Client binary for ALL projects
-9. Commit often — small, focused commits. Do NOT hoard unrelated changes into one big commit. **Findings-based work (audits, reviews, numbered fix-lists) defaults to one commit per finding** — never batch distinct findings into one commit just because they share a file or session. **Subagents do not commit** — complete edits and report back to the parent instance; the parent reviews the diff and owns the commit.
+9. Commit often — small, focused commits. Do NOT hoard unrelated changes into one big commit. **Findings-based work (audits, reviews, numbered fix-lists) defaults to one commit per finding** — never batch distinct findings into one commit just because they share a file or session. **Feature work is the opposite — one commit for the whole feature, never split per part. Unrelated bugs found mid-feature go to `TODO.AI.md`, except app-breaking bugs, which must be fixed immediately.** **Subagents do not commit** — complete edits and report back to the parent instance; the parent reviews the diff and owns the commit.
 
 ## File Locations
 - Config: `{config_dir}/server.yml`
