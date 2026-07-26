@@ -33717,6 +33717,7 @@ For self-hosted runners, change `runs-on: ubuntu-latest` to your runner label.
 
 | File | Trigger | Purpose |
 |------|---------|---------|
+| `ci.yml` | Push and pull requests; weekly schedule for security jobs | Build, test, lint, coverage, security jobs |
 | `release.yml` | Tag push (`v*`, `*.*.*`) | Production releases |
 | `beta.yml` | Push to `beta` branch | Beta releases |
 | `daily.yml` | Daily at 3am UTC + push to main/master | Daily builds |
