@@ -15277,7 +15277,7 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 
 | Key | Length | Storage | Purpose | Rotation |
 |-----|--------|---------|---------|----------|
-| `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run), alongside a companion `server.security.encryption_key_version` integer (starts at 1) | At-rest encryption for ALL sensitive server data: 2FA secrets, security report bodies (used as the AES fallback when no PGP keypair exists or when an admin has no personal pubkey, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via admin panel (sensitive-op flow). 30-day grace for in-flight encrypted data. `encryption_key_version` is incremented on every rotation and distributed to cluster nodes via the same propagation mechanism as the key itself. |
+| `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run), alongside a companion `server.security.encryption_key_version` integer (starts at 1) | At-rest encryption for ALL sensitive server data: 2FA secrets, security report bodies (used as the AES fallback when no PGP keypair exists or when an admin has no personal pubkey, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via admin panel (`/server/{admin_path}/config/security/encryption` → "Rotate Encryption Key"). Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt admin password, log to `audit.log` as `security.encryption_key_rotated`. 30-day grace for in-flight encrypted data. `encryption_key_version` is incremented on every rotation and distributed to cluster nodes via the same propagation mechanism as the key itself. |
 
 **Note on consolidation:** `server.security.encryption_key` is the canonical at-rest AES key — every place the spec talks about "encrypt this sensitive data at rest" resolves to this one key, including security report bodies. It is NOT duplicated in `app_secrets`. The three `app_secrets` rows above are HMAC keys (not AES) and a root-secret for HMAC derivation; they are stored in the DB rather than `server.yml` because they have independent rotation lifecycles and need to be visible to cluster replicas via shared DB read. `encryption_key`'s own version is instead tracked via the `encryption_key_version` field written alongside it in `server.yml` (see "Pre-existing key" above) — used to populate `server_security_encryption_key_version` in the cluster heartbeat below.
 
@@ -16896,6 +16896,14 @@ server:
 | `security.invalid_token` | Invalid API token used | Token type, IP |
 | `security.brute_force_detected` | Brute force attempt detected | IP, target (masked), attempt count |
 | `security.suspicious_activity` | Unusual activity detected | IP, activity type, details |
+| `security.installation_secret_rotated` | Installation secret rotated | Admin, IP, reason |
+| `security.encryption_key_rotated` | At-rest encryption key rotated | Admin, IP, reason |
+| `security.ip_allowlisted` | IP/CIDR added to allowlist | CIDR, description, added_by |
+| `security.ip_allowlist_removed` | IP/CIDR removed from allowlist | CIDR, removed_by |
+| `security.csp_violation` | CSP violation report received | IP, blocked-uri, violated-directive |
+| `security.security_id_invalid` | Invalid/expired security.txt id used | IP, user-agent, supplied id |
+| `security.report_received` | Security vulnerability report received | tracking_id, severity, sanitized affected-component |
+| `security.private_key_exported` | PGP private key exported | Admin, IP, reason |
 
 ### Token Events
 
