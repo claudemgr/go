@@ -26514,6 +26514,8 @@ server:
 | `ssl_renewed` | Certificate renewed successfully | ✗ |
 | `ssl_renewal_failed` | Certificate renewal failure | ✗ |
 | `scheduler_error` | Scheduled task failed | ✗ |
+| `update_available` | New eligible release detected (`update_check` task) | ✗ |
+| `update_installed` | Self-update completed (`auto_install: true`) | ✗ |
 | `test` | Test email | ✗ |
 
 ## Sane Defaults
@@ -26529,6 +26531,8 @@ server:
 | `ssl_renewed` | `SSL Certificate Renewed - {app_name}` | Confirmation of renewal |
 | `ssl_renewal_failed` | `SSL Renewal Failed - {app_name}` | Includes domain, error, days until expiry, next retry |
 | `scheduler_error` | `Scheduled Task Failed - {app_name}` | Includes task name and error |
+| `update_available` | `Update Available - {app_name}` | Includes current version, new version, and channel |
+| `update_installed` | `Update Installed - {app_name}` | Includes previous version and new version |
 | `test` | `Test Email - {app_name}` | Simple test message |
 
 **Default Sender:**
