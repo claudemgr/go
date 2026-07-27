@@ -16910,10 +16910,13 @@ server:
 
 | Event | Description | Logged Data |
 |-------|-------------|-------------|
-| `backup.created` | Backup created | Filename, size, created by |
+| `backup.created` | Backup created and verified | Filename, size, encrypted, verification status, created by |
 | `backup.restored` | Backup restored | Filename, restored by |
 | `backup.deleted` | Backup deleted | Filename, deleted by |
 | `backup.failed` | Backup failed | Error message |
+| `backup.retention_cleanup` | Old backups deleted | Deleted files, reason, remaining count |
+| `backup.verification_failed` | Backup verification failed | Filename, check that failed |
+| `backup.daily_updated` | Daily incremental updated | Filename, changes since last |
 | `backup.skipped_disk_full` | Backup skipped — insufficient free space or disk above threshold | Free space, disk usage %, threshold |
 | `server.started` | Application started | Version, mode, node ID |
 | `server.stopped` | Application stopped | Reason, uptime |
@@ -32123,12 +32126,17 @@ server:
 | `2fa_enabled` | 2FA activated on account | ✓ |
 | `2fa_disabled` | 2FA removed from account | ✓ |
 | `password_changed` | Password was changed | ✓ |
+| `token_regenerated` | API token regenerated | ✓ |
 | `backup_complete` | Backup finished successfully | ✗ |
 | `backup_failed` | Backup error | ✗ |
 | `ssl_expiring` | Certificate expiration warning | ✗ |
 | `ssl_renewed` | Certificate renewed successfully | ✗ |
 | `ssl_renewal_failed` | Certificate renewal failure | ✗ |
 | `scheduler_error` | Scheduled task failed | ✗ |
+| `startup` | Application started | ✗ |
+| `shutdown` | Application stopped | ✗ |
+| `update_available` | New eligible release detected (`update_check` task) | ✗ |
+| `update_installed` | Self-update completed (`auto_install: true`) | ✗ |
 | `breach_notification` | Data breach notification to affected users | ✓ |
 | `breach_admin_alert` | Breach detected alert to Server Admins | ✗ |
 | `test` | Test email | ✗ |
@@ -32150,12 +32158,17 @@ server:
 | `2fa_enabled` | `Two-Factor Authentication Enabled - {app_name}` | Confirmation of 2FA activation |
 | `2fa_disabled` | `Two-Factor Authentication Disabled - {app_name}` | Warning about 2FA removal |
 | `password_changed` | `Your Password Was Changed - {app_name}` | Confirmation of password change |
+| `token_regenerated` | `API Token Regenerated - {app_name}` | Confirmation of token regeneration |
 | `backup_complete` | `Backup Complete - {app_name}` | Includes filename and size |
 | `backup_failed` | `Backup Failed - {app_name}` | Includes error message |
 | `ssl_expiring` | `SSL Certificate Expiring - {app_name}` | Sent 30, 14, 7, 3, 1 days before expiry |
 | `ssl_renewed` | `SSL Certificate Renewed - {app_name}` | Confirmation of renewal |
 | `ssl_renewal_failed` | `SSL Renewal Failed - {app_name}` | Includes domain, error, days until expiry, next retry |
 | `scheduler_error` | `Scheduled Task Failed - {app_name}` | Includes task name and error |
+| `startup` | `{app_name} Started - {app_name}` | Includes version, mode |
+| `shutdown` | `{app_name} Stopped - {app_name}` | Includes reason, uptime |
+| `update_available` | `Update Available - {app_name}` | Includes current version, new version, and channel |
+| `update_installed` | `Update Installed - {app_name}` | Includes previous version and new version |
 | `breach_notification` | `Important Security Notice - {app_name}` | Compliance-aware, includes breach details, recommended actions |
 | `breach_admin_alert` | `[{severity}] Security Breach Detected - {app_name}` | Immediate alert, includes detection details, action required |
 | `test` | `Test Email - {app_name}` | Simple test message |
@@ -35650,7 +35663,10 @@ Every backup is verified **immediately after creation** - backups must be 100% w
 
 | Event | Description | Logged Data |
 |-------|-------------|-------------|
-| `backup.created` | Backup created and verified | Filename, size, encrypted, verification status |
+| `backup.created` | Backup created and verified | Filename, size, encrypted, verification status, created by |
+| `backup.restored` | Backup restored | Filename, restored by |
+| `backup.deleted` | Backup deleted | Filename, deleted by |
+| `backup.failed` | Backup failed | Error message |
 | `backup.retention_cleanup` | Old backups deleted | Deleted files, reason, remaining count |
 | `backup.verification_failed` | Backup verification failed | Filename, check that failed |
 | `backup.daily_updated` | Daily incremental updated | Filename, changes since last |

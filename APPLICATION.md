@@ -183,6 +183,8 @@ The deliverable for each supported target is **one statically linked binary** th
 | `GOOS=windows GOARCH=arm64 CGO_ENABLED=0` | fully static | Single `.exe` |
 | `GOOS=darwin GOARCH=amd64 CGO_ENABLED=0` | system frameworks only (Apple does not allow static libSystem) | "Static" here means: no third-party dynamic libraries; only Apple-provided frameworks resolved at runtime |
 | `GOOS=darwin GOARCH=arm64 CGO_ENABLED=0` | system frameworks only | Same rule as amd64 macOS |
+| `GOOS=freebsd GOARCH=amd64 CGO_ENABLED=0` | fully static | Default FreeBSD release target |
+| `GOOS=freebsd GOARCH=arm64 CGO_ENABLED=0` | fully static | Default ARM64 FreeBSD release target |
 
 **Rules:**
 - No `glibc` runtime dependency on Linux release artifacts — `CGO_ENABLED=0` produces a fully static binary on Linux without needing musl
