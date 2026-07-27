@@ -14671,7 +14671,7 @@ Admin manually removes dead nodes via:
 | `app_version` | Running binary's version (Tier-2 public-safe per PART 11) |
 | `commit_hash` | Build commit |
 | `installation_secret_version` | The version number of the `installation_secret` row this node currently has loaded (matches `app_secrets.version` for the `installation_secret` name). Used to detect drift. |
-| `server_security_encryption_key_version` | Same idea for the at-rest AES key (`server.security.encryption_key`). |
+| `server_security_encryption_key_version` | The node's local `server.security.encryption_key_version` value from `server.yml` (not an `app_secrets` row — this key is file-based, see PART 11 → "Server Encryption Key"). Used to detect drift the same way. |
 | `cookie_signing_key_version` | Same. |
 | `csrf_token_secret_version` | Same. |
 | `learned_origins_version` | Latest `MAX(observed_at)` from the `learned_origins` table this node has read. |
@@ -15277,9 +15277,9 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 
 | Key | Length | Storage | Purpose | Rotation |
 |-----|--------|---------|---------|----------|
-| `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run) | At-rest encryption for ALL sensitive server data: 2FA secrets, security report bodies (used as the AES fallback when no PGP keypair exists or when an admin has no personal pubkey, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via admin panel (sensitive-op flow). 30-day grace for in-flight encrypted data. |
+| `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run), alongside a companion `server.security.encryption_key_version` integer (starts at 1) | At-rest encryption for ALL sensitive server data: 2FA secrets, security report bodies (used as the AES fallback when no PGP keypair exists or when an admin has no personal pubkey, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via admin panel (sensitive-op flow). 30-day grace for in-flight encrypted data. `encryption_key_version` is incremented on every rotation and distributed to cluster nodes via the same propagation mechanism as the key itself. |
 
-**Note on consolidation:** `server.security.encryption_key` is the canonical at-rest AES key — every place the spec talks about "encrypt this sensitive data at rest" resolves to this one key, including security report bodies. It is NOT duplicated in `app_secrets`. The three `app_secrets` rows above are HMAC keys (not AES) and a root-secret for HMAC derivation; they are stored in the DB rather than `server.yml` because they have independent rotation lifecycles and need to be visible to cluster replicas via shared DB read.
+**Note on consolidation:** `server.security.encryption_key` is the canonical at-rest AES key — every place the spec talks about "encrypt this sensitive data at rest" resolves to this one key, including security report bodies. It is NOT duplicated in `app_secrets`. The three `app_secrets` rows above are HMAC keys (not AES) and a root-secret for HMAC derivation; they are stored in the DB rather than `server.yml` because they have independent rotation lifecycles and need to be visible to cluster replicas via shared DB read. `encryption_key`'s own version is instead tracked via the `encryption_key_version` field written alongside it in `server.yml` (see "Pre-existing key" above) — used to populate `server_security_encryption_key_version` in the cluster heartbeat below.
 
 **All secrets above:**
 - Generated on first start, before any user-visible operation.
