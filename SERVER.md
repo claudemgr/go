@@ -1832,20 +1832,20 @@ Both files use the same structure. Settings are merged: `settings.local.json` ov
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write(**)",
+        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "if grep -qi 'anthropic\\|claude' \"$file\" 2>/dev/null; then echo 'Error: File contains vendor names (Anthropic/Claude)' >&2; exit 1; fi"
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); if [ -n \"$f\" ] && grep -qi 'anthropic\\|claude' \"$f\" 2>/dev/null; then echo 'Error: File contains vendor names (Anthropic/Claude)' >&2; exit 1; fi"
           }
         ]
       },
       {
-        "matcher": "Write(*.go)",
+        "matcher": "Write|Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "gofmt -l \"$file\" 2>/dev/null | grep -q . && echo 'Error: Go file would not be formatted' >&2 && exit 1 || exit 0"
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.go) gofmt -l \"$f\" 2>/dev/null | grep -q . && { echo 'Error: Go file would not be formatted' >&2; exit 1; } || exit 0 ;; *) exit 0 ;; esac"
           }
         ]
       }
