@@ -15001,6 +15001,7 @@ server:
 | `security.country_blocked` | Request blocked by GeoIP signal | IP, country code |
 | `security.suspicious_activity` | Unusual activity detected | IP, activity type, details |
 | `security.installation_secret_rotated` | Installation secret rotated | IP, operator reason |
+| `security.encryption_key_rotated` | At-rest encryption key rotated | IP, operator reason |
 | `security.csp_violation` | CSP violation report received | IP, blocked-uri, violated-directive |
 | `security.security_id_invalid` | Invalid/expired security.txt id used | IP, user-agent, supplied id |
 | `security.report_received` | Security vulnerability report received | tracking_id, severity, sanitized affected-component |
