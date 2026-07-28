@@ -1103,7 +1103,7 @@ logging:
 | `--debug` | — | — | Enable debug output |
 | `--color` | — | `auto` (default) / `yes` / `no` | Color output — `auto`: TTY detect; `yes`: force on; `no`: force off and remove emojis |
 
-- `--color auto` and `--color=auto` (space and `=` forms) must both work — `cobra`/`pflag` handles this natively.
+- `--color auto` and `--color=auto` (space and `=` forms) must both work — stdlib `flag` and `cobra`/`pflag` both handle this natively; no extra parsing needed either way.
 - **No escalation** — `--help` and `--version` must never be gated behind privilege checks; never call `sudo`, require root/admin, or check `os.Getuid()` before help/version output.
 
 ## Output Rules
