@@ -10037,6 +10037,36 @@ Default config: /etc/apimgr/jokes/  # Hardcoded project name
 
 **For client flags, see PART 32.**
 
+## Flag Parsing (Server Binary)
+
+**Never hand-roll argument parsing** (no manual `switch`/`os.Args` loops for the primary flag set — see `go_conventions.md` § CLI Flags). The server binary is single-command (it starts the server; it has no subcommands), so it uses the stdlib `flag` package. `cobra`/`viper` (listed under "Common Go Modules") are for the multi-command client CLI binary — see PART 32 — not the server.
+
+```go
+func main() {
+    fs := flag.NewFlagSet(filepath.Base(os.Args[0]), flag.ExitOnError)
+    configPath := fs.String("config", "", "Path to config file")
+    dataDir := fs.String("data", "", "Data directory")
+    port := fs.Int("port", 0, "Listen port")
+    mode := fs.String("mode", "", "Application mode")
+    daemon := fs.Bool("daemon", false, "Run as background daemon")
+    debug := fs.Bool("debug", false, "Enable debug logging")
+    color := fs.String("color", "auto", "Color output: auto, yes, no")
+    showVersion := fs.Bool("version", false, "Show version and exit")
+
+    fs.Usage = func() { printHelp(fs) }
+    _ = fs.Parse(os.Args[1:])
+
+    if *showVersion {
+        printVersion()
+        os.Exit(0)
+    }
+    // Remaining flags (*configPath, *dataDir, *port, *mode, *daemon, *debug, *color)
+    // feed into config load / server startup below.
+}
+```
+
+`os.Args` manipulation elsewhere in this PART (e.g. `filterDaemonFlag`) operates on the args slice *after* this parse step (for daemon re-exec) — it is not a substitute for it.
+
 ## NO_COLOR Support (ALL Binaries)
 
 **All binaries (server, client) MUST respect the [NO_COLOR](https://no-color.org/) standard.**
