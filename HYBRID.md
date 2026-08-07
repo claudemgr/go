@@ -24182,7 +24182,10 @@ nearest ANSI color:
 | `Error` | `BrightRed` | `Red` |
 | `Info` | `BrightBlue` | `Blue` |
 
-- Respect `NO_COLOR` — strip all ANSI color when set; render plain text only
+- Respect `NO_COLOR` — `colors: ColorEnabled(nil)` (PART 8) already covers
+  the full precedence order (CLI flag > config > `NO_COLOR` > TTY/`TERM`
+  auto-detect); CLI/TUI output MUST gate on that same result, never a
+  separate ad hoc check, and strip all ANSI color when it is `false`
 - `lipgloss.AdaptiveColor` (TUI) and the CLI output package select the ANSI
   name above per role and per theme — never a hardcoded hex/RGB value
 - True-color terminals MAY additionally accept the literal hex palette as
@@ -24213,6 +24216,13 @@ var TerminalPaletteLight = TerminalPalette{
     Success: "2", Warning: "3", Error: "1", Info: "4", Border: "4",
 }
 ```
+
+- TUI: `lipgloss` (via `termenv`) auto-detects `NO_COLOR` and downgrades to
+  plain output on its own — no additional check needed in
+  `StylesFromTerminalPalette`
+- CLI: gate explicitly on `ColorEnabled(nil)` (PART 8) as shown in
+  "CLI Colored Output" below — raw `fmt.Printf` ANSI escapes are not
+  NO_COLOR-aware by themselves
 
 ### GUI Theming
 
