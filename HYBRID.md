@@ -30070,8 +30070,8 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 |------|----------|--------------|
 | `server.yml` | `{config_dir}/server.yml` (see PART 4) | Server first run |
 | `cli.yml` | `~/.config/{internal_org}/{internal_name}/cli.yml` | CLI first run |
-| Tor config | `{config_dir}/tor/torrc` (see PART 31) | When Tor enabled |
-| Tor data | `{data_dir}/tor/` (see PART 31) | When Tor enabled |
+| Tor config | `{config_dir}/tor/torrc` (see PART 26) | When Tor enabled |
+| Tor data | `{data_dir}/tor/` (see PART 26) | When Tor enabled |
 
 **Why runtime-generated?**
 
