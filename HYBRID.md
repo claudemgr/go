@@ -10275,7 +10275,7 @@ func IsRemoteSession() bool {
 
 **See PART 15 "Themes (NON-NEGOTIABLE - PROJECT-WIDE)" for the unified color palette.**
 
-**CLI/TUI/GUI use the same `theme.ThemePalette` from `src/common/theme/colors.go`.**
+**CLI and TUI use the same `TerminalPalette` (ANSI-mapped) from `src/common/theme/colors.go`; native GUI does not consume a literal palette — see "GUI Theming" above.**
 
 #### CLI Theme Configuration
 
@@ -31237,7 +31237,7 @@ fi
 
 **ALL binaries (server, client) support shell completions - built into binary, no separate files.**
 
-See PART 32: "Shell Completions (Built-in)" for full implementation details.
+See PART 8, "Shell Completions (Built-in, NON-NEGOTIABLE)" above, for full implementation details.
 
 ```bash
 # Generate and install completions (prints to stdout, user redirects)

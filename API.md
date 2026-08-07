@@ -41747,7 +41747,7 @@ func IsRemoteSession() bool {
 
 **See PART 16 "Themes (NON-NEGOTIABLE - PROJECT-WIDE)" for the unified color palette.**
 
-**CLI/TUI/GUI use the same `theme.ThemePalette` from `src/common/theme/colors.go`.**
+**CLI and TUI use the same `TerminalPalette` (ANSI-mapped) from `src/common/theme/colors.go`; native GUI does not consume a literal palette — see "GUI Theming" above.**
 
 ### CLI Theme Configuration
 
