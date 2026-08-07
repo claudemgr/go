@@ -1131,6 +1131,92 @@ When `NO_COLOR` is set and non-empty, disable ANSI color output. If the TUI depe
 | `NO_COLOR=1` | GUI unaffected unless project says otherwise | avoid color-dependent TUI | prefer CLI/plain |
 | stdout piped | avoid GUI | avoid TUI | use CLI |
 
+### Color Enablement Precedence
+
+```go
+// ColorEnabled checks if color output should be used
+func ColorEnabled(forceColor *bool) bool {
+    // 1. CLI flag overrides everything
+    if forceColor != nil {
+        return *forceColor
+    }
+    // 2. Config file (if applicable)
+    if cfg := GetConfig(); cfg != nil && cfg.Output.ColorSet {
+        return cfg.Output.Color
+    }
+    // 3. NO_COLOR env var (non-empty = disable)
+    if os.Getenv("NO_COLOR") != "" {
+        return false
+    }
+    // 4. Auto-detect: TTY + TERM support
+    if !term.IsTerminal(int(os.Stdout.Fd())) {
+        return false
+    }
+    if os.Getenv("TERM") == "dumb" {
+        return false
+    }
+    return true
+}
+```
+
+CLI and TUI output MUST gate on `ColorEnabled(nil)` — never a separate ad
+hoc `NO_COLOR` check. `lipgloss`/`termenv` (TUI) auto-detect `NO_COLOR`
+on their own; raw `fmt.Printf` ANSI escapes in the CLI path are not
+NO_COLOR-aware by themselves and must check `ColorEnabled()` explicitly.
+
+## Color Palette (TUI/CLI/GUI)
+
+**This is a single native binary — there is no Web CSS palette. TUI/CLI
+and GUI theming are defined separately, and neither uses literal hex:**
+
+### TUI/CLI — ANSI-mapped
+
+Terminals render a fixed, user-configured 16/256-color set, so TUI/CLI
+map semantic roles to the nearest ANSI color instead of literal hex:
+
+| Role | Dark ANSI | Light ANSI |
+|------|-----------|------------|
+| `Foreground` | `BrightWhite` | `Black` |
+| `Muted` | `White` | `DarkGray` |
+| `Primary` / `Accent` | `BrightMagenta` | `Blue` |
+| `Secondary` / `Success` | `BrightGreen` | `Green` |
+| `Warning` | `BrightYellow` | `Yellow` |
+| `Error` | `BrightRed` | `Red` |
+| `Info` | `BrightBlue` | `Blue` |
+
+```go
+// TerminalPalette holds ANSI 16-color indices (0-15) for TUI/CLI.
+// lipgloss.Color() and the ESC[38;5;{n}m escape both accept these
+// indices directly.
+type TerminalPalette struct {
+    Foreground string `json:"foreground"`
+    Muted      string `json:"muted"`
+    Primary    string `json:"primary"`
+    Success    string `json:"success"`
+    Warning    string `json:"warning"`
+    Error      string `json:"error"`
+    Info       string `json:"info"`
+    Border     string `json:"border"`
+}
+
+var TerminalPaletteDark = TerminalPalette{
+    Foreground: "15", Muted: "7", Primary: "13",
+    Success: "10", Warning: "11", Error: "9", Info: "12", Border: "13",
+}
+
+var TerminalPaletteLight = TerminalPalette{
+    Foreground: "0", Muted: "8", Primary: "4",
+    Success: "2", Warning: "3", Error: "1", Info: "4", Border: "4",
+}
+```
+
+### GUI — native theming only
+
+GUI never consumes `TerminalPalette` or any literal hex palette. It
+detects light/dark only (`github.com/adrg/xdg` / OS theme APIs — see
+"Theme detection" above) and lets the native toolkit (GTK/Cocoa/Win32)
+apply its own light/dark widget theme.
+
 ---
 
 # PART 8: TESTING, QUALITY, AND DEBUGGING
