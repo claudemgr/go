@@ -732,7 +732,7 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 │   ├── Dockerfile.dev      # devel image — same as release but binary runs in debug mode; tagged :devel (project-specific)
 │   ├── docker-compose.yml  # Production compose (NO debug)
 │   ├── docker-compose.dev.yml  # Development compose
-│   ├── docker-compose.test.yml # Test compose (DEBUG: 1, MODE: dev)
+│   ├── docker-compose.test.yml # Test compose (:devel image, DEBUG: true, MODE: development)
 │   └── rootfs/            # Build-time container filesystem overlay (committed)
 │       ├── usr/
 │       │   └── local/
@@ -2119,6 +2119,7 @@ useradd --system --uid {id} --gid {id} \
 |-------|-----------|---------|
 | Start | root | launchd starts binary as root |
 | Bind | root | Bind privileged ports (<1024) |
+| Spawn children | root | Tor spawned with setuid `{internal_name}` creds before the drop |
 | Drop | root→`{internal_name}` | Binary drops privileges |
 | Run | `{internal_name}` | Serve requests as unprivileged user |
 
@@ -3643,6 +3644,8 @@ sudo {project_name} --service --install
 
 **Default:** service starts with elevated privileges only when needed, then drops to dedicated service user after privileged setup/port binding.
 
+**Drop timing — the privilege drop is the FINAL root-phase action.** It happens only after ALL root-requiring initialization completes: service user/group creation, directory and file creation, ownership and permission setup, privileged port binding (<1024), and spawning managed child processes (e.g. Tor) with setuid/setgid service-user credentials. Nothing after the drop may require root — anything that does is an init-ordering bug. Immediately after dropping, verify with getuid() != 0.
+
 **Permanent-root exception:** allowed only for project-defined cases such as firewall control, packet capture, TUN/TAP/VPN, mount/filesystem management, package/service management, or other ongoing kernel/device operations.
 
 | Step | Running As | Actions |
@@ -3651,15 +3654,17 @@ sudo {project_name} --service --install
 | 2 | **root** | Create system user `{internal_name}` (if needed) |
 | 3 | **root** | Create directories, set ownership |
 | 4 | **root** | Bind configured ports (any port works) |
-| 5 | **root→user** | **DROP PRIVILEGES** to `{internal_name}` user |
-| 6 | **user** | Initialize config, database, etc. |
-| 7 | **user** | Start serving requests |
+| 5 | **root** | Spawn managed children (e.g. Tor) with setuid/setgid service-user credentials |
+| 6 | **root→user** | **DROP PRIVILEGES** to `{internal_name}` user |
+| 7 | **user** | Initialize config, database, etc. |
+| 8 | **user** | Start serving requests |
 
 ```
 Service start (automatic after install):
     ├─ Start as root (service manager)
     ├─ Create user/dirs if needed
     ├─ Bind port 80/443 (root)
+    ├─ Spawn Tor with service-user creds (never as root)
     ├─ Drop to {internal_name} user
     └─ Serve requests (user)
 ```
@@ -5821,6 +5826,7 @@ See `dockerfile_conventions.md` → "OCI Annotations" for the complete list of r
 | Requirement | Value |
 |-------------|-------|
 | `build:` | **NEVER include** |
+| `image:` tag | `:latest` in `docker-compose.yml` (production) · `:devel` in `docker-compose.dev.yml` and `docker-compose.test.yml` |
 | `version:` | **NEVER include** |
 | `name:` | `{project_name}` (top-level) |
 | `container_name:` | `{project_name}-app` (main), `{project_name}-cache` (Valkey) |
@@ -5830,7 +5836,7 @@ See `dockerfile_conventions.md` → "OCI Annotations" for the complete list of r
 | `x-logging:` | Anchor for consistent logging (see below) |
 | Network | Custom `{project_name}` with `external: false` |
 | Environment variables | **Hardcode with sane defaults** (NEVER use .env files); always YAML map style (`KEY: value`), never list style (`- KEY=value`) |
-| **environment: DEBUG/MODE** | `docker-compose.yml` sets **neither** `DEBUG` nor `MODE` (production defaults apply) · `docker-compose.dev.yml` and `docker-compose.test.yml` both set `DEBUG: 1` and `MODE: dev` |
+| **environment: DEBUG/MODE** | `docker-compose.yml` sets **neither** `DEBUG` nor `MODE` (production defaults apply) · `docker-compose.dev.yml` and `docker-compose.test.yml` both set `DEBUG: true` and `MODE: development` |
 
 ### Logging Anchor
 
@@ -5966,8 +5972,8 @@ services:
     logging: *default-logging
     environment:
       PORT: 80
-      DEBUG: 1
-      MODE: dev
+      DEBUG: true
+      MODE: development
       TZ: America/New_York
     ports:
       # Development: accessible from all interfaces, no 172.17.0.1 bind
@@ -6014,15 +6020,15 @@ x-logging: &default-logging
 
 services:
   {project_name}:
-    image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
+    image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:devel
     pull_policy: always
     container_name: {project_name}-test
     restart: "no"
     logging: *default-logging
     environment:
       PORT: 80
-      DEBUG: 1
-      MODE: dev
+      DEBUG: true
+      MODE: development
       TZ: America/New_York
       CACHE_URL: valkey://{project_name}-cache-test:6379
     volumes:
@@ -7019,7 +7025,7 @@ PHASE 5: Server startup (actual server start)
    ├─ {cache_dir}   (/var/cache/... or ~/.cache/...)
    ├─ {log_dir}     (/var/log/... or ~/.local/log/...)
    ├─ {backup_dir}  (see PART 8 GetBackupDir - /mnt/Backups/... if writable, else {data_dir}/backup/ in system mode)
-   └─ Never resolve ~/$HOME again after step 8g — the service account's HOME is {data_dir}
+   └─ Never resolve ~/$HOME again after step 8h — the service account's HOME is {data_dir}
 
 8. IF RUNNING AS ROOT - setup system resources BEFORE dropping privileges:
    a. Check/create system user:
@@ -7048,8 +7054,12 @@ PHASE 5: Server startup (actual server start)
       ├─ For each port < 1024: create and bind socket, store fd
       ├─ If ANY privileged port fails: exit with error
       └─ Unprivileged ports (>= 1024) bound later in step 18
-   g. DROP PRIVILEGES to {internal_name} user
-   h. Verify privilege drop succeeded (getuid() != 0)
+   g. Start managed child processes (Tor, if tor binary available) while still root:
+      ├─ Write child config first (e.g. {config_dir}/tor/torrc) with service-user ownership
+      ├─ Spawn with setuid/setgid credentials set to {internal_name}:{internal_name}
+      └─ Children NEVER run as root — credentials are applied at spawn time
+   h. DROP PRIVILEGES to {internal_name} user
+   i. Verify privilege drop succeeded (getuid() != 0)
 
 9. IF RUNNING AS USER (non-root) - setup user directories:
    ├─ Create {config_dir} (~/.config/{internal_org}/{internal_name}/)
@@ -7115,7 +7125,8 @@ PHASE 5: Server startup (actual server start)
     │   starting scheduler — clears accumulation from crashed/failed prior runs
     └─ Start scheduler goroutine
 
-17. Start Tor (if tor binary available) - see PART 26:
+17. Start Tor (if tor binary available and not already spawned in step 8g) - see PART 26:
+    ├─ Root mode → Tor already running (spawned in step 8g with {internal_name}:{internal_name} setuid credentials before the drop); skip
     ├─ tor not found in PATH → log INFO "Tor not available", skip
     ├─ tor found:
     │   ├─ Create directories: {config_dir}/tor/, {data_dir}/tor/, {data_dir}/tor/site/
@@ -7155,7 +7166,7 @@ PHASE 5: Server startup (actual server start)
 | Step | Runs As | Why |
 |------|---------|-----|
 | 6. Determine context | any | First thing - detect if root, container, etc. |
-| 7. Resolve paths | any | Resolved ONCE and cached — mode locked from start EUID; never re-derived after 8g |
+| 7. Resolve paths | any | Resolved ONCE and cached — mode locked from start EUID; never re-derived after 8h |
 | **IF ROOT (step 8):** | | |
 | 8a. Create system user | **root** | Only root can create system users |
 | 8b. Create directories | **root** | Only root can create /etc/, /var/lib/, etc. |
@@ -7163,28 +7174,32 @@ PHASE 5: Server startup (actual server start)
 | 8d. Set permissions | **root** | Easier while root, ensures correct perms |
 | 8e. Determine ports | **root** | Need to know before binding |
 | 8f. Bind privileged ports | **root** | Only root can bind port < 1024 |
-| **8g. DROP PRIVILEGES** | **root→user** | Security: minimize time running as root |
+| 8g. Spawn children (Tor) | **root** | Children spawned with setuid/setgid {internal_name} credentials — never run as root |
+| **8h. DROP PRIVILEGES** | **root→user** | Security: minimize time running as root |
 | **IF USER (step 9):** | | |
 | 9. Setup user directories | **user** | Create ~/.config/, ~/.local/share/, etc. |
 | **COMMON PATH:** | | |
 | 10-21. Everything else | **user** | Dirs exist, privileged sockets bound (if any) |
 
 **Security principle:** Drop privileges as EARLY as possible, but AFTER:
-1. Creating directories and setting ownership
-2. Binding any privileged ports (< 1024)
+1. Creating the service user/group
+2. Creating directories/files and setting ownership + permissions
+3. Binding any privileged ports (< 1024)
+4. Spawning managed child processes (e.g. Tor) with service-user setuid/setgid credentials
 
-**What REQUIRES root (steps 8a-8f):**
+**What REQUIRES root (steps 8a-8g):**
 - Creating system directories (/etc/, /var/lib/, /var/log/, /var/cache/, /var/backups/)
 - Creating system user/group
 - chown directories to app user
 - Setting permissions on system directories
 - Binding to privileged ports (80, 443, etc.)
+- Spawning managed child processes (e.g. Tor) with service-user setuid/setgid credentials
 
 **What does NOT require root (steps 10-21):**
 - Writing files to directories owned by app user (logging, config, database, PID)
 - Binding to unprivileged ports (>= 1024)
 - Accepting connections on pre-bound privileged sockets
-- Starting child processes (tor, scheduler)
+- Starting child processes (scheduler; Tor in user mode — in root mode Tor is spawned in step 8g before the drop)
 - Signal handling
 
 **Port binding examples (see PART 14 for full rules):**
@@ -8627,7 +8642,7 @@ func GetCacheDir(flagValue string) string {
 }
 
 // startedElevated is captured ONCE at process start, BEFORE any privilege
-// drop, and never re-evaluated. After startup step 8g drops privileges,
+// drop, and never re-evaluated. After startup step 8h drops privileges,
 // geteuid() changes but the directory mode (system vs user) must not.
 var startedElevated = isElevated()
 
