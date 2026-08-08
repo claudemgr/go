@@ -6816,9 +6816,9 @@ Before proceeding, confirm you understand:
 ```yaml
 volumes:
   # Host ./volumes/config → Container /config
-  - './volumes/config:/config:z'
+  - ./volumes/config:/config:z
   # Host ./volumes/data → Container /data
-  - './volumes/data:/data:z'
+  - ./volumes/data:/data:z
 ```
 
 ---
@@ -10973,7 +10973,7 @@ myapp is running (PID 12345)
 **Used for Docker/compose healthcheck:**
 ```yaml
 healthcheck:
-  test: /usr/local/bin/{project_name} --status
+  test: ["CMD", "/usr/local/bin/{project_name}", "--status"]
   interval: 10s
   timeout: 5s
   retries: 3
@@ -31885,8 +31885,8 @@ All compose files mount two volumes:
 
 ```yaml
 volumes:
-  - './volumes/config:/config:z'
-  - './volumes/data:/data:z'
+  - ./volumes/config:/config:z
+  - ./volumes/data:/data:z
 ```
 
 | Host Path | Container Path |
@@ -32238,8 +32238,8 @@ name: {project_name}
 
 x-logging: &default-logging
   options:
-    max-size: '5m'
-    max-file: '1'
+    max-size: "5m"
+    max-file: "1"
   driver: json-file
 
 services:
@@ -32258,12 +32258,12 @@ services:
       # DATABASE_DRIVER: libsql
       # DATABASE_URL: libsql://your-db.turso.io?authToken={token}
     volumes:
-      - './volumes/config:/config:z'
-      - './volumes/data:/data:z'
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
     ports:
-      - '172.17.0.1:64580:80'
+      - "172.17.0.1:64580:80"
     healthcheck:
-      test: /usr/local/bin/{project_name} --status
+      test: ["CMD", "/usr/local/bin/{project_name}", "--status"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -32281,9 +32281,9 @@ services:
     restart: always
     logging: *default-logging
     volumes:
-      - './volumes/data/db/valkey:/data:z'
+      - ./volumes/data/db/valkey:/data:z
     healthcheck:
-      test: valkey-cli ping || exit 1
+      test: ["CMD-SHELL", "valkey-cli ping || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -32319,9 +32319,9 @@ networks:
 x-logging: &default-logging
   options:
     # Max 5MB per log file
-    max-size: '5m'
+    max-size: "5m"
     # Keep only 1 log file
-    max-file: '1'
+    max-file: "1"
   # JSON format for parsing
   driver: json-file
 ```
@@ -32345,8 +32345,8 @@ name: {project_name}
 
 x-logging: &default-logging
   options:
-    max-size: '5m'
-    max-file: '1'
+    max-size: "5m"
+    max-file: "1"
   driver: json-file
 
 services:
@@ -32363,13 +32363,13 @@ services:
       MODE: dev
       TZ: America/New_York
     volumes:
-      - './volumes/config:/config:z'
-      - './volumes/data:/data:z'
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
     ports:
       # Development: accessible from all interfaces, no 172.17.0.1 bind
-      - '64580:80'
+      - "64580:80"
     healthcheck:
-      test: /usr/local/bin/{project_name} --status
+      test: ["CMD", "/usr/local/bin/{project_name}", "--status"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -32579,8 +32579,8 @@ name: {project_name}
 
 x-logging: &default-logging
   options:
-    max-size: '5m'
-    max-file: '1'
+    max-size: "5m"
+    max-file: "1"
   driver: json-file
 
 services:
@@ -32597,12 +32597,12 @@ services:
       TZ: America/New_York
     ports:
       # Development: accessible from all interfaces, no 172.17.0.1 bind
-      - '64580:80'
+      - "64580:80"
     volumes:
-      - './volumes/config:/config:z'
-      - './volumes/data:/data:z'
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
     healthcheck:
-      test: /usr/local/bin/{project_name} --status
+      test: ["CMD", "/usr/local/bin/{project_name}", "--status"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -32638,8 +32638,8 @@ name: {project_name}
 
 x-logging: &default-logging
   options:
-    max-size: '5m'
-    max-file: '1'
+    max-size: "5m"
+    max-file: "1"
   driver: json-file
 
 services:
@@ -32671,7 +32671,7 @@ services:
       # Production: bound to Docker bridge only (reverse proxy handles external)
       - "172.17.0.1:64580:80"
     healthcheck:
-      test: /usr/local/bin/{project_name} --status
+      test: ["CMD", "/usr/local/bin/{project_name}", "--status"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -32691,7 +32691,7 @@ services:
     volumes:
       - ./volumes/data/db/valkey:/data:z
     healthcheck:
-      test: valkey-cli ping || exit 1
+      test: ["CMD-SHELL", "valkey-cli ping || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -32727,8 +32727,8 @@ name: {project_name}-test
 
 x-logging: &default-logging
   options:
-    max-size: '5m'
-    max-file: '1'
+    max-size: "5m"
+    max-file: "1"
   driver: json-file
 
 services:
@@ -32753,7 +32753,7 @@ services:
     ports:
       - "172.17.0.1:64581:80"
     healthcheck:
-      test: /usr/local/bin/{project_name} --status
+      test: ["CMD", "/usr/local/bin/{project_name}", "--status"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -32773,7 +32773,7 @@ services:
     tmpfs:
       - /data
     healthcheck:
-      test: valkey-cli ping || exit 1
+      test: ["CMD-SHELL", "valkey-cli ping || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -32807,8 +32807,8 @@ name: {project_name}
 
 x-logging: &default-logging
   options:
-    max-size: '5m'
-    max-file: '1'
+    max-size: "5m"
+    max-file: "1"
   driver: json-file
 
 services:
@@ -32837,7 +32837,7 @@ services:
       # Production: bound to Docker bridge only (reverse proxy handles external)
       - "172.17.0.1:64580:80"
     healthcheck:
-      test: /usr/local/bin/{project_name} --status
+      test: ["CMD", "/usr/local/bin/{project_name}", "--status"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -32857,7 +32857,7 @@ services:
     volumes:
       - ./volumes/data/db/valkey/{project_name}:/data:z
     healthcheck:
-      test: valkey-cli ping || exit 1
+      test: ["CMD-SHELL", "valkey-cli ping || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
