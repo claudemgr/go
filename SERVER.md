@@ -7235,9 +7235,9 @@ Before proceeding, confirm you understand:
 ```yaml
 volumes:
   # Host ./volumes/config → Container /config
-  - './volumes/config:/config:z'
+  - ./volumes/config:/config:z
   # Host ./volumes/data → Container /data
-  - './volumes/data:/data:z'
+  - ./volumes/data:/data:z
 ```
 
 ---
@@ -38896,8 +38896,8 @@ All compose files mount two volumes:
 
 ```yaml
 volumes:
-  - './volumes/config:/config:z'
-  - './volumes/data:/data:z'
+  - ./volumes/config:/config:z
+  - ./volumes/data:/data:z
 ```
 
 | Host Path | Container Path |
