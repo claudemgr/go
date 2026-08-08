@@ -39012,7 +39012,8 @@ ARG TARGETARCH
 ARG VERSION=dev
 ARG BUILD_DATE
 ARG COMMIT_ID
-ARG OFFICIAL_SITE=""
+# Optional: set via --build-arg OFFICIAL_SITE=... (empty by default)
+ARG OFFICIAL_SITE
 
 WORKDIR /app
 
@@ -39082,8 +39083,8 @@ EXPOSE 80
 # Stop signal for graceful shutdown
 STOPSIGNAL SIGRTMIN+3
 
-# Health check (start period allows for service initialization)
-HEALTHCHECK --start-period=90s --interval=10s --timeout=5s --retries=3 \
+# Health check (long start period for services that need initialization)
+HEALTHCHECK --start-period=10m --interval=5m --timeout=15s --retries=3 \
     CMD /usr/local/bin/{project_name} --status || exit 1
 
 # Use tini as init with signal propagation
@@ -39637,10 +39638,10 @@ ENV PORT=80 \
 # Only expose app port - db/cache are internal
 EXPOSE 80
 
-HEALTHCHECK --interval=10s --timeout=5s --start-period=90s --retries=3 \
+HEALTHCHECK --start-period=10m --interval=5m --timeout=15s --retries=3 \
     CMD /usr/local/bin/{project_name} --status || exit 1
 
-ENTRYPOINT ["tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 ```
 
 **All-in-One supervisor config (`docker/rootfs/etc/supervisor/conf.d/services.conf`):**
