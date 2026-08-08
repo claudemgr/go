@@ -11105,7 +11105,7 @@ PHASE 5: Server startup (actual server start)
 8. IF RUNNING AS ROOT - setup system resources BEFORE dropping privileges:
    a. Check/create system user:
       ├─ User {project_name} exists → use it
-      └─ User missing → create {internal_name}:{internal_name} (see PART 25)
+      └─ User missing → create {internal_name}:{internal_name} (see PART 24)
    b. Create ALL directories (while still root):
       ├─ {config_dir}/ and subdirs (ssl/, tor/)
       ├─ {data_dir}/ and subdirs (db/, security/, tor/, tor/site/)
