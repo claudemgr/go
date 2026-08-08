@@ -431,14 +431,14 @@ They are the same binary and the same compiled `internal`/`src` package tree —
 
 PART 4 owns the authoritative detection priority, override rules (flag > config > env > auto-detect), and exact flag/subcommand names — this section only establishes that both personas exist in the same binary and are mutually exclusive per invocation (a single process is either the interactive app or the server, never both at once in the same process; a machine can of course run the server as a background service while a user separately runs the CLI/TUI/GUI app against it as a client).
 
-Independently of which persona is active, the binary also has a **production/development mode** and an orthogonal **debug flag** — this is a second, unrelated axis (application runtime posture, not UI-vs-server selection):
+Independently of which persona is active, the binary also has a **production/development/debug mode** and an orthogonal **debug flag** — this is a second, unrelated axis (application runtime posture, not UI-vs-server selection):
 
 | Setting | Priority |
 |---|---|
 | Mode | `--mode` flag > `MODE` env > default `production` |
-| Debug | `--debug` flag > `DEBUG` env > `--mode debug` alias > default `false` |
+| Debug | `--debug` flag > `DEBUG` env > `MODE=debug` (defaults debug on) > default `false` |
 
-Four operational states result: production, production+debug, development, development+debug. In every state, operator/token authentication (`server.token`) is NEVER bypassed by debug mode — debug only ever adds observability (pprof endpoints, `/debug/*` API routes, verbose logging), never removes a security control. Development mode alone (without `--debug`) still keeps debug/pprof endpoints DISABLED. This mode/debug axis applies to the server persona; it has no meaning for a plain interactive GUI/TUI/CLI session.
+Six operational states result: production, production+debug, development, development+debug, debug (debug flag on by default), and debug with `DEBUG=false` (debug mode, debug endpoints off). In every state, operator/token authentication (`server.token`) is NEVER bypassed by debug mode — debug only ever adds observability (pprof endpoints, `/debug/*` API routes, verbose logging), never removes a security control. Development mode alone (without `--debug`) still keeps debug/pprof endpoints DISABLED. This mode/debug axis applies to the server persona; it has no meaning for a plain interactive GUI/TUI/CLI session.
 
 ## Architectural Rule
 
@@ -3517,7 +3517,7 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 | `NO_COLOR` | Disable ANSI color output when set and non-empty (see PART 8) |
 | `TERM` | Terminal type; `TERM=dumb` disables ALL ANSI escapes and forces CLI mode (see PART 4) |
 | `DOMAIN` | FQDN override (highest priority for hostname resolution) |
-| `MODE` | `production` (default) or `development`; shortcuts `prod`, `dev`, `devel` accepted; `debug` = development + debug on unless `DEBUG` is explicitly set (see PART 2) |
+| `MODE` | `production` (default; shortcut `prod`) · `development` (shortcuts `dev`, `devel`) · `debug` (explicit opt-in only — see MODE vs DEBUG in PART 6) |
 | `DATABASE_DRIVER` | `sqlite` (+ `sqlite2`, `sqlite3`), `libsql` (+ `turso`) |
 | `DATABASE_URL` | Database connection string |
 | `SMTP_HOST` | SMTP server hostname (if set, skips autodetect) |
@@ -4314,7 +4314,7 @@ server:
   fqdn: {hostname}
   # [::] = all interfaces IPv4/IPv6
   address: "[::]"
-  # production or development
+  # production, development, or debug
   mode: production
   # API version prefix (default: v1) - used in /api/{api_version}/ routes
   api_version: v1
@@ -5643,12 +5643,12 @@ exec $APP_BIN $FLAGS "$@"
 | Variable | Default | Description |
 |----------|---------|--------------|
 | `TZ` | `America/New_York` | Timezone for app and scheduler |
-| `MODE` | `development` | `production` (strict) or `dev`/`devel`/`development` (relaxed, synonyms) |
+| `MODE` | `development` | `production` (`prod`) strict · `development` (`dev`/`devel`) relaxed · `debug` explicit-only |
 | `DEBUG` | `false` | Enable ALL debug features (pprof, expvar, detailed logging) |
 | `ADDRESS` | `0.0.0.0` | Listen address |
 | `PORT` | `80` | Listen port (update docker-compose ports: to match) |
 
-**MODE vs DEBUG:** `MODE=dev`, `MODE=devel`, and `MODE=development` are synonymous — the app must treat all three as the same relaxed-mode value: relaxed security, verbose logging, no caching (sensible for local dev). `MODE=production` — strict security, minimal logging, caching enabled. `DEBUG=true` — enables debug endpoints (`/debug/*`), regardless of MODE. Boolean env vars accept all truthy/falsy values (see Boolean Values table in PART 5). Tor is auto-enabled if the `tor` binary is installed — no `ENABLE_TOR` flag needed; the Docker image always includes Tor.
+**MODE vs DEBUG:** `MODE=production` (shortcut `prod` — the default) is strict: minimal logging, full output/log sanitization. `MODE=development` (shortcuts `dev` / `devel`) sits between production and debug: relaxed security, verbose logging, sanitization still fully enforced. `MODE=debug` is explicit opt-in only — NEVER implied or auto-enabled — with minimal sanitization (internals, dumps, stack traces may be exposed); credentials (keys, tokens, passwords, secrets) are ALWAYS redacted in every mode, no exceptions. `DEBUG=truthy` enables the debug endpoints (`/debug/*`) regardless of MODE; nothing else may auto-enable debug. Every mode uses the cache when one is configured — cache use is config-driven, not mode-driven. Boolean env vars accept all truthy/falsy values (see Boolean Values table in PART 5). Tor is auto-enabled if the `tor` binary is installed — no `ENABLE_TOR` flag needed; the Docker image always includes Tor.
 
 ### X11 and Wayland Forwarding (Mandatory for GUI/Display Testing)
 
@@ -5882,7 +5882,7 @@ services:
     pull_policy: always
     logging: *default-logging
     environment:
-      # Production: strict security, minimal logging, caching enabled
+      # Production: strict security, minimal logging (cache use is config-driven via CACHE_URL)
       # NO DEBUG/MODE - debug must be explicitly set via CLI if needed
       PORT: 80
       TZ: America/New_York
@@ -6638,7 +6638,7 @@ NO_COLOR=1 {project_name} --status | grep -E '✅|❌|⚠️|🚀'
 # Print shell init for eval (auto-detect if SHELL omitted)
 --shell init [SHELL]
 # Set application mode
---mode {production|development}
+--mode {production|development|debug}
 # Set config directory
 --config {config_dir}
 # Set data directory
@@ -6695,7 +6695,7 @@ Shell Integration:
 --shell help                           - Show shell help
 
 Server Configuration:
---mode {production|development}        - Application mode (default: production)
+--mode {production|development|debug}  - Application mode (default: production)
 --config DIR                           - Config directory
 --data DIR                             - Data directory
 --cache DIR                            - Cache directory
@@ -7156,7 +7156,7 @@ PHASE 5: Server startup (actual server start)
 
 20. Log startup complete:
     ├─ Log "Listening on {address}:{port}"
-    ├─ Log "Mode: {production|development}"
+    ├─ Log "Mode: {production|development|debug}"
     ├─ Log "Tor: {.onion address}" (if enabled)
     └─ If first_run: log path to generated `server.yml`
 
@@ -8459,7 +8459,7 @@ func buildHealthResponse() *HealthResponse {
         // "healthy", "unhealthy", "degraded"
         Status:    getOverallStatus(),
         Version:   version.Version,
-        // "production" or "development"
+        // "production", "development", or "debug"
         Mode:      cfg.Server.Mode,
         Uptime:    formatUptime(startTime),
         Timestamp: time.Now().UTC(),
@@ -8593,7 +8593,7 @@ $ kill -TERM $(cat /var/run/myapp.pid)
 | `--pid` | `PID_FILE` | PID file path |
 | `--port` | `PORT` | Listen port |
 | `--address` | `LISTEN` | Listen address |
-| `--mode` | `MODE` | Application mode (production/development) |
+| `--mode` | `MODE` | Application mode (production/development/debug) |
 | (none) | `DATABASE_DIR` | SQLite database directory (Docker: `/data/db/sqlite`, Native: `{data_dir}/db/`) |
 | (none) | `BACKUP_DIR` | Backup directory (defaults to `/mnt/Backups/{internal_org}/{internal_name}` when writable, else `{data_dir}/backup/`; changeable) |
 
@@ -8848,7 +8848,7 @@ All templates, Swagger/OpenAPI, GraphQL, email links, etc. MUST use these resolv
 | `{baseurl}` | URL path prefix (auto-detected) | `/` or `/myproject` |
 | `{port}` | Port number (ALWAYS stripped if 80/443) | `8080` or empty |
 | `{address}` | Listen IP address | `203.0.113.50` |
-| `{app_mode}` | Application mode | `production` or `development` |
+| `{app_mode}` | Application mode | `production`, `development`, or `debug` |
 | `{onion_address}` | Tor .onion address (if enabled) | `abc...xyz.onion` |
 | `{i2p_address}` | I2P address (if enabled) | `abc...xyz.b32.i2p` |
 | `{smtp_address}` | SMTP server address (if configured) | `172.17.0.1` |
@@ -9548,7 +9548,7 @@ func SaveIfEmptyOrInvalid(current, flagValue string, validate func(string) bool)
 | `--tui` | Auto-detected |
 | `--cli` | Auto-detected |
 | `--gui` | Auto-detected |
-| `--mode tui/cli/gui` | `--mode` is ONLY for `production`/`development` (app mode), NOT UI |
+| `--mode tui/cli/gui` | `--mode` is ONLY for `production`/`development`/`debug` (app mode), NOT UI |
 | `tui` subcommand | Auto-detected |
 
 **Display mode is auto-detected from environment. Override via config only (not flags).**
@@ -17240,7 +17240,7 @@ type HealthResponse struct {
     // 4. Runtime info (PART 4: application modes)
     // human readable "2d 5h 30m"
     Uptime    string    `json:"uptime"`
-    // "production" or "development"
+    // "production", "development", or "debug"
     Mode      string    `json:"mode"`
     // current UTC time
     Timestamp time.Time `json:"timestamp"`
@@ -19940,6 +19940,8 @@ func printServerBannerAppModeLine(appMode string, useIcons bool, lang string) {
         icon := "🔒"
         if appMode == "development" {
             icon = "🔧"
+        } else if appMode == "debug" {
+            icon = "🐛"
         }
         fmt.Printf("%s %s: %s\n", icon, i18n.T(lang, "cli.running_in_mode_label"), appMode)
     } else {
@@ -20029,8 +20031,10 @@ Displayed immediately after the header line, before URLs. Shows current mode and
 | production | true | `🔒 Running in mode: production [debugging]` |
 | development | false | `🔧 Running in mode: development` |
 | development | true | `🔧 Running in mode: development [debugging]` |
+| debug | false | `🐛 Running in mode: debug` |
+| debug | true | `🐛 Running in mode: debug [debugging]` |
 
-**Note:** Development mode does NOT enable debug features — only the debug flag does. `[debugging]` shows exactly when the debug flag is on (`--debug` CLI, `DEBUG` env truthy, or `MODE=debug` alias when debug is not explicitly set).
+**Note:** Development mode does NOT enable debug features — only the debug flag does. `[debugging]` shows exactly when the debug flag is on (`--debug` CLI, `DEBUG` env truthy, or `MODE=debug` — debug on by default unless `DEBUG` is explicitly set).
 
 **Port Configuration (Project-Wide, NON-NEGOTIABLE):**
 
@@ -36314,7 +36318,8 @@ var localeFS embed.FS
     "connected": "Conectado",
     "disconnected": "Desconectado",
     "production": "Producción",
-    "development": "Desarrollo"
+    "development": "Desarrollo",
+    "debug": "Depuración"
   },
 
   "status_values": {
@@ -38780,7 +38785,7 @@ Tor Hidden Service: Connected
 |-------|-------------|
 | Server Status | Running, stopped, or starting |
 | Port | Bind port |
-| Mode | production or development |
+| Mode | production, development, or debug |
 | Uptime | Human-readable uptime |
 | Tor | Connected/disabled and onion address |
 
