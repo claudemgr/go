@@ -2338,16 +2338,16 @@ server:
 
 ## How to Read This Large File
 
-**AI.md is ~2.4MB and ~62,300 lines. You CANNOT read it all at once. Follow these procedures.**
+**AI.md is ~2.4MB and ~63,300 lines. You CANNOT read it all at once. Follow these procedures.**
 
 ### File Size Reality
 
 | Constraint | Value |
 |------------|-------|
 | File size | ~2.4MB |
-| Line count | ~62,300 lines |
+| Line count | ~63,300 lines |
 | Read limit | ~500 lines per read |
-| Full reads needed | ~125 reads (impractical) |
+| Full reads needed | ~127 reads (impractical) |
 
 **Use the PART index to find relevant sections, then read each section COMPLETELY.**
 
@@ -5516,7 +5516,7 @@ curl -q -LSsf -X POST -d '{"key":"value"}' {url}
 
 | Flag | Purpose | Why Required |
 |------|---------|--------------|
-| `-q` | Quiet mode | Don't read `.curlrc` - ensures consistent behavior |
+| `-q` | Disable `.curlrc` | Skip config file - ensures consistent behavior |
 | `-L` | Follow redirects | Handle 301/302 automatically |
 | `-S` | Show errors | Display errors even in silent mode |
 | `-s` | Silent | No progress bar/meter |
@@ -6037,7 +6037,7 @@ package main
 |-------|-------|
 | **Name** | {project_name} |
 | **Organization** | {project_org} |
-| **Official Site** | https://{project_name}.{project_org}.us |
+| **Official Site** | `{official_site}` (e.g. `https://{project_name}.example.com`) |
 | **Repository** | {PLATFORM_REPO_URL} |
 | **README** | README.md |
 | **License** | MIT > LICENSE.md |
@@ -6130,7 +6130,7 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 | `~/Projects/` | Base projects directory (recommended) | Can be `~/Projects/`, `~/Documents/`, `/opt/`, etc. |
 | `{gitprovider}` | Git hosting provider or `local` | `github`, `gitlab`, `bitbucket`, `private`, `local` |
 | `{project_org}` | Organization/username (inferred) | `apimgr`, `casjay`, `myorg` |
-| `{project_name}` | Project name (inferred) | `jokes`, `icons`, `myproject` |
+| `{internal_name}` | Frozen on-disk project name (inferred) | `jokes`, `icons`, `myproject` |
 
 **Examples of recommended structure:**
 ```
@@ -10810,7 +10810,7 @@ Run '{project_name} <command> help' for detailed help on any command.
 | `--backup` | Directory | `/mnt/Backups/{internal_org}/{internal_name}/` (if writable, else `{data_dir}/backup/`) | `~/.local/share/Backups/{internal_org}/{internal_name}/` |
 | `--pid` | File | `/var/run/{internal_org}/{internal_name}.pid` | `~/.local/share/{internal_org}/{internal_name}/{internal_name}.pid` |
 
-**Note:** `--backup` prefers the system backup dir if writable. Fallback is mode-aware: system mode (started as root) falls back to `{data_dir}/backup/` — never a `$HOME`-derived path; user mode falls back to the user dir. See `GetBackupDir()` in PART 5.
+**Note:** `--backup` prefers the system backup dir if writable. Fallback is mode-aware: system mode (started as root) falls back to `{data_dir}/backup/` — never a `$HOME`-derived path; user mode falls back to the user dir. See `GetBackupDir()` in PART 8.
 
 **Directory mode is locked at process start.** System vs user paths are decided ONCE from the EUID at startup, before any privilege drop, and cached for the process lifetime. Never resolve `~` or `$HOME` after the privilege drop — the service account's HOME points at `{data_dir}` (e.g. `/var/lib/{internal_org}/{internal_name}`), so a late `$HOME` lookup nests user-style paths like `.local/share/Backups/` inside the system data dir.
 
@@ -11099,7 +11099,7 @@ PHASE 5: Server startup (actual server start)
    ├─ {data_dir}    (/var/lib/... or ~/.local/share/...)
    ├─ {cache_dir}   (/var/cache/... or ~/.cache/...)
    ├─ {log_dir}     (/var/log/... or ~/.local/log/...)
-   ├─ {backup_dir}  (see PART 5 GetBackupDir - /mnt/Backups/... if writable, else {data_dir}/backup/ in system mode)
+   ├─ {backup_dir}  (see PART 8 GetBackupDir - /mnt/Backups/... if writable, else {data_dir}/backup/ in system mode)
    └─ Never resolve ~/$HOME again after step 8g — the service account's HOME is {data_dir}
 
 8. IF RUNNING AS ROOT - setup system resources BEFORE dropping privileges:
@@ -11114,7 +11114,7 @@ PHASE 5: Server startup (actual server start)
       └─ {backup_dir}/
    c. Set ownership: chown -R {internal_name}:{internal_name} on all dirs
    d. Set permissions: 0755 general dirs, 0700 sensitive (security/, ssl/, tor/)
-   e. Determine ports (see PART 15 for full port rules):
+   e. Determine ports (see PART 5 for full port rules):
       ├─ Format 1: --port {port} (single port)
       │   ├─ HTTP by default
       │   ├─ If port is 443 → HTTPS-only mode
@@ -11269,7 +11269,7 @@ PHASE 5: Server startup (actual server start)
 - Starting child processes (tor, scheduler)
 - Signal handling
 
-**Port binding examples (see PART 15 for full rules):**
+**Port binding examples (see PART 5 for full rules):**
 
 | Config | Port(s) | Bind As | Protocol |
 |--------|---------|---------|----------|
@@ -24179,7 +24179,7 @@ document.addEventListener('click', function(e) {
 **All components use these CSS variables for consistent theming:**
 
 ```css
-:root {
+html.theme-dark {
   /* Backgrounds — dark palette */
   --color-bg: #282a36;
   --color-bg-secondary: #21222c;
@@ -26660,7 +26660,7 @@ src/server/static/
 ```css
 :root {
   /* Colors — reuse the --color-* variables from the CSS Variable Reference
-     above (defined once in :root / html.theme-light); never redefine them
+     above (defined once in html.theme-dark / html.theme-light); never redefine them
      here with different names or values. */
 
   /* Typography */
@@ -28638,8 +28638,8 @@ The opt-out is a POST form on the privacy page; the server sets the `ccpa_opt_ou
   left: 0;
   right: 0;
   width: 100%;
-  background: #7c5295;  /* Purple/magenta - or var(--accent-color) */
-  color: #ffffff;
+  background: var(--color-primary);
+  color: white;
   z-index: 9999;
 }
 
@@ -28661,7 +28661,7 @@ The opt-out is a POST form on the privacy page; the server sets the `ccpa_opt_ou
 }
 
 .cookie-banner .policy-link {
-  color: #ffffff;
+  color: white;
   text-decoration: underline;
 }
 
@@ -28679,7 +28679,7 @@ The opt-out is a POST form on the privacy page; the server sets the `ccpa_opt_ou
 .cookie-banner .btn-decline {
   background: transparent;
   border: none;
-  color: #ffffff;
+  color: white;
   padding: 0.625rem 1.5rem;
   cursor: pointer;
   font-size: 0.9rem;
@@ -28690,9 +28690,9 @@ The opt-out is a POST form on the privacy page; the server sets the `ccpa_opt_ou
 }
 
 .cookie-banner .btn-accept {
-  background: #ffffff;
+  background: white;
   border: none;
-  color: #7c5295;
+  color: var(--color-primary);
   padding: 0.625rem 1.5rem;
   cursor: pointer;
   font-size: 0.9rem;
@@ -33609,7 +33609,9 @@ In cluster mode, tasks are distributed to prevent duplicate execution:
 **Local Tasks (run on each node):**
 - `session_cleanup`
 - `token_cleanup`
+- `log_rotation`
 - `healthcheck_self`
+- `tor_health`
 - `cluster_heartbeat`
 
 ### Task Locking (Cluster Mode)
@@ -38389,6 +38391,7 @@ docker:
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg BUILD_DATE="$(BUILD_DATE)" \
 		--build-arg COMMIT_ID="$(COMMIT_ID)" \
+		--build-arg OFFICIAL_SITE="$(OFFICIAL_SITE)" \
 		-t $(REGISTRY):$(VERSION) \
 		-t $(REGISTRY):latest \
 		.
@@ -39267,9 +39270,7 @@ services:
     environment:
       PORT: 80
       TZ: ${TZ:-America/New_York}
-      CONTAINER_NAME: {project_name}-app
-      HOSTNAME: ${BASE_HOST_NAME:-$HOSTNAME}
-      CACHE_URL: valkey://{project_name}-cache:6379
+      CONTAINER_NAME: {project_name}-app      CACHE_URL: valkey://{project_name}-cache:6379
     volumes:
       - ./volumes/config:/config:z
       - ./volumes/data:/data:z
@@ -39371,9 +39372,7 @@ services:
     environment:
       PORT: 80
       TZ: ${TZ:-America/New_York}
-      CONTAINER_NAME: {project_name}-app
-      HOSTNAME: ${BASE_HOST_NAME:-$HOSTNAME}
-      DB_HOST: {project_name}-db
+      CONTAINER_NAME: {project_name}-app      DB_HOST: {project_name}-db
       DB_NAME: {project_name}
       DB_USER: {project_name}
       CACHE_URL: valkey://{project_name}-cache:6379
@@ -39508,9 +39507,7 @@ services:
     environment:
       PORT: 80
       TZ: ${TZ:-America/New_York}
-      CONTAINER_NAME: {project_name}-app
-      HOSTNAME: ${BASE_HOST_NAME:-$HOSTNAME}
-    volumes:
+      CONTAINER_NAME: {project_name}-app    volumes:
       - ./volumes/config:/config:z
       - ./volumes/data:/data:z
     ports:
@@ -39581,11 +39578,12 @@ COPY src/ ./src/
 
 # Build static binary (CGO_ENABLED=0)
 ARG VERSION=dev
-ARG COMMIT=unknown
-ARG BUILD_TIME=unknown
+ARG COMMIT_ID=unknown
+ARG BUILD_DATE=unknown
+ARG OFFICIAL_SITE=
 
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildTime=${BUILD_TIME}" \
+    -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
     -o {project_name} ./src
 
 # =============================================================================
@@ -40108,9 +40106,7 @@ services:
     environment:
       PORT: 80
       TZ: ${TZ:-America/New_York}
-      CONTAINER_NAME: {project_name}-app
-      HOSTNAME: ${BASE_HOST_NAME:-$HOSTNAME}
-      CACHE_URL: valkey://{project_name}-cache:6379
+      CONTAINER_NAME: {project_name}-app      CACHE_URL: valkey://{project_name}-cache:6379
       # DOMAIN (optional - auto-detects from reverse proxy headers)
       # DOMAIN: myapp.com,www.myapp.com
     volumes:
@@ -42779,6 +42775,7 @@ docker:build:
         --build-arg VERSION="${VERSION}" \
         --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
+        --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
         --label "org.opencontainers.image.title=${PROJECT_NAME}" \
@@ -42848,6 +42845,7 @@ docker:build-aio:
         --build-arg VERSION="${VERSION}" \
         --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
+        --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
         --label "org.opencontainers.image.title=${PROJECT_NAME}-aio" \
@@ -42906,6 +42904,7 @@ docker:build-devel:
         --build-arg VERSION="devel" \
         --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
+        --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
         --label "org.opencontainers.image.title=${PROJECT_NAME}-devel" \
@@ -43677,6 +43676,7 @@ pipeline {
                             --build-arg VERSION="${VERSION}" \
                             --build-arg COMMIT_ID="${COMMIT_ID}" \
                             --build-arg BUILD_DATE="${BUILD_DATE}" \
+                            --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
                             --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.title=${PROJECT_NAME}" \
@@ -43743,6 +43743,7 @@ pipeline {
                             --build-arg VERSION="${VERSION}" \
                             --build-arg COMMIT_ID="${COMMIT_ID}" \
                             --build-arg BUILD_DATE="${BUILD_DATE}" \
+                            --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
                             --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.title=${PROJECT_NAME}-aio" \
@@ -43796,6 +43797,7 @@ pipeline {
                             --build-arg VERSION="devel" \
                             --build-arg COMMIT_ID="${COMMIT_ID}" \
                             --build-arg BUILD_DATE="${BUILD_DATE}" \
+                            --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
                             --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.title=${PROJECT_NAME}-devel" \
@@ -46428,7 +46430,7 @@ docker run --name "{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -
 ## Links
 
 - [Repository]({PLATFORM_REPO_URL})
-- [Live Demo](https://{project_name}.{project_org}.us) (if applicable)
+- [Live Demo]({official_site}) (if applicable)
 - [API Documentation](/server/docs/swagger) (Swagger UI)
 - [GraphQL Playground](/server/docs/graphql)
 
@@ -50166,6 +50168,37 @@ func ValidateTorConfig(config *TorConfig) []ValidationError {
         errors = append(errors, ValidationError{
             Field:   "num_intro_points",
             Message: "Must be between 3 and 10",
+        })
+    }
+
+    if config.VirtualPort < 1 || config.VirtualPort > 65535 {
+        errors = append(errors, ValidationError{
+            Field:   "virtual_port",
+            Message: "Must be a valid port (1-65535)",
+        })
+    }
+
+    // Performance validation (bootstrap + streams)
+    if config.BootstrapTimeout < 30 || config.BootstrapTimeout > 600 {
+        errors = append(errors, ValidationError{
+            Field:   "bootstrap_timeout",
+            Message: "Must be between 30 and 600 seconds",
+        })
+    }
+
+    if config.MaxStreamsPerCircuit < 10 || config.MaxStreamsPerCircuit > 500 {
+        errors = append(errors, ValidationError{
+            Field:   "max_streams_per_circuit",
+            Message: "Must be between 10 and 500",
+        })
+    }
+
+    // Bandwidth validation (monthly cap) — number + GB/TB, or the literal "unlimited"
+    monthlyPattern := regexp.MustCompile(`^(\d+\s*(GB|TB)|unlimited)$`)
+    if !monthlyPattern.MatchString(strings.TrimSpace(config.MaxMonthlyBandwidth)) {
+        errors = append(errors, ValidationError{
+            Field:   "max_monthly_bandwidth",
+            Message: "Format: number + GB/TB or 'unlimited' (e.g., '100 GB')",
         })
     }
 
@@ -56048,9 +56081,9 @@ User receives: "Password reset requested by administrator.
 | Scenario | Error Message |
 |----------|---------------|
 | Blocklisted username | `Username contains blocked word: {word}` |
-| Username too short | `Username must be at least 3 characters` |
-| Username too long | `Username cannot exceed 32 characters` |
-| Invalid characters | `Username can only contain lowercase letters, numbers, underscore, and hyphen` |
+| Username too short | `Username must be at least 2 characters` |
+| Username too long | `Username cannot exceed 39 characters` |
+| Invalid characters | `Username can only contain lowercase letters, numbers, and hyphen` |
 | Invalid email format | `Please enter a valid email address` |
 | Password too weak | `Password must be at least 8 characters` |
 
@@ -56557,6 +56590,10 @@ server:
           auto_generate_cert: true
           sp_cert_path: ""
           sp_key_path: ""
+          # For auto_generate_cert: true — validity of the generated self-signed
+          # cert; the server rotates before expiry and re-publishes metadata.
+          # Ignored when auto_generate_cert: false (operator owns rotation).
+          cert_expiry_days: 3650
           # Single Logout (SLO) — SP-initiated and IdP-initiated
           slo_enabled: true
           idp_slo_url: "https://example.okta.com/app/abc123/slo/saml"
@@ -56644,7 +56681,12 @@ server:
 - **IdP-initiated login:** the IdP POSTs an unsolicited `Response` to the ACS with no stored `InResponseTo`. This is accepted ONLY when the provider is explicitly configured to allow it (`allow_idp_initiated: true`; unsolicited assertions weaken CSRF guarantees), and is rejected by default. Signature, audience, and replay checks are unchanged.
 - If the IdP does not emit a groups attribute, group-based admin mapping is unavailable for that provider and this MUST be documented, exactly as for OIDC/LDAP
 - With a `persistent` NameID format, the NameID becomes the stable `external_id`; with a transient format the SP MUST fall back to a documented stable attribute for `external_id`
-- SP signing/encryption keys MUST be auto-generated (self-signed) on provider creation when `auto_generate_cert: true` (zero-config default), or supplied by the admin via `sp_cert_path`/`sp_key_path`; the private key MUST be stored encrypted and included in backups
+- SP signing/encryption keys MUST be auto-generated (self-signed) on provider creation when `auto_generate_cert: true` (zero-config default), or supplied by the admin via `sp_cert_path`/`sp_key_path`; the private key MUST be stored encrypted and included in backups. See "SAML SP Certificate Management" below for rotation.
+
+### SAML SP Certificate Management
+
+- **Default (zero-config):** on first enable of a provider, the server generates a self-signed SP signing/encryption keypair (`auto_generate_cert: true`), persists the private key encrypted at rest (same store as 2FA secrets), and publishes the public cert in SP metadata. The server rotates before `cert_expiry_days` expiry and re-publishes metadata.
+- **Admin-supplied:** `auto_generate_cert: false` uses operator PEM `sp_cert_path`/`sp_key_path` (e.g. a cert already trusted by the IdP). Rotation is the operator's responsibility.
 
 ### Starter Group Mapping Presets
 
@@ -57303,13 +57345,18 @@ Appearance Settings (/users/settings/appearance)
 
 **Preferences are created on first access (lazy initialization):**
 ```go
-func GetOrCreatePreferences(userID int) (*UserPreferences, error) {
+func GetOrCreatePreferences(db *sql.DB, userID int) (*UserPreferences, error) {
     prefs := &UserPreferences{}
-    err := db.Where("user_id = ?", userID).First(prefs).Error
-    if err == gorm.ErrRecordNotFound {
-        // Uses DB defaults
+    err := db.QueryRow(`SELECT * FROM user_preferences WHERE user_id = ?`, userID).
+        Scan(&prefs.UserID /* ...remaining fields */)
+    if err == sql.ErrNoRows {
+        // Insert with DB-level defaults and re-read
+        if _, err := db.Exec(`INSERT INTO user_preferences (user_id) VALUES (?)`, userID); err != nil {
+            return nil, err
+        }
         prefs = &UserPreferences{UserID: userID}
-        db.Create(prefs)
+    } else if err != nil {
+        return nil, err
     }
     return prefs, nil
 }
@@ -58471,8 +58518,8 @@ mysql://[username[:password]@]host[:port]/database[?params]
 
 ```yaml
 # All tables go in same database with prefixes:
-# - srv_* tables (config, admin_sessions, rate_limits, audit_log, scheduler_*, backups)
-# - usr_* tables (admins, users, api_keys, password_resets, email_verifications, totp_secrets, passkeys, trusted_devices, user_sessions)
+# - srv_* tables (config, admins, admin_sessions, rate_limits, audit_log, scheduler_*, backups)
+# - usr_* tables (users, api_keys, password_resets, email_verifications, totp_secrets, passkeys, trusted_devices, user_sessions)
 ```
 
 ### Table Prefixes in Shared Database
@@ -59857,13 +59904,18 @@ Organization Email Settings (/orgs/acme-corp/email)
 
 **Preferences are created on first access (lazy initialization):**
 ```go
-func GetOrCreateOrgPreferences(orgID int) (*OrgPreferences, error) {
+func GetOrCreateOrgPreferences(db *sql.DB, orgID int) (*OrgPreferences, error) {
     prefs := &OrgPreferences{}
-    err := db.Where("org_id = ?", orgID).First(prefs).Error
-    if err == gorm.ErrRecordNotFound {
-        // Uses DB defaults
+    err := db.QueryRow(`SELECT * FROM org_preferences WHERE org_id = ?`, orgID).
+        Scan(&prefs.OrgID /* ...remaining fields */)
+    if err == sql.ErrNoRows {
+        // Insert with DB-level defaults and re-read
+        if _, err := db.Exec(`INSERT INTO org_preferences (org_id) VALUES (?)`, orgID); err != nil {
+            return nil, err
+        }
         prefs = &OrgPreferences{OrgID: orgID}
-        db.Create(prefs)
+    } else if err != nil {
+        return nil, err
     }
     return prefs, nil
 }
@@ -59963,7 +60015,7 @@ GET /api/{api_version}/orgs/acme-corp/members/very-private-user
 
 ```sql
 -- Add org_visibility to users table
-ALTER TABLE users ADD COLUMN org_visibility INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS org_visibility INTEGER NOT NULL DEFAULT 1;
 -- 1 = show basic info in orgs, 0 = username only
 
 -- Index for efficient org member queries
@@ -60300,9 +60352,9 @@ server:
 **Environment variable override:**
 
 ```bash
-CUSTOM_DOMAINS_ENABLED=true
-CUSTOM_DOMAINS_MAX_PER_USER=5
-CUSTOM_DOMAINS_MAX_PER_ORG=20
+{PROJECT_NAME}_CUSTOM_DOMAINS_ENABLED=true
+{PROJECT_NAME}_CUSTOM_DOMAINS_MAX_PER_USER=5
+{PROJECT_NAME}_CUSTOM_DOMAINS_MAX_PER_ORG=20
 ```
 
 ## Database Schema
@@ -60372,7 +60424,6 @@ CREATE TABLE IF NOT EXISTS custom_domains (
     updated_at          INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_domains_domain ON custom_domains(domain);
 CREATE INDEX IF NOT EXISTS idx_custom_domains_owner ON custom_domains(owner_type, owner_id);
 CREATE INDEX IF NOT EXISTS idx_custom_domains_status ON custom_domains(status);
 CREATE INDEX IF NOT EXISTS idx_custom_domains_ssl_expires ON custom_domains(ssl_expires_at);
@@ -61215,8 +61266,10 @@ project_org:     {project_org}
 internal_name:   {project_name}
 app_name:        {project_name}
 official_site:   {fqdn}
-maintainer_name: {maintainer_name — defaults to {project_org} if unset}
-maintainer_email: {maintainer_email — or empty; used only if set}
+# Defaults to project_org if unset
+maintainer_name: {maintainer_name}
+# Optional — used only if set
+maintainer_email: {maintainer_email}
 
 ## Business logic
 
@@ -63025,7 +63078,8 @@ When bootstrapping a new project from this specification:
 1. **Create src/server/server.go** - HTTP server setup
 2. **Create src/server/handler/health.go** - Health check
 3. **Add CLI flags** per PART 8 specification
-4. **Create Makefile** per PART 26
+4. **Add service support** per PART 25
+5. **Create Makefile** per PART 26
 
 **Test:** Server starts and responds to `/server/healthz`
 

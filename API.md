@@ -2233,16 +2233,16 @@ server:
 
 ## How to Read This Large File
 
-**AI.md is ~1.7MB and ~45,620 lines. You CANNOT read it all at once. Follow these procedures.**
+**AI.md is ~1.7MB and ~46,050 lines. You CANNOT read it all at once. Follow these procedures.**
 
 ### File Size Reality
 
 | Constraint | Value |
 |------------|-------|
 | File size | ~1.7MB |
-| Line count | ~45,620 lines |
+| Line count | ~46,050 lines |
 | Read limit | ~500 lines per read |
-| Full reads needed | ~92 reads (impractical) |
+| Full reads needed | ~93 reads (impractical) |
 
 **Use the PART index to find relevant sections, then read each section COMPLETELY.**
 
@@ -5780,7 +5780,7 @@ package main
 |-------|-------|
 | **Name** | {project_name} |
 | **Organization** | {project_org} |
-| **Official Site** | https://{project_name}.{project_org}.us |
+| **Official Site** | `{official_site}` (e.g. `https://{project_name}.example.com`) |
 | **Repository** | {PLATFORM_REPO_URL} |
 | **README** | README.md |
 | **License** | MIT > LICENSE.md |
@@ -13168,7 +13168,7 @@ func warmCache(ctx context.Context) error {
 | Schema changes | Idempotent `ALTER TABLE` on startup |
 | No migrations table | Keep it simple |
 
-See **Database Schema for Configuration** section in PART 5 for full table definitions.
+See **Full Database Schema Summary** section in PART 5 for full table definitions.
 
 ### Schema Updates (Idempotent Approach)
 
@@ -13791,7 +13791,7 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 | Generated | First start. Stored in `server.db` row `app_secrets.installation_secret`, base64-encoded. |
 | Scope | Server-wide. Generated on first start and persisted to `server.db`. NEVER appears in a request, response, or log. |
 | Used by | `{security_id}` HMAC (PART 11 → "Security Reports"); PGP private-key KDF (PART 11 → "GPG Keypair Management"); future derived material (cookie signing salts, etc.). |
-| Rotation | Manual via `--maintenance secret rotate installation_secret` (PART 5 → "Secret Rotation"). Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt for the operator token, log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and re-bases all live HMACs. The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
+| Rotation | Manual via `--maintenance secret rotate installation_secret` (PART 11 → "Secret Rotation"). Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt for the operator token, log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and re-bases all live HMACs. The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
 | Backup | Always — see PART 21 → "Backup Contents". Required for any restore: without it, the PGP private key in the backup is undecryptable. |
 | Loss = catastrophic | Lost = cannot decrypt PGP private key (and therefore cannot decrypt in-flight encrypted security reports); cannot validate `{security_id}` URLs on existing security.txt copies until the file regenerates. Recovery requires the operator to: regenerate keypair, regenerate `installation_secret`, accept that all in-flight encrypted reports are unreadable. |
 
@@ -13806,7 +13806,7 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 
 | Key | Length | Storage | Purpose | Rotation |
 |-----|--------|---------|---------|----------|
-| `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run) | At-rest encryption for ALL sensitive server data: API token hashes, security report bodies (used as the AES fallback when no PGP keypair exists, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via `--maintenance secret rotate encryption_key` (PART 5 → "Secret Rotation"). Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt for the operator token, log to `audit.log` as `security.encryption_key_rotated`. 30-day grace for in-flight encrypted data. |
+| `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run) | At-rest encryption for ALL sensitive server data: API token hashes, security report bodies (used as the AES fallback when no PGP keypair exists, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via `--maintenance secret rotate encryption_key` (PART 11 → "Secret Rotation"). Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt for the operator token, log to `audit.log` as `security.encryption_key_rotated`. 30-day grace for in-flight encrypted data. |
 
 ### Secret Rotation (`--maintenance secret` / `server.token`)
 
@@ -27665,7 +27665,7 @@ server:
 | **Scheduler metrics** | If using background scheduler (PART 18) |
 | **System metrics** | If `include_system: true` in config |
 | **Runtime metrics** | If `include_runtime: true` in config |
-| **Business metrics** | App-specific (users, sessions, etc.) |
+| **Business metrics** | App-specific domain counters (items, jobs, records processed, etc. — this template has no user accounts, so no users/sessions metrics) |
 
 ## Complete Metrics Reference
 
@@ -27833,23 +27833,23 @@ server:
 
 # HELP {project_name}_http_requests_total Total number of HTTP requests
 # TYPE {project_name}_http_requests_total counter
-{project_name}_http_requests_total{method="GET",path="/api/v1/users",status="200"} 1523
-{project_name}_http_requests_total{method="GET",path="/api/v1/users/:id",status="200"} 892
-{project_name}_http_requests_total{method="GET",path="/api/v1/users/:id",status="404"} 23
-{project_name}_http_requests_total{method="POST",path="/api/v1/users",status="201"} 42
+{project_name}_http_requests_total{method="GET",path="/api/v1/items",status="200"} 1523
+{project_name}_http_requests_total{method="GET",path="/api/v1/items/:id",status="200"} 892
+{project_name}_http_requests_total{method="GET",path="/api/v1/items/:id",status="404"} 23
+{project_name}_http_requests_total{method="POST",path="/api/v1/items",status="201"} 42
 {project_name}_http_requests_total{method="GET",path="/server/healthz",status="200"} 8640
 
 # HELP {project_name}_http_request_duration_seconds HTTP request duration in seconds
 # TYPE {project_name}_http_request_duration_seconds histogram
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.001"} 120
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.005"} 890
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.01"} 1400
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.025"} 1500
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.05"} 1510
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.1"} 1520
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="+Inf"} 1523
-{project_name}_http_request_duration_seconds_sum{method="GET",path="/api/v1/users"} 12.456
-{project_name}_http_request_duration_seconds_count{method="GET",path="/api/v1/users"} 1523
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.001"} 120
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.005"} 890
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.01"} 1400
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.025"} 1500
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.05"} 1510
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.1"} 1520
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="+Inf"} 1523
+{project_name}_http_request_duration_seconds_sum{method="GET",path="/api/v1/items"} 12.456
+{project_name}_http_request_duration_seconds_count{method="GET",path="/api/v1/items"} 1523
 
 # HELP {project_name}_http_active_requests Number of active HTTP requests
 # TYPE {project_name}_http_active_requests gauge
@@ -28126,17 +28126,17 @@ var (
     )
 
     // Business metrics
-    UsersTotal = promauto.NewGauge(
+    ItemsTotal = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{project_name}_users_total",
-            Help: "Total number of registered users",
+            Name: "{project_name}_items_total",
+            Help: "Total number of items",
         },
     )
 
-    UsersActive = promauto.NewGauge(
+    ItemsActive = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{project_name}_users_active",
-            Help: "Number of users active in last 24 hours",
+            Name: "{project_name}_items_active",
+            Help: "Number of items updated in last 24 hours",
         },
     )
 
@@ -28707,16 +28707,16 @@ func StartUptimeUpdater() {
 ```
 # HELP {project_name}_http_requests_total Total number of HTTP requests
 # TYPE {project_name}_http_requests_total counter
-{project_name}_http_requests_total{method="GET",path="/api/{api_version}/users",status="200"} 1523
-{project_name}_http_requests_total{method="POST",path="/api/{api_version}/users",status="201"} 42
+{project_name}_http_requests_total{method="GET",path="/api/{api_version}/items",status="200"} 1523
+{project_name}_http_requests_total{method="POST",path="/api/{api_version}/items",status="201"} 42
 
 # HELP {project_name}_http_request_duration_seconds HTTP request duration in seconds
 # TYPE {project_name}_http_request_duration_seconds histogram
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="0.01"} 1400
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="0.1"} 1520
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="+Inf"} 1523
-{project_name}_http_request_duration_seconds_sum{method="GET",path="/api/{api_version}/users"} 12.456
-{project_name}_http_request_duration_seconds_count{method="GET",path="/api/{api_version}/users"} 1523
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/items",le="0.01"} 1400
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/items",le="0.1"} 1520
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/items",le="+Inf"} 1523
+{project_name}_http_request_duration_seconds_sum{method="GET",path="/api/{api_version}/items"} 12.456
+{project_name}_http_request_duration_seconds_count{method="GET",path="/api/{api_version}/items"} 1523
 
 # HELP {project_name}_db_connections_open Number of open database connections
 # TYPE {project_name}_db_connections_open gauge
@@ -28830,7 +28830,7 @@ groups:
 
 ```json
 {
-  "title": "{PROJECT_NAME} Metrics",
+  "title": "{project_name} Metrics",
   "panels": [
     {
       "title": "Request Rate",
@@ -29196,47 +29196,6 @@ Every backup is verified **immediately after creation** - backups must be 100% w
 | `backup.daily_updated` | Daily incremental updated | Filename, changes since last |
 | `backup.skipped_disk_full` | Backup skipped — insufficient free space or disk above threshold | Free space, disk usage %, threshold |
 
-### Backup Files Created (Single Task at 02:00)
-
-**The backup task creates TWO files each run:**
-
-| File | Description | Retention |
-|------|-------------|-----------|
-| `{project_name}_backup_YYYY-MM-DD.tar.gz[.enc]` | Full backup (yesterday's data) | Controlled by `max_backups` |
-| `{project_name}-daily.tar.gz[.enc]` | Daily incremental (changes since full) | Always 1 (replaced each run) |
-| `{project_name}-hourly.tar.gz[.enc]` | Hourly incremental (if enabled) | Always 1 (replaced each run) |
-
-### Retention Configuration
-
-```yaml
-server:
-  backup:
-    retention:
-      # Full backups to keep (default: 1 = yesterday only)
-      max_backups: 1
-      # Optional: keep weekly backup (e.g., every Sunday's backup)
-      keep_weekly: 0
-      # Optional: keep monthly backup (e.g., 1st of month)
-      keep_monthly: 0
-      # Optional: keep yearly backup (e.g., Jan 1st)
-      keep_yearly: 0
-      # Hard size cap: percent of backup volume or absolute size; 0 = disabled
-      max_total_size: "10%"
-```
-
-**Retention Settings:**
-
-| Setting | Default | Valid | Description |
-|---------|---------|-------|-------------|
-| `max_backups` | 1 | ≥1 | Daily full backups to keep |
-| `keep_weekly` | 0 | ≥0 | Weekly backups (Sunday) - 0 = disabled |
-| `keep_monthly` | 0 | ≥0 | Monthly backups (1st) - 0 = disabled |
-| `keep_yearly` | 0 | ≥0 | Yearly backups (Jan 1st) - 0 = disabled |
-| `max_total_size` | `"10%"` | % or bytes | Hard size cap (e.g. `"10%"`, `"50G"`); `0` = disabled; overrides count limits |
-
-**Falsey Values (all mean disabled):**
-- `0`, `false`, `no`, `none`, `disable`, `disabled`, `off`
-
 **Validation (warn, don't error - server must start):**
 
 | Value | Behavior |
@@ -29277,10 +29236,6 @@ WARN: keep_monthly: 24 exceeds recommended 12 (2 years of monthly backups)
 └─────────────────────────────────────────────────────────┘
 ```
 
-**Default: 2 files total (yesterday + today's incremental)**
-
-**With hourly enabled: 3 files total** (yesterday + daily + hourly incrementals)
-
 **Retention Priority Order:**
 ```
 1. Yearly (Jan 1st) - highest priority, never deleted if in keep_yearly count
@@ -29288,6 +29243,16 @@ WARN: keep_monthly: 24 exceeds recommended 12 (2 years of monthly backups)
 3. Weekly (Sunday) - next priority
 4. Daily (max_backups) - lowest priority, oldest deleted first
 ```
+
+### Backup Files Created (Single Task at 02:00)
+
+**The backup task creates TWO files each run:**
+
+| File | Description | Retention |
+|------|-------------|-----------|
+| `{project_name}_backup_YYYY-MM-DD.tar.gz[.enc]` | Full backup (yesterday's data) | Controlled by `max_backups` |
+| `{project_name}-daily.tar.gz[.enc]` | Daily incremental (changes since full) | Always 1 (replaced each run) |
+| `{project_name}-hourly.tar.gz[.enc]` | Hourly incremental (if enabled) | Always 1 (replaced each run) |
 
 **Example: Default settings (max=1, weekly=0, monthly=0, yearly=0)**
 ```
@@ -29328,12 +29293,11 @@ retention:
 Backups on disk (January 15, 2026):
   myapp_backup_2026-01-15.tar.gz.enc    ← Yesterday (daily)
   myapp_backup_2026-01-12.tar.gz.enc    ← Last Sunday (weekly)
-  myapp_backup_2026-01-01.tar.gz.enc    ← 1st of Jan 2026 (monthly + yearly)
+  myapp_backup_2026-01-01.tar.gz.enc    ← 1st of Jan 2026 (yearly — highest priority)
   myapp_backup_2025-12-01.tar.gz.enc    ← 1st of Dec 2025 (monthly, kept until Feb)
-  myapp_backup_2025-01-01.tar.gz.enc    ← 1st of Jan 2025 (yearly)
   myapp-daily.tar.gz.enc                 ← Incremental
 
-Total: 6 files (1 daily + 1 weekly + 2 monthly + 1 yearly + incremental)
+Total: 5 files (1 daily + 1 weekly + 1 monthly + 1 yearly + incremental)
 ```
 
 **Backup Cleanup Logic (runs at startup and after every backup):**
@@ -29428,17 +29392,6 @@ Restoring...
 │                                         │
 │           [Cancel]  [Restore]           │
 └─────────────────────────────────────────┘
-```
-
-**CLI Restore:**
-
-```bash
-# Encrypted backup - password required
-{project_name} --maintenance restore backup_2025-01-15.tar.gz.enc
-# Prompts for password
-
-# Unencrypted backup - no password
-{project_name} --maintenance restore backup_2025-01-15.tar.gz
 ```
 
 ### Restore Verification
@@ -30420,8 +30373,6 @@ useradd --system --uid {id} --gid {id} \
 ```
 
 **Default rule:** create and use a dedicated service user/group.
-
-**Exception:** skip dedicated user creation only when the project is explicitly approved to run permanently as root/Administrator in IDEA.md.
 
 **Exception:** skip dedicated user creation only when the project is explicitly approved to run permanently as root/Administrator in IDEA.md.
 
@@ -32229,6 +32180,8 @@ exec $APP_BIN $FLAGS "$@"
 
 ### Production Compose (`docker/docker-compose.yml`)
 
+**⚠️ FOR HUMAN USE ONLY — AI assistants must NEVER run this file.**
+
 App + Valkey for persistent session/rate-limit cache. NO `DEBUG`/`MODE` env vars — the binary defaults to production behavior.
 
 ```yaml
@@ -32302,15 +32255,17 @@ networks:
 
 | Field | Value | Description |
 |-------|-------|-------------|
-| `name:` | `{project_name}` | Top-level compose project name |
-| `container_name:` | `{project_name}-app`, `{project_name}-db` | e.g., `jokes-app`, `jokes-db` |
+| `name:` (production, `docker-compose.yml`) | `{project_name}` | Top-level compose project name — no suffix |
+| `name:` (development, `docker-compose.dev.yml`) | `{project_name}-dev` | Suffixed so the dev stack can run alongside prod |
+| `name:` (test, `docker-compose.test.yml`) | `{project_name}-test` | Suffixed so the test stack can run alongside prod/dev |
+| `container_name:` | `{project_name}-app`, `{project_name}-db` | e.g., `jokes-app`, `jokes-db` (container names are not suffixed by mode) |
 | Main service | `{project_name}` | Service name matches project name |
 | Database service | `{project_name}-db` | Database service name |
-| `hostname:` | `{project_name}` | Hardcoded container hostname |
+| `hostname:` | `{project_name}` | Hardcoded container hostname — same across all three modes |
 | `restart:` | `always` | Always restart on failure |
 | `pull_policy:` | `always` | Always pull latest image |
 | `logging:` | `*default-logging` | Use the logging anchor |
-| `networks:` | `{project_name}` | Isolated network per project |
+| `networks:` | `{project_name}` (prod) / `{project_name}-dev` (dev) / `{project_name}-test` (test) | Isolated network per project, suffixed to match the compose `name:` for that mode so stacks can coexist |
 
 ### Logging Anchor
 
@@ -32336,13 +32291,15 @@ services:
 
 ### Development Compose (`docker/docker-compose.dev.yml`)
 
+**FOR HUMAN USE ONLY — AI assistants must NEVER run this file.**
+
 Single-service, in-process memory cache, debug mode enabled. Uses the `:devel` image.
 
 ```yaml
 # nginx proxy address - http://172.17.0.1:{port}
 # {project_name} - development
 
-name: {project_name}
+name: {project_name}-dev
 
 x-logging: &default-logging
   options:
@@ -32376,11 +32333,11 @@ services:
       retries: 3
       start_period: 90s
     networks:
-      - {project_name}
+      - {project_name}-dev
 
 networks:
-  {project_name}:
-    name: {project_name}
+  {project_name}-dev:
+    name: {project_name}-dev
     external: false
 ```
 
@@ -32564,157 +32521,6 @@ rm -rf "$TEMP_DIR"
 - No outdated `.env.example` files to maintain
 - Users can override by editing docker-compose.yml directly
 
-### Docker Compose (Development) - HUMAN USE ONLY
-
-**Location:** `docker/docker-compose.dev.yml`
-
-**FOR HUMAN USE ONLY — AI assistants must NEVER use this file.**
-
-Development mode with in-process memory cache and debug enabled. Uses the `:devel` image.
-
-```yaml
-# nginx proxy address - http://172.17.0.1:{port}
-# {project_name} - development
-
-name: {project_name}
-
-x-logging: &default-logging
-  options:
-    max-size: "5m"
-    max-file: "1"
-  driver: json-file
-
-services:
-  {project_name}:
-    image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:devel
-    pull_policy: always
-    container_name: {project_name}-app
-    restart: always
-    logging: *default-logging
-    environment:
-      PORT: 80
-      DEBUG: 1
-      MODE: dev
-      TZ: America/New_York
-    ports:
-      # Development: accessible from all interfaces, no 172.17.0.1 bind
-      - "64580:80"
-    volumes:
-      - ./volumes/config:/config:z
-      - ./volumes/data:/data:z
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/{project_name}", "--status"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 90s
-    networks:
-      - {project_name}
-
-networks:
-  {project_name}:
-    name: {project_name}
-    external: false
-```
-
-**Run:**
-```bash
-mkdir -p "${TMPDIR:-/tmp}/{project_org}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{project_org}/{internal_name}-XXXXXX")
-mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
-cp docker/docker-compose.dev.yml "$TEMP_DIR/docker-compose.yml"
-cd "$TEMP_DIR" && docker compose up -d
-```
-
-### Docker Compose (Production) - HUMAN USE ONLY
-
-**Location:** `docker/docker-compose.yml`
-
-**⚠️ FOR HUMAN USE ONLY - AI assistants must NEVER use this file.**
-
-Production has NO `DEBUG`/`MODE` env vars. Debug must be set via CLI if needed. Humans deploy this for production use. Includes the Valkey cache service (persistent volume).
-
-```yaml
-name: {project_name}
-
-x-logging: &default-logging
-  options:
-    max-size: "5m"
-    max-file: "1"
-  driver: json-file
-
-services:
-  {project_name}:
-    image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
-    pull_policy: always
-    container_name: {project_name}-app
-    restart: always
-    logging: *default-logging
-    environment:
-      # Production: strict security, minimal logging, caching enabled
-      # NO DEBUG/MODE - debug must be explicitly set via CLI if needed
-      PORT: 80
-      TZ: America/New_York
-      CACHE_URL: valkey://{project_name}-cache:6379
-      # DOMAIN (optional - auto-detects from reverse proxy headers)
-      # DOMAIN: myapp.com,www.myapp.com
-      # SMTP (optional - autodetects if not set)
-      # SMTP_HOST: smtp.example.com
-      # SMTP_PORT: 587
-      # SMTP_USERNAME: user
-      # SMTP_PASSWORD: pass
-    volumes:
-      # TEMP DIR WORKFLOW: ./volumes/ resolves to $TEMP_DIR/volumes/
-      # NEVER run from project directory - always use temp dir workflow
-      - ./volumes/config:/config:z
-      - ./volumes/data:/data:z
-    ports:
-      # Production: bound to Docker bridge only (reverse proxy handles external)
-      - "172.17.0.1:64580:80"
-    healthcheck:
-      test: ["CMD", "/usr/local/bin/{project_name}", "--status"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 90s
-    depends_on:
-      {project_name}-cache:
-        condition: service_healthy
-    networks:
-      - {project_name}
-
-  {project_name}-cache:
-    image: valkey/valkey:alpine
-    pull_policy: always
-    container_name: {project_name}-cache
-    restart: always
-    logging: *default-logging
-    volumes:
-      - ./volumes/data/db/valkey:/data:z
-    healthcheck:
-      test: ["CMD-SHELL", "valkey-cli ping || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    networks:
-      - {project_name}
-
-networks:
-  {project_name}:
-    name: {project_name}
-    external: false
-```
-
-**Run:**
-```bash
-mkdir -p "${TMPDIR:-/tmp}/{project_org}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{project_org}/{internal_name}-XXXXXX")
-mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
-cp docker/docker-compose.yml "$TEMP_DIR/"
-cd "$TEMP_DIR" && docker compose up -d
-```
-
 ### Docker Compose (Test) - AI/AUTOMATED TESTING
 
 **Location:** `docker/docker-compose.test.yml`
@@ -32737,6 +32543,7 @@ services:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
     pull_policy: always
     container_name: {project_name}-test
+    hostname: {project_name}
     restart: "no"
     logging: *default-logging
     environment:
@@ -37974,7 +37781,7 @@ docker run --name "{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -
 ## Links
 
 - [Repository]({PLATFORM_REPO_URL})
-- [Live Demo](https://{project_name}.{project_org}.us) (if applicable)
+- [Live Demo]({official_site}) (if applicable)
 - [API Documentation](/server/docs/swagger) (Swagger UI)
 - [GraphQL Playground](/server/docs/graphql)
 
@@ -40556,8 +40363,7 @@ func (tm *TorManager) UpdateConfig(config *TorConfig) error {
     // Regenerate torrc with new settings (overwrite existing)
     configDir := paths.GetConfigDir()
     torrcPath := filepath.Join(configDir, "tor", "torrc")
-    controlSocket := filepath.Join(tm.dataDir, "control.sock")
-    torrcContent := getTorConfig(controlSocket, config)
+    torrcContent := getTorConfig(config)
 
     if err := updateTorrc(torrcPath, []byte(torrcContent)); err != nil {
         return fmt.Errorf("failed to update torrc: %w", err)
@@ -40750,7 +40556,6 @@ No impact on binary size - Tor is external. Application binary remains small and
 | Tor config directory | `{config_dir}/tor/` | Server creates with 0700 |
 | Tor config file | `{config_dir}/tor/torrc` | Server generates with 0600 |
 | Tor data directory | `{data_dir}/tor/` | Server creates with 0700 |
-| Control socket | `{data_dir}/tor/control.sock` | Unix/macOS/BSD only |
 | Hidden service keys | `{data_dir}/tor/site/` | Server creates with 0700 |
 | Tor process PID | `{data_dir}/tor/tor.pid` | |
 | Tor log file | `{log_dir}/tor.log` | |
@@ -40924,7 +40729,6 @@ func ensureTorFile(path string, content []byte) error {
 | Config dir | `{config_dir}/tor/` | `0700` | app user | Server creates/enforces |
 | torrc | `{config_dir}/tor/torrc` | `0600` | app user | Server generates |
 | Data dir | `{data_dir}/tor/` | `0700` | app user | Server creates/enforces |
-| Control socket | `{data_dir}/tor/control.sock` | `0600` | app user | Unix only |
 | Site dir | `{data_dir}/tor/site/` | `0700` | app user | Server creates/enforces |
 | Private key | `{data_dir}/tor/site/hs_ed25519_secret_key` | `0600` | app user | Tor creates |
 | Public key | `{data_dir}/tor/site/hs_ed25519_public_key` | `0600` | app user | Tor creates |
@@ -42583,44 +42387,44 @@ import (
 )
 
 const (
-	projectOrg  = "{project_org}"
-	projectName = "{project_name}"
+	internalOrg  = "{internal_org}"
+	internalName = "{internal_name}"
 )
 
 // ConfigDir returns the CLI config directory
 func ConfigDir() string {
 	if runtime.GOOS == "windows" {
-		return filepath.Join(os.Getenv("APPDATA"), projectOrg, projectName)
+		return filepath.Join(os.Getenv("APPDATA"), internalOrg, internalName)
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", projectOrg, projectName)
+	return filepath.Join(home, ".config", internalOrg, internalName)
 }
 
 // DataDir returns the CLI data directory
 func DataDir() string {
 	if runtime.GOOS == "windows" {
-		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "data")
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), internalOrg, internalName, "data")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "share", projectOrg, projectName)
+	return filepath.Join(home, ".local", "share", internalOrg, internalName)
 }
 
 // CacheDir returns the CLI cache directory
 func CacheDir() string {
 	if runtime.GOOS == "windows" {
-		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "cache")
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), internalOrg, internalName, "cache")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cache", projectOrg, projectName)
+	return filepath.Join(home, ".cache", internalOrg, internalName)
 }
 
 // LogDir returns the CLI log directory
 func LogDir() string {
 	if runtime.GOOS == "windows" {
-		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "log")
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), internalOrg, internalName, "log")
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "log", projectOrg, projectName)
+	return filepath.Join(home, ".local", "log", internalOrg, internalName)
 }
 
 // ConfigFile returns the CLI config file path
@@ -44302,6 +44106,8 @@ Free-form prose, 1–3 paragraphs.}
 
 project_name:    {project_name}
 project_org:     {project_org}
+# FROZEN — set at creation, defaults to project_org, never changes
+internal_org:    {project_org}
 # FROZEN — equals project_name on first install, never changes
 internal_name:   {project_name}
 app_name:        {project_name}
@@ -44353,6 +44159,7 @@ high-quality developer humor with category filtering and search.
 
 project_name:    jokes-api
 project_org:     casjay
+internal_org:    casjay
 internal_name:   jokes-api
 app_name:        Jokes API
 official_site:   https://jokes.example.com
@@ -44405,6 +44212,7 @@ clicks, and view statistics.
 
 project_name:    linkshort
 project_org:     casjay
+internal_org:    casjay
 internal_name:   linkshort
 app_name:        LinkShort
 official_site:   https://short.example.com
@@ -44457,6 +44265,7 @@ serves it in a unified format. Provides current conditions, forecasts, and alert
 
 project_name:    weather-api
 project_org:     casjay
+internal_org:    casjay
 internal_name:   weather-api
 app_name:        Weather API
 official_site:   https://weather.example.com
@@ -44618,7 +44427,7 @@ maintainer_email: jane@example.com
 |-------|--------|
 | `docker compose up` in project dir | Use temp directory workflow |
 | Runtime data in project directory | `/tmp/{project_org}/{internal_name}-XXXXXX/` |
-| `mktemp -d` (bare) | `mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX"` |
+| `mktemp -d` (bare) | `mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX"` |
 | `/tmp/myfile` | `/tmp/{project_org}/{internal_name}-XXXXXX/myfile` |
 
 ```bash
@@ -44714,7 +44523,7 @@ make docker
 - [ ] BSD paths: Same as Linux
 - [ ] Docker paths: `/config/`, `/data/`
 - [ ] Root vs user path detection works
-- [ ] All path functions use `{project_org}/{internal_name}` structure
+- [ ] All path functions use `{internal_org}/{internal_name}` structure
 
 **PART 5: Configuration**
 - [ ] Config file: `server.yml` (not .yaml, not .json)
@@ -46091,7 +45900,7 @@ Implement the required client, then any project-specific optional features:
 
 #### Step 10: Project-Specific (IDEA.md)
 
-1. **Fill in IDEA.md in AI.md** - Define project-specific endpoints, data, config
+1. **Fill in IDEA.md** - Define project-specific endpoints, data, config
 2. **Implement project-specific features**
 3. **Add project-specific tests**
 4. **Update documentation with project specifics**

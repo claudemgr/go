@@ -543,10 +543,10 @@ Prefer platform-standard user directories:
 
 | Purpose | Linux / BSD | macOS | Windows |
 |---------|-------------|-------|---------|
-| Config | `~/.config/{internal_org}/{internal_name}/` | `~/Library/Application Support/{internal_name}/config/` | `%AppData%\\{internal_org}\\{internal_name}\\config\\` |
-| Data | `~/.local/share/{internal_org}/{internal_name}/` | `~/Library/Application Support/{internal_name}/data/` | `%LocalAppData%\\{internal_org}\\{internal_name}\\data\\` |
-| Cache | `~/.cache/{internal_org}/{internal_name}/` | `~/Library/Caches/{internal_name}/` | `%LocalAppData%\\{internal_org}\\{internal_name}\\cache\\` |
-| Logs | `~/.local/state/{internal_org}/{internal_name}/logs/` | `~/Library/Logs/{internal_name}/` | `%LocalAppData%\\{internal_org}\\{internal_name}\\logs\\` |
+| Config | `~/.config/{internal_org}/{internal_name}/` | `~/Library/Application Support/{internal_org}/{internal_name}/config/` | `%AppData%\\{internal_org}\\{internal_name}\\config\\` |
+| Data | `~/.local/share/{internal_org}/{internal_name}/` | `~/Library/Application Support/{internal_org}/{internal_name}/data/` | `%LocalAppData%\\{internal_org}\\{internal_name}\\data\\` |
+| Cache | `~/.cache/{internal_org}/{internal_name}/` | `~/Library/Caches/{internal_org}/{internal_name}/` | `%LocalAppData%\\{internal_org}\\{internal_name}\\cache\\` |
+| Logs | `~/.local/state/{internal_org}/{internal_name}/logs/` | `~/Library/Logs/{internal_org}/{internal_name}/` | `%LocalAppData%\\{internal_org}\\{internal_name}\\logs\\` |
 
 **Rule:** Both `{internal_name}` and `{internal_org}` anchor on-disk identifiers and stable OS-registered names (Bundle IDs, package IDs, dbus names, keychain entries, updater channels). A rename of `{project_name}` or `{project_org}` MUST NOT silently move user data or change those identifiers.
 
@@ -610,7 +610,7 @@ This list is not exhaustive; treat it as the starting point. When introducing a 
 
 ## Go Commands
 
-**All Go invocations execute inside the project Docker container — never on the host.** The table below shows the *logical* command; the **actual** invocation is wrapped via the `GO_DOCKER` macro (see "Makefile Section" in PART 6 for the full macro definition). See "Docker Rule" below.
+**All Go invocations execute inside the project Docker container — never on the host.** The table below shows the *logical* command; the **actual** invocation is wrapped via the `GO_DOCKER` macro (see "Build Metadata" in PART 6 for the full macro definition). See "Docker Rule" below.
 
 | Logical Command | Purpose |
 |-----------------|---------|
@@ -725,7 +725,7 @@ The `assets/` directory in the repo holds source files (fonts, icons, default th
 | Package names | lowercase, no underscores | `package config`, `package ui` |
 | Types/interfaces | `PascalCase` | `AppConfig`, `UIMode` |
 | Functions | `camelCase` (unexported) / `PascalCase` (exported) | `detectUIMode`, `DetectUIMode` |
-| Constants/vars | `SCREAMING_SNAKE_CASE` (package-level consts) | `DefaultTheme` (exported), `defaultTimeout` (unexported) |
+| Constants/vars | `PascalCase` (exported) / `camelCase` (unexported) (package-level consts) | `DefaultTheme` (exported), `defaultTimeout` (unexported) |
 | Go module path (`go.mod`) | lowercase, URL-style | `github.com/myorg/myapp` |
 | Go package name | lowercase, no underscores, no hyphens | `package myapp` |
 
@@ -795,6 +795,60 @@ Image metadata is applied as OCI annotations on the manifest index — never as 
 - All metadata is passed at build time via `--annotation` flags on `docker buildx build` (or via `docker/metadata-action` → `annotations:` output in GitHub Actions / Gitea / Forgejo).
 - See `dockerfile_conventions.md` → "OCI Annotations" for the full required annotation set (static + dynamic) and the canonical `docker/metadata-action` snippet.
 
+### Container Runtime Rules
+
+Every production image MUST satisfy:
+
+- **Startup chain `tini → entrypoint.sh → app`** — `ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]`. Never override `ENTRYPOINT` or `CMD` to bypass `tini` or the entrypoint shim. All startup customization goes in `docker/rootfs/usr/local/bin/entrypoint.sh`, which MUST end with `exec "$@"` to preserve PID 1 signal handling.
+- **`STOPSIGNAL SIGTERM`** (or `SIGRTMIN+3` for s6-based images) for graceful shutdown
+- **`HEALTHCHECK`** — every production image declares a `HEALTHCHECK` that exits non-zero when the binary is unhealthy
+- **Non-root `USER`** — containers MUST NOT run as root. Create a non-root user/group in the Dockerfile and switch to it via `USER` before `ENTRYPOINT`. `entrypoint.sh` may remap UID/GID at runtime to match host ownership of mounted volumes. Exceptions (privileged port binding, device access, etc.) MUST be documented in `IDEA.md`.
+
+### Mandatory `docker run` Naming Convention
+
+Every `docker run` invocation in this project (CI, scripts, docs, examples) MUST use:
+
+```bash
+PROJECT_NAME="{project_name}"
+PROJECT_IMAGE="casjaysdev/go:latest"
+
+docker run --rm \
+  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  ...
+```
+
+`PROJECT_NAME` and `PROJECT_IMAGE` are shell variables set once (e.g., in the Makefile or the calling script) before any of the `docker run` examples below — `PROJECT_NAME` resolves to the project's `{project_name}` and `PROJECT_IMAGE` to the toolchain image selected under "Toolchain Image" above (normally `casjaysdev/go:latest`).
+
+- `--rm` — self-remove on exit (no orphaned containers)
+- `-it` — interactive-capable for log streaming and signal handling
+- `--name "${PROJECT_NAME}-XXXX"` — traceable name; `XXXX` is the 8-char lowercase-alphanumeric random suffix produced by `tr -dc 'a-z0-9' </dev/urandom | head -c8` (Makefile form: `$$(tr -dc 'a-z0-9' </dev/urandom | head -c8)`)
+
+There is no opt-out. Unnamed or persistent build/test containers are a spec violation.
+
+### Portability Rule
+
+No hardcoded org, project name, official site, or registry value may appear in any Dockerfile, workflow, or Makefile. Use build-time variables:
+
+| Context | Reference |
+|---------|-----------|
+| Dockerfile | `ARG PROJECT_ORG` / `ARG PROJECT_NAME` (passed via `--build-arg`) |
+| GitHub Actions | `${{ github.repository_owner }}` / `${{ github.event.repository.name }}` / `${{ github.event.repository.html_url }}` |
+| GitLab CI | `$CI_REGISTRY_IMAGE`, `$CI_PROJECT_NAMESPACE`, `$CI_PROJECT_NAME` |
+| Gitea / Forgejo | provider-supplied equivalents to the GitHub variables |
+| Jenkinsfile | `${env.JOB_NAME}`, `${env.GIT_URL}` (parse org/name) |
+| Makefile | `PROJECT_ORG ?= $(shell git remote get-url origin \| ...)` |
+
+This rule ensures every workflow, Dockerfile, and Makefile keeps working after a fork without editing values.
+
+### Build-Time vs Runtime Linkage of Display Libraries
+
+`CGO_ENABLED=0` is the default for Go builds (PART 5 → "Toolchain Image"), so the produced binary is a pure static Go binary with no C link-time dependency of any kind — including on GUI-stack libraries. Display-related C libraries, when needed at all, reach the binary only via runtime `dlopen`/`cgo` opt-in, on demand, when a real GUI session is started; the default build MUST NOT introduce a link-time dependency on them.
+
+- **X11**: prefer a pure-Go X11 client (e.g. `github.com/jezek/xgb` / `github.com/jezek/xgbutil`) — no `libX11` involvement at any stage, and no CGO required. If a CGO-based binding is unavoidable, it MUST be gated behind a build tag that is off by default, and the default release build MUST stay `CGO_ENABLED=0`.
+- **Wayland**: prefer a pure-Go Wayland client (e.g. `github.com/rajveermalviya/go-wayland`) that talks the wire protocol directly rather than linking `libwayland-client`.
+- **OpenGL / EGL / Vulkan**: when in scope, use Go loaders that resolve symbols at runtime (e.g. `github.com/go-gl/glow`-style dynamic loading) so the binary stays portable across hosts with different GPU stacks; do not statically link `libGL`/`libEGL`/`libVulkan`.
+- After every release build, the static-linkage check (`ldd` / `otool -L` / `dumpbin /dependents`, PART 5 → "Release Artifacts") MUST confirm there is no link-time dependency on `libX11` / `libwayland-client` / `libGL` / `libEGL` / `libVulkan`. With `CGO_ENABLED=0` this is automatic; any exception that re-enables CGO for GUI support MUST re-run and document this check.
+
 ### CI/CD Workflow Pattern
 
 All Go CI jobs run inside `casjaysdev/go:latest`. Never `apk add` or `go install` in a workflow `run:` step — every tool is already in the image. No `ensure-build-image` pre-flight, no `build-toolchain.yml`.
@@ -808,7 +862,7 @@ jobs:
     container:
       image: casjaysdev/go:latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - run: go build -buildvcs=false -trimpath ./src
 ```
 
@@ -951,8 +1005,9 @@ GO_DOCKER := docker run --rm \
 	-e GOFLAGS=-buildvcs=false \
 	casjaysdev/go:latest
 
-PLATFORMS ?= linux/amd64 linux/arm64
-REGISTRY  ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
+PLATFORMS        ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64
+DOCKER_PLATFORMS ?= linux/amd64,linux/arm64
+REGISTRY         ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
 
 .PHONY: build release docker test dev clean
 
@@ -989,7 +1044,7 @@ release:
 
 docker:
 	docker buildx build \
-		--platform $(shell echo $(PLATFORMS) | tr ' ' ',') \
+		--platform $(DOCKER_PLATFORMS) \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT_ID=$(COMMIT_ID) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
@@ -997,7 +1052,11 @@ docker:
 		-f docker/Dockerfile .
 
 dev: build
-	$(BINDIR)/$(PROJECTNAME)
+	docker run --rm -it \
+		--name $(PROJECTNAME)-dev-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
+		-v $(PWD):/app -w /app \
+		casjaysdev/go:latest \
+		$(BINDIR)/$(PROJECTNAME)
 
 clean:
 	rm -rf $(BINDIR) $(RELDIR)
@@ -1234,8 +1293,28 @@ All gates execute inside the project Docker container (PART 5 → "Docker Rule")
 | Vulnerability scan | `govulncheck ./...` | `$(GO_DOCKER) govulncheck ./...` |
 | License enumeration | `go-licenses report ./...` | see PART 10 → "Suggested CI Steps" |
 | Attribution drift | `go-licenses report ./...` (output diffed against the GENERATED region of `LICENSE.md`) | see PART 10 → "Suggested CI Steps" |
+| Coverage | `go test -cover ./...` | see "Coverage Gate" below |
 | GUI smoke (X11) | `go run . -- --ui gui` against an X11 socket | see PART 5 → "X11 and Wayland Forwarding" |
 | GUI smoke (Wayland) | `go run . -- --ui gui` against a Wayland socket | see PART 5 → "X11 and Wayland Forwarding" |
+
+## Coverage Gate
+
+`ci.yml` MUST enforce a minimum test coverage threshold. The threshold is declared in `IDEA.md ## Business logic` (free-form prose — e.g., "minimum test coverage: 75%"). If `IDEA.md` does not specify a value, the **default is 60%**. The `test:` Makefile target already enforces a hardcoded 60% floor (PART 6 → "Build Metadata"); when `IDEA.md` declares a different threshold, update that hardcoded value to match — the Makefile check and the CI gate below must never disagree.
+
+- Use `go test -cover ./...` to compute per-package coverage and `go tool cover -func=coverage.out` to get a total percentage — both pre-installed in `casjaysdev/go:latest`
+- CI MUST fail when coverage drops below the threshold; a passing build with uncovered code is a silent regression
+- Coverage is computed against `go test ./...` output, run inside the toolchain image
+
+```bash
+# Example (Docker-wrapped) — fails if total coverage < threshold
+THRESHOLD="${COVERAGE_MIN:-60}"
+docker run --rm \
+  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  -v "$PWD":/work -w /work "$PROJECT_IMAGE" \
+  sh -c "go test -coverprofile=coverage.out ./... && \
+    COVERAGE=\$(go tool cover -func=coverage.out | tail -1 | awk '{print \$3}' | tr -d '%') && \
+    awk -v c=\"\$COVERAGE\" -v t=\"$THRESHOLD\" 'BEGIN { exit !(c >= t) }'"
+```
 
 ## Testing Rules
 
@@ -1253,6 +1332,10 @@ All gates execute inside the project Docker container (PART 5 → "Docker Rule")
 - Do not expose sensitive data in logs
 - Panic behavior must be intentional and documented (`recover` used deliberately, not to swallow all errors)
 - GUI/TUI debug tooling must not leak into normal production UX by default
+
+## Directory Naming
+
+**Singular** — Go source directories match package names, and Go package names are singular by convention (`internal/handler/`, `internal/model/`, `internal/middleware/`) — not `handlers/`, `models/`. Tooling dirs are always plural regardless of language (`scripts/`, `tests/`, `completions/`).
 
 ## Performance Rules
 
@@ -1322,6 +1405,12 @@ No hidden telemetry. Any analytics, crash reporting, or update pings must be doc
 | Version precedence | `release.txt` wins when present |
 | Site precedence | `site.txt` wins when present |
 | Verifiable outputs | Releases publish checksums and an SBOM (always); provenance/attestation when the platform supports it |
+| No Makefile in CI | Workflow `run:` steps invoke explicit commands with all environment variables inlined — never `make {target}`. The Makefile is for local developer convenience only. CI MUST NOT depend on Makefile targets that could drift silently. |
+| Portability | No hardcoded org, project name, official site, or registry value anywhere in workflows. Use `${{ github.repository_owner }}` / `${{ github.event.repository.name }}` (and provider equivalents). Workflows must keep working after a fork without editing values. |
+| Renovate only | `renovate.json` at repo root is the only supported dependency-update tool — it covers GitHub Actions SHAs, Docker image digests, Go module versions, and works across all five providers from a single config. Dependabot is **forbidden** (GitHub-only; duplicates Renovate on GitHub; cannot serve the other four providers). |
+| `act` pre-commit validation | Before committing any change to `.github/workflows/*.yml`, run `act --list -W {file}` on each changed file. Fix all errors before committing. The `validate-workflows.sh` PreToolUse hook enforces this automatically. |
+| Concurrency groups | Every push/PR workflow declares `concurrency: { group: ${{ github.workflow }}-${{ github.ref }}, cancel-in-progress: true }`. Release workflows also use `cancel-in-progress: true` — a newer tag push supersedes the in-flight release build. |
+| Artifact retention | Every `actions/upload-artifact` step sets `retention-days: 7` (or shorter) — no infinite retention of build outputs. |
 
 ## Workflow Permissions
 
@@ -1360,7 +1449,7 @@ jobs:
     ...
 ```
 
-Third-party registry publishing uses repository secrets, not GitHub token permissions (e.g. `NODE_AUTH_TOKEN` for npm).
+Third-party registry publishing uses repository secrets, not GitHub token permissions (e.g. a private Go module proxy auth token for a non-public `GOPROXY`).
 
 ## Third-party Action Pinning
 
@@ -1371,7 +1460,7 @@ Every external action (`uses: owner/action@...`) MUST be pinned to a full commit
 - uses: actions/checkout@v4
 
 # Correct — SHA is immutable
-- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+- uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 ```
 
 **When updating a pinned SHA**, verify three things:
@@ -1380,7 +1469,7 @@ Every external action (`uses: owner/action@...`) MUST be pinned to a full commit
 2. **Runtime is still supported** — open the action's `action.yml` at the new SHA and check `runs.using`; if it names a runtime that GitHub has deprecated or scheduled for removal, the action will silently fail after that date. Example: `node20` is removed from GitHub-hosted runners on **2026-09-16** — any action still on `node20` must be updated to a SHA where it has migrated to `node24` — all common `actions/*` and `docker/*` actions have already done so
 3. **No supply-chain change** — skim the diff between the old and new SHA; unexpected new dependencies, changed entrypoints, or network calls added to setup steps are red flags
 
-Renovate covers `github-actions` SHA updates automatically via `pinDigests: true` — but it only updates the SHA, not the runtime verification. The runtime check is always manual.
+**Renovate** (`renovate.json`) is the only supported dependency update tool — it updates GitHub Actions SHAs, Docker image digests, and Go module versions across all providers in a single config (see `cicd_conventions.md`). Renovate does not do the runtime verification — that is always a manual check.
 
 ### Provider CLIs and Local Runner
 
@@ -1399,11 +1488,137 @@ Renovate covers `github-actions` SHA updates automatically via `pinDigests: true
 
 ## Minimum Public Repo Workflows
 
-- `ci.yml` — build, test, lint, coverage, and security jobs (push + PR + weekly schedule)
-- `release.yml` — tagged/manual release build and publish
-`ci.yml` and `release.yml` are mandatory. Go projects never have `build-toolchain.yml` — `casjaysdev/go:latest` is maintained externally and needs no per-project rebuild workflow.
+Every project ships workflow files for all five CI/CD providers. Same gates, different syntax — no vendor lock-in.
 
-Equivalent Gitea/Forgejo/GitLab/Jenkins pipelines must enforce the same gates, not a weaker subset.
+**Workflow creation order — not all workflows carry the same risk:**
+1. **Security-only workflows** (secret scan, SHA/digest policy, dependency audit) — no build dependency; safe to add anytime
+2. **`ci.yml` and `release.yml`** — add **last**, only after all code is complete, `make test` passes, and the lint gate is clean; these trigger a full build on push and will fail immediately if the code is not ready
+
+Go projects never have `build-toolchain.yml` — `casjaysdev/go:latest` is maintained externally and needs no per-project rebuild workflow.
+
+| Provider | Workflow location | Syntax |
+|----------|------------------|--------|
+| GitHub | `.github/workflows/ci.yml` / `release.yml` | GitHub Actions |
+| GitLab | `.gitlab-ci.yml` (stages: build, test, security, release) | GitLab CI |
+| Gitea | `.gitea/workflows/ci.yml` / `release.yml` | GitHub Actions (act runner) |
+| Forgejo | `.forgejo/workflows/ci.yml` / `release.yml` | GitHub Actions (act runner) |
+| Jenkins | `Jenkinsfile` (parallel stages: Build / Test / Security / Release) | Declarative Pipeline |
+
+**Workflow purposes:**
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `ci.yml` | push + pull_request + weekly schedule (security jobs only on schedule) | `gofmt -l .`, `golangci-lint run`, `go test ./...`, coverage gate, `go build`, truffleHog secret scan, workflow-policy SHA check, `govulncheck ./...`, Trivy image scan |
+| `release.yml` | tag push (`v*`) + workflow_dispatch | Build statically linked artifacts for the supported target matrix, sign, upload to GitHub Releases, publish SBOM and checksums |
+
+In addition to the workflows, every repository ships:
+
+- `renovate.json` — single dependency-update config covering GitHub Actions SHAs, Docker digests, Go module versions; works on all five providers (see PART 9 → "Dependency Governance")
+
+**`security` job conditionality (applies to all providers):**
+- Secret scan (truffleHog) — always runs; full git history required
+- Workflow policy (SHA/digest pinning check) — always runs
+- `vuln-scan` (`govulncheck`) — conditional on `go.sum` present
+- `image-scan` (Trivy) — conditional on Dockerfile present; runs after image build
+
+**GitHub Actions job ordering (`needs:`):**
+- `ci.yml`: `lint` and `test` run in parallel → `build` needs: test → `upload-artifacts` needs: build; security jobs (`secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan`) run in parallel with each other
+- `release.yml`: `build` → `release` (needs: build); release job always re-runs its own build inline
+- Cross-workflow ordering via branch protection; never `workflow_run`
+
+**GitLab CI**: security jobs run in the `security` stage (parallel by default). Release stage triggered by `$CI_COMMIT_TAG`.
+
+**Jenkins**: `Security` stage uses `parallel {}`. `Release` stage uses `when { tag 'v*' }`.
+
+CI MUST fail on all providers when tests, coverage gates, secret scans, dependency checks, or release validation fail. Never accept a weaker gate on one provider than another.
+
+### Security Jobs in `ci.yml` Example (GitHub / Gitea / Forgejo)
+
+truffleHog is the mandatory secret scanner — **never** `gitleaks` (requires a commercial license for org repos). Trivy is the mandatory image scanner. Both pin to full commit SHAs. These jobs live in `ci.yml` and also run on the weekly schedule trigger.
+
+```yaml
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # weekly Monday 06:00 UTC
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          # required: truffleHog needs full history
+          fetch-depth: 0
+
+      - name: TruffleHog secret scan
+        uses: trufflesecurity/trufflehog@b634fb72d9901a4f942e5b8e4ef5f7ec59c97e7c  # v3.88.2
+        with:
+          # NEVER use default_branch — it resolves to HEAD post-push and skips the scan
+          base: ${{ github.event.before }}
+          head: ${{ github.sha }}
+          extra_args: --only-verified
+
+  workflow-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Verify all third-party actions are pinned to a 40-char SHA
+        run: |
+          set -eo pipefail
+          bad=$(grep -RhnE '^\s*uses:\s*[^@]+@(v?[0-9]|main|master)' .github/ .gitea/ .forgejo/ 2>/dev/null || true)
+          if [[ -n "$bad" ]]; then
+            echo "::error::Unpinned actions found (must be 40-char SHAs):"
+            echo "$bad"
+            exit 1
+          fi
+
+  vuln-scan:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('go.sum') != '' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: govulncheck (inside casjaysdev/go:latest)
+        run: |
+          IMAGE="casjaysdev/go:latest"
+          docker run --rm -i \
+            --name "${{ github.event.repository.name }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+            -v "$PWD":/work -w /work -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+            "$IMAGE" govulncheck ./...
+
+  image-scan:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('docker/Dockerfile') != '' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      - name: Build local image for scanning
+        run: |
+          docker build -f docker/Dockerfile -t scan-target:ci .
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37  # v0.70.0
+        with:
+          image-ref: scan-target:ci
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+```
+
+**Per-provider notes:**
+
+- GitLab: `secret-scan` runs as a docker job using `image: trufflesecurity/trufflehog:latest` with `GIT_DEPTH: 0`; `image-scan` uses `image: aquasec/trivy:0.70.0`.
+- Jenkins: `Security` stage uses `parallel {}`; truffleHog and Trivy each run via `docker.image(...).inside { ... }`.
+- All providers: same gates, same severities, same exit conditions — no weaker subset on any provider.
 
 ## Post-Push CI Verification
 
@@ -1420,6 +1635,29 @@ Build failed → this is a bug, not a note for later; diagnose the root cause an
 ## Suggested CI Steps
 
 CI runs every Go step inside `casjaysdev/go:latest`. CI MUST NOT install a Go toolchain on the runner and call `go` directly — and MUST NOT run quality-gate commands inside the runtime image (`docker/Dockerfile`), which contains only the final binary. Use `casjaysdev/go:latest` for all build, test, lint, and vet steps.
+
+### Required Concurrency and Retention Headers
+
+Every push/PR workflow (`ci.yml`) MUST declare:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+```
+
+Release workflows (`release.yml`) MUST use `cancel-in-progress: true` — a newer tag push supersedes the in-flight release build, so the superseded run should be cancelled rather than left to finish.
+
+Every `actions/upload-artifact` step MUST set a finite `retention-days`:
+
+```yaml
+- uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+  with:
+    name: {project_name}-${{ matrix.target }}
+    path: binaries/
+    # release-job artifacts may use up to 30; build-job CI artifacts use 7
+    retention-days: 7
+```
 
 ```bash
 # Prepare output directory for release artifacts (binaries, checksums, SBOM)
@@ -1484,6 +1722,49 @@ docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -
 ```
 
 For GUI smoke tests in CI, use a virtual X server (e.g., `Xvfb`) and a headless Wayland compositor (e.g., `cage`, `weston --backend=headless`) **inside** the container or as a sidecar service — both backends MUST be exercised, not just one.
+
+## Workflow Error Messaging
+
+Use `::error::` workflow commands for validation failures — they appear as red annotations on the Actions summary page, not just buried in logs:
+
+```bash
+echo "::error::Tag 'foo' does not exist in this repository"
+echo "::error file=.github/workflows/release.yml,line=12::message tied to a source location"
+```
+
+Always write messages so a developer reading only the step name + message understands what failed and what to do next.
+
+## Release Pre-flight Validation
+
+The GitHub Releases API returns HTTP 422 `"tag_name is not a valid tag"` when the tag does not exist at API call time or is malformed. The correct fix is for the **release job to own the tag** — delete it if it exists, then recreate it at the current HEAD. This ensures the tag always exists and points to the right commit, and makes the workflow idempotent.
+
+The `release` job already has `contents: write` to push assets — this covers tag push as well.
+
+```yaml
+- uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+  with:
+    # required: full history needed to inspect and push tags
+    fetch-depth: 0
+
+- name: Ensure release tag
+  run: |
+    ref="${{ github.ref }}"
+    if [[ "$ref" != refs/tags/* ]]; then
+      echo "::error::release.yml triggered on non-tag ref '$ref'. Releases require a tag push (refs/tags/v...)."
+      exit 1
+    fi
+    tag="${ref#refs/tags/}"
+    if printf '%s' "$tag" | grep -qP '[[:space:][:cntrl:]]'; then
+      echo "::error::Tag '$tag' contains whitespace or control characters and is not a valid GitHub tag name."
+      exit 1
+    fi
+    # Delete existing tag (local + remote) then recreate at current HEAD
+    git tag -d "$tag" 2>/dev/null || true
+    git push origin ":refs/tags/$tag" 2>/dev/null || true
+    git tag "$tag"
+    git push origin "refs/tags/$tag"
+    echo "Tag '$tag' ensured at $(git rev-parse HEAD)"
+```
 
 ## Release Integrity
 
@@ -1552,12 +1833,12 @@ Never use a GitHub Actions badge for a GitLab or Gitea project — the CI badge 
 
 # GitLab
 [![Release](https://gitlab.com/{project_org}/{project_name}/-/badges/release.svg)](https://gitlab.com/{project_org}/{project_name}/-/releases)
-[![License](https://img.shields.io/github/license/{project_org}/{project_name})](LICENSE.md)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 [![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
 
 # Gitea/Forgejo (use shields.io with custom endpoint or static badge)
 [![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/{api_version}/repos/{project_org}/{project_name}/releases/latest&query=$.tag_name&label=release)](https://git.example.com/{project_org}/{project_name}/releases)
-[![License](https://img.shields.io/github/license/{project_org}/{project_name})](LICENSE.md)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 [![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
 
 # {RTD_PROJECT} and {RTD_URL} - Use one of:
@@ -2098,7 +2379,7 @@ maintainer_email: jane@example.com
 - Symlinks are created relative to the dotfiles repo so the home directory remains portable
 
 **Platform constraints:**
-- POSIX-style filesystem operations; Windows support uses junction-style links via the Go standard library (`os.Symlink` on Windows creates junctions where appropriate)
+- POSIX-style filesystem operations; on Windows, `os.Symlink` calls `CreateSymbolicLink`, producing real NTFS symlinks (requires Developer Mode or an elevated process) — junctions are a separate mechanism and are not used here
 
 **Outbound network use:** none
 

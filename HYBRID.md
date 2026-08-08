@@ -313,7 +313,7 @@ Every declared feature in `IDEA.md` is implemented, tested (Self-Validation Loop
 
 ### New-Project Completion Checklist
 
-Structure (PART 3) · Core app + server features (PART 2, 4, 8, 12–21 as scoped) · Infrastructure (PART 6, 23) · Governance & community (PART 1, 24) · Supply chain & release (PART 7, 21, 23) · Security & operations (PART 11, 14) · Any project-specific features `IDEA.md` declares beyond this template.
+Structure (PART 3) · Core app + server features (PART 2, 4, 8, 9, 10, 12–21 as scoped) · Infrastructure (PART 6, 23) · Governance & community (PART 1, 24) · Supply chain & release (PART 7, 21, 23) · Security & operations (PART 11, 14) · Any project-specific features `IDEA.md` declares beyond this template.
 
 ---
 
@@ -499,7 +499,7 @@ See PART 4 for the complete Runtime Mode Selection specification — detection p
 |-------|-------|
 | **Name** | {project_name} |
 | **Organization** | {project_org} |
-| **Official Site** | https://{project_name}.{project_org}.us |
+| **Official Site** | `{official_site}` (e.g. `https://{project_name}.example.com`) |
 | **Repository** | {PLATFORM_REPO_URL} |
 | **README** | README.md |
 | **License** | MIT > LICENSE.md |
@@ -1547,7 +1547,7 @@ Before proceeding, confirm you understand:
 | Log File | `/data/log/{project_name}/server.log` |
 | SQLite DB | `/data/db/sqlite/` (server.db) |
 | Backup | `/data/backups/{project_name}/` |
-| Internal Port | `80` |
+| Internal Port | Container listen port, set via the `PORT` env (image default `80`); the native default is a random port in 64000-64999 — see PART 5 → "Port Rules" |
 
 **Docker volume mounts map host paths to container paths:**
 ```yaml
@@ -2111,8 +2111,6 @@ useradd --system --uid {id} --gid {id} \
 
 **Exception:** skip dedicated user creation only when the project is explicitly approved to run permanently as root/Administrator in IDEA.md.
 
-**Exception:** skip dedicated user creation only when the project is explicitly approved to run permanently as root/Administrator in IDEA.md.
-
 ### macOS Service Account
 
 **Default:** macOS services start as root only for privileged startup, then drop to dedicated user after port binding.
@@ -2121,10 +2119,10 @@ useradd --system --uid {id} --gid {id} \
 |-------|-----------|---------|
 | Start | root | launchd starts binary as root |
 | Bind | root | Bind privileged ports (<1024) |
-| Drop | root→`{project_name}` | Binary drops privileges |
-| Run | `{project_name}` | Serve requests as unprivileged user |
+| Drop | root→`{internal_name}` | Binary drops privileges |
+| Run | `{internal_name}` | Serve requests as unprivileged user |
 
-**The `{project_name}` user is created automatically by the binary on first startup.**
+**The `{internal_name}` user is created automatically by the binary on first startup.**
 
 macOS uses `dscl` (Directory Service Command Line) to create system users. The user is hidden from login screen and has no shell access.
 
@@ -2390,7 +2388,7 @@ func installWindowsService() error {
 
 ## Service Templates
 
-**Unix default:** service starts elevated only for privileged startup, then drops to `{project_name}` user after port binding.
+**Unix default:** service starts elevated only for privileged startup, then drops to `{internal_name}` user after port binding.
 **Windows: Service runs as Virtual Service Account (`NT SERVICE\{internal_name}`).**
 
 This allows any port configuration without service file changes.
@@ -2436,7 +2434,7 @@ WantedBy=multi-user.target
 ```sh
 #!/sbin/openrc-run
 # Service identity comes from {internal_name} so config_dir/data_dir paths stay
-# stable across binary renames (see PART 0 → "Why `{internal_name}` exists separately from `{project_name}`").
+# stable across binary renames (see PART 3 → "Mutability rule").
 
 name="{internal_name}"
 description="{app_name}"
@@ -3181,7 +3179,7 @@ Self-Healing Successful?                        │
 
 ### API Responses in Maintenance Mode
 
-**All write operations return HTTP `503 Service Unavailable` with the canonical error body (see PART 14 → "Error Response"). Maintenance-specific context goes in `details` and in response headers — never in ad-hoc top-level fields.**
+**All write operations return HTTP `503 Service Unavailable` with the canonical error body (see PART 13 → "Error Response"). Maintenance-specific context goes in `details` and in response headers — never in ad-hoc top-level fields.**
 
 ```json
 {
@@ -3516,9 +3514,9 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 | Variable | Description |
 |----------|-------------|
 | `NO_COLOR` | Disable ANSI color output when set and non-empty (see PART 8) |
-| `TERM` | Terminal type; `TERM=dumb` disables ALL ANSI escapes and forces CLI mode (see PART 7) |
+| `TERM` | Terminal type; `TERM=dumb` disables ALL ANSI escapes and forces CLI mode (see PART 4) |
 | `DOMAIN` | FQDN override (highest priority for hostname resolution) |
-| `MODE` | `production` (default) or `development`; shortcuts `prod`, `dev`, `devel` accepted; `debug` = development + debug on unless `DEBUG` is explicitly set (see PART 6) |
+| `MODE` | `production` (default) or `development`; shortcuts `prod`, `dev`, `devel` accepted; `debug` = development + debug on unless `DEBUG` is explicitly set (see PART 2) |
 | `DATABASE_DRIVER` | `sqlite` (+ `sqlite2`, `sqlite3`), `libsql` (+ `turso`) |
 | `DATABASE_URL` | Database connection string |
 | `SMTP_HOST` | SMTP server hostname (if set, skips autodetect) |
@@ -3650,10 +3648,10 @@ sudo {project_name} --service --install
 | Step | Running As | Actions |
 |------|-----------|---------|
 | 1 | **root** | Service manager starts binary |
-| 2 | **root** | Create system user `{project_name}` (if needed) |
+| 2 | **root** | Create system user `{internal_name}` (if needed) |
 | 3 | **root** | Create directories, set ownership |
 | 4 | **root** | Bind configured ports (any port works) |
-| 5 | **root→user** | **DROP PRIVILEGES** to `{project_name}` user |
+| 5 | **root→user** | **DROP PRIVILEGES** to `{internal_name}` user |
 | 6 | **user** | Initialize config, database, etc. |
 | 7 | **user** | Start serving requests |
 
@@ -3662,7 +3660,7 @@ Service start (automatic after install):
     ├─ Start as root (service manager)
     ├─ Create user/dirs if needed
     ├─ Bind port 80/443 (root)
-    ├─ Drop to {project_name} user
+    ├─ Drop to {internal_name} user
     └─ Serve requests (user)
 ```
 
@@ -3954,7 +3952,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 | `--maintenance secret rotate <name>` | 🔐 Auth | Requires `server.token` OR root | N/A |
 | (normal start) | ❌ No | Adapts paths to current user | N/A |
 
-**Key insight:** After service install, the `{project_name}` user owns all data directories. However, sensitive operations require AUTHORIZATION, not just file access.
+**Key insight:** After service install, the `{internal_name}` user owns all data directories. However, sensitive operations require AUTHORIZATION, not just file access.
 
 #### Sensitive Operations (🔐 Auth Required)
 
@@ -3994,7 +3992,7 @@ Binary checks:
 │   └─ YES → Allow restore (nothing to protect)
 ├─ Is user root?
 │   └─ YES → Allow restore (with confirmation prompt)
-├─ Is user the service user ({project_name})?
+├─ Is user the service user ({internal_name})?
 │   └─ YES → Require operator token (`server.token`):
 │            "This will OVERWRITE all data. Enter operator token to confirm."
 │            └─ Valid token → Allow restore
@@ -4012,7 +4010,7 @@ User runs: {project_name} --maintenance mode development
 Binary checks:
 ├─ Is user root?
 │   └─ YES → Allow (with warning about security implications)
-├─ Is user the service user ({project_name})?
+├─ Is user the service user ({internal_name})?
 │   └─ YES → Require operator token (`server.token`)
 └─ Random user → Reject
 ```
@@ -4156,20 +4154,20 @@ Binary checks:
 └─ Warn user of actual port in use
 ```
 
-#### The `{project_name}` System User/Group
+#### The `{internal_name}` System User/Group
 
 **Created automatically during first root/service startup.**
 
 | Property | Value |
 |----------|-------|
-| **Username** | `{project_name}` |
-| **Group** | `{project_name}` |
+| **Username** | `{internal_name}` |
+| **Group** | `{internal_name}` |
 | **Shell** | `/usr/sbin/nologin` (no login) |
 | **Home** | `/var/lib/{internal_org}/{internal_name}` |
 | **UID/GID** | Auto-assigned by system |
 | **Type** | System user (UID < 1000 on Linux) |
 
-**What the `{project_name}` user CAN do:**
+**What the `{internal_name}` user CAN do:**
 
 | Permission | Details |
 |------------|---------|
@@ -4184,7 +4182,7 @@ Binary checks:
 | Manage database | SQLite in data dir |
 | Manage SSL certs | In `{config_dir}/ssl/` |
 
-**What the `{project_name}` user CANNOT do:**
+**What the `{internal_name}` user CANNOT do:**
 
 | Restriction | Reason |
 |-------------|--------|
@@ -4215,14 +4213,14 @@ chmod 755 /var/cache/{internal_org}/{internal_name}/
 chmod 755 /var/log/{internal_org}/{internal_name}/
 ```
 
-**User creation:** See PART 23 for platform-specific user creation commands (Linux `useradd`, macOS `dscl`, FreeBSD `pw`).
+**User creation:** See PART 4 for platform-specific user creation commands (Linux `useradd`, macOS `dscl`, FreeBSD `pw`).
 
 **User service vs system service:**
 
 | Aspect | System Service | User Service |
 |--------|---------------|--------------|
 | **Installed by** | root/admin | Unprivileged OS user |
-| **Runs as** | root → drops to `{project_name}` | Calling user |
+| **Runs as** | root → drops to `{internal_name}` | Calling user |
 | **Ports** | Any | >1024 only |
 | **Paths** | `/etc/`, `/var/` | `~/.config/`, `~/.local/` |
 | **Survives logout** | Yes | Depends on `lingering` |
@@ -4321,7 +4319,7 @@ server:
       # When true, mount /healthz to the SAME handler as /server/healthz (never redirect).
       enabled: false
 
-  # Branding & SEO - see PART 16 for full details
+  # Branding & SEO - see PART 15 for full details
   branding:
     title: "{project_name}"
     tagline: ""
@@ -5204,7 +5202,7 @@ make build             # Full cross-platform build
 | **Path pollution** | Binaries scattered across system |
 | **No cleanup** | Copies left behind, consuming space |
 
-**The only exception: CI/CD release.** Binaries are copied only during the CI/CD release process, where they are built fresh, stripped (debug symbols removed), and uploaded directly to release (GitHub Releases, registry, etc.) — handled by CI/CD, not manual commands.
+**The only exception: release builds.** Release binaries are always built *fresh* — never copied from `binaries/` by hand — then stripped (debug symbols removed) and published directly (GitHub Releases, registry, etc.). This happens either through the CI/CD release pipeline or through the local `make release` target (see PART 6 → "`make release`"); both build from source rather than copying an existing artifact.
 
 ## Release Artifacts
 
@@ -5950,7 +5948,7 @@ cd "$TEMP_DIR" && docker compose up -d
 # nginx proxy address - http://172.17.0.1:{port}
 # {project_name} - development
 
-name: {project_name}
+name: {project_name}-dev
 
 x-logging: &default-logging
   options:
@@ -5984,11 +5982,11 @@ services:
       retries: 3
       start_period: 90s
     networks:
-      - {project_name}
+      - {project_name}-dev
 
 networks:
-  {project_name}:
-    name: {project_name}
+  {project_name}-dev:
+    name: {project_name}-dev
     external: false
 ```
 
@@ -6308,7 +6306,7 @@ jobs:
     container:
       image: casjaysdev/go:latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - run: go build -buildvcs=false -trimpath ./src
 ```
 
@@ -6989,11 +6987,16 @@ PHASE 2: Handle service commands (NO startup)
 PHASE 3: Handle maintenance commands (NO startup)
 ─────────────────────────────────────────────────
 4. Handle --maintenance subcommands → execute and EXIT:
-   ├─ --maintenance backup  → backup data, exit
-   ├─ --maintenance restore → restore data, exit
-   ├─ --maintenance update  → update binary, exit
-   ├─ --maintenance mode    → set mode, exit
-   └─ --maintenance setup   → reset server configuration, exit
+   ├─ --maintenance backup     → backup data, exit
+   ├─ --maintenance restore    → restore data, exit
+   ├─ --maintenance update     → update binary, exit
+   ├─ --maintenance mode       → set mode, exit
+   ├─ --maintenance setup      → reset server configuration, exit
+   ├─ --maintenance pgp        → manage PGP keypair, exit
+   ├─ --maintenance secret     → rotate a project secret, exit
+   ├─ --maintenance token      → manage API tokens, exit
+   ├─ --maintenance data       → data maintenance operations, exit
+   └─ --maintenance compliance → compliance report, exit
 
 PHASE 4: Handle update commands (NO startup)
 ────────────────────────────────────────────
@@ -7045,7 +7048,7 @@ PHASE 5: Server startup (actual server start)
       ├─ For each port < 1024: create and bind socket, store fd
       ├─ If ANY privileged port fails: exit with error
       └─ Unprivileged ports (>= 1024) bound later in step 18
-   g. DROP PRIVILEGES to {project_name} user
+   g. DROP PRIVILEGES to {internal_name} user
    h. Verify privilege drop succeeded (getuid() != 0)
 
 9. IF RUNNING AS USER (non-root) - setup user directories:
@@ -8748,8 +8751,8 @@ services:
       - --pid=/run/{internal_name}.pid
       - --port=80
     volumes:
-      # Config (read-only)
-      - config:/config:ro
+      # Config (read-write)
+      - config:/config
       # Data (read-write)
       - data:/data
       # Logs (read-write)
@@ -9651,9 +9654,298 @@ func detectMode(args []string) string {
 }
 ```
 
+### Display Package (`package display`)
+
+**Defined here in PART 8; referenced throughout this document. `src/common/display/detect.go` holds the core detection logic, with platform-specific `detectPlatformDisplay()` implementations split across build-tagged files.**
+
+```go
+// src/common/display/detect.go
+package display
+
+import (
+    "os"
+    "runtime"
+    "strings"
+    "golang.org/x/term"
+)
+
+// DisplayMode - UI display mode (NOT app mode)
+type DisplayMode int
+
+const (
+    // No display, no TTY
+    DisplayModeHeadless DisplayMode = iota
+    // Command-line only (piped or command provided)
+    DisplayModeCLI
+    // Terminal UI (interactive terminal)
+    DisplayModeTUI
+    // Native graphical UI
+    DisplayModeGUI
+)
+
+// DisplayEnv - detected display environment
+type DisplayEnv struct {
+    Mode          DisplayMode
+    // X11, Wayland, Windows, macOS display
+    HasDisplay    bool
+    // "x11", "wayland", "windows", "macos", "none"
+    DisplayType   string
+    // stdout is a TTY
+    IsTerminal    bool
+    // Running over SSH
+    IsSSH         bool
+    // Running over mosh
+    IsMosh        bool
+    // Running in screen/tmux
+    IsScreen      bool
+    // TERM value
+    TerminalType  string
+    // Terminal columns (0 if no terminal)
+    Cols          int
+    // Terminal rows (0 if no terminal)
+    Rows          int
+}
+
+// DetectDisplayEnv - auto-detect display environment
+func DetectDisplayEnv() DisplayEnv {
+    env := DisplayEnv{}
+
+    // Terminal detection
+    env.IsTerminal = term.IsTerminal(int(os.Stdout.Fd()))
+    if env.IsTerminal {
+        env.Cols, env.Rows, _ = term.GetSize(int(os.Stdout.Fd()))
+    }
+    env.TerminalType = os.Getenv("TERM")
+
+    // Remote session detection
+    env.IsSSH = os.Getenv("SSH_CLIENT") != "" || os.Getenv("SSH_TTY") != ""
+    env.IsMosh = os.Getenv("MOSH") != "" || strings.Contains(os.Getenv("TERM"), "mosh")
+    env.IsScreen = os.Getenv("STY") != "" || os.Getenv("TMUX") != ""
+
+    // Platform-specific display detection
+    env.detectPlatformDisplay()
+
+    // Auto-detect display mode
+    env.Mode = env.autoDetectDisplayMode()
+
+    return env
+}
+
+// autoDetectDisplayMode - determine display mode from environment
+func (e *DisplayEnv) autoDetectDisplayMode() DisplayMode {
+    if !e.IsTerminal && !e.HasDisplay {
+        return DisplayModeHeadless
+    }
+    // TERM=dumb: force CLI mode (no TUI, no ANSI escapes)
+    if e.TerminalType == "dumb" {
+        return DisplayModeCLI
+    }
+    if e.HasDisplay && !e.IsSSH && !e.IsMosh {
+        return DisplayModeGUI
+    }
+    if e.IsTerminal {
+        return DisplayModeTUI
+    }
+    return DisplayModeCLI
+}
+
+// IsDumbTerminal - check if running in dumb terminal (no ANSI support)
+func (e *DisplayEnv) IsDumbTerminal() bool {
+    return e.TerminalType == "dumb"
+}
+
+// Helper methods with clear names
+func (e DisplayEnv) IsAutoDetectDisplayModeGUI() bool      { return e.Mode == DisplayModeGUI }
+func (e DisplayEnv) IsAutoDetectDisplayModeTUI() bool      { return e.Mode == DisplayModeTUI }
+func (e DisplayEnv) IsAutoDetectDisplayModeCLI() bool      { return e.Mode == DisplayModeCLI }
+func (e DisplayEnv) IsAutoDetectDisplayModeHeadless() bool { return e.Mode == DisplayModeHeadless }
+```
+
+```go
+// --- detect_unix.go ---
+//go:build !windows
+// +build !windows
+
+package display
+
+import (
+    "os"
+    "os/exec"
+    "runtime"
+    "strings"
+)
+
+// detectPlatformDisplay - Unix/macOS display detection
+func (e *DisplayEnv) detectPlatformDisplay() {
+    // Check for Wayland first (preferred on Linux)
+    if waylandDisplay := os.Getenv("WAYLAND_DISPLAY"); waylandDisplay != "" {
+        e.HasDisplay = true
+        e.DisplayType = "wayland"
+        return
+    }
+
+    // Check for X11
+    if display := os.Getenv("DISPLAY"); display != "" {
+        e.HasDisplay = true
+        e.DisplayType = "x11"
+        return
+    }
+
+    // macOS: check if we have access to WindowServer
+    if runtime.GOOS == "darwin" {
+        // On macOS, display is always available unless:
+        // - Running over SSH
+        // - Running as a LaunchDaemon (no GUI session)
+        if !e.IsSSH && os.Getenv("__CFBundleIdentifier") != "" {
+            e.HasDisplay = true
+            e.DisplayType = "macos"
+            return
+        }
+        // Check if WindowServer is accessible
+        cmd := exec.Command("launchctl", "managername")
+        if output, err := cmd.Output(); err == nil {
+            if strings.Contains(string(output), "Aqua") {
+                e.HasDisplay = true
+                e.DisplayType = "macos"
+                return
+            }
+        }
+    }
+
+    e.HasDisplay = false
+    e.DisplayType = "none"
+}
+```
+
+```go
+// --- detect_windows.go ---
+//go:build windows
+// +build windows
+
+package display
+
+import (
+    "os"
+    "golang.org/x/sys/windows"
+)
+
+// detectPlatformDisplay - Windows display detection
+func (e *DisplayEnv) detectPlatformDisplay() {
+    // Windows always has a display unless running as a service
+    // Check if we're running as a Windows service (no interactive desktop)
+
+    // Method 1: Check if we have a console window
+    kernel32 := windows.NewLazySystemDLL("kernel32.dll")
+    getConsoleWindow := kernel32.NewProc("GetConsoleWindow")
+    hwnd, _, _ := getConsoleWindow.Call()
+
+    // Method 2: Check if we're in session 0 (service session)
+    var sessionID uint32
+    windows.ProcessIdToSessionId(windows.GetCurrentProcessId(), &sessionID)
+
+    if sessionID == 0 {
+        // Running as a service (session 0) - no interactive desktop
+        e.HasDisplay = false
+        e.DisplayType = "none"
+        return
+    }
+
+    // Check for remote desktop session
+    if os.Getenv("SESSIONNAME") == "RDP-Tcp#0" || os.Getenv("SESSIONNAME") != "" {
+        // Remote desktop - has display but may want different behavior
+        e.HasDisplay = true
+        e.DisplayType = "windows-rdp"
+        return
+    }
+
+    // Normal Windows session with display
+    e.HasDisplay = hwnd != 0
+    if e.HasDisplay {
+        e.DisplayType = "windows"
+    } else {
+        e.DisplayType = "none"
+    }
+}
+```
+
+### Terminal Package (`package terminal`)
+
+**Defined here in PART 8; referenced throughout this document. `src/common/terminal/size.go` provides `SizeMode`, `TerminalSize`, and `GetTerminalSize()`.**
+
+```go
+// src/common/terminal/size.go
+package terminal
+
+import (
+    "os"
+    "golang.org/x/term"
+)
+
+type SizeMode int
+
+const (
+    // <40 cols or <10 rows
+    SizeModeMicro     SizeMode = iota
+    // 40-59 cols or 10-15 rows
+    SizeModeMinimal
+    // 60-79 cols or 16-23 rows
+    SizeModeCompact
+    // 80-119 cols and 24-39 rows
+    SizeModeStandard
+    // 120-199 cols and 40-59 rows
+    SizeModeWide
+    // 200-399 cols and 60-79 rows
+    SizeModeUltrawide
+    // 400+ cols and 80+ rows
+    SizeModeMassive
+)
+
+type TerminalSize struct {
+    Cols int
+    Rows int
+    Mode SizeMode
+}
+
+func GetTerminalSize() TerminalSize {
+    cols, rows, _ := term.GetSize(int(os.Stdout.Fd()))
+    if cols == 0 { cols = 80 }
+    if rows == 0 { rows = 24 }
+
+    return TerminalSize{
+        Cols: cols,
+        Rows: rows,
+        Mode: calculateMode(cols, rows),
+    }
+}
+
+func calculateMode(cols, rows int) SizeMode {
+    switch {
+    case cols < 40 || rows < 10:
+        return SizeModeMicro
+    case cols < 60 || rows < 16:
+        return SizeModeMinimal
+    case cols < 80 || rows < 24:
+        return SizeModeCompact
+    case cols < 120 || rows < 40:
+        return SizeModeStandard
+    case cols < 200 || rows < 60:
+        return SizeModeWide
+    case cols < 400 || rows < 80:
+        return SizeModeUltrawide
+    default:
+        return SizeModeMassive
+    }
+}
+
+func (s SizeMode) ShowASCIIArt() bool    { return s >= SizeModeStandard }
+func (s SizeMode) ShowBorders() bool     { return s >= SizeModeCompact }
+func (s SizeMode) ShowSidebar() bool     { return s >= SizeModeWide }
+func (s SizeMode) ShowIcons() bool       { return s >= SizeModeMinimal }
+```
+
 ### Display Environment Detection (CLI-Specific)
 
-**Uses `display.DetectDisplayEnv()` from PART 7 (`src/common/display/detect.go`).**
+**Uses `display.DetectDisplayEnv()` from PART 8 (`src/common/display/detect.go`).**
 
 **CLI binary uses the auto-detected display mode:**
 
@@ -10441,7 +10733,7 @@ func calculateGUILayout(width, height int, dpi float64) Layout {
 
 #### TUI Responsive Layout
 
-**TUI uses `terminal.SizeMode` from common/terminal (see PART 7) for size detection.**
+**TUI uses `terminal.SizeMode` from common/terminal (see PART 8) for size detection.**
 
 ```go
 // src/client/tui/layout.go
@@ -11769,7 +12061,7 @@ func GetBinaryName() string {
 
 **Build command (CI/CD injects version from git tag):**
 ```bash
-# VERSION comes from git tag (see PART 6/22 for version handling)
+# VERSION comes from git tag (see PART 7/23 for version handling)
 go build -buildvcs=false -trimpath -ldflags "-X main.ProjectName={project_name} -X main.Version=${VERSION}" -o {project_name}-cli ./src/client
 ```
 
@@ -12192,7 +12484,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 **Phone SSH and small terminal support is required. Many users work remotely via phone.**
 
-**See PART 7 for `SizeMode`, `TerminalSize`, and `GetTerminalSize()` definitions in `src/common/terminal/size.go`.**
+**See PART 8 for `SizeMode`, `TerminalSize`, and `GetTerminalSize()` definitions in `src/common/terminal/size.go`.**
 
 | Breakpoint | Columns | Rows | SizeMode Constant | Behavior |
 |------------|---------|------|-------------------|----------|
@@ -12204,9 +12496,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 | **Minimal** | 40-59 | 10-15 | `SizeModeMinimal` | Single column, no borders, text only |
 | **Micro** | <40 | <10 | `SizeModeMicro` | Critical info only, scrollable |
 
-client uses `common/terminal` from PART 7:
+client uses `common/terminal` from PART 8:
 ```go
-// CLI uses common/terminal package (defined in PART 7)
+// CLI uses common/terminal package (defined in PART 8)
 import "github.com/{project_org}/{internal_name}/src/common/terminal"
 
 func (m SizeMode) MaxTableColumns() int {
@@ -13636,8 +13928,11 @@ See PART 21 → UPDATE COMMAND for the update mechanism itself.
 ### Dependency Governance
 
 - Keep dependencies minimal
-- Remove unused packages promptly
-- Public repos should automate dependency updates for Go modules, GitHub Actions, and Docker if used
+- Remove unused modules promptly
+- **Renovate is the only supported dependency-update tool** — covers Go modules, GitHub Actions SHAs, and Docker image digests from a single `renovate.json` at the repo root. Works on GitHub, GitLab, Gitea, Forgejo, and Bitbucket.
+- **Dependabot is forbidden** — GitHub-only, duplicates Renovate's work on GitHub, and cannot serve the other four providers. Never enable both.
+- Public repos MUST ship `renovate.json` so Go module / Actions / Docker updates land as PRs automatically; Renovate uses `pinDigests: true` to keep all `uses:` lines pinned to immutable SHAs
+- Renovate only updates the SHA; the **runtime-still-supported** verification (e.g., node24 vs deprecated runtimes) remains a manual check on every SHA bump (PART 23 → "Third-party Action Pinning")
 - Security advisories are blockers until triaged
 - Run `govulncheck ./...` as part of CI to catch known vulnerabilities
 
@@ -17025,23 +17320,23 @@ type StatsInfo struct {
 
 | Field | Source | PART |
 |-------|--------|------|
-| `project.name` | `cfg.Branding.Title` | 16 |
-| `project.tagline` | `cfg.Branding.Tagline` | 16 |
-| `project.description` | `cfg.Branding.Description` | 16 |
+| `project.name` | `cfg.Branding.Title` | 15 |
+| `project.tagline` | `cfg.Branding.Tagline` | 15 |
+| `project.description` | `cfg.Branding.Description` | 15 |
 | `status` | `getOverallStatus()` | - |
 | `version` | `version.Version` (build var) | 7 |
 | `go_version` | `runtime.Version()` | 7 |
 | `build.commit` | `version.Commit` (build var) | 7 |
 | `build.date` | `version.Date` (build var) | 7 |
 | `uptime` | `formatUptime(startTime)` | - |
-| `mode` | `cfg.Server.Mode` | 6 |
-| `features.tor.*` | `torManager.*` | 31 |
-| `features.geoip` | `cfg.GeoIP.Enabled` (true/false) | 19 |
+| `mode` | `cfg.Server.Mode` | 4 |
+| `features.tor.*` | `torManager.*` | 26 |
+| `features.geoip` | `cfg.GeoIP.Enabled` (true/false) | 18 |
 | `features.*` (project-specific) | Show actual status when project-specific optional features used | - |
 | `checks.database` | `checkDatabase()` | 10 |
 | `checks.cache` | `checkCache()` | 10 |
-| `checks.scheduler` | `checkScheduler()` | 18 |
-| `checks.tor` | `checkTor()` | 31 |
+| `checks.scheduler` | `checkScheduler()` | 17 |
+| `checks.tor` | `checkTor()` | 26 |
 | `stats.*` | `statsCollector.*` | - |
 
 #### Frontend Display Order
@@ -18019,7 +18314,7 @@ func getAPIResponseFormat(r *http.Request) string {
 **Testing:** Test scripts MUST verify:
 - API `.txt` extension works
 - Frontend smart detection works (browser → HTML, CLI → formatted text)
-- Accept headers work on both API and frontend (see PART 22: TESTING & DEVELOPMENT)
+- Accept headers work on both API and frontend (see PART 22: TESTING, QUALITY & DEBUGGING)
 
 ### Content Negotiation Priority
 
@@ -22759,15 +23054,18 @@ async function requestPersistentStorage() {
 | 204 | No Content | Successful DELETE |
 | 301 | Moved Permanently | Permanent redirects |
 | 302 | Found | Temporary redirects |
+| 304 | Not Modified | Conditional GET cache hit |
 | 400 | Bad Request | Invalid input, validation errors |
 | 401 | Unauthorized | Not authenticated |
 | 403 | Forbidden | Authenticated but not authorized |
 | 404 | Not Found | Resource doesn't exist |
 | 405 | Method Not Allowed | Wrong HTTP method |
 | 409 | Conflict | Duplicate resource, version conflict |
+| 410 | Gone | Resource permanently deleted |
 | 422 | Unprocessable Entity | Semantic validation errors |
 | 429 | Too Many Requests | Rate limit exceeded |
 | 500 | Internal Server Error | Server-side errors |
+| 502 | Bad Gateway | Upstream service failure |
 | 503 | Service Unavailable | Maintenance mode |
 
 ## Unified Response Format
@@ -23803,7 +24101,7 @@ Mobile:
 
 **No Fixed/Pinned Elements :**
 - Header, nav, footer all scroll with page
-- NOTHING pinned/fixed to viewport
+- Header, nav, and footer are NEVER pinned/fixed to the viewport (the only `position: fixed` exceptions are transient toast notifications and the cookie/consent banner)
 - User scrolls down → header/nav scroll away
 - User scrolls to bottom → footer appears
 
@@ -23955,7 +24253,7 @@ package server
 
 import "embed"
 
-//go:embed template/*.tmpl template/**/*.tmpl
+//go:embed template
 var templateFS embed.FS
 
 //go:embed static/*
@@ -29926,7 +30224,7 @@ func verifyChecksum(filePath, expectedHash string) error {
 
 ## Required Quality Gates
 
-All gates execute inside the project Docker container (PART 5 → "Docker Rule"). The "Logical Command" column shows the Go invocation; the actual command is Docker-wrapped.
+All gates execute inside the project Docker container (PART 6 → "Docker Rule"). The "Logical Command" column shows the Go invocation; the actual command is Docker-wrapped.
 
 | Gate | Logical Command | Wrapped Form (example) |
 |------|-----------------|------------------------|
@@ -29935,10 +30233,10 @@ All gates execute inside the project Docker container (PART 5 → "Docker Rule")
 | Tests | `go test ./...` | `$(GO_DOCKER) go test ./...` |
 | Vet | `go vet ./...` | `$(GO_DOCKER) go vet ./...` |
 | Vulnerability scan | `govulncheck ./...` | `$(GO_DOCKER) govulncheck ./...` |
-| License enumeration | `go-licenses report ./...` | see PART 10 → "Suggested CI Steps" |
-| Attribution drift | `go-licenses report ./...` (output diffed against the GENERATED region of `LICENSE.md`) | see PART 10 → "Suggested CI Steps" |
-| GUI smoke (X11) | `go run . -- --ui gui` against an X11 socket | see PART 5 → "X11 and Wayland Forwarding" |
-| GUI smoke (Wayland) | `go run . -- --ui gui` against a Wayland socket | see PART 5 → "X11 and Wayland Forwarding" |
+| License enumeration | `go-licenses report ./...` | see PART 23 → "Suggested CI Steps" |
+| Attribution drift | `go-licenses report ./...` (output diffed against the GENERATED region of `LICENSE.md`) | see PART 23 → "Suggested CI Steps" |
+| GUI smoke (X11) | `go run . -- --ui gui` against an X11 socket | see PART 6 → "X11 and Wayland Forwarding" |
+| GUI smoke (Wayland) | `go run . -- --ui gui` against a Wayland socket | see PART 6 → "X11 and Wayland Forwarding" |
 
 ## Testing Rules
 
@@ -29956,6 +30254,12 @@ All gates execute inside the project Docker container (PART 5 → "Docker Rule")
 - Do not expose sensitive data in logs
 - Panic behavior must be intentional and documented (`recover` used deliberately, not to swallow all errors)
 - GUI/TUI debug tooling must not leak into normal production UX by default
+
+## Directory Naming
+
+**Singular** — Go package directories use singular names to match the package name inside them (`handler/`, `model/`, `middleware/`, `route/`) — `src/handler/handler.go` declares `package handler`, not `handlers`. This is a Go-specific rule: a directory name that disagrees with its package name is a smell (`go vet`/tooling and readers both expect them to match). Tooling directories that hold no Go package are always plural regardless of language (`scripts/`, `tests/`, `completions/`).
+
+---
 
 ## Performance Rules
 
@@ -30068,7 +30372,7 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 
 | File | Location | Created When |
 |------|----------|--------------|
-| `server.yml` | `{config_dir}/server.yml` (see PART 4) | Server first run |
+| `server.yml` | `{config_dir}/server.yml` (see PART 5) | Server first run |
 | `cli.yml` | `~/.config/{internal_org}/{internal_name}/cli.yml` | CLI first run |
 | Tor config | `{config_dir}/tor/torrc` (see PART 26) | When Tor enabled |
 | Tor data | `{data_dir}/tor/` (see PART 26) | When Tor enabled |
@@ -30529,7 +30833,7 @@ curl -q -LSsf /links/abc123
 make test
 ```
 
-**Note:** Makefile targets use Docker internally. See PART 25 for underlying commands.
+**Note:** Makefile targets use Docker internally. See PART 6 for underlying commands.
 
 ## Test Coverage
 
@@ -30564,33 +30868,9 @@ make test
 
 ### Coverage Enforcement
 
-**In CI/CD Pipeline (REQUIRED):**
+**In CI/CD Pipeline (REQUIRED):** the coverage gate runs as part of the `ci.yml` `test` job. Do **not** duplicate the job YAML here — PART 23 → "ci.yml" is the single source for the actual workflow (checkout SHA, Docker-wrapped `go test -cover`, and the ≥60% threshold check). Editing coverage CI means editing that spec, not this section.
 
-```yaml
-# .github/workflows/ci.yml (coverage job)
-test:
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-
-    - name: Run tests with coverage
-      run: |
-        # coverage.out goes to the mounted workspace (/app), not /tmp — two separate docker run
-        # invocations cannot share /tmp; the workspace mount is the only shared path between them.
-        # The runner workspace is ephemeral so this is safe.
-        docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app casjaysdev/go:latest \
-          go test -cover -coverprofile=coverage.out ./...
-
-    - name: Check coverage is ≥60%
-      run: |
-        COVERAGE=$(docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app casjaysdev/go:latest \
-          go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-        if [ $(echo "$COVERAGE < 60" | bc -l) -eq 1 ]; then
-          echo "ERROR: Coverage is $COVERAGE%, must be >= 60%"
-          exit 1
-        fi
-        echo "Coverage: $COVERAGE% ✓"
-```
+**Default threshold is 60%.** A project MAY raise it via `IDEA.md` (`## Project variables` → `coverage_minimum: 80`) when higher coverage is appropriate; never override it downward.
 
 ### How to Achieve 60% Coverage
 
@@ -31710,7 +31990,7 @@ Every external action (`uses: owner/action@...`) MUST be pinned to a full commit
 - uses: actions/checkout@v4
 
 # Correct — SHA is immutable
-- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+- uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 ```
 
 **When updating a pinned SHA**, verify three things:
@@ -31893,6 +32173,17 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 
 **Tag release auto-cancel policy:** Tag-only release workflows like `release.yml` MUST also use workflow concurrency, but only per exact tag ref. A newer run for `refs/tags/v1.2.3` should cancel the older `refs/tags/v1.2.3` run. A run for `v1.2.4` must NOT cancel `v1.2.3`.
 
+**Artifact retention:** Every `actions/upload-artifact` step MUST set a finite `retention-days` — no infinite retention of build outputs:
+
+```yaml
+- uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+  with:
+    name: {project_name}-${{ matrix.goos }}-${{ matrix.goarch }}
+    path: {project_name}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+    # release-job artifacts may use up to 30; build-job CI artifacts use 7
+    retention-days: 7
+```
+
 ## Build Info Variables
 
 All workflows MUST set these environment variables:
@@ -31920,6 +32211,9 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  schedule:
+    # weekly Monday 06:00 UTC
+    - cron: '0 6 * * 1'
 
 permissions:
   contents: read
@@ -31930,6 +32224,7 @@ concurrency:
 
 jobs:
   lint:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -31939,6 +32234,7 @@ jobs:
       - run: staticcheck ./...
 
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -31962,6 +32258,7 @@ jobs:
           fi
 
   build:
+    if: github.event_name != 'schedule'
     needs: [lint, test]
     runs-on: ubuntu-latest
     container:
@@ -31972,6 +32269,36 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - run: go build -buildvcs=false ./...
 
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          # required: truffleHog needs full history
+          fetch-depth: 0
+
+      - name: TruffleHog secret scan
+        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.95.9
+        with:
+          # NEVER use default_branch — it resolves to HEAD post-push and skips the scan
+          base: ${{ github.event.before }}
+          head: ${{ github.sha }}
+          extra_args: --only-verified
+
+  workflow-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Verify all third-party actions are pinned to a 40-char SHA
+        run: |
+          set -eo pipefail
+          bad=$(grep -RhnE '^\s*uses:\s*[^@]+@(v?[0-9]|main|master)' .github/ .gitea/ .forgejo/ 2>/dev/null || true)
+          if [[ -n "$bad" ]]; then
+            echo "::error::Unpinned actions found (must be 40-char SHAs):"
+            echo "$bad"
+            exit 1
+          fi
+
   vuln-scan:
     runs-on: ubuntu-latest
     container:
@@ -31979,7 +32306,29 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - run: govulncheck ./...
+
+  image-scan:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('docker/Dockerfile') != '' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      - name: Build local image for scanning
+        run: |
+          docker build -f docker/Dockerfile -t scan-target:ci .
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37  # v0.70.0
+        with:
+          image-ref: scan-target:ci
+          severity: CRITICAL,HIGH
+          exit-code: '1'
 ```
+
+**Per-provider notes:**
+
+- GitLab: `secret-scan` runs as a docker job using `image: trufflesecurity/trufflehog:latest` with `GIT_DEPTH: 0`; `image-scan` uses `image: aquasec/trivy:0.70.0`.
+- Jenkins: `Security` stage uses `parallel {}`; truffleHog and Trivy each run via `docker.image(...).inside { ... }`.
+- All providers: same gates, same severities, same exit conditions — no weaker subset on any provider.
 
 > **Note:** Security jobs (`secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan`) are defined within `ci.yml`. They run on push, PR, and weekly schedule (`cron: '0 6 * * 1'`). Add `if: github.event_name != 'schedule'` to build/test/coverage/artifact jobs to skip non-security work on scheduled runs. Secret scanning is mandatory on every public repo via truffleHog (Apache-2.0). Use `github.event.before` / `github.event.after` for the scan range — never `default_branch`, which after a push resolves to the same commit as HEAD and silently skips the scan.
 
@@ -32078,6 +32427,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
@@ -32085,6 +32436,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
 
   release:
@@ -32228,6 +32581,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
@@ -32235,6 +32590,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
 
   release:
@@ -32371,6 +32728,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
@@ -32378,6 +32737,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
 
   release:
@@ -32795,6 +33156,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
@@ -32802,6 +33165,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
 
   release:
@@ -32945,6 +33310,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
@@ -32952,6 +33319,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
 
   release:
@@ -33088,6 +33457,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
@@ -33095,6 +33466,8 @@ jobs:
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          # release-job artifacts may use up to 30; build-job CI artifacts use 7
+          retention-days: 7
 
 
   release:
@@ -34741,7 +35114,7 @@ License compliance is enforced by tooling and gated in CI; it is not left to man
 |------|---------|
 | `govulncheck` | Security advisory scanning for known Go vulnerabilities |
 | `go-licenses` | License enumeration and generation of the third-party attribution section of `LICENSE.md` from `go.sum` |
-| `cyclonedx-gomod` | Generate the SBOM (CycloneDX format) referenced in PART 5 → "Release Artifacts" and PART 10 → "Release Integrity" |
+| `cyclonedx-gomod` | Generate the SBOM (CycloneDX format) referenced in PART 6 → "Release Artifacts" and PART 23 → "Release Integrity" |
 | `golangci-lint` | Lint enforcement; configured to ban import patterns violating the pure-Go rule |
 
 All tools run inside the project Docker image. The image MUST have them pre-installed.
@@ -34837,7 +35210,7 @@ All three surfaces read the same `LICENSE.md` blob embedded at compile time via 
 
 ### CI Gate (mandatory)
 
-The canonical CI invocation lives in PART 10 → "Suggested CI Steps" (the `govulncheck` command and the `go-licenses report` + `sed`/`diff` drift check). This section defines the **policy**; PART 10 owns the script template. Do not duplicate the commands here when editing — keep PART 10 as the single source.
+The canonical CI invocation lives in PART 23 → "Suggested CI Steps" (the `govulncheck` command and the `go-licenses report` + `sed`/`diff` drift check). This section defines the **policy**; PART 23 owns the script template. Do not duplicate the commands here when editing — keep PART 23 as the single source.
 
 Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure, not a warning. The module graph is the source of truth for what licenses we ship, and `LICENSE.md` MUST match it.
 
@@ -34849,11 +35222,9 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 
 ---
 
----
-
 ## ReadTheDocs Project Setup
 
-## Overview
+### Overview
 
 **Every project MUST have documentation hosted on ReadTheDocs.**
 
@@ -34861,12 +35232,12 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 
 Documentation uses MkDocs Material theme with dark/light/auto switching.
 
-**See PART 16: Themes for project-wide theme rules (colors, accessibility, switching behavior).**
+**See PART 15: Themes for project-wide theme rules (colors, accessibility, switching behavior).**
 
 | Attribute | Value |
 |-----------|-------|
 | Documentation engine | MkDocs (Markdown-based) |
-| Theme | MkDocs Material (follows PART 16 theme rules) |
+| Theme | MkDocs Material (follows PART 15 theme rules) |
 | Theme files | `docs/stylesheets/dark.css`, `docs/stylesheets/light.css` |
 | Hosting | ReadTheDocs |
 | Source directory | `docs/` (ONLY ReadTheDocs files) |
@@ -34885,16 +35256,16 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 3. Standalone projects may use just `{project_name}`
 4. Custom domains require RTD paid plan or manual DNS setup
 
-## Required Files
+### Required Files
 
-### Project Root Files
+#### Project Root Files
 
 | File | Purpose |
 |------|---------|
 | `mkdocs.yml` | MkDocs configuration |
 | `.readthedocs.yaml` | ReadTheDocs build configuration |
 
-### Documentation Directory (`docs/`)
+#### Documentation Directory (`docs/`)
 
 **`docs/` is the operator/user/integrator documentation set. It MUST explain the shipped product as it actually behaves now.**
 
@@ -34917,7 +35288,7 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 | `stylesheets/light.css` | Optional | Light theme customization |
 | `requirements.txt` | ✓ | Python dependencies for MkDocs |
 
-## mkdocs.yml Template
+### mkdocs.yml Template
 
 ```yaml
 site_name: {PROJECT_NAME}
@@ -35046,7 +35417,7 @@ extra:
   generator: false
 ```
 
-## .readthedocs.yaml Template
+### .readthedocs.yaml Template
 
 ```yaml
 # ReadTheDocs configuration
@@ -35070,7 +35441,7 @@ python:
     - requirements: docs/requirements.txt
 ```
 
-## docs/requirements.txt
+### docs/requirements.txt
 
 ```
 mkdocs>=1.5.0
@@ -35079,16 +35450,16 @@ mkdocs-minify-plugin>=0.7.0
 pymdown-extensions>=10.0
 ```
 
-## Theme CSS Files
+### Theme CSS Files
 
-**Theme colors and rules defined in PART 16. These files apply those rules to MkDocs:**
+**Theme colors and rules defined in PART 15. These files apply those rules to MkDocs:**
 
 | File | Purpose | Applies To |
 |------|---------|------------|
 | `docs/stylesheets/dark.css` | Dark theme | `scheme: slate` |
 | `docs/stylesheets/light.css` | Light theme | `scheme: default` |
 
-### Dark Theme CSS
+#### Dark Theme CSS
 
 **File:** `docs/stylesheets/dark.css`
 
@@ -35272,7 +35643,7 @@ pymdown-extensions>=10.0
 }
 ```
 
-### Light Theme CSS
+#### Light Theme CSS
 
 **File:** `docs/stylesheets/light.css`
 
@@ -35355,9 +35726,9 @@ pymdown-extensions>=10.0
 }
 ```
 
-## Documentation Templates
+### Documentation Templates
 
-### docs/index.md
+#### docs/index.md
 
 ```markdown
 # {PROJECT_NAME}
@@ -35392,7 +35763,7 @@ docker run --name "{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -
 ## Links
 
 - [Repository]({PLATFORM_REPO_URL})
-- [Live Demo](https://{project_name}.{project_org}.us) (if applicable)
+- [Live Demo]({official_site}) (if applicable)
 - [API Documentation](/server/docs/swagger) (Swagger UI)
 - [GraphQL Playground](/server/docs/graphql)
 
@@ -35401,7 +35772,7 @@ docker run --name "{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -
 MIT - See [LICENSE.md]({PLATFORM_REPO_URL}/blob/main/LICENSE.md)
 ```
 
-### docs/installation.md
+#### docs/installation.md
 
 ```markdown
 # Installation
@@ -35442,14 +35813,14 @@ sudo systemctl enable {project_name}
 See [Configuration](configuration.md) for all options.
 ```
 
-### docs/configuration.md
+#### docs/configuration.md
 
 ```markdown
 # Configuration
 
 ## Config File
 
-Default location: `{config_dir}/server.yml` (see PART 4 for platform-specific paths)
+Default location: `{config_dir}/server.yml` (see PART 3 for platform-specific paths)
 
 ```yaml
 server:
@@ -35458,7 +35829,7 @@ server:
 
 database:
   type: sqlite
-  # Path auto-detected based on platform (see PART 4)
+  # Path auto-detected based on platform (see PART 3)
   # Docker: /data/db/sqlite/server.db
   # Native: {db_dir}/server.db
 
@@ -35483,7 +35854,7 @@ Document:
 - health/public endpoint toggles that operators can change
 ```
 
-### docs/api.md
+#### docs/api.md
 
 ```markdown
 # API Reference
@@ -35519,7 +35890,7 @@ GraphQL playground: [/server/docs/graphql](/server/docs/graphql)
 ```
 ```
 
-### docs/security.md
+#### docs/security.md
 
 ```markdown
 # Security
@@ -35552,7 +35923,7 @@ GraphQL playground: [/server/docs/graphql](/server/docs/graphql)
 - Document feature-gated entries such as WebFinger, OpenID Provider Metadata, App Links, Apple association, and MTA-STS only when they are actually enabled
 ```
 
-### docs/integrations.md
+#### docs/integrations.md
 
 ```markdown
 # Integrations
@@ -35580,7 +35951,7 @@ GraphQL playground: [/server/docs/graphql](/server/docs/graphql)
 - What must be configured before enabling each integration
 ```
 
-### docs/development.md
+#### docs/development.md
 
 ```markdown
 # Development Guide
@@ -35628,7 +35999,7 @@ make test
 
 ---
 
-## Project-Specific Customization
+### Project-Specific Customization
 
 **The theme colors defined above are DEFAULT values.** Individual projects MAY customize colors to match their branding, but MUST:
 
@@ -36148,13 +36519,16 @@ var localeFS embed.FS
       "ssl_renewed": "Certificado SSL renovado - {app_name}",
       "ssl_renewal_failed": "Error al renovar SSL - {app_name}",
       "task_failed": "Tarea programada fallida - {app_name}",
-      "test_email": "Correo de prueba - {app_name}"
+      "test_email": "Correo de prueba - {app_name}",
+      "operator_alert": "Alerta de operador ({alert_type}) - {app_name}"
     },
     "body": {
       "security_alert_heading": "ALERTA DE SEGURIDAD",
       "recommended_actions": "ACCIONES RECOMENDADAS",
       "contact_information": "INFORMACIÓN DE CONTACTO",
-      "from": "De: {app_name} ({fqdn})"
+      "from": "De: {app_name} ({fqdn})",
+      "alert_heading": "ALERTA DE OPERADOR",
+      "alert_description": "Se ha activado una alerta del operador."
     }
   },
 
@@ -37972,8 +38346,7 @@ func (tm *TorManager) UpdateConfig(config *TorConfig) error {
     // Regenerate torrc with new settings (overwrite existing)
     configDir := paths.GetConfigDir()
     torrcPath := filepath.Join(configDir, "tor", "torrc")
-    controlSocket := filepath.Join(tm.dataDir, "control.sock")
-    torrcContent := getTorConfig(controlSocket, config)
+    torrcContent := getTorConfig(config)
 
     if err := updateTorrc(torrcPath, []byte(torrcContent)); err != nil {
         return fmt.Errorf("failed to update torrc: %w", err)
@@ -38166,7 +38539,6 @@ No impact on binary size - Tor is external. Application binary remains small and
 | Tor config directory | `{config_dir}/tor/` | Server creates with 0700 |
 | Tor config file | `{config_dir}/tor/torrc` | Server generates with 0600 |
 | Tor data directory | `{data_dir}/tor/` | Server creates with 0700 |
-| Control socket | `{data_dir}/tor/control.sock` | Unix/macOS/BSD only |
 | Hidden service keys | `{data_dir}/tor/site/` | Server creates with 0700 |
 | Tor process PID | `{data_dir}/tor/tor.pid` | |
 | Tor log file | `{log_dir}/tor.log` | |
@@ -38340,7 +38712,6 @@ func ensureTorFile(path string, content []byte) error {
 | Config dir | `{config_dir}/tor/` | `0700` | app user | Server creates/enforces |
 | torrc | `{config_dir}/tor/torrc` | `0600` | app user | Server generates |
 | Data dir | `{data_dir}/tor/` | `0700` | app user | Server creates/enforces |
-| Control socket | `{data_dir}/tor/control.sock` | `0600` | app user | Unix only |
 | Site dir | `{data_dir}/tor/site/` | `0700` | app user | Server creates/enforces |
 | Private key | `{data_dir}/tor/site/hs_ed25519_secret_key` | `0600` | app user | Tor creates |
 | Public key | `{data_dir}/tor/site/hs_ed25519_public_key` | `0600` | app user | Tor creates |
@@ -38476,6 +38847,7 @@ All gates run inside the project Docker image — never on the host.
 - [ ] No automatic privilege escalation
 - [ ] No unsafe downloaded-code execution
 - [ ] `govulncheck` and license checks remain enabled in CI
+- [ ] Tor hidden service (if the `tor` binary is present) logs with `SafeLogging` enabled and never leaks the .onion private key or control-port cookie
 - [ ] Rate limiting, blocklists, and IP/country blocking (if enabled) were exercised against a real request, not just unit-tested in isolation
 - [ ] Backup files, if they contain database dumps or secrets, are encrypted at rest or excluded from unencrypted transport
 
@@ -38493,6 +38865,8 @@ All gates run inside the project Docker image — never on the host.
 - [ ] Artifacts cover the supported target matrix declared in IDEA.md (defaults: `{project_name}-linux-{amd64,arm64}`, `{project_name}-darwin-{amd64,arm64}`, `{project_name}-windows-{amd64,arm64}.exe`, `{project_name}-freebsd-{amd64,arm64}`)
 - [ ] SBOM generated via `cyclonedx-gomod` and published with the release; provenance/attestation included when the platform supports it
 - [ ] Packaging metadata matches supported GUI/TUI/CLI/server surfaces
+- [ ] Backup and restore were exercised against a built release binary, not just in-tree via `go test`
+- [ ] `--status` / the healthz endpoint were verified against the release binary before publishing
 - [ ] A single release binary was smoke-tested standalone as the server (web frontend reachable, `/healthz` OK, database auto-created) with no other files present alongside it
 
 ## Red Flags (Stop and Ask Human)

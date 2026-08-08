@@ -15,10 +15,10 @@ Template specifications for CasjaysDev Go projects. Each file is a master templa
 
 | File | Purpose |
 |------|---------|
-| `API.md` | Go API server template — source of truth for API projects |
-| `APPLICATION.md` | Go application template — source of truth for GUI/TUI/CLI projects |
-| `SERVER.md` | Go web server template — source of truth for full-stack server projects |
-| `HYBRID.md` | Go hybrid application+server template — source of truth for single-binary projects that are also a full server |
+| `API.md` | Go API server template — source of truth for API projects (PARTs 0–33) |
+| `APPLICATION.md` | Go application template — source of truth for GUI/TUI/CLI projects (PARTs 0–13) |
+| `SERVER.md` | Go web server template — source of truth for full-stack server projects (PARTs 0–37) |
+| `HYBRID.md` | Go hybrid application+server template — source of truth for single-binary projects that are also a full server (PARTs 0–28) |
 | `README.md` | This file |
 | `LICENSE.md` | Repository license (WTFPL) |
 
