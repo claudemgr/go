@@ -756,7 +756,7 @@ docker/
 ├── docker-compose.yml      # production compose — HUMAN USE ONLY
 ├── docker-compose.dev.yml  # development compose — runs `:devel` image in debug mode; HUMAN USE ONLY
 ├── docker-compose.test.yml # automated test compose — AI prefers the tests/ scripts over running this directly
-├── entrypoint.sh           # sets non-root UID/GID, prepares cache dirs
+├── entrypoint.sh           # prepares cache dirs; user creation and privilege drop happen in the binary
 └── README.md               # how to build the image, run tests, run GUI with display forwarding
 ```
 
@@ -802,7 +802,7 @@ Every production image MUST satisfy:
 - **Startup chain `tini → entrypoint.sh → app`** — `ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]`. Never override `ENTRYPOINT` or `CMD` to bypass `tini` or the entrypoint shim. All startup customization goes in `docker/rootfs/usr/local/bin/entrypoint.sh`, which MUST end with `exec "$@"` to preserve PID 1 signal handling.
 - **`STOPSIGNAL SIGTERM`** (or `SIGRTMIN+3` for s6-based images) for graceful shutdown
 - **`HEALTHCHECK`** — every production image declares a `HEALTHCHECK` that exits non-zero when the binary is unhealthy
-- **Non-root `USER`** — containers MUST NOT run as root. Create a non-root user/group in the Dockerfile and switch to it via `USER` before `ENTRYPOINT`. `entrypoint.sh` may remap UID/GID at runtime to match host ownership of mounted volumes. Exceptions (privileged port binding, device access, etc.) MUST be documented in `IDEA.md`.
+- **Privilege drop, not Dockerfile users** — containers start as root with NO `USER` directive and no user/group creation in the Dockerfile. The binary itself creates its dedicated user/group, creates its directories, sets permissions, then drops privileges once initialization completes. `entrypoint.sh` may export UID/GID env vars so the binary can match host ownership of mounted volumes. Running permanently as root (never dropping) is the exception and MUST be justified in `IDEA.md`.
 
 ### Mandatory `docker run` Naming Convention
 

@@ -5437,7 +5437,7 @@ CI workflows reference this image directly: `container: image: casjaysdev/go:lat
 |------|-------------|
 | **NEVER modify ENTRYPOINT** | Always use entrypoint.sh for customization |
 | **NEVER modify CMD** | Pass commands to entrypoint.sh instead |
-| **Non-root runtime user** | Runtime stage MUST create and switch to a non-root user. Alpine: `RUN addgroup -S app && adduser -S -G app app` then `USER app`. Debian/Ubuntu: `RUN groupadd -r app && useradd -r -g app app` then `USER app`. Exception: only if the app must bind a privileged port (<1024 — and even then prefer `setcap cap_net_bind_service`), or must manage system services. Document any exception in `IDEA.md`. |
+| **Privilege drop, not Dockerfile users** | NO `USER` directive and no user/group creation in the Dockerfile — the container starts as root and the binary creates its own user/group, creates its directories, sets permissions, then drops privileges after initialization (see "Privileged Port Binding (<1024)" for the run-mode and drop rules). Running permanently as root is the exception and MUST be documented in `IDEA.md`. |
 | **STOPSIGNAL** | Use `SIGRTMIN+3` for proper shutdown |
 | **ENTRYPOINT format** | `[ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]` |
 | **HEALTHCHECK timing** | Start: 10m, Interval: 5m, Timeout: 15s |
