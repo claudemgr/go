@@ -19989,7 +19989,7 @@ formatURL(host, 8443, true)
 - HTTPS adds overhead without additional security benefit
 - Only use HTTPS on overlays when HTTPS-only mode is required (port 443)
 
-**Footer timestamp format:** `%B %-d, %Y at %H:%M:%S %Z` → `December 4, 2025 at 13:05:13 EST` — anything user-facing MUST use this format; use `%Y-%m-%dT%H:%M:%S%:z` (RFC 3339) only where machine-readability matters (API responses, logs, health endpoints)
+**Footer timestamp format:** `%B %d, %Y at %H:%M:%S %Z` → `December 04, 2025 at 13:05:13 EST` — anything user-facing MUST use this format; use `%Y-%m-%dT%H:%M:%S%:z` (RFC 3339) only where machine-readability matters (API responses, logs, health endpoints)
 
 **"Last update" MUST use build date, NEVER hardcoded.** Use `{build_datetime}` template variable which comes from `BUILD_DATE` at compile time. This ensures the footer always shows when the binary was built, not a static date in the source code.
 
@@ -25271,15 +25271,15 @@ When the operator sets `custom_html` in `server.yml`, the server logs at startup
 | `{project_name}` | Project name |
 | `{project_org}` | Organization name |
 | `{project_version}` | Application version |
-| `{build_datetime}` | Build date/time (`%B %-d, %Y at %H:%M:%S %Z`) |
-| `{onion_address}` | Tor `.onion` address (only when Tor enabled and running) |
+| `{build_datetime}` | Build date/time (`%B %d, %Y at %H:%M:%S %Z`) |
+| `{onion_address}` | Tor `.onion` address (only when Tor is enabled, running, and an address is published; empty otherwise) |
 
 ### Default Application Footer (Always Shown)
 
 ```html
 <footer class="footer">
-  <!-- Onion address (only shown if Tor is enabled and running) -->
-  {{ if and .TorEnabled .TorRunning }}
+  <!-- Onion address (only shown if Tor is enabled, running, and an onion address is published) -->
+  {{ if and .TorEnabled .TorRunning .OnionAddress }}
   <p class="footer-onion">
     <a href="/server/help#tor-access" aria-label="Tor Support">🧅</a>
     <code class="onion-address">{onion_address}</code>
@@ -26290,9 +26290,9 @@ curl -H "Accept: application/xml" https://jokes.example.com/api/v1/joke</code></
 </div>
 ```
 
-**Tor Access section (only shown if Tor is enabled and running):**
+**Tor Access section (only shown if Tor is enabled, running, and an onion address is published):**
 ```html
-{{ if and .TorEnabled .TorRunning }}
+{{ if and .TorEnabled .TorRunning .OnionAddress }}
 <section id="tor-access" class="tor-access">
   <h3>Tor Access</h3>
   <p>This application is available as a Tor hidden service for enhanced privacy.</p>
