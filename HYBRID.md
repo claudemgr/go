@@ -3207,9 +3207,14 @@ X-Maintenance-Reason: database_connection
 
 ```json
 {
+  "project": {
+    "name": "My Application",
+    "tagline": "The best app ever",
+    "description": "A brief description of what this application does"
+  },
   "status": "maintenance",
   "version": "1.0.0",
-  "mode": "maintenance",
+  "mode": "production",
   "uptime": "2d 5h 30m",
   "maintenance": {
     "reason": "database_connection",
@@ -3229,6 +3234,8 @@ X-Maintenance-Reason: database_connection
   }
 }
 ```
+
+**`mode` always reports the configured MODE (`production`/`development`/`debug`) — maintenance is a state carried by `status`, never a mode. HTTP code: `503 Service Unavailable`.**
 
 ### Recovery (Automatic)
 
@@ -8425,9 +8432,14 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 
     response := buildHealthResponse()
 
-    // Check shutdown state
+    // Health status → HTTP code (see Health Status Values & HTTP Codes)
     if isShuttingDown() {
         response.Status = "shutting_down"
+        w.WriteHeader(http.StatusServiceUnavailable)
+    } else if maintenanceManager.Active() {
+        response.Status = "maintenance"
+        w.WriteHeader(http.StatusServiceUnavailable)
+    } else if response.Status == "unhealthy" {
         w.WriteHeader(http.StatusServiceUnavailable)
     } else if configManager.PendingRestart() {
         response.Status = "restart_required"
@@ -8436,6 +8448,7 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
         // Still healthy, just needs restart
         w.WriteHeader(http.StatusOK)
     } else {
+        // healthy or degraded — still serving
         w.WriteHeader(http.StatusOK)
     }
 
@@ -8451,7 +8464,8 @@ func buildHealthResponse() *HealthResponse {
     return &HealthResponse{
         // Project info (from branding config)
         Project: ProjectInfo{
-            Name:        cfg.Branding.Name,
+            Name:        cfg.Branding.Title,
+            Tagline:     cfg.Branding.Tagline,
             Description: cfg.Branding.Description,
         },
 
@@ -13729,7 +13743,7 @@ func isSerializationError(err error) bool {
 | `build_date` | `/server/healthz`, `--version` | Same as above |
 | `go_version` | `/server/healthz` (under `runtime`) | Build metadata, not a vulnerability vector on its own |
 | `uptime` (seconds or human) | `/server/healthz` | Operational diagnostic |
-| `mode` (`production` / `development`) | `/server/healthz` | Operational diagnostic; debug is gated separately |
+| `mode` (`production` / `development` / `debug`) | `/server/healthz` | Operational diagnostic; only the mode value is shown — Tier 3 debug diagnostics remain gated |
 | `db_type` (`sqlite` / `libsql`) | `/server/healthz` | Just the engine family — no host, no creds |
 | `db_locality` (`local` / `remote`) | `/server/healthz` | Fuzzy — no host name or IP |
 | `request_count_24h`, `active_connections`, `total_connections` | `/server/healthz` (under `metrics`) | Operational, aggregate |
@@ -17168,6 +17182,7 @@ All settings above are configured via config file:
 - `/server/healthz` - Frontend route (follows PART 13 content negotiation rules)
 - Optional `/healthz` - root alias to `/server/healthz` only when `server.healthz.root.enabled: true`
 - `/api/{api_version}/server/healthz` - API route (JSON by default; text via PART 13 API rules)
+- `/api/healthz` - unversioned direct alias for machine-friendly versionless probing
 
 **Content negotiation:** Follows standard frontend rules (see PART 13). No special `/server/healthz` rules. If `/healthz` is enabled, it follows the exact same negotiation because it mounts the same handler.
 
@@ -17339,12 +17354,15 @@ type StatsInfo struct {
 | `project.tagline` | `cfg.Branding.Tagline` | 15 |
 | `project.description` | `cfg.Branding.Description` | 15 |
 | `status` | `getOverallStatus()` | - |
+| `pending_restart` | `configManager.PendingRestart()` | - |
+| `restart_reason` | `configManager.RestartSettings()` | - |
 | `version` | `version.Version` (build var) | 7 |
 | `go_version` | `runtime.Version()` | 7 |
 | `build.commit` | `version.Commit` (build var) | 7 |
 | `build.date` | `version.Date` (build var) | 7 |
 | `uptime` | `formatUptime(startTime)` | - |
 | `mode` | `cfg.Server.Mode` | 4 |
+| `timestamp` | `time.Now().UTC()` | - |
 | `features.tor.*` | `torManager.*` | 26 |
 | `features.geoip` | `cfg.GeoIP.Enabled` (true/false) | 18 |
 | `features.*` (project-specific) | Show actual status when project-specific optional features used | - |
@@ -17381,7 +17399,7 @@ type StatsInfo struct {
 | Build commit | `<code>` | Optional | `<code>abc1234</code>` |
 | Build date | `<time>` | No | `<time datetime="2024-01-10">Jan 10, 2024</time>` |
 | Uptime | plain text | No | `2d 5h 30m` |
-| Mode | `.badge` | No | `<span class="badge badge-production">Production</span>` |
+| Mode | `.badge` | No | `<span class="badge badge-production">Production</span>` (class is badge-{mode}: badge-production / badge-development / badge-debug) |
 | Timestamp | `<time>` | No | `<time datetime="...">Jan 15, 2024 10:30 AM</time>` |
 | Tor address | `.code-block` | **Yes** | 56-char v3 onion, copy button, horizontal scroll |
 | Feature enabled | `.feature-enabled` | No | `<li class="feature-enabled">🌍 GeoIP</li>` |
@@ -17451,7 +17469,7 @@ type StatsInfo struct {
       <span class="status-icon">✅</span>
       <span class="status-text">All Systems Operational</span>
     </div>
-    <!-- Use .status-ok (healthy), .status-error (unhealthy), .status-warning (degraded) -->
+    <!-- Banner class/icon/text by status — see table below -->
 
     <!-- Version & Build Info -->
     <section class="section-card">
@@ -17537,6 +17555,17 @@ type StatsInfo struct {
 </html>
 ```
 
+**Status banner by `status` value:**
+
+| `status` | Banner class | Icon | Text |
+|----------|--------------|------|------|
+| `healthy` | `.status-ok` | ✅ | All Systems Operational |
+| `degraded` | `.status-warning` | ⚠️ | Degraded Performance |
+| `restart_required` | `.status-warning` | 🔄 | Restart Required |
+| `unhealthy` | `.status-error` | ❌ | Systems Unhealthy |
+| `maintenance` | `.status-error` | 🚧 | Maintenance in Progress |
+| `shutting_down` | `.status-error` | 🛑 | Shutting Down |
+
 **Healthz-specific styles (extends PART 15):**
 
 ```css
@@ -17552,6 +17581,11 @@ type StatsInfo struct {
 .status-banner.status-ok { background: var(--color-success-bg); color: var(--color-success); }
 .status-banner.status-error { background: var(--color-error-bg); color: var(--color-error); }
 .status-banner.status-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+
+/* Mode badge — class is badge-{mode} */
+.badge-production { background: var(--color-success-bg); color: var(--color-success); }
+.badge-development { background: var(--color-warning-bg); color: var(--color-warning); }
+.badge-debug { background: var(--color-error-bg); color: var(--color-error); }
 
 /* Stats with larger values */
 .stats-grid dd {
@@ -17584,6 +17618,8 @@ type StatsInfo struct {
 - Show countdown or "Auto-refreshing in Xs" indicator
 
 #### JSON (Accept: application/json)
+
+**Envelope exception:** health responses are BARE — no `{ "ok": ..., "data": ... }` wrapper, on any health route, in any state. Kubernetes probes, uptime monitors, and load balancers expect a flat body; the HTTP status code plus the top-level `status` field carry the health state.
 
 **Fields in canonical order (see "Field Order & Structure" above). References template PARTS.**
 
@@ -17630,7 +17666,9 @@ type StatsInfo struct {
 }
 ```
 
-### /api/{api_version}/server/healthz Security Rules
+### Security Rules (all health responses)
+
+These rules apply to the health payload in every format and on every health route (`/server/healthz`, `/healthz` alias, `/api/{api_version}/server/healthz`, `/api/healthz`).
 
 **NEVER expose in /server/healthz response:**
 
@@ -17654,7 +17692,7 @@ type StatsInfo struct {
 | **Features** | Enabled PUBLIC features only (not /metrics) | `tor: enabled` |
 | **Checks** | Service status (ok/error only) | `database: ok` |
 | **Stats** | Aggregate counts only | `requests_total: 12345` |
-| **Mode** | Production/development | `production` |
+| **Mode** | Production/development/debug | `production` |
 
 **Rule: Health can be expansive if the field is intentionally public-safe and acceptable for any unauthenticated internet viewer to see.**
 
@@ -17718,10 +17756,13 @@ Same underlying health response as `/server/healthz`, but formatted using the st
 | Field | Description |
 |-------|-------------|
 | `project.name` | Application name (from branding config) |
+| `project.tagline` | Application tagline/slogan (from branding config) |
 | `project.description` | Application description (from branding config) |
-| `status` | healthy, degraded, unhealthy |
+| `status` | healthy, degraded, unhealthy, restart_required, maintenance, shutting_down (see Health Status Values & HTTP Codes) |
+| `pending_restart` | Present (`true`) only when a config change requires a restart |
+| `restart_reason` | Settings that changed (only with `pending_restart`) |
 | `version` | Application version (SemVer) |
-| `mode` | production, development |
+| `mode` | production, development, debug |
 | `uptime` | Human-readable uptime |
 | `timestamp` | ISO 8601 timestamp |
 | `go_version` | Go runtime version |
@@ -17736,6 +17777,19 @@ Same underlying health response as `/server/healthz`, but formatted using the st
 | `stats.requests_total` | Total requests served |
 | `stats.requests_24h` | Requests in last 24 hours |
 | `stats.active_connections` | Current active connections |
+
+### Health Status Values & HTTP Codes
+
+**Applies to every health route (`/server/healthz`, `/healthz` alias, `/api/{api_version}/server/healthz`, `/api/healthz`) and every format (HTML/JSON/text). The body renders normally in all states — only the HTTP status code changes.**
+
+| `status` | Meaning | HTTP code |
+|----------|---------|-----------|
+| `healthy` | All checks pass | 200 |
+| `degraded` | Some non-critical checks failing; still serving | 200 |
+| `restart_required` | Healthy, but a config change needs a restart (`pending_restart: true`) | 200 |
+| `unhealthy` | Critical checks failing | 503 |
+| `maintenance` | Maintenance mode active | 503 |
+| `shutting_down` | Graceful shutdown in progress | 503 |
 
 **Who uses health endpoints:**
 - Browsers, curl, and uptime checks use `/server/healthz`
@@ -18048,7 +18102,7 @@ GET /api/{api_version}/items?status=active            ✓ Filtering
 | **Indentation** | 2 spaces — never tabs, never 4 spaces |
 | **Trailing newline** | Every JSON response ends with exactly one `\n` |
 | **No bare arrays at root** | Never emit a top-level JSON array — always wrap: `{ "data": [...] }`. Bare arrays cannot grow new sibling fields (pagination, metadata) without a breaking change, and some older clients reject them as JSON. |
-| **Success shape** | `{ "ok": true, "data": { ... } }` — `ok` is the discriminator; `data` carries the payload |
+| **Success shape** | `{ "ok": true, "data": { ... } }` — `ok` is the discriminator; `data` carries the payload. Exception: health endpoints return the bare health object (see PART 12). |
 | **Error shape** | `{ "ok": false, "error": "CODE", "message": "...", "details": {} }` — see PART 13 |
 
 ```go
@@ -31239,7 +31293,7 @@ docker run --rm \
 
     echo '=== Open API Smoke Test ==='
     # No auth required — all endpoints are publicly accessible
-    curl -q -LSsf http://localhost:64580/server/healthz | grep -q '"ok":true' \
+    curl -q -LSsf http://localhost:64580/server/healthz | grep -q '"status":"healthy"' \
         && echo '✓ Health endpoint works' \
         || echo '✗ FAILED: Health endpoint'
 
@@ -31436,7 +31490,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "
 
     echo '=== Open API Smoke Test ==='
     # No auth required — all endpoints are publicly accessible
-    curl -q -LSsf http://localhost:80/server/healthz | grep -q '"ok":true' \
+    curl -q -LSsf http://localhost:80/server/healthz | grep -q '"status":"healthy"' \
         && echo '✓ Health endpoint works' \
         || echo '✗ FAILED: Health endpoint'
 
@@ -31581,7 +31635,7 @@ sleep 3
 
 # 1. Health check
 echo "Testing health endpoint..."
-curl -q -LSsf http://localhost:64580/server/healthz | grep -q '"ok":true' \
+curl -q -LSsf http://localhost:64580/server/healthz | grep -q '"status":"healthy"' \
     && echo '✓ Health endpoint works' \
     || { echo '✗ FAILED: Health endpoint'; kill $SERVER_PID; exit 1; }
 
