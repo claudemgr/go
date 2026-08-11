@@ -14,7 +14,7 @@ All paths in this document are relative to `{project_dir}` (the git repository r
 
 ### CRITICAL: AI.md Is the Source of Truth
 
-This file (or the file it was copied into as `AI.md`) is the authoritative specification for `{project_name}`. `IDEA.md` declares project-specific WHAT (scope, features, product identity); `SPEC.md` declares project-specific rule overrides. When code, docs, or prior sessions disagree with `AI.md`, `AI.md` wins — fix the drift, do not fix the spec to match the drift.
+**About this file:** `AI.md` is the complete, authoritative specification for `{project_name}`. `IDEA.md` declares project-specific WHAT (scope, features, product identity); `SPEC.md` declares project-specific rule overrides. When code, docs, or prior sessions disagree with `AI.md`, `AI.md` wins — fix the drift, do not fix the spec to match the drift.
 
 ### CRITICAL: Keep Documentation in Sync
 
@@ -22,12 +22,12 @@ This file (or the file it was copied into as `AI.md`) is the authoritative speci
 
 ### CRITICAL: One Coherent Product
 
-This template defines **one Go application** with a single set of shared core business logic and multiple presentation/operation layers:
+This specification defines **one Go application** with a single set of shared core business logic and multiple presentation/operation layers:
 
 - A native **GUI/TUI/CLI** application surface (per PART 2's Application Model and PART 4's Runtime Mode Selection), and
 - A **full server** — frontend (web UI) and backend (JSON API) together, never referred to as an "API server" or "API-only service" — that this same binary can run.
 
-Single-process, single binary. Where APPLICATION-style templates state the app "does not host any [remote services]," that statement does NOT apply to HYBRID projects: a HYBRID binary explicitly DOES host a full server (see PART 2). What still holds unmodified: there is exactly one binary, one build, one release artifact per platform — never a split "client binary" + "server binary" pair unless `IDEA.md` explicitly says otherwise.
+Single-process, single binary. Where APPLICATION-style specifications state the app "does not host any [remote services]," that statement does NOT apply to HYBRID projects: a HYBRID binary explicitly DOES host a full server (see PART 2). What still holds unmodified: there is exactly one binary, one build, one release artifact per platform — never a split "client binary" + "server binary" pair unless `IDEA.md` explicitly says otherwise.
 
 ### CRITICAL: No Host Toolchain or Binary Execution
 
@@ -169,7 +169,7 @@ New session → read `AI.md` (relevant PARTs) → read `IDEA.md`/`SPEC.md` → r
 
 ### Session Initialization
 
-On first read of a HYBRID project: (1) locate `AI.md`, confirm it is this template or a copy of it; (2) read `IDEA.md` fully; (3) read `SPEC.md` if present; (4) read `TODO.AI.md`/`TODO.md`/`PLAN.AI.md`/`PLAN.md` if present; (5) check `git status --porcelain` for uncommitted drift; (6) confirm the project's actual directory layout matches PART 3; (7) confirm the build system matches PART 6; (8) confirm config matches PART 5; (9) proceed with the requested task.
+On first read of a HYBRID project: (1) locate `AI.md`, confirm it is this specification; (2) read `IDEA.md` fully; (3) read `SPEC.md` if present; (4) read `TODO.AI.md`/`TODO.md`/`PLAN.AI.md`/`PLAN.md` if present; (5) check `git status --porcelain` for uncommitted drift; (6) confirm the project's actual directory layout matches PART 3; (7) confirm the build system matches PART 6; (8) confirm config matches PART 5; (9) proceed with the requested task.
 
 ### Rule Files to Create/Update
 
@@ -208,7 +208,7 @@ Every piece of user-facing text (UI labels, error messages shown to users, email
 
 ## Editing AI.md
 
-`AI.md` is the copied template and is normally read-only for a project session — edits to the template itself happen in the template repository, not in a downstream project. A downstream project records deviations in `SPEC.md`, not by hand-editing its local `AI.md` copy.
+`AI.md` is normally read-only for a project session. A project records deviations in `SPEC.md`, not by hand-editing `AI.md`.
 
 ## Check Files Process vs. Audit
 
@@ -245,7 +245,7 @@ For a remote image URL: `curl -q -LSsf` to download it locally first, then Read 
 
 ## Migration Principles
 
-Migrating an existing Go project (application-only, or server-only) onto the HYBRID template preserves the project's actual product identity and behavior; it does not silently rewrite scope. `IDEA.md` continues to declare what the project actually is — HYBRID only applies where `IDEA.md` says the project is genuinely both an app and a server.
+Migrating an existing Go project (application-only, or server-only) onto the HYBRID specification preserves the project's actual product identity and behavior; it does not silently rewrite scope. `IDEA.md` continues to declare what the project actually is — HYBRID only applies where `IDEA.md` says the project is genuinely both an app and a server.
 
 | Projects CANNOT change without asking | Projects CAN change freely |
 |---|---|
@@ -284,7 +284,7 @@ If migration would require breaking a released public contract (flag, route, con
 | Common AI deviation | Correct behavior instead |
 |---|---|
 | Renaming a released flag "to match the spec" | Keep the flag; document the deviation in `SPEC.md` |
-| Deleting a route because it's "not in the template" | Keep it if `IDEA.md` covers it; ask if unclear |
+| Deleting a route because it's "not in the specification" | Keep it if `IDEA.md` covers it; ask if unclear |
 | Rewriting config format wholesale | Migrate incrementally with a compatibility shim |
 
 **Verification protocol:** after migration, run the full existing test suite plus a manual smoke test of the top 3 user-facing flows before declaring the migration done.
@@ -313,7 +313,7 @@ Every declared feature in `IDEA.md` is implemented, tested (Self-Validation Loop
 
 ### New-Project Completion Checklist
 
-Structure (PART 3) · Core app + server features (PART 2, 4, 8, 9, 10, 12–21 as scoped) · Infrastructure (PART 6, 23) · Governance & community (PART 1, 24) · Supply chain & release (PART 7, 21, 23) · Security & operations (PART 11, 14) · Any project-specific features `IDEA.md` declares beyond this template.
+Structure (PART 3) · Core app + server features (PART 2, 4, 8, 9, 10, 12–21 as scoped) · Infrastructure (PART 6, 23) · Governance & community (PART 1, 24) · Supply chain & release (PART 7, 21, 23) · Security & operations (PART 11, 14) · Any project-specific features `IDEA.md` declares beyond this specification.
 
 ---
 
@@ -323,7 +323,7 @@ Structure (PART 3) · Core app + server features (PART 2, 4, 8, 9, 10, 12–21 a
 
 | File | Owner | Purpose |
 |---|---|---|
-| `AI.md` | Template (read-only in downstream projects) | This specification |
+| `AI.md` | Specification (read-only in projects) | This specification |
 | `SPEC.md` | Human + AI | Project-specific rule overrides |
 | `IDEA.md` | Human + AI | Project-specific WHAT — scope, features, product identity |
 | `TODO.AI.md` | AI-owned | AI task tracking, cleared item-by-item on completion |
@@ -411,7 +411,7 @@ MIT projects may depend on: MIT, Apache-2.0, BSD, ISC, Public Domain. MIT projec
 
 # PART 2: APPLICATION & SERVER MODEL
 
-This is the most important reconciliation in the HYBRID template: the project is not "an app that happens to also serve HTTP," and it is not "a server that happens to also have a CLI." It is one Go binary, one set of shared core logic, with two coexisting operational personas.
+This is the most important reconciliation in the HYBRID specification: the project is not "an app that happens to also serve HTTP," and it is not "a server that happens to also have a CLI." It is one Go binary, one set of shared core logic, with two coexisting operational personas.
 
 ## Product Model
 
@@ -8485,7 +8485,7 @@ func buildHealthResponse() *HealthResponse {
             Date:   version.Date,
         },
 
-        // Features (PUBLIC only - do NOT include /metrics)
+        // Features (PUBLIC only - do NOT include /server/metrics)
         Features: FeaturesInfo{
             GeoIP:         cfg.Features.GeoIP.Enabled,
             Tor: TorInfo{
@@ -8824,6 +8824,26 @@ volumes:
 | Never show | `0.0.0.0`, `127.0.0.1`, `localhost` |
 | Always show | Valid FQDN, host, or IP |
 | Show only | One address, the most relevant |
+
+## Human-Readable Values (Frontend)
+
+**Every value shown on a user-facing surface — web pages, `/server/healthz` HTML,
+admin panel, error pages, TUI/GUI, pretty console output — MUST be human-readable.
+Raw machine values belong to JSON/API responses, Prometheus metrics, and logs only.**
+
+| Kind | Rule | Examples |
+|------|------|----------|
+| **Durations** | Largest fitting unit, at most two units, correct singular/plural: <60 s → seconds · ≥60 s → minutes · ≥60 min → hours · ≥24 h → days | `1 second` · `45 seconds` · `3 minutes` · `2 minutes 5 seconds` · `2 hours` · `1 hour 30 minutes` · `3 days 4 hours` |
+| **Sizes** | 1024 boundaries, full unit names, singular/plural, at most one decimal (drop `.0`): bytes → kilobytes → megabytes → gigabytes → terabytes | `1 byte` · `512 bytes` · `1 kilobyte` · `2.5 megabytes` · `5 gigabytes` · `1.2 terabytes` |
+| **Counts** | Locale-aware thousands separators | `12,847` |
+| **Timestamps** | Footer/display format `%B %d, %Y at %H:%M:%S %Z` (zero-padded day) as already specified | `January 05, 2026 at 14:03:07 UTC` |
+
+| Rule | Detail |
+|------|--------|
+| **Shared helpers** | One implementation: `format.Duration()` / `format.Size()` / `format.Count()` in the shared/common formatting package — never per-page ad-hoc formatting |
+| **i18n** | Unit names go through translation keys (`format.seconds_one`, `format.seconds_other`, …) with per-language plural rules — never hardcoded English unit strings |
+| **Raw value preserved** | HTML MAY carry the machine value in a `title=`/`data-` attribute for tooltips; the visible text is always the human form |
+| **Machine surfaces unchanged** | JSON API fields, Prometheus metrics, and log files keep raw base units (seconds, bytes) — formatting is a presentation concern only |
 
 ## URL & FQDN Detection
 
@@ -13247,15 +13267,33 @@ func GetUserWithVersion(ctx context.Context, userID int, version int) (*User, er
 
 | Content Type | Cache-Control Header | Description |
 |--------------|---------------------|-------------|
-| Static assets (JS/CSS/images) | `public, max-age=31536000, immutable` | 1 year, fingerprinted files |
+| Static assets with matching `?v=` build stamp | `public, max-age=31536000, immutable` | 1 year — URL changes every release, so this can never go stale |
+| Static assets without / with mismatched `?v=` | `no-cache` + `ETag` | Always revalidated — never trusted across updates |
 | HTML pages | `no-store` | Always fetch fresh |
 | API responses (public) | `public, max-age=60` | Short cache for CDN |
 | API responses (private) | `private, no-store` | User-specific data |
 | Authenticated pages | `private, no-store` | Never cache |
 | Error pages | `no-store` | Don't cache errors |
 
+### Asset Version-Busting (REQUIRED)
+
+**A stale browser cache must never survive an update.** Assets are embedded in the
+binary, so every release changes their content but not their paths — long-lived
+caching on bare paths is exactly how an old frontend keeps rendering after an
+update. The fix is mandatory URL stamping:
+
+| Rule | Detail |
+|------|--------|
+| **`asset()` template helper** | Every static asset reference in every template goes through a shared helper that appends the build stamp: `/static/app.css?v={project_version}-{short_commit}`. Hand-written bare `/static/...` URLs in templates are a bug. |
+| **`immutable` only on a matching stamp** | The static handler sends `public, max-age=31536000, immutable` ONLY when the request's `?v=` equals the running build's stamp. Missing or mismatched stamp → `no-cache` + `ETag` (the bytes still serve — cached HTML from an old version never breaks, it just revalidates). |
+| **HTML is never cached** | All HTML documents: `Cache-Control: no-store` plus an `ETag` derived from the build stamp, so any intermediary that ignores `no-store` still revalidates. |
+| **Service worker (if the project adds one)** | Cache name MUST embed `{project_version}`; `activate` deletes all caches from other versions. |
+
+**Result:** deploying a new version changes every asset URL, so browsers fetch the
+new frontend on the first page load after an update — no manual cache clearing, ever.
+
 ```go
-func setCacheHeaders(w http.ResponseWriter, contentType string, isAuthenticated bool) {
+func setCacheHeaders(w http.ResponseWriter, r *http.Request, contentType string, isAuthenticated bool) {
     if isAuthenticated {
         w.Header().Set("Cache-Control", "private, no-store")
         return
@@ -13263,7 +13301,12 @@ func setCacheHeaders(w http.ResponseWriter, contentType string, isAuthenticated 
 
     switch contentType {
     case "static":
-        w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+        if r.URL.Query().Get("v") == buildinfo.AssetStamp() {
+            w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+        } else {
+            w.Header().Set("Cache-Control", "no-cache")
+            w.Header().Set("ETag", `"`+buildinfo.AssetStamp()+`"`)
+        }
     case "api":
         w.Header().Set("Cache-Control", "public, max-age=60")
     case "html":
@@ -13271,6 +13314,8 @@ func setCacheHeaders(w http.ResponseWriter, contentType string, isAuthenticated 
     }
 }
 ```
+
+(`buildinfo.AssetStamp()` = `{project_version}-{short_commit}`.)
 
 ### Cache Warming
 
@@ -14540,7 +14585,7 @@ Files can be served from:
 ### Adding New Well-Known Entries
 
 - Only add a new `/.well-known/...` entry when a real protocol, platform, or ecosystem integration requires that exact path
-- The exact path, source of truth, content type, auth model, and unsupported behavior MUST be documented in the template/`IDEA.md`
+- The exact path, source of truth, content type, auth model, and unsupported behavior MUST be documented in this specification/`IDEA.md`
 - New entries MUST be added to the route tables, reserved-route checks, and the audit/final checklist
 - If a requested capability can live under `/server/*` or `/api/{api_version}/server/*` without breaking interoperability, do NOT put it under `/.well-known/`
 
@@ -14678,7 +14723,7 @@ web:
 | Public API (`/api/**`) | Yes | AI agents can use these |
 | Authenticated API (`/api/**` + auth) | Yes | Note auth requirement |
 | Health (`/server/healthz`) | Yes | Useful for monitoring agents |
-| Metrics (`/metrics`) | No | Operational/internal endpoint; never advertised |
+| Metrics (`/server/metrics` + aliases) | No | Operational/internal endpoint; never advertised |
 
 **Well-Known Support Matrix Update:**
 
@@ -17190,11 +17235,11 @@ All settings above are configured via config file:
 
 ### Global vs App-Specific
 
-**This template defines the COMPLETE global structure. Projects extend with app-specific data. ALL fields MUST be public-safe.**
+**This specification defines the COMPLETE global structure. Projects extend with app-specific data. ALL fields MUST be public-safe.**
 
 | Type | Description | Defined Where |
 |------|-------------|---------------|
-| **Global (this template)** | Complete structure: project, status, version, build, runtime, features, checks, stats | Below (comprehensive) |
+| **Global (this specification)** | Complete structure: project, status, version, build, runtime, features, checks, stats | Below (comprehensive) |
 | **App-specific (extend)** | Additional features, stats, checks relevant to your app | IDEA.md |
 
 **How to extend:**
@@ -17227,7 +17272,7 @@ All settings above are configured via config file:
 
 #### Backend Structure (Go)
 
-**Based on template PARTS: branding (PART 15), modes (PART 4), database (PART 10), features (PARTS 18, 26), scheduler (PART 17).**
+**Based on specification PARTS: branding (PART 15), modes (PART 4), database (PART 10), features (PARTS 18, 26), scheduler (PART 17).**
 
 ```go
 // HealthResponse - canonical field order for /server/healthz
@@ -17291,7 +17336,7 @@ type BuildInfo struct {
     Date   string `json:"date"`
 }
 
-// FeaturesInfo - PUBLIC features only (no /metrics - PART 19 is internal)
+// FeaturesInfo - PUBLIC features only (no /server/metrics - PART 19 is internal)
 // Only shows NON-NEGOTIABLE features.
 // For project-specific optional features, add fields here when implemented.
 type FeaturesInfo struct {
@@ -17398,7 +17443,7 @@ type StatsInfo struct {
 | Go version | `<code>` | No | `<code>{{.GoVersion}}</code>` |
 | Build commit | `<code>` | Optional | `<code>abc1234</code>` |
 | Build date | `<time>` | No | `<time datetime="2024-01-10">Jan 10, 2024</time>` |
-| Uptime | plain text | No | `2d 5h 30m` |
+| Uptime | plain text | No | `2 days 5 hours` |
 | Mode | `.badge` | No | `<span class="badge badge-production">Production</span>` (class is badge-{mode}: badge-production / badge-development / badge-debug) |
 | Timestamp | `<time>` | No | `<time datetime="...">Jan 15, 2024 10:30 AM</time>` |
 | Tor address | `.code-block` | **Yes** | 56-char v3 onion, copy button, horizontal scroll |
@@ -17418,7 +17463,7 @@ type StatsInfo struct {
 | Project description (from branding) | API keys or tokens |
 | Status: "healthy"/"unhealthy" | Passwords or secrets |
 | Version: "1.0.0" | Internal IP addresses |
-| Uptime: "2d 5h" | File paths on server |
+| Uptime: "2 days 5 hours" | File paths on server |
 | Mode: "production" | Environment variables |
 | Checks: "ok"/"error" | Config file contents |
 
@@ -17485,7 +17530,7 @@ type StatsInfo struct {
         <dd><code>abc1234</code> (2024-01-10)</dd>
 
         <dt>⏱️ Uptime</dt>
-        <dd>2d 5h 30m</dd>
+        <dd>2 days 5 hours</dd>
 
         <dt>🚀 Mode</dt>
         <dd><span class="badge badge-production">Production</span></dd>
@@ -17531,7 +17576,7 @@ type StatsInfo struct {
     <section class="section-card">
       <h2>📈 Server Statistics</h2>
       <!-- NOTE: Public-safe aggregate stats only.
-           /metrics endpoint (PART 19) is internal/authenticated, not shown here. -->
+           The metrics routes under /server/metrics (PART 19) are internal/authenticated, not shown here. -->
       <dl class="info-list stats-grid">
         <dt>📥 Total Requests</dt>
         <dd>1,234,567</dd>
@@ -17621,7 +17666,7 @@ type StatsInfo struct {
 
 **Envelope exception:** health responses are BARE — no `{ "ok": ..., "data": ... }` wrapper, on any health route, in any state. Kubernetes probes, uptime monitors, and load balancers expect a flat body; the HTTP status code plus the top-level `status` field carry the health state.
 
-**Fields in canonical order (see "Field Order & Structure" above). References template PARTS.**
+**Fields in canonical order (see "Field Order & Structure" above). References specification PARTS.**
 
 **Note:** Only non-negotiable features shown with actual status (true/false, enabled/disabled). If project uses project-specific optional features, those become non-negotiable for that project and show their actual enabled/disabled status.
 
@@ -17681,15 +17726,15 @@ These rules apply to the health payload in every format and on every health rout
 | **Email** | SMTP host, operator/contact emails | Phishing/spam target |
 | **Secrets** | Encryption keys, session secrets | Cryptographic breach |
 | **Debug** | Stack traces, detailed errors | Exploitation info |
-| **Internal endpoints** | /metrics status, internal service endpoints | Internal infrastructure info |
+| **Internal endpoints** | /server/metrics status, internal service endpoints | Internal infrastructure info |
 
 **Safe to include:**
 
 | Category | OK to Include | Example |
 |----------|---------------|---------|
 | **Version** | App version, Go version, build info | `1.0.0`, `<runtime.Version()>` |
-| **Status** | Health status, uptime | `healthy`, `2d 5h` |
-| **Features** | Enabled PUBLIC features only (not /metrics) | `tor: enabled` |
+| **Status** | Health status, uptime | `healthy`, `2 days 5 hours` |
+| **Features** | Enabled PUBLIC features only (not /server/metrics) | `tor: enabled` |
 | **Checks** | Service status (ok/error only) | `database: ok` |
 | **Stats** | Aggregate counts only | `requests_total: 12345` |
 | **Mode** | Production/development/debug | `production` |
@@ -17702,7 +17747,7 @@ These rules apply to the health payload in every format and on every health rout
 
 #### Plain Text (Accept: text/plain)
 
-**Fields in canonical order, flattened with dot notation. References template PARTS.**
+**Fields in canonical order, flattened with dot notation. References specification PARTS.**
 
 ```
 # 1. Project (PART 15: branding)
@@ -19368,7 +19413,9 @@ Need additional compatible endpoints?"
 | `/healthz` | GET | None | Optional direct alias to `/server/healthz` when `server.healthz.root.enabled` is `true` |
 | `/server/docs/swagger` | GET | None | Swagger UI (interactive REST explorer; fetches spec from `/api/swagger`) |
 | `/server/docs/graphql` | GET | None | GraphiQL UI (interactive GraphQL explorer; POSTs to `/api/graphql`) |
-| `/metrics` | GET | Optional | Prometheus metrics |
+| `/server/metrics[/{service}]` | GET | Bearer token (per-service) | Metrics services — `prometheus`, `grafana`, `loki` (PART 19) |
+| `/metrics[/{service}]` | GET | Bearer token (per-service) | Root alias when `server.metrics.root.enabled` is `true` (default); same handler, never a redirect |
+| `/api/metrics[/{service}]` | GET | Bearer token (per-service) | Metrics — unversioned alias for current `{api_version}`; same handlers |
 | `/api/autodiscover` | GET | None | Server settings, config schema, and options for CLI (non-versioned) |
 | `/api/swagger` | GET | None | OpenAPI JSON spec — direct alias for current `{api_version}` |
 | `/api/graphql` | POST | None | GraphQL queries — direct alias for current `{api_version}` |
@@ -20393,8 +20440,24 @@ Started: {startup_datetime}
 | **Interactive console** | ✅ Yes | ✅ Yes | ✅ Yes | Pretty |
 | **Log files** | ❌ Never | ❌ Never | ❌ Never | Raw text |
 | **Log output (stdout)** | ❌ Never | ❌ Never | ❌ Never | Raw text |
+| **Background tasks / scheduler** | ❌ Never | ❌ Never | ❌ Never | Log files only — never console |
+| **Health checks / probes** | ❌ Never | ❌ Never | ❌ Never | Log files only — never console |
 
 **Note:** Startup banner adapts to terminal width. ASCII art only shown at ≥80 columns. Icons reduced at <60 columns. See "Responsive Startup Banner" section.
+
+### Runtime Console Silence
+
+**After the startup banner, the console (stdout) stays silent during normal operation.**
+
+| Never printed to console | Where it goes instead |
+|--------------------------|----------------------|
+| Scheduler / background task activity (started, completed, skipped, failed, next run) | Log files only |
+| `healthcheck_self` results and all incoming health probe requests (Docker/compose healthchecks, k8s probes, uptime monitors) | Log files only (successful health hits are already excluded from `access.log` by default) |
+| Recurring internal work — cache maintenance, metrics collection, certificate renewal checks, heartbeats, cleanup tasks | Log files only |
+
+**The console after the banner shows ONLY:** WARN/ERROR conditions, direct responses
+to interactive commands, and shutdown messages. Everything else is log-file material
+at the appropriate level — a healthy server prints nothing.
 
 **Log format is ALWAYS plain text:**
 ```
@@ -21295,7 +21358,7 @@ document.addEventListener('click', function(e) {
   <dd><code>1.2.3</code></dd>
 
   <dt>⏱️ Uptime</dt>
-  <dd>2d 5h 30m</dd>
+  <dd>2 days 5 hours</dd>
 
   <dt>🧅 Tor Address</dt>
   <dd>
@@ -22954,14 +23017,14 @@ if (new URLSearchParams(window.location.search).get('source') === 'pwa') {
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="{app_name}">
-  <link rel="apple-touch-icon" href="/static/icons/icon-180.png">
+  <link rel="apple-touch-icon" href="{{ asset "icons/icon-180.png" }}">
 
   <!-- iOS splash screens -->
   <link rel="apple-touch-startup-image"
-        href="/static/splash/iphone-1179x2556.png"
+        href="{{ asset "splash/iphone-1179x2556.png" }}"
         media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
   <link rel="apple-touch-startup-image"
-        href="/static/splash/iphone-1284x2778.png"
+        href="{{ asset "splash/iphone-1284x2778.png" }}"
         media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
 </head>
 ```
@@ -23029,9 +23092,9 @@ async function requestPersistentStorage() {
   <link rel="manifest" href="/manifest.json">
 
   <!-- Icons -->
-  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png">
-  <link rel="apple-touch-icon" href="/static/icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ asset "icons/favicon-32.png" }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ asset "icons/favicon-16.png" }}">
+  <link rel="apple-touch-icon" href="{{ asset "icons/icon-180.png" }}">
 
   <!-- iOS specific -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -23039,7 +23102,7 @@ async function requestPersistentStorage() {
   <meta name="apple-mobile-web-app-title" content="{app_name}">
 
   <title>{App Name}</title>
-  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="{{ asset "css/app.css" }}">
 </head>
 <body>
   <!-- Offline indicator -->
@@ -23048,7 +23111,7 @@ async function requestPersistentStorage() {
   <!-- App content -->
   <div id="app"></div>
 
-  <script src="/static/js/app.js"></script>
+  <script src="{{ asset "js/app.js" }}"></script>
 </body>
 </html>
 ```
@@ -27609,7 +27672,7 @@ Shutdown complete
 1. **Use Go's time/ticker** - No external cron libraries required
 2. **Database-backed state** - All state in server.db, survives restarts
 3. **Graceful shutdown** - Complete running tasks before exit
-4. **Audit logging** - All task executions logged
+4. **Audit logging** - All task executions logged. Task activity is logged to log files only — the scheduler NEVER prints to the console (see Console vs Logs → Runtime Console Silence).
 5. **Notifications** - Failed tasks trigger notifications (if configured)
 
 ---
@@ -27742,27 +27805,59 @@ server:
 | Feature | Description |
 |---------|-------------|
 | Format | Prometheus text exposition format |
-| Endpoint | `/metrics` (configurable) |
-| Authentication | Optional bearer token |
+| Endpoints | `/server/metrics` + per-service sub-endpoints (see Endpoints below) |
+| Authentication | Mandatory per-service bearer tokens (configured in `server.yml`) |
 | Library | `github.com/prometheus/client_golang` |
+
+## Endpoints
+
+**The metrics endpoint lives in the `/server` namespace, mirroring the healthz layout, with three service-specific sub-endpoints.**
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/server/metrics` | GET | Bearer token (`prometheus`) | Prometheus text exposition (same handler as `/server/metrics/prometheus`) |
+| `/server/metrics/prometheus` | GET | Bearer token (`prometheus`) | Complete Prometheus text exposition — every exported metric |
+| `/server/metrics/grafana` | GET | Bearer token (`grafana`) | Complete importable Grafana dashboard JSON covering every exported metric |
+| `/server/metrics/loki` | GET | Bearer token (`loki`) | Recent structured log entries in Loki-compatible JSON streams |
+| `/api/{api_version}/server/metrics[/{service}]` | GET | Same per-service token | Versioned API path — same handlers |
+| `/api/metrics[/{service}]` | GET | Same per-service token | Unversioned machine-friendly alias for current `{api_version}` — same handlers |
+| `/metrics[/{service}]` | GET | Same per-service token | Root alias, gated on `server.metrics.root.enabled: true` (default **true** — Prometheus scrapers default to `/metrics`); same handler, NEVER a redirect |
+
+- All alias routes invoke the SAME handler — never redirect (redirects break scrapers), same rule as the healthz root alias.
+- The correct product spelling is **Grafana** — endpoint and config key are `grafana`.
+
+## Service Semantics
+
+| Service | Content-Type | Body |
+|---------|--------------|------|
+| `prometheus` | `text/plain; version=0.0.4` | Full Prometheus text exposition — all required + project metrics |
+| `grafana` | `application/json` | A complete, importable Grafana dashboard definition (schema-current JSON) with panels covering every metric category this specification requires (HTTP, database, cache, scheduler, system, business); datasource left as a template variable so it imports against any Prometheus datasource |
+| `loki` | `application/json` | Recent structured log entries in Loki push-API stream format: `{"streams":[{"stream":{labels},"values":[["<ns-timestamp>","<line>"],...]}]}` — bounded by `loki.max_entries`/`loki.max_age`, same sanitization as log files (credentials ALWAYS redacted) |
 
 ## Access Control
 
-**`/metrics` is INTERNAL ONLY. See TERMINOLOGY > Monitoring Endpoints for /server/healthz vs /metrics distinction.**
+**`/server/metrics` and its aliases are INTERNAL ONLY. See TERMINOLOGY > Monitoring Endpoints for the /server/healthz vs /server/metrics distinction.**
 
 | Deployment | Access Method | Recommendation |
 |------------|---------------|----------------|
-| **Single server** | Firewall rules | Block external access to `/metrics` port/path |
-| **Behind reverse proxy** | Proxy config | Do NOT proxy `/metrics` to public |
+| **Single server** | Firewall rules | Block external access to `/server/metrics` and `/metrics` port/path |
+| **Behind reverse proxy** | Proxy config | Do NOT proxy `/server/metrics` or `/metrics` to public |
 | **Kubernetes** | NetworkPolicy | Restrict to monitoring namespace |
 | **Cloud** | Security groups | Allow only from Prometheus IP |
 
-**Authentication options:**
+### Authentication
 
-| Method | Config | Use When |
-|--------|--------|----------|
-| **None** | `token: ""` | Firewalled, internal network only |
-| **Bearer token** | `token: "secret123"` | Additional layer, or when firewall not possible |
+**Every metrics route requires a bearer token. There is no unauthenticated default.**
+
+| Rule | Detail |
+|------|--------|
+| **Per-service tokens** | Each service (`prometheus`, `grafana`, `loki`) has its own token in `server.yml` — rotating one service's token never breaks the others |
+| **Header only** | `Authorization: Bearer {token}` — query-string tokens are FORBIDDEN (they leak into access logs and proxies) |
+| **Constant-time compare** | Token comparison uses constant-time equality |
+| **Empty token = service disabled** | An empty token disables that service's endpoints → `403` with an empty body; the reason is logged once at startup (log files, not console) |
+| **Never logged, always redacted** | Tokens never appear in logs, error messages, `/server/healthz`, or any config dump — display as `xxxxx` |
+| **Firewalled escape hatch** | `auth.allow_unauthenticated: true` (default `false`) skips token checks for ALL metrics services — for firewalled internal networks only; setting it while the server is reachable publicly is a deployment bug |
+| **Still INTERNAL** | Metrics remain internal/operational endpoints — never advertised, never in FeaturesInfo, firewall/proxy rules still apply as defense in depth |
 
 **Token authentication header:**
 ```
@@ -27775,8 +27870,11 @@ scrape_configs:
   - job_name: '{project_name}'
     static_configs:
       - targets: ['app.internal:8080']
+    # Root alias (default) - or use /server/metrics
+    metrics_path: /metrics
     authorization:
-      credentials: 'your-metrics-token-here'
+      # The prometheus service token from server.metrics.auth.tokens.prometheus
+      credentials: 'your-prometheus-service-token-here'
 ```
 
 ## Configuration
@@ -27785,7 +27883,22 @@ scrape_configs:
 server:
   metrics:
     enabled: true
-    endpoint: /metrics
+
+    # Root aliases /metrics and /metrics/{service}
+    # (default true - Prometheus scrapers expect /metrics)
+    root:
+      enabled: true
+
+    auth:
+      # true skips token checks for ALL metrics services
+      # ONLY for firewalled internal networks - never on a public server
+      allow_unauthenticated: false
+
+      # Per-service bearer tokens - empty disables that service (403)
+      tokens:
+        prometheus: ""
+        grafana: ""
+        loki: ""
 
     # Include system metrics (CPU, memory, disk, goroutines)
     include_system: true
@@ -27793,8 +27906,10 @@ server:
     # Include Go runtime metrics
     include_runtime: true
 
-    # Optional Bearer token for authentication
-    token: ""
+    # Loki service - how much recent log to serve
+    loki:
+      max_entries: 1000
+      max_age: 1h
 
     # Histogram buckets for request duration (seconds)
     duration_buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
@@ -27897,7 +28012,7 @@ server:
 
 ## Complete Metrics Reference
 
-**Every metric exported by `/metrics`. All prefixed with `{project_name}_`.**
+**Every metric exported by `/server/metrics`. All prefixed with `{project_name}_`.**
 
 ### Application Metrics (REQUIRED)
 
@@ -28044,7 +28159,7 @@ server:
 
 ## Metrics Output Example
 
-**Sample `/metrics` output (Prometheus text format):**
+**Sample `/server/metrics/prometheus` output (Prometheus text format):**
 
 ```
 # HELP {project_name}_app_info Application information
@@ -28880,28 +28995,47 @@ func (c *SystemCollector) collectRuntime() {
 package handler
 
 import (
+    "crypto/subtle"
     "net/http"
 
     "github.com/prometheus/client_golang/prometheus/promhttp"
+
+    "github.com/{project_org}/{internal_name}/src/config"
 )
 
-// MetricsHandler returns the Prometheus metrics handler with optional auth
-func MetricsHandler(token string) http.Handler {
-    handler := promhttp.Handler()
-
-    if token == "" {
-        return handler
-    }
-
-    // Wrap with bearer token authentication
+// MetricsAuth wraps a metrics service handler with mandatory per-service
+// bearer token auth (server.metrics.auth.tokens.{service})
+func MetricsAuth(cfg config.MetricsAuth, service string, handler http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Firewalled internal networks only - never on a public server
+        if cfg.AllowUnauthenticated {
+            handler.ServeHTTP(w, r)
+            return
+        }
+
+        // Empty token disables the service - 403 with empty body
+        // (reason logged once at startup, log files only)
+        token := cfg.Tokens[service]
+        if token == "" {
+            w.WriteHeader(http.StatusForbidden)
+            return
+        }
+
+        // Header only - query-string tokens are forbidden
         auth := r.Header.Get("Authorization")
-        if auth != "Bearer "+token {
+        expected := "Bearer " + token
+        if subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
             http.Error(w, t(r, "errors.unauthorized"), http.StatusUnauthorized)
             return
         }
         handler.ServeHTTP(w, r)
     })
+}
+
+// PrometheusHandler serves /server/metrics and /server/metrics/prometheus
+// (and their /api and root aliases - same handler, never a redirect)
+func PrometheusHandler() http.Handler {
+    return promhttp.Handler()
 }
 ```
 
@@ -29135,10 +29269,13 @@ groups:
 | Element | Config Key | Description |
 |---------|------------|-------------|
 | Enable metrics | `server.metrics.enabled` | Turn metrics on/off |
-| Endpoint | `server.metrics.endpoint` | Metrics endpoint path (default: /metrics) |
+| Root alias | `server.metrics.root.enabled` | Serve `/metrics[/{service}]` root aliases (default: true) |
 | Include system metrics | `server.metrics.include_system` | Include CPU/memory/disk |
 | Include runtime metrics | `server.metrics.include_runtime` | Include Go runtime stats |
-| Authentication token | `server.metrics.token` | Bearer token (empty = no auth) |
+| Unauthenticated access | `server.metrics.auth.allow_unauthenticated` | Skip token checks (firewalled internal networks only; default: false) |
+| Per-service tokens | `server.metrics.auth.tokens.{prometheus\|grafana\|loki}` | Bearer token per service (empty = that service disabled, 403) |
+| Loki entry limit | `server.metrics.loki.max_entries` | Max log entries served by the `loki` service |
+| Loki age limit | `server.metrics.loki.max_age` | Max age of log entries served by the `loki` service |
 
 ---
 
@@ -38827,7 +38964,7 @@ $ myapp --status
 Server Status: Running
   Port: 8080
   Mode: production
-  Uptime: 2d 5h 30m
+  Uptime: 2 days 5 hours
 
 Tor Hidden Service: Connected
   Address: abcd1234...wxyz.onion
@@ -38958,9 +39095,9 @@ All gates run inside the project Docker image — never on the host.
 
 ## Success Criteria
 
-A compliant Go hybrid application+server project created from this template:
+A compliant Go hybrid application+server project following this specification:
 - is driven by `IDEA.md` project variables while `AI.md` stays read-only
-- preserves the governance/documentation discipline of the original template
+- preserves this specification's governance/documentation discipline
 - models a single-binary, fully self-contained Go application built around GUI / TUI / CLI surfaces, and/or a full server (web frontend + API), per what IDEA.md declares in scope
 - ships exclusively Go source code (small Docker shell helpers excepted)
 - produces one statically linked binary per target with all assets — including the web frontend and database migrations — embedded
@@ -39067,7 +39204,7 @@ maintainer_email: {maintainer@example.com — or empty; used only if set}
 
 - No hardcoded routes — say "Get random joke", not `/api/v1/jokes/random`. AI.md PART 13 defines route patterns.
 - No implementation details — describe behavior, not algorithms or libraries. AI.md PARTs 0–27 define HOW; PART 27 verifies compliance.
-- This template covers the full range of the hybrid model: GUI / TUI / CLI applications, a full server (web frontend + API), or any combination declared under `Surfaces` (PART 2 → "One Coherent Product").
+- This specification covers the full range of the hybrid model: GUI / TUI / CLI applications, a full server (web frontend + API), or any combination declared under `Surfaces` (PART 2 → "One Coherent Product").
 - Cross-reference AI.md PARTs by number for any pattern that already exists there (Docker → PART 6, security → PART 11, database → PART 10, scheduler → PART 17, license exceptions → PART 24, etc.).
 - `internal_name` and `internal_org` are immutable after first set (see "IDEA.md Required Layout" → Project variables rules).
 

@@ -2,7 +2,7 @@
 
 **Name**: {project_name}
 
-**About this file:** `APPLICATION.md` is the master template. When applied to a project, this file is copied (or symlinked) into the project as `AI.md`. Throughout this document, all references to `AI.md` refer to that resulting file in a real project.
+**About this file:** `AI.md` is the complete, authoritative specification for this project. Throughout this document, all references to `AI.md` refer to this file.
 
 **Note:** `{PROJECT_NAME}` and `{project_name}` in this file are reference tokens, not setup-time text replacements. Their values are resolved from `IDEA.md ## Project variables` while `AI.md` remains read-only.
 
@@ -22,8 +22,8 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 | File | Role | Update When |
 |------|------|-------------|
-| **AI.md** | SOURCE OF TRUTH - implementation rules (readonly template copy) | No — use SPEC.md for project-specific rule overrides |
-| **SPEC.md** | Project-specific rule overrides — created only when a rule must contradict the template or global. May be empty. SPEC.md wins over AI.md. | When a project rule must differ from the template or global |
+| **AI.md** | SOURCE OF TRUTH - implementation rules (read-only) | No — use SPEC.md for project-specific rule overrides |
+| **SPEC.md** | Project-specific rule overrides — created only when a rule must contradict this specification or global. May be empty. SPEC.md wins over AI.md. | When a project rule must differ from this specification or global |
 | **IDEA.md** | PROJECT PLAN - must follow AI.md | Features change, project variables change |
 
 **Rule hierarchy:** SPEC.md > AI.md > global CLAUDE.md. If SPEC.md and AI.md conflict, SPEC.md wins — that is its purpose.
@@ -78,7 +78,7 @@ security assumptions, and any exceptions.)
 
 ## Migrating Existing `CLAUDE.md` Into `IDEA.md`
 
-**If a repository already has a pre-template `CLAUDE.md` or `.claude/CLAUDE.md` with real project details, those project details MUST be migrated into `IDEA.md`.**
+**If a repository already has a pre-existing `CLAUDE.md` or `.claude/CLAUDE.md` with real project details, those project details MUST be migrated into `IDEA.md`.**
 
 **What belongs in `IDEA.md`:**
 - project description / elevator pitch
@@ -141,7 +141,7 @@ Update these when their subject changes:
 
 ## ⚠️ CRITICAL: One Coherent Product
 
-This template defines **one Go application** with shared core logic and up to three presentation layers:
+This specification defines **one Go application** with shared core logic and up to three presentation layers:
 - GUI (preferred when available)
 - TUI (fallback for interactive terminals)
 - CLI (fallback for non-interactive/plain execution)
@@ -233,8 +233,8 @@ The single binary contains **everything the app needs to function**. The user is
 
 | File | Purpose | Update When |
 |------|---------|-------------|
-| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH, readonly template copy | No — use SPEC.md for project-specific rule overrides |
-| **SPEC.md** | Project-specific rule overrides (optional, may be empty) | When a project rule must contradict the template or global |
+| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH, read-only | No — use SPEC.md for project-specific rule overrides |
+| **SPEC.md** | Project-specific rule overrides (optional, may be empty) | When a project rule must contradict this specification or global |
 | **IDEA.md** | Project plan (WHAT) | Features or variables change |
 | **TODO.AI.md** | Task tracking (AI-owned) | Tasks added/completed |
 | **TODO.md** | Task tracking (human-owned) | AI may mark done; never delete/empty |
@@ -260,7 +260,7 @@ The single binary contains **everything the app needs to function**. The user is
 
 **AI MUST verify its own work with real tools before reporting a task as done. Do not rely on "the code looks right."**
 
-**This rule applies to EVERY change type covered by this template — library/API logic, GUI/TUI/CLI binaries, single-static-binary build, asset embedding, Docker, CI/CD, configuration, documentation, security — not only one category.** Whatever you touched, you verify.
+**This rule applies to EVERY change type covered by this specification — library/API logic, GUI/TUI/CLI binaries, single-static-binary build, asset embedding, Docker, CI/CD, configuration, documentation, security — not only one category.** Whatever you touched, you verify.
 
 Getting code correct on the first try is much harder than iterating with feedback. Close the loop every time. All execution goes through the project's containerised targets — never bare host Go toolchain.
 
@@ -305,7 +305,7 @@ Getting code correct on the first try is much harder than iterating with feedbac
 
 ## Product Model
 
-This template targets a **single-binary, fully self-contained Go application** that may expose:
+This specification targets a **single-binary, fully self-contained Go application** that may expose:
 - a native GUI
 - a terminal UI (TUI)
 - a plain CLI
@@ -1090,7 +1090,7 @@ All machine-dependent settings MUST be detected at runtime on the target machine
 
 ## Logging & Log Rotation
 
-Applications write `app.log` and `error.log` to the platform log directory. Rotation is built in — no external logrotate needed. Same `rotate`/`keep` schema as the SERVER template.
+Applications write `app.log` and `error.log` to the platform log directory. Rotation is built in — no external logrotate needed. Same `rotate`/`keep` schema as the SERVER specification.
 
 ### Rotation Options
 
@@ -1177,6 +1177,24 @@ logging:
 - Provide machine-readable output when the app advertises it (`--json`, `--plain`, etc.)
 - Help/version output must show the **actual invoked binary name**
 - **No escalation** — help at every level (main, subcommand, nested) must never call `sudo`, require root/admin, or check privilege state; exit immediately with the help text.
+
+## Human-Readable Values (User-Facing Output)
+
+**Every value shown on a user-facing surface — GUI windows and dialogs, TUI screens, and pretty CLI output — MUST be human-readable. Raw machine values belong to machine-readable output (`--json`, `--plain`) and log files only.**
+
+| Kind | Rule | Examples |
+|------|------|----------|
+| **Durations** | Largest fitting unit, at most two units, correct singular/plural: <60 s → seconds · ≥60 s → minutes · ≥60 min → hours · ≥24 h → days | `1 second` · `45 seconds` · `3 minutes` · `2 minutes 5 seconds` · `2 hours` · `1 hour 30 minutes` · `3 days 4 hours` |
+| **Sizes** | 1024 boundaries, full unit names, singular/plural, at most one decimal (drop `.0`): bytes → kilobytes → megabytes → gigabytes → terabytes | `1 byte` · `512 bytes` · `1 kilobyte` · `2.5 megabytes` · `5 gigabytes` · `1.2 terabytes` |
+| **Counts** | Locale-aware thousands separators | `12,847` |
+| **Timestamps** | Display format `%B %d, %Y at %H:%M:%S %Z` (zero-padded day) | `January 05, 2026 at 14:03:07 UTC` |
+
+| Rule | Detail |
+|------|--------|
+| **Shared helpers** | One implementation: `format.Duration()` / `format.Size()` / `format.Count()` in the shared/common formatting package — never per-surface ad-hoc formatting |
+| **i18n** | Unit names go through translation keys (`format.seconds_one`, `format.seconds_other`, …) with per-language plural rules — never hardcoded English unit strings |
+| **Raw value preserved** | GUI/TUI surfaces MAY carry the machine value in a tooltip or detail view; the visible text is always the human form |
+| **Machine surfaces unchanged** | `--json`/`--plain` output fields and log files keep raw base units (seconds, bytes) — formatting is a presentation concern only |
 
 ## NO_COLOR Support
 
@@ -2005,7 +2023,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] `IDEA.md` has `## Project variables`
 - [ ] `IDEA.md` has `## Business logic`
 - [ ] `project_name`, `project_org`, `internal_name`, and `internal_org` exist
-- [ ] If pre-template `CLAUDE.md` or `.claude/CLAUDE.md` existed, project-specific content was migrated into IDEA.md
+- [ ] If a pre-existing `CLAUDE.md` or `.claude/CLAUDE.md` existed, project-specific content was migrated into IDEA.md
 - [ ] `CLAUDE.md` / `.claude/CLAUDE.md` are short loaders, not duplicate specs
 - [ ] `release.txt` exists if the project is using explicit release versioning
 - [ ] `site.txt` exists only if there is a real official site URL
@@ -2095,9 +2113,9 @@ All gates run inside the project Docker image — never on the host.
 
 ## Success Criteria
 
-A compliant Go project created from this template:
+A compliant Go project following this specification:
 - is driven by `IDEA.md` project variables while `AI.md` stays read-only
-- preserves the governance/documentation discipline of the original template
+- preserves the governance/documentation discipline of this specification
 - models a single-binary, fully self-contained Go application built around GUI / TUI / CLI surfaces
 - ships exclusively Go source code (small Docker shell helpers excepted)
 - produces one statically linked binary per target with all assets embedded
@@ -2193,7 +2211,7 @@ maintainer_email: {maintainer@example.com — or empty; used only if set}
 **Rules for the example contents above:**
 
 - No implementation details — describe behavior, not algorithms or libraries. AI.md PARTs 0–11 define HOW; PART 12 verifies compliance.
-- This template targets GUI / TUI / CLI applications (PART 0 → "One Coherent Product").
+- This specification targets GUI / TUI / CLI applications (PART 0 → "One Coherent Product").
 - Cross-reference AI.md PARTs by number for any pattern that already exists there (Docker → PART 5, security → PART 9, license exceptions → PART 11, etc.).
 - `internal_name` and `internal_org` are immutable after first set (see "IDEA.md Required Layout" → Project variables rules).
 
