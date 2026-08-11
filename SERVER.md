@@ -20049,7 +20049,7 @@ type StatsInfo struct {
         <dt>📥 Total Requests</dt>
         <dd>1,234,567</dd>
 
-        <dt>📅 Requests (24h)</dt>
+        <dt>📅 Requests (24 hours)</dt>
         <dd>45,678</dd>
 
         <dt>🔌 Active Connections</dt>
@@ -24764,7 +24764,7 @@ Toasts require JavaScript. For standard (non-AJAX) form POSTs, the server MUST u
 | **Icon** | Type indicator (info, success, warning, error) |
 | **Title** | Brief notification title |
 | **Message** | Short description (truncated if long) |
-| **Timestamp** | Relative time ("2m ago", "1h ago", "Yesterday") |
+| **Timestamp** | Relative time ("2 minutes ago", "1 hour ago", "Yesterday") |
 | **Unread indicator** | Blue dot on left side |
 | **Click behavior** | Mark as read + navigate to related page |
 
@@ -24789,7 +24789,7 @@ Toasts require JavaScript. For standard (non-AJAX) form POSTs, the server MUST u
           <div class="notification-content">
             <span class="notification-title">Settings updated</span>
             <span class="notification-message">Your preferences were saved</span>
-            <span class="notification-time">2m ago</span>
+            <span class="notification-time">2 minutes ago</span>
           </div>
         </a>
         <!-- More items... -->
@@ -30707,8 +30707,8 @@ Admin Panel Header:
 │                                                                         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
 │  │   STATUS     │  │   UPTIME     │  │   REQUESTS   │  │   ERRORS     │ │
-│  │   ● Online   │  │   5d 12h 3m  │  │   12,345     │  │   23         │ │
-│  │              │  │              │  │   (24h)      │  │   (24h)      │ │
+│  │   ● Online   │  │   5 days     │  │   12,345     │  │   23         │ │
+│  │              │  │              │  │   (24 hours) │  │   (24 hours) │ │
 │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘ │
 │                                                                         │
 │  ┌─────────────────────────────────┐  ┌─────────────────────────────┐   │
@@ -30746,8 +30746,8 @@ Admin Panel Header:
 |--------|---------|
 | Status | Online/Maintenance/Error indicator |
 | Uptime | Time since last restart |
-| Requests | Request count (24h) |
-| Errors | Error count (24h) |
+| Requests | Request count (24 hours) |
+| Errors | Error count (24 hours) |
 | System Resources | CPU, Memory, Disk usage bars |
 | Quick Actions | Common admin tasks |
 | Recent Activity | Last 5-10 audit log entries |
@@ -31348,11 +31348,11 @@ Response for `GET /api/{api_version}/server/{admin_path}/config/network/blocklis
 │                                                                         │
 │ ┌─ Sources ─────────────────────────────────────────────────────────┐   │
 │ │                                                                    │   │
-│ │ ☑ level1                     398,211 rules    Updated 2h ago       │   │
+│ │ ☑ level1                     398,211 rules    Updated 2 hours ago  │   │
 │ │   https://www.iblocklist.com/lists/level1.gz                       │   │
 │ │   Format: auto  Size: 2.7 megabytes             [Update] [Remove]  │   │
 │ │                                                                    │   │
-│ │ ☑ spamhaus_drop               84,520 rules    Updated 2h ago       │   │
+│ │ ☑ spamhaus_drop               84,520 rules    Updated 2 hours ago  │   │
 │ │   https://www.spamhaus.org/drop/drop.txt                           │   │
 │ │   Format: cidr  Size: 12 kilobytes              [Update] [Remove]  │   │
 │ │                                                                    │   │
@@ -31758,11 +31758,11 @@ The admin panel MUST include a scheduler section with:
 │                                                                             │
 │  │ Name              │ Status    │ Connected     │ Last Seen    │ Health   │
 │  ├───────────────────┼───────────┼───────────────┼──────────────┼──────────│
-│  │ web-server-01     │ ● Online  │ 2h 15m        │ Just now     │ ✓ Good   │
-│  │ web-server-02     │ ● Online  │ 2h 14m        │ 5s ago       │ ✓ Good   │
-│  │ db-primary        │ ● Online  │ 5d 3h         │ 2s ago       │ ⚠ Warn   │
+│  │ web-server-01     │ ● Online  │ 2 hours       │ Just now     │ ✓ Good   │
+│  │ web-server-02     │ ● Online  │ 2 hours       │ 5 seconds ago│ ✓ Good   │
+│  │ db-primary        │ ● Online  │ 5 days        │ 2 seconds ago│ ⚠ Warn   │
 │  │ db-replica        │ ○ Offline │ —             │ 3 days ago   │ ✗ Error  │
-│  │ cache-01          │ ● Online  │ 12h 30m       │ 1s ago       │ ✓ Good   │
+│  │ cache-01          │ ● Online  │ 12 hours      │ 1 second ago │ ✓ Good   │
 │  └───────────────────┴───────────┴───────────────┴──────────────┴──────────┘
 │                                                                             │
 │  Summary: 4 online, 1 offline                                               │
@@ -31805,8 +31805,8 @@ The admin panel MUST include a scheduler section with:
 │  ┌─ Connection ──────────────────────────────────────────────────────────┐  │
 │  │                                                                       │  │
 │  │  Status:      ● Connected                                             │  │
-│  │  Connected:   2h 15m ago                                              │  │
-│  │  Last Report: Just now (every 60s)                                    │  │
+│  │  Connected:   2 hours 15 minutes ago                                  │  │
+│  │  Last Report: Just now (every minute)                                 │  │
 │  │  IP Address:  192.168.1.100                                           │  │
 │  │                                                                       │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
@@ -31966,10 +31966,10 @@ func getDefaultAgentName() string {
 │  │ Name              │ Status    │ Last Seen                            │   │
 │  ├───────────────────┼───────────┼──────────────────────────────────────┤   │
 │  │ ○ web-server-01   │ ● Online  │ Just now                             │   │
-│  │ ○ web-server-02   │ ● Online  │ 5s ago                               │   │
-│  │ ○ db-primary      │ ● Online  │ 2s ago                               │   │
+│  │ ○ web-server-02   │ ● Online  │ 5 seconds ago                        │   │
+│  │ ○ db-primary      │ ● Online  │ 2 seconds ago                        │   │
 │  │ ○ db-replica      │ ○ Offline │ 3 days ago                           │   │
-│  │ ○ cache-01        │ ● Online  │ 1s ago                               │   │
+│  │ ○ cache-01        │ ● Online  │ 1 second ago                         │   │
 │  └───────────────────┴───────────┴──────────────────────────────────────┘   │
 │                                                                             │
 │  [Remove Selected]                                                          │
@@ -33851,16 +33851,16 @@ Execute task
 │  SCHEDULED TASKS                                            [Run All Now]   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  Task                 Schedule        Last Run           Next Run    Status │
+│ Task              Schedule         Last Run                  Next Run Status│
 │  ───────────────────────────────────────────────────────────────────────── │
-│  ✓ Backup Daily       02:00 daily     Today 02:00 (15s)  Tomorrow    ✓     │
-│  ○ Backup Hourly      Hourly          -                  -           ○     │
-│  ✓ SSL Renewal        03:00 daily     Today 03:00 (1s)   Tomorrow    ✓     │
-│  ✓ GeoIP Update       03:00 Sunday    Jan 12 03:00 (45s) Jan 19      ✓     │
-│  ✓ Session Cleanup    Every 15m       14:15 (0.1s)       14:30       ✓     │
-│  ✓ Token Cleanup      Every 15m       14:15 (0.1s)       14:30       ✓     │
-│  ✓ Log Rotation       00:00 daily     Today 00:00 (2s)   Tomorrow    ✓     │
-│  ✓ Health Check       Every 5m        14:25 (0.1s)       14:30       ✓     │
+│ ✓ Backup Daily    02:00 daily      Today 02:00 (15 seconds)  Tomorrow ✓    │
+│ ○ Backup Hourly   Hourly           -                         -        ○    │
+│ ✓ SSL Renewal     03:00 daily      Today 03:00 (1 second)    Tomorrow ✓    │
+│ ✓ GeoIP Update    03:00 Sunday     Jan 12 03:00 (45 seconds) Jan 19   ✓    │
+│ ✓ Session Cleanup Every 15 minutes 14:15 (0.1 seconds)       14:30    ✓    │
+│ ✓ Token Cleanup   Every 15 minutes 14:15 (0.1 seconds)       14:30    ✓    │
+│ ✓ Log Rotation    00:00 daily      Today 00:00 (2 seconds)   Tomorrow ✓    │
+│ ✓ Health Check    Every 5 minutes  14:25 (0.1 seconds)       14:30    ✓    │
 │                                                                             │
 │  Legend: ✓ Success  ● Running  ✗ Failed  ○ Pending  ◐ Skipped             │
 │                                                                             │
@@ -33877,7 +33877,7 @@ Execute task
 │  Status:      ✓ Enabled                                                    │
 │  Schedule:    0 2 * * * (Daily at 02:00)                                   │
 │  Type:        Global (runs on one cluster node)                            │
-│  Last Run:    2025-01-15 02:00:05 (15.1s)                                  │
+│  Last Run:    2025-01-15 02:00:05 (15.1 seconds)                           │
 │  Next Run:    2025-01-16 02:00:00                                          │
 │  Run Count:   342 successful, 2 failed                                     │
 │                                                                             │
@@ -33887,17 +33887,17 @@ Execute task
 │  ─────────────────────────────────────────────────────────────────────────  │
 │  CURRENT BACKUPS                                                            │
 │  ─────────────────────────────────────────────────────────────────────────  │
-│  File                                   Size      Created          Status  │
-│  myapp_backup_2025-01-15.tar.gz.enc    23MB      Today 02:00      ✓       │
-│  myapp-daily.tar.gz.enc                 5MB      Today 02:00      ✓       │
+│  File                                  Size          Created        Status │
+│  myapp_backup_2025-01-15.tar.gz.enc    23 megabytes  Today 02:00    ✓     │
+│  myapp-daily.tar.gz.enc                5 megabytes   Today 02:00    ✓     │
 │                                                                             │
 │  ─────────────────────────────────────────────────────────────────────────  │
 │  RECENT HISTORY                                                             │
 │  ─────────────────────────────────────────────────────────────────────────  │
-│  Date                 Duration   Status   Details                          │
-│  2025-01-15 02:00     15.1s      ✓        Verified: 2 backups, 28MB       │
-│  2025-01-14 02:00     14.8s      ✓        Verified: 2 backups, 27MB       │
-│  2025-01-13 02:00     45.2s      ✗        Error: disk full                │
+│  Date               Duration     Status   Details                          │
+│  2025-01-15 02:00   15.1 seconds ✓        Verified: 2 backups, 28 megabytes│
+│  2025-01-14 02:00   14.8 seconds ✓        Verified: 2 backups, 27 megabytes│
+│  2025-01-13 02:00   45.2 seconds ✗        Error: disk full                │
 │                                                                             │
 │  [View Full History]  [Download Backup]  [Restore...]                      │
 │                                                                             │
@@ -47288,7 +47288,7 @@ var localeFS embed.FS
     "component_status": "Estado de componentes",
     "server_statistics": "Estadísticas del servidor",
     "total_requests": "Solicitudes totales",
-    "requests_24h": "Solicitudes (24h)",
+    "requests_24h": "Solicitudes (24 horas)",
     "active_connections": "Conexiones activas",
     "last_checked": "Última verificación:",
     "auto_refresh": "Auto-actualización en {seconds}s",
@@ -47529,7 +47529,7 @@ var localeFS embed.FS
       "uptime": "TIEMPO DE ACTIVIDAD",
       "requests": "SOLICITUDES",
       "errors": "ERRORES",
-      "period_24h": "(24h)",
+      "period_24h": "(24 hours)",
       "system_resources": "RECURSOS DEL SISTEMA",
       "cpu": "CPU:",
       "memory": "Memoria:",
@@ -50479,7 +50479,7 @@ func ValidateTorConfig(config *TorConfig) []ValidationError {
 │ Vanity Address                                                      │
 │                                                                     │
 │ Prefix: [______] (max 6 chars)  [Generate]                          │
-│ ⏳ Generating: "myapp" - 2h 15m elapsed... [Cancel]                 │
+│ ⏳ Generating: "myapp" - 2 hours 15 minutes elapsed... [Cancel]     │
 ├─────────────────────────────────────────────────────────────────────┤
 │ Import External Keys                                   [Import Keys]│
 │ ⓘ Help: How to generate longer vanity addresses                    │
@@ -50508,7 +50508,7 @@ func ValidateTorConfig(config *TorConfig) []ValidationError {
 │ │ Bandwidth rate:     [1___] [MB ▼]  (per second)               │   │
 │ │ Bandwidth burst:    [2___] [MB ▼]  (per second)               │   │
 │ │ Monthly limit:      [100_] [GB ▼]  ☐ Unlimited                │   │
-│ │   Current usage: 23.4 GB / 100 GB (23%)  ▓▓░░░░░░░░           │   │
+│ │   Current usage: 23.4 gigabytes / 100 gigabytes (23%) ▓▓░░░░  │   │
 │ └───────────────────────────────────────────────────────────────┘   │
 │                                                                     │
 │ ┌─ Hidden Service ──────────────────────────────────────────────┐   │
@@ -57686,12 +57686,12 @@ PATCH /api/{api_version}/users/settings
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │ My CLI Token           usr_a1b2...      Last: 2h ago│    │
+│  │ My CLI Token           usr_a1b2... Last: 2 hours ago│    │
 │  │ Scopes: read, write    Expires: Never       [Revoke]│    │
 │  └─────────────────────────────────────────────────────┘    │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │ CI Pipeline            usr_x9y8...      Last: 1d ago│    │
+│  │ CI Pipeline            usr_x9y8...   Last: 1 day ago│    │
 │  │ Scopes: read           Expires: 2025-12-31  [Revoke]│    │
 │  └─────────────────────────────────────────────────────┘    │
 │                                                             │

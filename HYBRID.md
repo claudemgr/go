@@ -17581,7 +17581,7 @@ type StatsInfo struct {
         <dt>📥 Total Requests</dt>
         <dd>1,234,567</dd>
 
-        <dt>📅 Requests (24h)</dt>
+        <dt>📅 Requests (24 hours)</dt>
         <dd>45,678</dd>
 
         <dt>🔌 Active Connections</dt>
@@ -27542,15 +27542,15 @@ The scheduler status is available via the server status API. Task execution can 
 │  SCHEDULED TASKS                                            [Run All Now]   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  Task                 Schedule        Last Run           Next Run    Status │
+│ Task              Schedule         Last Run                  Next Run Status│
 │  ───────────────────────────────────────────────────────────────────────── │
-│  ✓ Backup Daily       02:00 daily     Today 02:00 (15s)  Tomorrow    ✓     │
-│  ○ Backup Hourly      Hourly          -                  -           ○     │
-│  ✓ SSL Renewal        03:00 daily     Today 03:00 (1s)   Tomorrow    ✓     │
-│  ✓ GeoIP Update       03:00 Sunday    Jan 12 03:00 (45s) Jan 19      ✓     │
-│  ✓ Token Cleanup      Every 15m       14:15 (0.1s)       14:30       ✓     │
-│  ✓ Log Rotation       00:00 daily     Today 00:00 (2s)   Tomorrow    ✓     │
-│  ✓ Health Check       Every 5m        14:25 (0.1s)       14:30       ✓     │
+│ ✓ Backup Daily    02:00 daily      Today 02:00 (15 seconds)  Tomorrow ✓    │
+│ ○ Backup Hourly   Hourly           -                         -        ○    │
+│ ✓ SSL Renewal     03:00 daily      Today 03:00 (1 second)    Tomorrow ✓    │
+│ ✓ GeoIP Update    03:00 Sunday     Jan 12 03:00 (45 seconds) Jan 19   ✓    │
+│ ✓ Token Cleanup   Every 15 minutes 14:15 (0.1 seconds)       14:30    ✓    │
+│ ✓ Log Rotation    00:00 daily      Today 00:00 (2 seconds)   Tomorrow ✓    │
+│ ✓ Health Check    Every 5 minutes  14:25 (0.1 seconds)       14:30    ✓    │
 │                                                                             │
 │  Legend: ✓ Success  ● Running  ✗ Failed  ○ Pending  ◐ Skipped             │
 │                                                                             │
@@ -27567,7 +27567,7 @@ The scheduler status is available via the server status API. Task execution can 
 │  Status:      ✓ Enabled                                                    │
 │  Schedule:    0 2 * * * (Daily at 02:00)                                   │
 │  Type:        Scheduled                                                    │
-│  Last Run:    2025-01-15 02:00:05 (15.1s)                                  │
+│  Last Run:    2025-01-15 02:00:05 (15.1 seconds)                           │
 │  Next Run:    2025-01-16 02:00:00                                          │
 │  Run Count:   342 successful, 2 failed                                     │
 │                                                                             │
@@ -27577,17 +27577,17 @@ The scheduler status is available via the server status API. Task execution can 
 │  ─────────────────────────────────────────────────────────────────────────  │
 │  CURRENT BACKUPS                                                            │
 │  ─────────────────────────────────────────────────────────────────────────  │
-│  File                                   Size      Created          Status  │
-│  myapp_backup_2025-01-15.tar.gz.enc    23MB      Today 02:00      ✓       │
-│  myapp-daily.tar.gz.enc                 5MB      Today 02:00      ✓       │
+│  File                                  Size          Created        Status │
+│  myapp_backup_2025-01-15.tar.gz.enc    23 megabytes  Today 02:00    ✓     │
+│  myapp-daily.tar.gz.enc                5 megabytes   Today 02:00    ✓     │
 │                                                                             │
 │  ─────────────────────────────────────────────────────────────────────────  │
 │  RECENT HISTORY                                                             │
 │  ─────────────────────────────────────────────────────────────────────────  │
-│  Date                 Duration   Status   Details                          │
-│  2025-01-15 02:00     15.1s      ✓        Verified: 2 backups, 28MB       │
-│  2025-01-14 02:00     14.8s      ✓        Verified: 2 backups, 27MB       │
-│  2025-01-13 02:00     45.2s      ✗        Error: disk full                │
+│  Date               Duration     Status   Details                          │
+│  2025-01-15 02:00   15.1 seconds ✓        Verified: 2 backups, 28 megabytes│
+│  2025-01-14 02:00   14.8 seconds ✓        Verified: 2 backups, 27 megabytes│
+│  2025-01-13 02:00   45.2 seconds ✗        Error: disk full                │
 │                                                                             │
 │  [View Full History]  [Download Backup]  [Restore...]                      │
 │                                                                             │
@@ -29540,7 +29540,7 @@ Every backup is verified **immediately after creation** - backups must be 100% w
 │                                                                      │
 │  [✓] Auto-delete old backups after successful backup                │
 │                                                                      │
-│  Current storage: 23 MB (2 files: yesterday + daily incremental)    │
+│  Current storage: 23 megabytes (2 files: yesterday + daily incr.)   │
 │                                                                      │
 │  Hourly incremental:                                                 │
 │  [ ] Enable backup_hourly task (creates 3rd file)                   │
@@ -29636,7 +29636,7 @@ WARN: keep_monthly: 24 exceeds recommended 12 (2 years of monthly backups)
 │  max_backups: 30 will retain 30 days of daily backups.  │
 │  Recommended: 7 or less.                                │
 │                                                         │
-│  Estimated storage: ~15 GB (based on current backups)   │
+│  Estimated storage: ~15 gigabytes (based on backups)    │
 │                                                         │
 │              [Cancel]  [Save Anyway]                    │
 └─────────────────────────────────────────────────────────┘
@@ -36501,7 +36501,7 @@ var localeFS embed.FS
     "component_status": "Estado de componentes",
     "server_statistics": "Estadísticas del servidor",
     "total_requests": "Solicitudes totales",
-    "requests_24h": "Solicitudes (24h)",
+    "requests_24h": "Solicitudes (24 horas)",
     "active_connections": "Conexiones activas",
     "last_checked": "Última verificación:",
     "auto_refresh": "Auto-actualización en {seconds}s",
