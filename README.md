@@ -7,7 +7,7 @@ Template specifications for CasjaysDev Go projects. Each file is a master templa
 | File | App type | When to use |
 |------|----------|-------------|
 | `API.md` | REST / JSON API server | HTTP services that expose a structured API; may include a companion CLI client |
-| `APPLICATION.md` | Native GUI / TUI / CLI application | Single-binary desktop or terminal applications (Gio, Bubble Tea, Cobra) with no server component |
+| `APPLICATION.md` | Native GUI / TUI / CLI application | Single-binary desktop or terminal applications (Gio, Bubble Tea, Cobra) with no web frontend/API of their own; may optionally be an RFC protocol daemon (HTTP, FTP, SMTP, IMAP, DNS, proxy — PART 14) |
 | `SERVER.md` | Full-stack web server | Server-side rendered HTML with optional REST endpoints; similar to API but ships a frontend |
 | `HYBRID.md` | Native application + full server | Single-binary GUI/TUI/CLI application that also embeds a full server (frontend + backend, never called an "API server"); merges the entirety of `APPLICATION.md` and `API.md` |
 
@@ -16,7 +16,7 @@ Template specifications for CasjaysDev Go projects. Each file is a master templa
 | File | Purpose |
 |------|---------|
 | `API.md` | Go API server template — source of truth for API projects (PARTs 0–33) |
-| `APPLICATION.md` | Go application template — source of truth for GUI/TUI/CLI projects (PARTs 0–13) |
+| `APPLICATION.md` | Go application template — source of truth for GUI/TUI/CLI projects (PARTs 0–14) |
 | `SERVER.md` | Go web server template — source of truth for full-stack server projects (PARTs 0–37) |
 | `HYBRID.md` | Go hybrid application+server template — source of truth for single-binary projects that are also a full server (PARTs 0–28) |
 | `README.md` | This file |

@@ -72,7 +72,7 @@ security assumptions, and any exceptions.)
 
 **Rules for `## Business logic`:**
 - It MUST define the actual product scope for THIS project - not generic boilerplate
-- It MUST state which app surfaces exist: GUI, TUI, CLI, or a subset
+- It MUST state which app surfaces exist: GUI, TUI, CLI, or a subset — and whether the project is an RFC protocol daemon (PART 14)
 - It MUST define user flows, stored data, trust boundaries, abuse cases, and platform constraints
 - If a security-sensitive choice is intentionally allowed, the reason MUST be documented there
 
@@ -309,8 +309,11 @@ This specification targets a **single-binary, fully self-contained Go applicatio
 - a native GUI
 - a terminal UI (TUI)
 - a plain CLI
+- an **RFC protocol server (daemon)** — conditional; only when IDEA.md declares it (PART 14)
 
 The application may make outbound network calls to consume remote services it depends on (APIs, databases, object stores, update endpoints, etc.).
+
+**Listening sockets are allowed only in daemon mode** — a project that accepts inbound connections MUST satisfy PART 14; otherwise the application opens no listening sockets.
 
 **Distribution model:** one statically linked binary per supported target. Everything the app needs at runtime — UI assets, fonts, icons, default config, schemas, templates, locales — is embedded inside that binary. See PART 0 → "Single Static Binary" and "Self-Contained Assets."
 
@@ -2062,6 +2065,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] `release.txt` / `site.txt` precedence is preserved
 - [ ] Docs and examples use Go/make terminology — wrapped in Docker invocations
 - [ ] No build/test/run instructions tell the user to invoke `go` on the host
+- [ ] If IDEA.md declares an RFC protocol daemon: the PART 14 daemon checklist passes
 
 ## Quality Checklist
 
@@ -2116,7 +2120,7 @@ All gates run inside the project Docker image — never on the host.
 A compliant Go project following this specification:
 - is driven by `IDEA.md` project variables while `AI.md` stays read-only
 - preserves the governance/documentation discipline of this specification
-- models a single-binary, fully self-contained Go application built around GUI / TUI / CLI surfaces
+- models a single-binary, fully self-contained Go application built around GUI / TUI / CLI surfaces (plus the conditional RFC protocol daemon mode of PART 14)
 - ships exclusively Go source code (small Docker shell helpers excepted)
 - produces one statically linked binary per target with all assets embedded
 - runs end-to-end from the binary alone on an air-gapped machine
@@ -2407,3 +2411,139 @@ maintainer_email: jane@example.com
 
 **License exceptions:** none
 ```
+
+---
+
+# PART 14: RFC PROTOCOL SERVER / DAEMON MODE (CONDITIONAL)
+
+**This PART applies only when IDEA.md `## Business logic` declares the project an RFC protocol server (daemon). If it does not, this PART is inert and adds no requirements.**
+
+## What This Mode Is
+
+A protocol daemon is an infrastructure server in the tradition of nginx/httpd/caddy (HTTP), proftpd/vsftpd (FTP), postfix/exim (SMTP), dovecot (IMAP/POP3), squid (HTTP proxy), or bind/unbound (DNS). It is still a single-binary application under this specification — it is NOT an API server and NOT a web frontend server:
+
+| Type | Speaks | Governing spec |
+|------|--------|----------------|
+| API server | JSON/REST over HTTP for its own API | the API server specification |
+| Full-stack web server | its own HTML frontend + optional REST | the web server specification |
+| **Protocol daemon (this PART)** | **a standard wire protocol, exactly as its RFC defines** | this specification + this PART |
+
+**Every listening socket speaks a standard, RFC-governed wire protocol. The daemon never exposes an invented protocol, and never mixes non-protocol traffic (dashboards, JSON APIs, health endpoints) into protocol sockets.**
+
+## IDEA.md Declaration
+
+IDEA.md `## Business logic` MUST declare:
+- that the project is a protocol server (daemon)
+- every protocol implemented, with its governing RFC numbers
+- which optional protocol extensions are in scope
+
+Example:
+
+```markdown
+### Protocols
+
+| Protocol | RFCs | Extensions |
+|----------|------|------------|
+| SMTP (MTA) | RFC 5321, RFC 5322 | STARTTLS (RFC 3207), AUTH (RFC 4954), 8BITMIME (RFC 6152) |
+| Submission | RFC 6409 | — |
+```
+
+## RFC Conformance Rules
+
+| Rule | Detail |
+|------|--------|
+| **The RFC is the contract** | Wire behavior implements the RFCs IDEA.md declares. RFC 2119/8174 key words apply: RFC MUST requirements are hard gates; any SHOULD-level deviation requires an IDEA.md entry with reasoning |
+| **Never invent wire protocols** | No proprietary commands, replies, or framing on protocol sockets |
+| **Extensions via the protocol's own mechanism** | ESMTP EHLO keywords, IMAP CAPABILITY, FTP FEAT, HTTP headers/upgrade — advertised through the protocol's negotiation, declared in IDEA.md |
+| **Protocol constants from the RFC** | Reply codes, status codes, and grammar come from the RFC — never invented values |
+| **Interop is the ground truth** | Conformance is verified against real-world clients, not only unit tests |
+
+## Common Protocol → RFC Map (Reference Only — IDEA.md's Declared List Governs)
+
+| Protocol | Core RFCs | Example daemons |
+|----------|-----------|-----------------|
+| HTTP/1.1 | 9110, 9111, 9112 | nginx, httpd, caddy |
+| HTTP/2 · HTTP/3 | 9113 · 9114 | nginx, caddy |
+| HTTP proxy (CONNECT) | 9110 | squid |
+| FTP | 959, 2228, 3659 | proftpd, vsftpd |
+| SMTP / submission | 5321, 5322, 6409 | postfix, exim |
+| IMAP4rev2 / POP3 | 9051 (3501), 1939 | dovecot |
+| DNS | 1034, 1035 | bind, unbound |
+| TLS / STARTTLS | 8446, 3207 | — |
+| WebSocket | 6455 | — |
+
+## Runtime Model
+
+| Rule | Detail |
+|------|--------|
+| **Serve entrypoint** | `{project_name} serve` starts the daemon; IDEA.md may define aliases |
+| **Foreground only** | The process runs in the foreground and never self-daemonizes (no fork/detach) — systemd or the container runtime supervises it |
+| **UI mode** | `serve` forces CLI mode; the GUI/TUI auto-detect of PART 3 never applies to a service process. Optional GUI/TUI surfaces are management consoles over the same shared core |
+| **Console output** | Startup banner, then console silence in normal operation — protocol traffic and periodic work log to files only; the console shows WARN/ERROR |
+
+## Signals & Lifecycle
+
+| Signal | Action |
+|--------|--------|
+| `SIGTERM` / `SIGINT` | Graceful shutdown: stop accepting, drain active sessions up to `daemon.shutdown_timeout` (default 30 seconds), then exit 0 |
+| `SIGHUP` | Reload config and TLS certificates without dropping established sessions; if the new config is invalid, keep running on the old config and log ERROR |
+| `SIGUSR1` | Reopen log files (for external rotation tooling; built-in rotation per PART 7 still applies) |
+
+Signal handling uses `os/signal` (`signal.NotifyContext` for shutdown, a dedicated channel for `SIGHUP`/`SIGUSR1`).
+
+**`--config-test` (`-t`) is REQUIRED:** parse and validate the full config, print errors to stderr, exit 0 (valid) or 1 (invalid) — mirrors `nginx -t`. It never touches sockets or running state.
+
+## Sockets, Ports & Privileges
+
+- IPv4 + IPv6 listeners (dual-stack by default; per-listener config)
+- IANA standard port defaults for the protocol; every listener configurable
+- **Privileged ports (<1024): bind first, then drop privileges** — target credentials are resolved before the drop, and the daemon never continues running as root after binding (`golang.org/x/sys/unix` setuid/setgid pattern)
+- TLS: cert/key paths in config, reloaded on SIGHUP; implicit TLS vs STARTTLS per the protocol's RFC
+
+## Health & Metrics Sidecar (Optional — OFF by Default)
+
+```yaml
+daemon:
+  # Seconds to drain active sessions on SIGTERM
+  shutdown_timeout: 30
+  sidecar:
+    # OFF by default — protocol sockets stay pure protocol
+    enabled: false
+    # Loopback only unless explicitly configured otherwise
+    address: 127.0.0.1
+    # REQUIRED when enabled — no implicit default port
+    port: 0
+```
+
+| Rule | Detail |
+|------|--------|
+| **Disabled = no HTTP listener** | When `sidecar.enabled: false` (default), the daemon opens no HTTP socket at all |
+| **Same contract as the server specs** | When enabled, the sidecar serves `/server/healthz` and `/server/metrics[/{service}]` with the exact same JSON shape, status semantics, and per-service bearer-token auth defined by the API/SERVER specifications |
+| **Loopback bind** | `127.0.0.1` by default; binding a non-loopback address requires explicit config |
+| **Never on protocol sockets** | Health/metrics never ride the protocol listeners — even when the daemon's protocol is HTTP itself, the sidecar is a separate listener |
+
+## Protocol Logging
+
+- Transaction logs use the protocol community's de-facto standard format where one exists (HTTP → Apache combined by default; FTP → xferlog; SMTP → per-message queue/delivery lines); otherwise structured text
+- Same rotation/retention schema as PART 7 logging
+- The wire is a machine surface: protocol bytes are exactly what the RFC prescribes — the human-readable formatting rules of PART 7 apply to CLI/status/TUI/GUI output only, never to wire output
+
+## Testing
+
+- Every implemented RFC MUST requirement has a conformance test; SHOULD-level behavior is tested when in scope
+- Interop smoke tests run in `docker/docker-compose.test.yml` against real clients (`curl` for HTTP, `lftp` for FTP, `swaks` for SMTP, `openssl s_client` for TLS, `dig` for DNS)
+- Malformed-input tests: negative/fuzz cases return the RFC-mandated error replies and never crash the daemon
+- A failed RFC MUST requirement is a bug — never a documented quirk
+
+## Daemon Checklist
+
+- [ ] IDEA.md declares protocols, RFC numbers, and in-scope extensions
+- [ ] All wire behavior traces to the declared RFCs; no invented commands, replies, or framing
+- [ ] `serve` runs foreground in CLI mode; no self-daemonization
+- [ ] SIGTERM drains gracefully within `shutdown_timeout`; SIGHUP reloads config/certs without dropping sessions; an invalid reload keeps the old config running
+- [ ] `--config-test` validates the config and exits 0/1
+- [ ] Privileged ports use bind-then-drop; the daemon never runs steady-state as root
+- [ ] IPv4+IPv6 listeners with IANA defaults, all configurable
+- [ ] Sidecar is OFF by default; when enabled it binds loopback and matches the server specs' healthz/metrics contract
+- [ ] Transaction logs use the protocol's standard format; console is silent in normal operation
+- [ ] Interop smoke tests pass against real clients in Docker
