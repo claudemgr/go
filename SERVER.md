@@ -40942,7 +40942,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -40958,7 +40958,7 @@ jobs:
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -40966,7 +40966,7 @@ jobs:
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -40976,7 +40976,7 @@ jobs:
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -41109,7 +41109,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -41125,7 +41125,7 @@ jobs:
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -41133,7 +41133,7 @@ jobs:
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -41143,7 +41143,7 @@ jobs:
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -41269,7 +41269,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -41285,7 +41285,7 @@ jobs:
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -41293,7 +41293,7 @@ jobs:
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -41303,7 +41303,7 @@ jobs:
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -41846,7 +41846,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -41862,7 +41862,7 @@ jobs:
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -41870,7 +41870,7 @@ jobs:
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -41880,7 +41880,7 @@ jobs:
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -42013,7 +42013,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -42029,7 +42029,7 @@ jobs:
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -42037,7 +42037,7 @@ jobs:
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -42047,7 +42047,7 @@ jobs:
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -42173,7 +42173,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -42189,7 +42189,7 @@ jobs:
           path: ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -42197,7 +42197,7 @@ jobs:
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -42207,7 +42207,7 @@ jobs:
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
-        if: hashFiles('src/agent/') != ''
+        if: hashFiles('src/agent/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}

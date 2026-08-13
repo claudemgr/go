@@ -33309,7 +33309,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -33327,7 +33327,7 @@ jobs:
           retention-days: 7
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -33463,7 +33463,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -33481,7 +33481,7 @@ jobs:
           retention-days: 7
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -33610,7 +33610,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -33628,7 +33628,7 @@ jobs:
           retention-days: 7
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -34038,7 +34038,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -34056,7 +34056,7 @@ jobs:
           retention-days: 7
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -34192,7 +34192,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -34210,7 +34210,7 @@ jobs:
           retention-days: 7
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -34339,7 +34339,7 @@ jobs:
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
@@ -34357,7 +34357,7 @@ jobs:
           retention-days: 7
 
       - name: Upload CLI artifact
-        if: hashFiles('src/client/') != ''
+        if: hashFiles('src/client/**') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
