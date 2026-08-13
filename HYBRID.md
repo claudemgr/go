@@ -17383,6 +17383,8 @@ All settings above are configured via config file:
 
 ## Health Checks
 
+**No-JS-first (PART 15 rule):** build the server-rendered form → POST → redirect path FIRST and verify it works with JavaScript disabled; JS may only enhance what already works.
+
 **Endpoints:**
 - `/server/healthz` - Frontend route (follows PART 13 content negotiation rules)
 - Optional `/healthz` - root alias to `/server/healthz` only when `server.healthz.root.enabled: true`
@@ -22503,6 +22505,8 @@ textarea:user-invalid,
 
 ## PWA Support
 
+**No-JS-first (PART 15 rule):** build the server-rendered form → POST → redirect path FIRST and verify it works with JavaScript disabled; JS may only enhance what already works. The PWA layer itself is an enhancement — the site must be fully usable if the service worker never installs.
+
 **Progressive Web App = Native-like web app (installable, offline, push notifications, GPS)**
 
 **Goal: Indistinguishable from native app** - same UX, capabilities, and performance.
@@ -27311,6 +27315,8 @@ Next run: {next_run}
 ## Email Template Configuration
 
 Templates are stored as files on disk. Override any built-in template by placing a file in the configured template directory. Use `{project_name} email test` to send a test email and verify configuration.
+
+**No-JS-first (PART 15 rule):** build the server-rendered form → POST → redirect path FIRST and verify it works with JavaScript disabled; JS may only enhance what already works.
 
 **Editor Features:**
 - Syntax highlighting for `{variables}`
@@ -39667,6 +39673,8 @@ Tor Hidden Service: Connected
 **The server admin user and the server admin routes are ONE feature.** Enabling either one enables both: there is no configuration in which the admin routes exist without the server admin account, or the server admin account exists without the admin routes.
 
 **When enabled, the project MUST have a full admin panel.**
+
+**No-JS-first (PART 15 rule):** build the server-rendered form → POST → redirect path FIRST and verify it works with JavaScript disabled; JS may only enhance what already works.
 
 ## Admin Panel Isolation
 

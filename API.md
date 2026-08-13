@@ -21569,6 +21569,8 @@ html.theme-light {
 
 ## UI Components
 
+**No-JS-first (PART 16 rule):** build the server-rendered form → POST → redirect path FIRST and verify it works with JavaScript disabled; JS may only enhance what already works.
+
 ### Buttons
 
 | Type | Use For | Style |
@@ -22164,6 +22166,8 @@ textarea:user-invalid {
 ```
 
 ## PWA Support
+
+**No-JS-first (PART 16 rule):** build the server-rendered form → POST → redirect path FIRST and verify it works with JavaScript disabled; JS may only enhance what already works. The PWA layer itself is an enhancement — the site must be fully usable if the service worker never installs.
 
 **Progressive Web App = Native-like web app (installable, offline, GPS)**
 
@@ -25933,6 +25937,8 @@ func trackingScript(r *http.Request) template.HTML {
 ```
 
 ## Standard Pages
+
+**No-JS-first (PART 16 rule):** build the server-rendered form → POST → redirect path FIRST and verify it works with JavaScript disabled; JS may only enhance what already works.
 
 **ALL applications MUST have these standard pages. Content is defined per-application.**
 
