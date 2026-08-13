@@ -1009,7 +1009,8 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 ├── tests/                  # Repository-root executable integration test scripts (Go unit tests stay next to code as *_test.go)
 │   ├── run_tests.sh        # Auto-detect and run tests (REQUIRED)
 │   ├── docker.sh           # Beta testing with Docker (REQUIRED)
-│   └── incus.sh            # Beta testing with Incus (REQUIRED)
+│   ├── incus.sh            # Beta testing with Incus (REQUIRED)
+│   └── e2e.sh              # Browser E2E beta testing, headless Chromium (REQUIRED — PART 23)
 ├── docker/                 # Docker files
 │   ├── Dockerfile          # Production Dockerfile
 │   ├── Dockerfile.dev      # devel image — same as release but binary runs in debug mode; tagged :devel (project-specific)
@@ -5238,6 +5239,7 @@ docker run --rm \
 | `./tests/run_tests.sh` | Auto-detect | General testing (picks best available) |
 | `./tests/docker.sh` | Docker `alpine:latest` | Quick binary validation |
 | `./tests/incus.sh` | Incus `debian:latest` | **PREFERRED** — Full OS, systemd, realistic |
+| `./tests/e2e.sh` | Docker + Chromium | Browser E2E beta testing — frontend with and without JS (PART 23) |
 
 **Typical workflow:**
 ```bash
@@ -31325,7 +31327,7 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
 - Tests project-specific functionality (from IDEA.md)
 - Run with `./tests/run_tests.sh`
 - `./tests/*` means executable shell scripts in the repository-root `tests/` directory
-- Minimum required scripts: `./tests/run_tests.sh`, `./tests/docker.sh`, `./tests/incus.sh`
+- Minimum required scripts: `./tests/run_tests.sh`, `./tests/docker.sh`, `./tests/incus.sh`, `./tests/e2e.sh` (browser E2E — see "Browser E2E Testing" below; standalone entry point, not invoked by `./tests/run_tests.sh`)
 - Additional helper scripts are allowed (for example `./tests/test_content_negotiation.sh`)
 - These scripts complement binary coverage; they do **NOT** replace required Go unit tests in `*_test.go`
 
@@ -32268,7 +32270,7 @@ fi
 
 | Rule | Requirement |
 |------|-------------|
-| **Location** | `tests/run_tests.sh`, `tests/docker.sh`, `tests/incus.sh` |
+| **Location** | `tests/run_tests.sh`, `tests/docker.sh`, `tests/incus.sh`, `tests/e2e.sh` |
 | **Permissions** | Executable (`chmod +x tests/*.sh`) |
 | **Build method** | ALWAYS use Docker (casjaysdev/go:latest) with host cache dirs (`GO_CACHE`/`GO_BUILD`) |
 | **Go cache** | Host cache dirs bind-mounted: `GO_CACHE` → mod cache, `GO_BUILD` → build cache |
@@ -32448,6 +32450,92 @@ docker run --rm \
   -w /app \
   casjaysdev/go:latest sh
 ```
+
+## Browser E2E Testing (Headless Browser, On-Demand Beta Testing)
+
+The web frontend (PART 15) is verified end to end by driving the real frontend in a real headless browser. This suite is the project's beta-testing harness: it is built alongside the frontend and run **on demand** — when the user asks for beta testing, before a release, or after major frontend work. It is **NOT part of the commit gate** (`make test` does not run it). When it does run, every requirement in this section is non-negotiable: route unit tests and `curl` smoke tests are not a substitute for verifying what a user actually sees and does, with and without JavaScript.
+
+**Engine:** `github.com/chromedp/chromedp` driving headless Chromium over CDP — pure Go, no Node toolchain. Test code lives in `tests/e2e/` behind the `e2e` build tag, so `make test` never sees it; the entry point is `./tests/e2e.sh`, which Docker-wraps `go test -tags e2e ./tests/e2e/...` and joins the existing manual `./tests/*.sh` script family (this PART → "Testing Strategy"). No new Makefile target — the seven-target set is fixed. Everything runs inside Docker like every other test (this PART → "Host System Safety Applies to All Testing & Debugging").
+
+### Three Mandatory Tiers
+
+| Tier | Engine | JavaScript | Verifies |
+|------|--------|------------|----------|
+| 1 — SSR | plain `net/http` client (no browser) | n/a (raw HTML) | Server renders complete, correct HTML: real page content in the initial response, correct `<title>`, meta tags, valid structure — never an empty shell that JS fills in later |
+| 2 — No-JS browser | chromedp, script execution disabled | OFF | Progressive enhancement (PART 15): every core flow works without JS — native form POSTs, links, redirects, pagination |
+| 3 — Full browser | chromedp | ON | Full flows with JS enhancements; zero console errors; zero failed asset/XHR requests |
+
+All three tiers are REQUIRED. A feature that only passes Tier 3 is a PART 15 progressive-enhancement violation, not a passing test.
+
+Tier 2 disables JavaScript via CDP before navigation:
+
+```go
+// tests/e2e/nojs_test.go (build tag: e2e)
+chromedp.Run(ctx,
+    // Tier 2: verify the page without any client-side JavaScript
+    emulation.SetScriptExecutionDisabled(true),
+    chromedp.Navigate(baseURL+"/"),
+    chromedp.OuterHTML("html", &html),
+)
+```
+
+### SSR Correctness (Tier 1)
+
+- The initial HTML response contains the actual page content — assert on real domain data (the paste body, the search result titles, the item name), never just HTTP 200
+- No loading spinners, empty `<div id="app">` shells, or client-side-only rendering — that violates PART 15 and MUST fail the test
+- Correct status per route: 200 for pages, 302 + `Location` for redirects, 404 for unknown paths
+- `<title>`, `lang`, charset, and viewport meta present and correct on every page
+- Content negotiation honored where PART 15 defines it (HTML vs JSON by `Accept`)
+
+### Project-Scoped Feature Coverage (NON-NEGOTIABLE)
+
+Generic route checks alone are NON-COMPLIANT. The suite MUST exercise this project's actual domain features end to end, derived feature-by-feature from IDEA.md — every user-facing feature gets at least one Tier-1 assertion, one Tier-2 scenario, and one Tier-3 scenario, each a named test.
+
+| Example project | Minimum required E2E scenarios |
+|-----------------|-------------------------------|
+| Pastebin | Create paste via form POST → view rendered paste → raw view matches input exactly; syntax highlighting present; expired paste → 404/410; delete works; unknown ID → 404 |
+| Meta search engine | Query → results render (providers stubbed locally); result links point at the right targets; empty query handled; no-results page; pagination; special characters in query |
+| URL shortener | Shorten → redirect fires (301/302 + correct `Location`); stats page reflects the hit; invalid/dangerous URL rejected with a rendered error |
+| Monitoring server | Fixture agents listed; metrics present in the SSR output; agent detail pages render; stale agent shown as offline |
+
+The table is illustrative — the rule is universal: enumerate IDEA.md's features and map each to E2E scenarios covering create/read/update/delete/error paths as applicable. A feature without an E2E scenario is untested.
+
+### Universal Coverage (Every Project)
+
+- **Full crawl**: start at `/`, follow every internal link — no dead links, no 500s, every navigable route visited
+- **Token login (PART 8)**: valid `sys_` token → session established; invalid token → error page with no user-existence hints
+- **Instance switcher (PART 15)**: fixture registry entries are listed and switching navigates correctly
+- **Theme**: dark, light, and auto all render; assert computed styles actually change (PART 15 theme rules)
+- **Responsive**: 375×812 viewport — no horizontal scroll, navigation usable (PART 15 mobile rules)
+- **i18n (PART 26)**: switching language changes rendered strings
+- **Forms**: validation errors render server-side (Tier 2) and inline (Tier 3); CSRF token present and enforced
+- **Error pages**: 404 and 500 render the PART 9 error pages, not blank bodies or stack traces
+- **Static assets**: every referenced CSS/JS/image/font loads with 200
+- **Console**: zero JavaScript errors on every page visited (Tier 3)
+
+### Determinism & Hermeticity
+
+- Fixture data seeded into a fresh test database before the suite; never depends on prior runs
+- **Zero external network**: every outbound dependency (search providers, webhooks, GeoIP downloads, update checks) is stubbed with local `httptest` servers — the whole suite MUST pass offline
+- Server under test starts once per suite on a port from 64500–64999, PID captured, killed and cleaned in teardown
+- Failure artifacts (screenshots, page HTML, server log) go to the tempdir structure — never the project tree
+
+### Invocation & CI
+
+| Command | Runs | When |
+|---------|------|------|
+| `make test` | Unit + route tests only — the commit gate; NEVER runs E2E | Before every commit |
+| `./tests/e2e.sh` | Full E2E suite (all three tiers) | On demand: beta testing, pre-release, after major frontend work |
+
+`./tests/e2e.sh` follows the same manual, developer-initiated pattern as `./tests/incus.sh` and is Docker-wrapped: the E2E container needs Chromium (`chromedp/headless-shell` as a sidecar, or Chromium installed in the test image). In CI, E2E is at most a manually triggered job (`workflow_dispatch`) that uploads failure artifacts — it is never a required check and never blocks commits, merges, or releases.
+
+### AI Exploratory Pass (Discovery Only — NEVER the Gate)
+
+In addition to the committed suite, AI-driven exploratory testing with a real browser (e.g. Claude driving the Playwright MCP server) is the defined workflow for finding what the scripted suite misses: walk every page, try hostile input, resize, toggle themes, read console/network errors.
+
+- Every finding is either fixed immediately or logged in `TODO.AI.md` — never left only in conversation
+- Every confirmed finding is converted into a committed deterministic chromedp test so it can never regress silently
+- Agent runs are not reproducible: they are NEVER a gate of any kind — the committed deterministic suite is the repeatable record of frontend correctness, run on demand alongside this pass
 
 ## Build and Test
 
@@ -42963,6 +43051,7 @@ All gates run inside the project Docker image — never on the host.
 - [ ] `govulncheck ./...` passes (Docker-wrapped)
 - [ ] `go-licenses report ./...` output matches the generated region of `LICENSE.md` (Docker-wrapped diff check)
 - [ ] If GUI is in scope: smoke test exercised under both X11 and Wayland forwarding
+- [ ] Browser E2E suite (PART 23) exists and covers every IDEA.md feature with project-scoped scenarios across all three tiers (SSR, no-JS, full-JS) — run on demand for beta testing, never part of the commit gate
 - [ ] New behavior includes tests where practical
 - [ ] `make i18n-validate` passes — every language file has the same key set as `en.json`
 - [ ] Health/status endpoint returns correct component states with the database, scheduler, and (if enabled) SSL/Tor components stopped or degraded, not just in the fully-healthy case
