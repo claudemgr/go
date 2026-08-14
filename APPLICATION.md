@@ -72,7 +72,7 @@ security assumptions, and any exceptions.)
 
 **Rules for `## Business logic`:**
 - It MUST define the actual product scope for THIS project - not generic boilerplate
-- It MUST state which app surfaces exist: GUI, TUI, CLI, or a subset — and whether the project is an RFC protocol daemon (PART 14)
+- It MUST state which app surfaces exist: GUI, TUI, CLI, or a subset — and whether the project is an RFC protocol daemon (PART 14) or a local client/server (IPC) split (PART 2 → "Local Client/Server (IPC) Mode")
 - It MUST define user flows, stored data, trust boundaries, abuse cases, and platform constraints
 - If a security-sensitive choice is intentionally allowed, the reason MUST be documented there
 
@@ -310,12 +310,32 @@ This specification targets a **single-binary, fully self-contained Go applicatio
 - a terminal UI (TUI)
 - a plain CLI
 - an **RFC protocol server (daemon)** — conditional; only when IDEA.md declares it (PART 14)
+- a **local client/server (IPC) split** — conditional; only when IDEA.md declares it (see "Local Client/Server (IPC) Mode" below)
 
 The application may make outbound network calls to consume remote services it depends on (APIs, databases, object stores, update endpoints, etc.).
 
-**Listening sockets are allowed only in daemon mode** — a project that accepts inbound connections MUST satisfy PART 14; otherwise the application opens no listening sockets.
+**Network listening sockets (TCP/UDP) are allowed only in daemon mode** — a project that accepts inbound network connections MUST satisfy PART 14; otherwise the application opens no network listening sockets. Unix domain sockets and named pipes are local IPC, not network listening — they are governed by "Local Client/Server (IPC) Mode" below, not by PART 14.
 
 **Distribution model:** one statically linked binary per supported target. Everything the app needs at runtime — UI assets, fonts, icons, default config, schemas, templates, locales — is embedded inside that binary. See PART 0 → "Single Static Binary" and "Self-Contained Assets."
+
+## Local Client/Server (IPC) Mode
+
+Some applications split into a thin client and a long-lived local server the way tmux, `nvim --listen`, and atuin's daemon do. This is allowed for any surface when IDEA.md `## Business logic` declares the client/server architecture — it does NOT trigger PART 14, which governs network protocol daemons only.
+
+**Socket placement & permissions:**
+- All sockets live in `$XDG_RUNTIME_DIR/{project_name}/` (fallback: the per-user state dir, PART 4 → "Path Rule"); directory mode `0700`, sockets `0600` — never world-accessible, never in shared `/tmp` paths
+- Private wire protocols are allowed on IPC sockets — PART 14's "never invent wire protocols" rule applies to network sockets only
+- No TCP listener by default, not even loopback — a TCP listener changes the trust boundary and requires its own explicit IDEA.md declaration
+
+**Main socket + named servers:**
+- The first server started is the **main server** and owns the **main socket**: `$XDG_RUNTIME_DIR/{project_name}/{project_name}.sock`
+- The user may start additional **named servers**; each gets its own socket: `$XDG_RUNTIME_DIR/{project_name}/{server_name}.sock` (server names validated against `[a-z0-9._-]+`; no path separators, never colliding with the main socket name)
+- **The main server is aware of all servers** — it keeps a registry of every named server; named servers announce themselves to the main socket on startup and deregister on clean shutdown
+- Clients enumerate all running servers through the main socket (e.g. a `{project_name} servers` / `list-servers` command)
+- **Registry self-heal:** on main-server start and on every listing, the registry reconciles against a scan of the socket directory — each socket is connect-tested, and dead/stale entries are dropped from the registry and their socket files unlinked
+- A missing main server never blocks a named server from starting — the named server retries registration in the background and is picked up by the main server's next reconcile scan
+
+**Trust boundary:** the IPC surface trusts same-UID local processes only — access control is the `0700`/`0600` filesystem permissions above; peer-credential checks (`SO_PEERCRED` on Linux, `getpeereid` on BSD/macOS) are the defense-in-depth verification. IDEA.md's **Trust boundaries & abuse cases** block MUST name this boundary (abuse case: another local user or process attempting to reach a socket → refused by permissions and peer check).
 
 ## Architectural Rule
 
@@ -2127,6 +2147,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] Docs and examples use Go/make terminology — wrapped in Docker invocations
 - [ ] No build/test/run instructions tell the user to invoke `go` on the host
 - [ ] If IDEA.md declares an RFC protocol daemon: the PART 14 daemon checklist passes
+- [ ] If IDEA.md declares a local client/server (IPC) split: sockets live in `$XDG_RUNTIME_DIR/{project_name}/` with `0700`/`0600` modes, the main-socket registry model is implemented, and no TCP listener exists (PART 2 → "Local Client/Server (IPC) Mode")
 
 ## Quality Checklist
 
@@ -2181,7 +2202,7 @@ All gates run inside the project Docker image — never on the host.
 A compliant Go project following this specification:
 - is driven by `IDEA.md` project variables while `AI.md` stays read-only
 - preserves the governance/documentation discipline of this specification
-- models a single-binary, fully self-contained Go application built around GUI / TUI / CLI surfaces (plus the conditional RFC protocol daemon mode of PART 14)
+- models a single-binary, fully self-contained Go application built around GUI / TUI / CLI surfaces (plus the conditional RFC protocol daemon mode of PART 14 and the conditional local client/server IPC mode of PART 2)
 - ships exclusively Go source code (small Docker shell helpers excepted)
 - produces one statically linked binary per target with all assets embedded
 - runs end-to-end from the binary alone on an air-gapped machine
@@ -2501,6 +2522,8 @@ maintainer_email: jane@example.com
 # PART 14: RFC PROTOCOL SERVER / DAEMON MODE (CONDITIONAL)
 
 **This PART applies only when IDEA.md `## Business logic` declares the project an RFC protocol server (daemon). If it does not, this PART is inert and adds no requirements.**
+
+**Local client/server (IPC) applications — tmux/nvim-style Unix-socket splits — are NOT protocol daemons and never use this PART**; they are governed by PART 2 → "Local Client/Server (IPC) Mode".
 
 ## What This Mode Is
 
