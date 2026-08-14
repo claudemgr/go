@@ -2003,7 +2003,7 @@ Compound SPDX expressions like `MIT OR Apache-2.0` are accepted automatically wh
 
 A project MAY use a denylisted module only if **all** of:
 
-1. `IDEA.md` adds a `## License exceptions` subsection naming the module, the upstream license, and the rationale
+1. `IDEA.md` adds (or extends) the `**License exceptions:**` block under `## Business logic`, naming the module, the upstream license, and the rationale (IDEA.md keeps exactly three top-level sections — this is a block, never a new `##` section)
 2. The exception explicitly accepts the consequence — e.g., "this binary is distributed under GPL-3.0; the project's MIT claim applies only to the source we author, not the published binary" — and `IDEA.md ## Project variables` adds (or updates) the variable `distribution_license` accordingly. `distribution_license` is an exception-only variable: it is not part of the required-keys list and is present only in projects that have taken a license exception
 3. README, `LICENSE.md`, and any user-visible "About" surface are updated to reflect the actual distribution license, not just the source license
 4. Any tooling configuration (e.g., `golangci-lint` import ban config) is updated with a scoped allow entry for the specific module + version, not a blanket category unblock
@@ -2119,7 +2119,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] All assets (fonts, icons, themes, default config, schemas, locales) are embedded at compile time via `//go:embed`
 - [ ] Dependencies are pure Go where a viable pure-Go package exists (PART 5 → "Pure-Go Library Stack"); each C-dependent package is justified in IDEA.md
 - [ ] `go mod graph` was reviewed — no surprise transitive C or CGO dependencies
-- [ ] No GPL / AGPL / LGPL / SSPL / BUSL / source-available dep was added without an IDEA.md `## License exceptions` entry and an updated `distribution_license` (PART 11 → "License Compliance")
+- [ ] No GPL / AGPL / LGPL / SSPL / BUSL / source-available dep was added without an IDEA.md `**License exceptions:**` entry and an updated `distribution_license` (PART 11 → "License Compliance")
 - [ ] User-visible licenses surface exists: CLI `--licenses`, TUI "Licenses" entry, GUI "About → Open Source Licenses" — all reading the same embedded `LICENSE.md`
 - [ ] App runs end-to-end from the binary alone on an air-gapped machine — no first-run downloads
 - [ ] No plugin or runtime extension loading from disk unless IDEA.md defines a hardened plugin contract
@@ -2208,7 +2208,7 @@ Every IDEA.md has exactly three top-level sections, in this order:
 
 1. `## Project description` — free-form prose: what the project is, who uses it, what problem it solves
 2. `## Project variables` — `key: value` lines that provide the canonical values AI.md resolves for `project_name`, `project_org`, `internal_name`, `internal_org`, etc.
-3. `## Business logic` — features, data models, user flows, platform constraints, security assumptions (WHAT, not HOW)
+3. `## Business logic` — features, data models, user flows, trust boundaries, abuse cases, platform constraints, security assumptions (WHAT, not HOW)
 
 See "IDEA.md Required Layout" at the top of this file for the authoritative rules: variable-key naming, the immutable `internal_name` / `internal_org` rule, the missing-value setup flow, and the migration procedure for legacy `CLAUDE.md` files.
 
@@ -2263,13 +2263,19 @@ maintainer_email: {maintainer@example.com — or empty; used only if set}
 **Platform constraints:**
 - {OS support, hardware requirements, display-server requirements}
 
+**Trust boundaries & abuse cases:**
+- {Untrusted input source → where it is validated / what trusts what}
+- {Abuse case: what a hostile input or user could attempt → expected mitigation posture}
+
+**Security exceptions:** {intentionally allowed security-sensitive choice + documented reason — or `none`}
+
 **Outbound network use (if any — see PART 9 → "Security-First Design"):**
 - {Remote service consumed, purpose, auth model}
 
 **Stored data location (per-user — see PART 4 → "Path Rule"):**
 - {What is stored at the per-user paths}
 
-**License exceptions (only if a denylisted or C-dependent module is used — see PART 11 → "License Compliance"):**
+**License exceptions (always present — write `none` when no denylisted or C-dependent module is used; see PART 11 → "License Compliance"):**
 - {module path, upstream license, rationale, `distribution_license` consequence if applicable}
 ```
 
@@ -2337,6 +2343,12 @@ maintainer_email: jane@example.com
 - GUI requires X11 or Wayland on Linux/BSD (handled by Gio toolkit — supports both)
 - No internet access required; works fully offline (PART 0 → "Self-Contained Assets")
 
+**Trust boundaries & abuse cases:**
+- All data is local and owned by the user; the only untrusted input is imported markdown, which is parsed for rendering and never executed
+- Abuse case: a crafted markdown file targeting the parser → memory-safe parsing, no HTML/script execution, size limit on import
+
+**Security exceptions:** none
+
 **Outbound network use:** none
 
 **Stored data location (per-user):**
@@ -2344,8 +2356,7 @@ maintainer_email: jane@example.com
 - Config: `~/.config/casjay/notes/config.toml`
 - Cache: `~/.cache/casjay/notes/`
 
-**License exceptions:**
-- `modernc.org/sqlite` for the local notes database. Pure-Go SQLite implementation; compatible with `CGO_ENABLED=0`. No exception to the Go-only rule required. Distribution license remains MIT.
+**License exceptions:** none — `modernc.org/sqlite` (BSD-3-Clause, pure Go) powers the local notes database but is allowlisted; ordinary `LICENSE.md` attribution applies, no exception needed.
 ```
 
 **Example 2: Feeds (TUI + CLI, consumes a remote API)**
@@ -2402,6 +2413,13 @@ maintainer_email: jane@example.com
 **Platform constraints:**
 - TUI requires a TTY (PART 3 → "Smart Detect Rules"); for headless cron use the `feeds sync` CLI subcommand
 
+**Trust boundaries & abuse cases:**
+- Remote feed content (XML/HTML) is fully untrusted → hardened parsing, HTML sanitized to text, scripts and external resource loads never executed
+- Feed URLs are user-supplied → fetched over HTTPS only; non-HTTP schemes refused; no credentials attached
+- Abuse case: a hostile feed serving oversized or decompression-bomb responses → response size and time limits on sync
+
+**Security exceptions:** none
+
 **Outbound network use:**
 - HTTPS GET to feed URLs the user adds. TLS via `crypto/tls` stdlib (PART 9 → "Security-First Design"). No telemetry, no tracking, no third-party analytics.
 
@@ -2410,8 +2428,7 @@ maintainer_email: jane@example.com
 - Config: `~/.config/casjay/feeds/config.toml`
 - Cache (article bodies, images): `~/.cache/casjay/feeds/`
 
-**License exceptions:**
-- `modernc.org/sqlite` for the local feeds database. Pure-Go SQLite; `CGO_ENABLED=0` compatible. Distribution license remains MIT.
+**License exceptions:** none — `modernc.org/sqlite` (BSD-3-Clause, pure Go) powers the local feeds database but is allowlisted; ordinary `LICENSE.md` attribution applies, no exception needed.
 ```
 
 **Example 3: dotctl (CLI only, manages dotfiles)**
@@ -2463,6 +2480,12 @@ maintainer_email: jane@example.com
 
 **Platform constraints:**
 - POSIX-style filesystem operations; on Windows, `os.Symlink` calls `CreateSymbolicLink`, producing real NTFS symlinks (requires Developer Mode or an elevated process) — junctions are a separate mechanism and are not used here
+
+**Trust boundaries & abuse cases:**
+- Repo contents are the user's own but treated as untrusted path input: every target path is validated to resolve inside `$HOME`
+- Abuse case: a repo entry attempting path traversal (`../../etc/...`) or a symlink escape outside `$HOME` → refused; nothing outside `$HOME` is ever written
+
+**Security exceptions:** none
 
 **Outbound network use:** none
 
