@@ -335,6 +335,13 @@ Some applications split into a thin client and a long-lived local server the way
 - **Registry self-heal:** on main-server start and on every listing, the registry reconciles against a scan of the socket directory — each socket is connect-tested, and dead/stale entries are dropped from the registry and their socket files unlinked
 - A missing main server never blocks a named server from starting — the named server retries registration in the background and is picked up by the main server's next reconcile scan
 
+**Advanced capabilities (optional — each one used only when IDEA.md `## Business logic` declares it):**
+- **Session state awareness** — the server may track live per-session/per-client state: working directory, foreground command, environment snapshot, window/pane layout, whatever the product needs; clients query it over the IPC socket
+- **Save/restore** — full server state (sessions, layout, per-session working directory, running-command metadata) serializes to the per-user state dir (PART 4 → "Path Rule") as `0600` files, written atomically (temp file + rename); an explicit `save` / `restore` command pair
+- **Continuous persistence (continuum-style)** — periodic autosave on a configurable interval plus save on clean shutdown, and restore-on-start reattaches the previous state; autosave runs in the background and never blocks the serving path
+- **Restore never re-executes commands by default** — a default restore recreates sessions, layout, and working directories only; re-launching previously running programs happens only when the user has explicitly enabled it (per program or per profile), mirroring tmux-resurrect's opt-in model
+- **Privacy:** tracked state (working directories, command lines, environment) is sensitive data — stored only in per-user `0600` files, never logged at default verbosity, never transmitted off-machine, and excluded from any diagnostics output unless the user explicitly opts in
+
 **Trust boundary:** the IPC surface trusts same-UID local processes only — access control is the `0700`/`0600` filesystem permissions above; peer-credential checks (`SO_PEERCRED` on Linux, `getpeereid` on BSD/macOS) are the defense-in-depth verification. IDEA.md's **Trust boundaries & abuse cases** block MUST name this boundary (abuse case: another local user or process attempting to reach a socket → refused by permissions and peer check).
 
 ## Architectural Rule
