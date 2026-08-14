@@ -41286,11 +41286,28 @@ jobs:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
+      # SBOM is release-level - generate once on the linux/amd64 leg (cyclonedx-gomod is pre-installed in the image)
+      - name: Generate SBOM
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: cyclonedx-gomod mod -json -output ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
+      - name: Upload SBOM artifact
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ env.PROJECT_NAME }}-sbom
+          path: ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
   release:
     needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
+      # create GitHub release + upload assets
       contents: write
+      # OIDC token for artifact attestation
+      id-token: write
+      # GitHub artifact attestations (SBOM, provenance)
+      attestations: write
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
@@ -41307,12 +41324,23 @@ jobs:
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
 
+      - name: Create source archive
+        run: |
+          tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
+            --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
+            -czf binaries/${{ env.PROJECT_NAME }}-${{ env.VERSION }}-source.tar.gz .
+
       - name: Generate checksums
         run: |
           cd binaries
           FILES="$(ls)"
           sha256sum $FILES > sha256.txt
           sha512sum $FILES > sha512.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: binaries/${{ env.PROJECT_NAME }}-*
 
       - name: Create Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
@@ -41461,11 +41489,28 @@ jobs:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
+      # SBOM is release-level - generate once on the linux/amd64 leg (cyclonedx-gomod is pre-installed in the image)
+      - name: Generate SBOM
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: cyclonedx-gomod mod -json -output ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
+      - name: Upload SBOM artifact
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ env.PROJECT_NAME }}-sbom
+          path: ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
   release:
     needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
+      # create GitHub release + upload assets
       contents: write
+      # OIDC token for artifact attestation
+      id-token: write
+      # GitHub artifact attestations (SBOM, provenance)
+      attestations: write
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
@@ -41482,12 +41527,23 @@ jobs:
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
 
+      - name: Create source archive
+        run: |
+          tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
+            --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
+            -czf binaries/${{ env.PROJECT_NAME }}-${{ env.VERSION }}-source.tar.gz .
+
       - name: Generate checksums
         run: |
           cd binaries
           FILES="$(ls)"
           sha256sum $FILES > sha256.txt
           sha512sum $FILES > sha512.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: binaries/${{ env.PROJECT_NAME }}-*
 
       - name: Delete previous daily release
         run: |
@@ -42280,6 +42336,18 @@ jobs:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
+      # SBOM is release-level - generate once on the linux/amd64 leg (cyclonedx-gomod is pre-installed in the image)
+      - name: Generate SBOM
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: cyclonedx-gomod mod -json -output ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
+      - name: Upload SBOM artifact
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ env.PROJECT_NAME }}-sbom
+          path: ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
   release:
     needs: [version, build]
     runs-on: ubuntu-latest
@@ -42300,6 +42368,12 @@ jobs:
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
+
+      - name: Create source archive
+        run: |
+          tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
+            --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
+            -czf binaries/${{ env.PROJECT_NAME }}-${{ env.VERSION }}-source.tar.gz .
 
       - name: Generate checksums
         run: |
@@ -42454,6 +42528,18 @@ jobs:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
+      # SBOM is release-level - generate once on the linux/amd64 leg (cyclonedx-gomod is pre-installed in the image)
+      - name: Generate SBOM
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: cyclonedx-gomod mod -json -output ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
+      - name: Upload SBOM artifact
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ env.PROJECT_NAME }}-sbom
+          path: ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
   release:
     needs: [version, build]
     runs-on: ubuntu-latest
@@ -42474,6 +42560,12 @@ jobs:
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
+
+      - name: Create source archive
+        run: |
+          tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
+            --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
+            -czf binaries/${{ env.PROJECT_NAME }}-${{ env.VERSION }}-source.tar.gz .
 
       - name: Generate checksums
         run: |
@@ -42986,9 +43078,21 @@ build:linux-amd64:
     - go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-linux-amd64 ./src
     - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-linux-amd64 ./src/client; fi
     - if [ -d "src/agent" ]; then go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-linux-amd64 ./src/agent; fi
+    # SBOM is release-level - generate once on this leg (cyclonedx-gomod is
+    # pre-installed in casjaysdev/go:latest)
+    - cyclonedx-gomod mod -json -output ${PROJECT_NAME}-sbom.cdx.json
+    # release's declarative `release:` block can't shell-expand and can't see
+    # a dotenv report the release job exports on itself - only upstream
+    # dotenv (via `needs:`) reaches it - so RELEASE_VERSION is exported here,
+    # in a build job the release job needs, scoped to tag pipelines by this
+    # job's own rules below
+    - echo "RELEASE_VERSION=${CI_COMMIT_TAG#v}" > release.env
   artifacts:
     paths:
       - ${PROJECT_NAME}-linux-amd64*
+      - ${PROJECT_NAME}-sbom.cdx.json
+    reports:
+      dotenv: release.env
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -43145,13 +43249,27 @@ release:
     - test
   script:
     - echo "Creating release ${CI_COMMIT_TAG}"
-    - echo "${CI_COMMIT_TAG#v}" > version.txt
+    # RELEASE_VERSION comes from build:linux-amd64's dotenv (via `needs:`) -
+    # the declarative `release:` block below can't shell-expand
+    # ${CI_COMMIT_TAG#v} itself, and a job's own dotenv report is never
+    # visible to that same job's declarative fields (dotenv only flows
+    # downstream to jobs that `needs:` the exporting job) - so the export
+    # must live upstream, not here
+    - echo "${RELEASE_VERSION}" > version.txt
+    # Source archive - the job runs in the full repo checkout (not an
+    # isolated directory), so already-staged release assets (binaries, sbom,
+    # checksums) are excluded to avoid archiving our own output
+    - >
+      tar --exclude='.git' --exclude='${PROJECT_NAME}-*' --exclude='version.txt'
+      --exclude='sha256.txt' --exclude='sha512.txt'
+      -czf ${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz .
     # Consolidated sha256.txt/sha512.txt over every release asset (version.txt +
-    # binaries) - the job runs in the full repo checkout, not an isolated directory,
-    # so the file list is explicitly scoped rather than a bare `ls`; pre-capturing it
-    # once (GitLab concatenates script items into one shell, so the var carries)
-    # ensures both checksum files cover the identical asset set and never hash
-    # each other or themselves
+    # binaries + SBOM + source archive) - the job runs in the full repo
+    # checkout, not an isolated directory, so the file list is explicitly
+    # scoped rather than a bare `ls`; pre-capturing it once (GitLab
+    # concatenates script items into one shell, so the var carries) ensures
+    # both checksum files cover the identical asset set and never hash each
+    # other or themselves
     - FILES="version.txt ${PROJECT_NAME}-*"
     - sha256sum $FILES > sha256.txt
     - sha512sum $FILES > sha512.txt
@@ -43183,6 +43301,10 @@ release:
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-amd64?job=build:freebsd-amd64"
         - name: "${PROJECT_NAME}-freebsd-arm64"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:freebsd-arm64"
+        - name: "${PROJECT_NAME}-sbom.cdx.json"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-sbom.cdx.json?job=build:linux-amd64"
+        - name: "${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz?job=release"
         - name: "sha256.txt"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/sha256.txt?job=release"
         - name: "sha512.txt"
@@ -43241,17 +43363,86 @@ build:beta:
     - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-windows-arm64.exe ./src/agent; fi
     - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-amd64 ./src/agent; fi
     - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-arm64 ./src/agent; fi
-    # Job runs in the full repo checkout - scope the asset list explicitly rather
-    # than a bare `ls`; pre-captured so both checksum files cover the identical set
-    - FILES="${PROJECT_NAME}-*"
+    # SBOM is release-level - generate once per build (cyclonedx-gomod is
+    # pre-installed in casjaysdev/go:latest)
+    - cyclonedx-gomod mod -json -output ${PROJECT_NAME}-sbom.cdx.json
+    # Export VERSION via dotenv so release:beta can consume the exact version
+    # embedded in these binaries - the release identity must match the embedded
+    # identity, never recompute the timestamp downstream
+    - echo "RELEASE_VERSION=${VERSION}" > release.env
+  artifacts:
+    paths:
+      - ${PROJECT_NAME}-*
+    reports:
+      dotenv: release.env
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == "beta"
+
+release:beta:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - build:beta
+    - test
+  script:
+    - echo "Creating beta release ${RELEASE_VERSION}"
+    - echo "${RELEASE_VERSION}" > version.txt
+    # Source archive - the job runs in the full repo checkout (not an
+    # isolated directory), so already-staged release assets are excluded to
+    # avoid archiving our own output
+    - >
+      tar --exclude='.git' --exclude='${PROJECT_NAME}-*' --exclude='version.txt'
+      --exclude='sha256.txt' --exclude='sha512.txt'
+      -czf ${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz .
+    # Consolidated sha256.txt/sha512.txt over every release asset (version.txt +
+    # binaries + SBOM + source archive) - the job runs in the full repo
+    # checkout, not an isolated directory, so the file list is explicitly
+    # scoped rather than a bare `ls`; pre-capturing it once ensures both
+    # checksum files cover the identical asset set and never hash each other
+    # or themselves
+    - FILES="version.txt ${PROJECT_NAME}-*"
     - sha256sum $FILES > sha256.txt
     - sha512sum $FILES > sha512.txt
   artifacts:
     paths:
-      - ${PROJECT_NAME}-*
+      - version.txt
       - sha256.txt
       - sha512.txt
+      - ${PROJECT_NAME}-*
     expire_in: 1 week
+  release:
+    tag_name: "$RELEASE_VERSION"
+    name: "Beta $RELEASE_VERSION"
+    description: "Beta release created by GitLab CI"
+    assets:
+      links:
+        - name: "${PROJECT_NAME}-linux-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-linux-amd64?job=build:beta"
+        - name: "${PROJECT_NAME}-linux-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-linux-arm64?job=build:beta"
+        - name: "${PROJECT_NAME}-darwin-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-darwin-amd64?job=build:beta"
+        - name: "${PROJECT_NAME}-darwin-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-darwin-arm64?job=build:beta"
+        - name: "${PROJECT_NAME}-windows-amd64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-windows-amd64.exe?job=build:beta"
+        - name: "${PROJECT_NAME}-windows-arm64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-windows-arm64.exe?job=build:beta"
+        - name: "${PROJECT_NAME}-freebsd-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-freebsd-amd64?job=build:beta"
+        - name: "${PROJECT_NAME}-freebsd-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:beta"
+        - name: "${PROJECT_NAME}-sbom.cdx.json"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-sbom.cdx.json?job=build:beta"
+        - name: "${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz?job=release:beta"
+        - name: "sha256.txt"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/sha256.txt?job=release:beta"
+        - name: "sha512.txt"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/sha512.txt?job=release:beta"
+        - name: "version.txt"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/version.txt?job=release:beta"
   rules:
     - if: $CI_COMMIT_BRANCH == "beta"
 
@@ -43306,17 +43497,94 @@ build:daily:
     - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-windows-arm64.exe ./src/agent; fi
     - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-amd64 ./src/agent; fi
     - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-arm64 ./src/agent; fi
-    # Job runs in the full repo checkout - scope the asset list explicitly rather
-    # than a bare `ls`; pre-captured so both checksum files cover the identical set
-    - FILES="${PROJECT_NAME}-*"
+    # SBOM is release-level - generate once per build (cyclonedx-gomod is
+    # pre-installed in casjaysdev/go:latest)
+    - cyclonedx-gomod mod -json -output ${PROJECT_NAME}-sbom.cdx.json
+  artifacts:
+    paths:
+      - ${PROJECT_NAME}-*
+    expire_in: 1 day
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+      when: manual
+      allow_failure: true
+
+release:daily:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - build:daily
+    - test
+  before_script:
+    # Delete the prior rolling `daily` release + tag - the daily channel is a
+    # single rolling release, not a versioned tag, so the old one must go
+    # before the new one is published
+    - >
+      curl --request DELETE --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}"
+      "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/releases/daily" || true
+    - >
+      curl --request DELETE --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}"
+      "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/repository/tags/daily" || true
+  script:
+    # Daily identity is the commit, not a timestamp - CI_COMMIT_SHORT_SHA is a
+    # predefined variable, so it needs no cross-job dotenv passthrough
+    - echo "${CI_COMMIT_SHORT_SHA}" > version.txt
+    # Source archive - the job runs in the full repo checkout (not an
+    # isolated directory), so already-staged release assets are excluded to
+    # avoid archiving our own output
+    - >
+      tar --exclude='.git' --exclude='${PROJECT_NAME}-*' --exclude='version.txt'
+      --exclude='sha256.txt' --exclude='sha512.txt'
+      -czf ${PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-source.tar.gz .
+    # Consolidated sha256.txt/sha512.txt over every release asset (version.txt +
+    # binaries + SBOM + source archive) - the job runs in the full repo
+    # checkout, not an isolated directory, so the file list is explicitly
+    # scoped rather than a bare `ls`; pre-capturing it once ensures both
+    # checksum files cover the identical asset set and never hash each other
+    # or themselves
+    - FILES="version.txt ${PROJECT_NAME}-*"
     - sha256sum $FILES > sha256.txt
     - sha512sum $FILES > sha512.txt
   artifacts:
     paths:
-      - ${PROJECT_NAME}-*
+      - version.txt
       - sha256.txt
       - sha512.txt
+      - ${PROJECT_NAME}-*
     expire_in: 1 day
+  release:
+    tag_name: "daily"
+    name: "Daily Build ${CI_COMMIT_SHORT_SHA}"
+    description: "Daily build: ${CI_COMMIT_SHORT_SHA}"
+    assets:
+      links:
+        - name: "${PROJECT_NAME}-linux-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-linux-amd64?job=build:daily"
+        - name: "${PROJECT_NAME}-linux-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-linux-arm64?job=build:daily"
+        - name: "${PROJECT_NAME}-darwin-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-darwin-amd64?job=build:daily"
+        - name: "${PROJECT_NAME}-darwin-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-darwin-arm64?job=build:daily"
+        - name: "${PROJECT_NAME}-windows-amd64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-windows-amd64.exe?job=build:daily"
+        - name: "${PROJECT_NAME}-windows-arm64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-windows-arm64.exe?job=build:daily"
+        - name: "${PROJECT_NAME}-freebsd-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-freebsd-amd64?job=build:daily"
+        - name: "${PROJECT_NAME}-freebsd-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:daily"
+        - name: "${PROJECT_NAME}-sbom.cdx.json"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-sbom.cdx.json?job=build:daily"
+        - name: "${PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-source.tar.gz"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/${PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-source.tar.gz?job=release:daily"
+        - name: "sha256.txt"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/sha256.txt?job=release:daily"
+        - name: "sha512.txt"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/sha512.txt?job=release:daily"
+        - name: "version.txt"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_BRANCH}/raw/version.txt?job=release:daily"
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
@@ -44194,7 +44462,16 @@ pipeline {
                         --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
                         --exclude='*.tar.gz' \
                         -czf ${RELDIR}/${PROJECT_NAME}-${VERSION}-source.tar.gz .
-
+                '''
+                sh '''
+                    docker run --rm \
+                        --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                        -v ${WORKSPACE}:/app \
+                        -w /app \
+                        casjaysdev/go:latest \
+                        cyclonedx-gomod mod -json -output ${RELDIR}/${PROJECT_NAME}-sbom.cdx.json
+                '''
+                sh '''
                     cd ${RELDIR}
                     FILES="$(ls)"
                     sha256sum $FILES > sha256.txt
@@ -44219,6 +44496,20 @@ pipeline {
                         cp "$f" ${RELDIR}/
                     done
 
+                    tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
+                        --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
+                        --exclude='*.tar.gz' \
+                        -czf ${RELDIR}/${PROJECT_NAME}-${VERSION}-source.tar.gz .
+                '''
+                sh '''
+                    docker run --rm \
+                        --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                        -v ${WORKSPACE}:/app \
+                        -w /app \
+                        casjaysdev/go:latest \
+                        cyclonedx-gomod mod -json -output ${RELDIR}/${PROJECT_NAME}-sbom.cdx.json
+                '''
+                sh '''
                     cd ${RELDIR}
                     FILES="$(ls)"
                     sha256sum $FILES > sha256.txt
@@ -44243,6 +44534,20 @@ pipeline {
                         cp "$f" ${RELDIR}/
                     done
 
+                    tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
+                        --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
+                        --exclude='*.tar.gz' \
+                        -czf ${RELDIR}/${PROJECT_NAME}-${VERSION}-source.tar.gz .
+                '''
+                sh '''
+                    docker run --rm \
+                        --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                        -v ${WORKSPACE}:/app \
+                        -w /app \
+                        casjaysdev/go:latest \
+                        cyclonedx-gomod mod -json -output ${RELDIR}/${PROJECT_NAME}-sbom.cdx.json
+                '''
+                sh '''
                     cd ${RELDIR}
                     FILES="$(ls)"
                     sha256sum $FILES > sha256.txt
