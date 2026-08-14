@@ -18859,18 +18859,30 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 **Color Palette:**
 ```css
 /* Dark Theme Colors */
---dark-bg: #282a36;           /* Background */
---dark-bg-alt: #1e1f29;       /* Alternate background (topbar, etc.) */
---dark-bg-elevated: #44475a;  /* Elevated elements (inputs, buttons) */
---dark-text: #f8f8f2;         /* Primary text */
---dark-text-muted: #6272a4;   /* Muted text, borders */
---dark-accent-cyan: #8be9fd;  /* Links, GET methods */
---dark-accent-green: #50fa7b; /* Success, POST methods */
---dark-accent-orange: #ffb86c; /* Warning, PUT methods */
---dark-accent-red: #ff5555;   /* Error, DELETE methods */
---dark-accent-purple: #bd93f9; /* Primary accent */
---dark-accent-pink: #ff79c6;  /* Secondary accent */
---dark-accent-yellow: #f1fa8c; /* Highlights */
+/* Background */
+--dark-bg: #282a36;
+/* Alternate background (topbar, etc.) */
+--dark-bg-alt: #1e1f29;
+/* Elevated elements (inputs, buttons) */
+--dark-bg-elevated: #44475a;
+/* Primary text */
+--dark-text: #f8f8f2;
+/* Muted text, borders */
+--dark-text-muted: #6272a4;
+/* Links, GET methods */
+--dark-accent-cyan: #8be9fd;
+/* Success, POST methods */
+--dark-accent-green: #50fa7b;
+/* Warning, PUT methods */
+--dark-accent-orange: #ffb86c;
+/* Error, DELETE methods */
+--dark-accent-red: #ff5555;
+/* Primary accent */
+--dark-accent-purple: #bd93f9;
+/* Secondary accent */
+--dark-accent-pink: #ff79c6;
+/* Highlights */
+--dark-accent-yellow: #f1fa8c;
 ```
 
 | Element | Style |
@@ -18975,17 +18987,28 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 **Color Palette:**
 ```css
 /* Light Theme Colors */
---light-bg: #ffffff;           /* Background */
---light-bg-alt: #f5f5f5;       /* Alternate background (topbar, etc.) */
---light-bg-elevated: #e0e0e0;  /* Elevated elements, borders */
---light-text: #1a1a1a;         /* Primary text */
---light-text-muted: #666666;   /* Muted text */
---light-accent-blue: #0066cc;  /* Links, GET methods */
---light-accent-green: #008000; /* Success, POST methods */
---light-accent-orange: #ff8c00; /* Warning, PUT methods */
---light-accent-red: #cc0000;   /* Error, DELETE methods */
---light-accent-purple: #6600cc; /* Primary accent */
---light-accent-teal: #008080;  /* Secondary accent */
+/* Background */
+--light-bg: #ffffff;
+/* Alternate background (topbar, etc.) */
+--light-bg-alt: #f5f5f5;
+/* Elevated elements, borders */
+--light-bg-elevated: #e0e0e0;
+/* Primary text */
+--light-text: #1a1a1a;
+/* Muted text */
+--light-text-muted: #666666;
+/* Links, GET methods */
+--light-accent-blue: #0066cc;
+/* Success, POST methods */
+--light-accent-green: #008000;
+/* Warning, PUT methods */
+--light-accent-orange: #ff8c00;
+/* Error, DELETE methods */
+--light-accent-red: #cc0000;
+/* Primary accent */
+--light-accent-purple: #6600cc;
+/* Secondary accent */
+--light-accent-teal: #008080;
 ```
 
 | Element | Style |
@@ -21023,7 +21046,8 @@ code {
 .code-content {
   display: block;
   flex: 1;
-  min-width: 0; /* Allow shrinking */
+  /* Allow shrinking */
+  min-width: 0;
   overflow-x: auto;
   white-space: nowrap;
   padding: 0.5rem 0.75rem;
@@ -21031,7 +21055,8 @@ code {
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.875rem;
-  -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS */
+  /* Smooth scroll on iOS */
+  -webkit-overflow-scrolling: touch;
 }
 
 .copy-btn {
@@ -21340,7 +21365,8 @@ document.addEventListener('click', function(e) {
 
 .data-table {
   width: 100%;
-  min-width: 400px; /* Force scroll on narrow screens */
+  /* Force scroll on narrow screens */
+  min-width: 400px;
   border-collapse: collapse;
   font-size: 0.875rem;
 }
@@ -21355,7 +21381,8 @@ document.addEventListener('click', function(e) {
 
 @media (min-width: 768px) {
   .data-table {
-    min-width: 0; /* Allow natural width */
+    /* Allow natural width */
+    min-width: 0;
     font-size: 1rem;
   }
 
@@ -24102,7 +24129,8 @@ Mobile:
 .nav-panel {
   position: fixed;
   top: 0;
-  right: -280px;           /* Hidden off-screen right */
+  /* Hidden off-screen right */
+  right: -280px;
   width: 280px;
   height: 100vh;
   background: var(--color-bg);
@@ -24122,7 +24150,8 @@ Mobile:
 
 /* When checkbox is checked: show menu and overlay */
 .nav-checkbox:checked ~ .nav-panel {
-  right: 0;                /* Slide in from right */
+  /* Slide in from right */
+  right: 0;
 }
 
 .nav-checkbox:checked ~ .nav-overlay {
@@ -24164,7 +24193,8 @@ body {
 }
 
 main {
-  flex: 1;  /* Grows to push footer to bottom */
+  /* Grows to push footer to bottom */
+  flex: 1;
 }
 
 /* NO position: fixed or position: sticky on header/nav/footer */
@@ -25764,7 +25794,8 @@ initCCPA();
   left: 0;
   right: 0;
   width: 100%;
-  background: #7c5295;  /* Purple/magenta - or var(--accent-color) */
+  /* Purple/magenta - or var(--accent-color) */
+  background: #7c5295;
   color: #ffffff;
   z-index: 9999;
 }
@@ -27679,9 +27710,12 @@ server:
     # Which databases to download and use - all three are CC BY 4.0 and
     # require the attribution above whenever their data is used
     databases:
-      asn: true      # autonomous_system_number, autonomous_system_organization
-      country: true  # country_code
-      city: true     # city, country_code, state1, state2, postcode, lat/lon, timezone
+      # autonomous_system_number, autonomous_system_organization
+      asn: true
+      # country_code
+      country: true
+      # city, country_code, state1, state2, postcode, lat/lon, timezone
+      city: true
 ```
 
 | Config Key | Description |
@@ -39623,9 +39657,12 @@ i18n-validate:
 ```css
 /* Use logical properties */
 .element {
-  margin-inline-start: 1rem;  /* Not margin-left */
-  padding-inline-end: 1rem;   /* Not padding-right */
-  text-align: start;          /* Not text-align: left */
+  /* Not margin-left */
+  margin-inline-start: 1rem;
+  /* Not padding-right */
+  padding-inline-end: 1rem;
+  /* Not text-align: left */
+  text-align: start;
 }
 
 /* RTL-specific overrides */

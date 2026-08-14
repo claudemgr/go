@@ -23880,7 +23880,8 @@ code {
 .code-content {
   display: block;
   flex: 1;
-  min-width: 0; /* Allow shrinking */
+  /* Allow shrinking */
+  min-width: 0;
   overflow-x: auto;
   white-space: nowrap;
   padding: 0.5rem 0.75rem;
@@ -23888,7 +23889,8 @@ code {
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.875rem;
-  -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS */
+  /* Smooth scroll on iOS */
+  -webkit-overflow-scrolling: touch;
 }
 
 .copy-btn {
@@ -24198,7 +24200,8 @@ document.addEventListener('click', function(e) {
 
 .data-table {
   width: 100%;
-  min-width: 400px; /* Force scroll on narrow screens */
+  /* Force scroll on narrow screens */
+  min-width: 400px;
   border-collapse: collapse;
   font-size: 0.875rem;
 }
@@ -24213,7 +24216,8 @@ document.addEventListener('click', function(e) {
 
 @media (min-width: 768px) {
   .data-table {
-    min-width: 0; /* Allow natural width */
+    /* Allow natural width */
+    min-width: 0;
     font-size: 1rem;
   }
 
@@ -27158,7 +27162,8 @@ Mobile:
 .nav-panel {
   position: fixed;
   top: 0;
-  right: -280px;           /* Hidden off-screen right */
+  /* Hidden off-screen right */
+  right: -280px;
   width: 280px;
   height: 100vh;
   background: var(--color-bg);
@@ -27178,7 +27183,8 @@ Mobile:
 
 /* When checkbox is checked: show menu and overlay */
 .nav-checkbox:checked ~ .nav-panel {
-  right: 0;                /* Slide in from right */
+  /* Slide in from right */
+  right: 0;
 }
 
 .nav-checkbox:checked ~ .nav-overlay {
@@ -27221,7 +27227,8 @@ body {
 }
 
 main {
-  flex: 1;  /* Grows to push footer to bottom */
+  /* Grows to push footer to bottom */
+  flex: 1;
 }
 
 /* NO position: fixed or position: sticky on header/nav/footer */
@@ -34120,9 +34127,12 @@ server:
     # Which databases to download and use - all three are CC BY 4.0 and
     # require the attribution above whenever their data is used
     databases:
-      asn: true      # autonomous_system_number, autonomous_system_organization
-      country: true  # country_code
-      city: true     # city, country_code, state1, state2, postcode, lat/lon, timezone
+      # autonomous_system_number, autonomous_system_organization
+      asn: true
+      # country_code
+      country: true
+      # city, country_code, state1, state2, postcode, lat/lon, timezone
+      city: true
 ```
 
 | Config Key | Description |
@@ -48931,9 +48941,12 @@ i18n-validate:
 ```css
 /* Use logical properties */
 .element {
-  margin-inline-start: 1rem;  /* Not margin-left */
-  padding-inline-end: 1rem;   /* Not padding-right */
-  text-align: start;          /* Not text-align: left */
+  /* Not margin-left */
+  margin-inline-start: 1rem;
+  /* Not padding-right */
+  padding-inline-end: 1rem;
+  /* Not text-align: left */
+  text-align: start;
 }
 
 /* RTL-specific overrides */
