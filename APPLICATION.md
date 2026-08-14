@@ -1571,7 +1571,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -1583,13 +1583,26 @@ jobs:
           # required: truffleHog needs full history
           fetch-depth: 0
 
+      # Empty base/head = full-history scan (schedule runs and new-branch pushes)
+      - name: Determine scan range
+        id: range
+        run: |
+          BASE=""; HEAD=""
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            BASE="${{ github.event.before }}"; HEAD="${{ github.sha }}"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"; HEAD="${{ github.event.pull_request.head.sha }}"
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+
       - name: TruffleHog secret scan
-        uses: trufflesecurity/trufflehog@b634fb72d9901a4f942e5b8e4ef5f7ec59c97e7c  # v3.88.2
+        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.95.9
         with:
           # NEVER use default_branch — it resolves to HEAD post-push and skips the scan
-          base: ${{ github.event.before }}
-          head: ${{ github.sha }}
-          extra_args: --only-verified
+          base: ${{ steps.range.outputs.base }}
+          head: ${{ steps.range.outputs.head }}
+          extra_args: --results=verified,unknown
 
   workflow-policy:
     runs-on: ubuntu-latest
@@ -1598,7 +1611,7 @@ jobs:
       - name: Verify all third-party actions are pinned to a 40-char SHA
         run: |
           set -eo pipefail
-          bad=$(grep -RhnE '^\s*uses:\s*[^@]+@(v?[0-9]|main|master)' .github/ .gitea/ .forgejo/ 2>/dev/null || true)
+          bad=$(grep -RnE '^[[:space:]]*uses:' .github/ .gitea/ .forgejo/ 2>/dev/null | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
           if [[ -n "$bad" ]]; then
             echo "::error::Unpinned actions found (must be 40-char SHAs):"
             echo "$bad"
@@ -1607,28 +1620,32 @@ jobs:
 
   vuln-scan:
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('go.sum') != '' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      # step-level gate: hashFiles() is not valid in a job-level if
       - name: govulncheck (inside casjaysdev/go:latest)
+        if: hashFiles('go.sum') != ''
         run: |
           IMAGE="casjaysdev/go:latest"
           docker run --rm -i \
-            --name "${{ github.event.repository.name }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+            --name "$(basename "$GITHUB_REPOSITORY")-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
             -v "$PWD":/work -w /work -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
             "$IMAGE" govulncheck ./...
 
   image-scan:
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('docker/Dockerfile') != '' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      # step-level gates: hashFiles() is not valid in a job-level if
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+        if: hashFiles('docker/Dockerfile') != ''
       - name: Build local image for scanning
+        if: hashFiles('docker/Dockerfile') != ''
         run: |
           docker build -f docker/Dockerfile -t scan-target:ci .
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37  # v0.70.0
+        if: hashFiles('docker/Dockerfile') != ''
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           image-ref: scan-target:ci
           severity: CRITICAL,HIGH
@@ -1858,7 +1875,7 @@ Never use a GitHub Actions badge for a GitLab or Gitea project — the CI badge 
 [![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
 
 # Gitea/Forgejo (use shields.io with custom endpoint or static badge)
-[![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/{api_version}/repos/{project_org}/{project_name}/releases/latest&query=$.tag_name&label=release)](https://git.example.com/{project_org}/{project_name}/releases)
+[![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/v1/repos/{project_org}/{project_name}/releases/latest&query=$.tag_name&label=release)](https://git.example.com/{project_org}/{project_name}/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 [![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
 

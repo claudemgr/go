@@ -4998,7 +4998,7 @@ Detect platform by checking for workflow files in this order:
 [![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
 
 # Gitea/Forgejo (use shields.io with custom endpoint or static badge)
-[![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/{api_version}/repos/{project_org}/{project_name}/releases/latest&query=$.tag_name&label=release)](https://git.example.com/{project_org}/{project_name}/releases)
+[![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/v1/repos/{project_org}/{project_name}/releases/latest&query=$.tag_name&label=release)](https://git.example.com/{project_org}/{project_name}/releases)
 [![License](https://img.shields.io/github/license/{project_org}/{project_name})](LICENSE.md)
 [![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
 
@@ -40795,6 +40795,8 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  schedule:
+    - cron: '0 6 * * 1'
 
 permissions:
   contents: read
@@ -40805,6 +40807,7 @@ concurrency:
 
 jobs:
   lint:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -40814,6 +40817,7 @@ jobs:
       - run: staticcheck ./...
 
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -40837,6 +40841,7 @@ jobs:
           fi
 
   build:
+    if: github.event_name != 'schedule'
     needs: [lint, test]
     runs-on: ubuntu-latest
     container:
@@ -40879,7 +40884,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
@@ -40982,14 +40987,53 @@ jobs:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
+      # SBOM is release-level - generate once on the linux/amd64 leg (cyclonedx-gomod is pre-installed in the image)
+      - name: Generate SBOM
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: cyclonedx-gomod mod -json -output ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
+      - name: Upload SBOM artifact
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ env.PROJECT_NAME }}-sbom
+          path: ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
   release:
     needs: build
     runs-on: ubuntu-latest
     permissions:
+      # create GitHub release + upload assets, plus tag ownership (Ensure release tag)
       contents: write
+      # OIDC token for artifact attestation
+      id-token: write
+      # GitHub artifact attestations (SBOM, provenance)
+      attestations: write
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          # required: full history needed to inspect and push tags
+          fetch-depth: 0
+
+      - name: Ensure release tag
+        run: |
+          ref="${{ github.ref }}"
+          if [[ "$ref" != refs/tags/* ]]; then
+            echo "::error::release.yml triggered on non-tag ref '$ref'. Releases require a tag push (refs/tags/v...)."
+            exit 1
+          fi
+          tag="${ref#refs/tags/}"
+          if printf '%s' "$tag" | grep -qP '[[:space:][:cntrl:]]'; then
+            echo "::error::Tag '$tag' contains whitespace or control characters and is not a valid GitHub tag name."
+            exit 1
+          fi
+          # Delete existing tag (local + remote) then recreate at current HEAD
+          git tag -d "$tag" 2>/dev/null || true
+          git push origin ":refs/tags/$tag" 2>/dev/null || true
+          git tag "$tag"
+          git push origin "refs/tags/$tag"
+          echo "Tag '$tag' ensured at $(git rev-parse HEAD)"
 
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
@@ -41020,8 +41064,22 @@ jobs:
             --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
             -czf binaries/${{ env.PROJECT_NAME }}-${{ env.VERSION }}-source.tar.gz .
 
+      - name: Generate checksums
+        run: |
+          cd binaries
+          for f in *; do
+            [ -f "$f" ] || continue
+            case "$f" in *.sha256) continue ;; esac
+            sha256sum "$f" > "$f.sha256"
+          done
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: binaries/${{ env.PROJECT_NAME }}-*
+
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: binaries/*
@@ -41046,13 +41104,34 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Compute version
+        id: v
+        run: |
+          STAMP="$(date -u +%Y%m%d%H%M%S)"
+          if [ -f release.txt ]; then
+            VERSION="$(cat release.txt)"
+          else
+            VERSION="${STAMP}-beta"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Release tag is always the timestamped beta form - the update channel matches the -beta suffix
+          echo "tag=${STAMP}-beta" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: [version]
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -41083,11 +41162,7 @@ jobs:
 
       - name: Set build info
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITHUB_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
@@ -41150,7 +41225,7 @@ jobs:
           path: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -41165,20 +41240,24 @@ jobs:
           merge-multiple: true
 
       - name: Set version
-        run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITHUB_ENV
-          fi
+        run: echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
 
+      - name: Generate checksums
+        run: |
+          cd binaries
+          for f in *; do
+            [ -f "$f" ] || continue
+            case "$f" in *.sha256) continue ;; esac
+            sha256sum "$f" > "$f.sha256"
+          done
+
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
-          tag_name: ${{ env.VERSION }}
+          tag_name: ${{ needs.version.outputs.tag }}
           files: binaries/*
           prerelease: true
           generate_release_notes: true
@@ -41202,17 +41281,34 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: daily-${{ github.ref }}
+  group: daily-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/beta' }}
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Compute version
+        id: v
+        run: |
+          if [ -f release.txt ]; then
+            VERSION="$(cat release.txt)"
+          else
+            VERSION="$(date -u +%Y%m%d%H%M%S)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: [version]
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -41243,11 +41339,7 @@ jobs:
 
       - name: Set build info
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
@@ -41310,7 +41402,7 @@ jobs:
           path: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -41325,15 +41417,19 @@ jobs:
           merge-multiple: true
 
       - name: Set version
-        run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
-          fi
+        run: echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
+
+      - name: Generate checksums
+        run: |
+          cd binaries
+          for f in *; do
+            [ -f "$f" ] || continue
+            case "$f" in *.sha256) continue ;; esac
+            sha256sum "$f" > "$f.sha256"
+          done
 
       - name: Delete previous daily release
         run: |
@@ -41343,7 +41439,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: daily
           name: "Daily Build ${{ env.VERSION }}"
@@ -41396,13 +41492,12 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: docker-${{ github.ref }}
+  group: docker-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/beta' }}
 
 env:
   PROJECT_NAME: {project_name}
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-standard:
@@ -41430,6 +41525,8 @@ jobs:
 
       - name: Set build info
         run: |
+          # ghcr.io requires a lowercase image path
+          echo "IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "YYMM=$(date +"%y%m")" >> $GITHUB_ENV
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
@@ -41441,6 +41538,8 @@ jobs:
             echo "IS_TAG=false" >> $GITHUB_ENV
           fi
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
+          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 
       - name: Determine tags (standard)
         id: tags
@@ -41479,7 +41578,7 @@ jobs:
             org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - standard image (alpine)
             org.opencontainers.image.version=${{ env.VERSION }}
-            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41492,7 +41591,7 @@ jobs:
             manifest:org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - standard image (alpine)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             manifest:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41524,8 +41623,12 @@ jobs:
 
       - name: Set build info
         run: |
+          # ghcr.io requires a lowercase image path
+          echo "IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
+          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 
       - name: Build and push (devel)
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
@@ -41547,7 +41650,7 @@ jobs:
             org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - development image (alpine, debug mode)
             org.opencontainers.image.version=devel
-            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41560,7 +41663,7 @@ jobs:
             manifest:org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - development image (alpine, debug mode)
             manifest:org.opencontainers.image.version=devel
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             manifest:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41603,7 +41706,6 @@ concurrency:
 env:
   PROJECT_NAME: {project_name}
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-aio:
@@ -41630,6 +41732,8 @@ jobs:
 
       - name: Set build info
         run: |
+          # ghcr.io requires a lowercase image path
+          echo "IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "YYMM=$(date +"%y%m")" >> $GITHUB_ENV
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
@@ -41641,6 +41745,8 @@ jobs:
             echo "IS_TAG=false" >> $GITHUB_ENV
           fi
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
+          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 
       - name: Determine tags (all-in-one)
         id: tags
@@ -41680,7 +41786,7 @@ jobs:
             org.opencontainers.image.title=${{ env.PROJECT_NAME }}-aio
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - all-in-one (debian + postgresql + valkey + tor)
             org.opencontainers.image.version=${{ env.VERSION }}
-            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41692,7 +41798,7 @@ jobs:
             manifest:org.opencontainers.image.title=${{ env.PROJECT_NAME }}-aio
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - all-in-one (debian + postgresql + valkey + tor)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             manifest:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41736,7 +41842,7 @@ Key differences from GitHub Actions:
 
 | Setting | Value |
 |---------|-------|
-| Gitea version | 1.19+ (Actions support) |
+| Gitea version | 1.22+ with act_runner 0.2.12+ (Actions support) |
 | Enable Actions | Site Administration → Actions → Enable Actions |
 | Runner | Register runner via `act_runner` |
 | Container Registry | Enable in Site Administration → Packages |
@@ -41783,7 +41889,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
@@ -41886,6 +41992,18 @@ jobs:
           name: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
+      # SBOM is release-level - generate once on the linux/amd64 leg (cyclonedx-gomod is pre-installed in the image)
+      - name: Generate SBOM
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        run: cyclonedx-gomod mod -json -output ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
+      - name: Upload SBOM artifact
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ env.PROJECT_NAME }}-sbom
+          path: ${{ env.PROJECT_NAME }}-sbom.cdx.json
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -41894,6 +42012,28 @@ jobs:
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          # required: full history needed to inspect and push tags
+          fetch-depth: 0
+
+      - name: Ensure release tag
+        run: |
+          ref="${{ gitea.ref }}"
+          if [[ "$ref" != refs/tags/* ]]; then
+            echo "::error::release.yml triggered on non-tag ref '$ref'. Releases require a tag push (refs/tags/v...)."
+            exit 1
+          fi
+          tag="${ref#refs/tags/}"
+          if printf '%s' "$tag" | grep -qP '[[:space:][:cntrl:]]'; then
+            echo "::error::Tag '$tag' contains whitespace or control characters and is not a valid tag name."
+            exit 1
+          fi
+          # Delete existing tag (local + remote) then recreate at current HEAD
+          git tag -d "$tag" 2>/dev/null || true
+          git push origin ":refs/tags/$tag" 2>/dev/null || true
+          git tag "$tag"
+          git push origin "refs/tags/$tag"
+          echo "Tag '$tag' ensured at $(git rev-parse HEAD)"
 
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
@@ -41924,13 +42064,20 @@ jobs:
             --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
             -czf binaries/${{ env.PROJECT_NAME }}-${{ env.VERSION }}-source.tar.gz .
 
+      - name: Generate checksums
+        run: |
+          cd binaries
+          for f in *; do
+            [ -f "$f" ] || continue
+            case "$f" in *.sha256) continue ;; esac
+            sha256sum "$f" > "$f.sha256"
+          done
+
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: binaries/*
-          generate_release_notes: true
-          make_latest: true
 ```
 
 ## Beta Workflow (Gitea/Forgejo Actions)
@@ -41950,13 +42097,34 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Compute version
+        id: v
+        run: |
+          STAMP="$(date -u +%Y%m%d%H%M%S)"
+          if [ -f release.txt ]; then
+            VERSION="$(cat release.txt)"
+          else
+            VERSION="${STAMP}-beta"
+          fi
+          echo "version=$VERSION" >> "$GITEA_OUTPUT"
+          # Release tag is always the timestamped beta form - the update channel matches the -beta suffix
+          echo "tag=${STAMP}-beta" >> "$GITEA_OUTPUT"
+
   build:
+    needs: [version]
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -41987,11 +42155,7 @@ jobs:
 
       - name: Set build info
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITEA_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
@@ -42054,7 +42218,7 @@ jobs:
           path: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -42069,23 +42233,26 @@ jobs:
           merge-multiple: true
 
       - name: Set version
-        run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITEA_ENV
-          fi
+        run: echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
 
+      - name: Generate checksums
+        run: |
+          cd binaries
+          for f in *; do
+            [ -f "$f" ] || continue
+            case "$f" in *.sha256) continue ;; esac
+            sha256sum "$f" > "$f.sha256"
+          done
+
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
-          tag_name: ${{ env.VERSION }}
+          tag_name: ${{ needs.version.outputs.tag }}
           files: binaries/*
           prerelease: true
-          generate_release_notes: true
 ```
 
 ## Daily Workflow (Gitea/Forgejo Actions)
@@ -42106,17 +42273,34 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: daily-${{ gitea.ref }}
+  group: daily-${{ gitea.ref }}-${{ gitea.event_name }}
   cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/devel' || gitea.ref == 'refs/heads/dev' || gitea.ref == 'refs/heads/beta' }}
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Compute version
+        id: v
+        run: |
+          if [ -f release.txt ]; then
+            VERSION="$(cat release.txt)"
+          else
+            VERSION="$(date -u +%Y%m%d%H%M%S)"
+          fi
+          echo "version=$VERSION" >> "$GITEA_OUTPUT"
+
   build:
+    needs: [version]
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -42147,11 +42331,7 @@ jobs:
 
       - name: Set build info
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITEA_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
@@ -42214,7 +42394,7 @@ jobs:
           path: ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -42229,26 +42409,30 @@ jobs:
           merge-multiple: true
 
       - name: Set version
-        run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITEA_ENV
-          fi
+        run: echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
+
+      - name: Generate checksums
+        run: |
+          cd binaries
+          for f in *; do
+            [ -f "$f" ] || continue
+            case "$f" in *.sha256) continue ;; esac
+            sha256sum "$f" > "$f.sha256"
+          done
 
       - name: Delete previous daily release
         run: |
           # Use Gitea API to delete previous daily release
           curl -X DELETE \
             -H "Authorization: token ${{ secrets.GITEA_TOKEN }}" \
-            "${{ gitea.server_url }}/api/{api_version}/repos/${{ gitea.repository }}/releases/tags/daily" || true
+            "${{ gitea.server_url }}/api/v1/repos/${{ gitea.repository }}/releases/tags/daily" || true
           git push origin :refs/tags/daily 2>/dev/null || true
 
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: daily
           name: "Daily Build ${{ env.VERSION }}"
@@ -42276,14 +42460,11 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: docker-${{ gitea.ref }}
+  group: docker-${{ gitea.ref }}-${{ gitea.event_name }}
   cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/devel' || gitea.ref == 'refs/heads/dev' || gitea.ref == 'refs/heads/beta' }}
 
 env:
   PROJECT_NAME: {project_name}
-  # Registry auto-detected from Gitea instance (works with self-hosted)
-  # Format: {gitea-server}/owner/repo -> extracts server for registry
-  IMAGE_NAME: ${{ gitea.repository }}
 
 jobs:
   build-standard:
@@ -42310,6 +42491,8 @@ jobs:
           REGISTRY="${SERVER_URL#https://}"
           REGISTRY="${REGISTRY#http://}"
           echo "REGISTRY=${REGISTRY}" >> $GITEA_ENV
+          # Container registries require a lowercase image path
+          echo "IMAGE_NAME=$(echo "${{ gitea.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITEA_ENV
 
       - name: Log in to Container Registry
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
@@ -42332,6 +42515,8 @@ jobs:
             echo "IS_TAG=false" >> $GITEA_ENV
           fi
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
+          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
 
       - name: Determine tags (standard)
         id: tags
@@ -42373,7 +42558,7 @@ jobs:
             org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - standard image (alpine)
             org.opencontainers.image.version=${{ env.VERSION }}
-            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -42386,7 +42571,7 @@ jobs:
             manifest:org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - standard image (alpine)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -42415,6 +42600,8 @@ jobs:
           REGISTRY="${SERVER_URL#https://}"
           REGISTRY="${REGISTRY#http://}"
           echo "REGISTRY=${REGISTRY}" >> $GITEA_ENV
+          # Container registries require a lowercase image path
+          echo "IMAGE_NAME=$(echo "${{ gitea.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITEA_ENV
 
       - name: Log in to Container Registry
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
@@ -42427,6 +42614,8 @@ jobs:
         run: |
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
+          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
 
       - name: Build and push (devel)
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
@@ -42448,7 +42637,7 @@ jobs:
             org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - development image (alpine, debug mode)
             org.opencontainers.image.version=devel
-            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -42461,7 +42650,7 @@ jobs:
             manifest:org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - development image (alpine, debug mode)
             manifest:org.opencontainers.image.version=devel
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -42503,7 +42692,6 @@ concurrency:
 
 env:
   PROJECT_NAME: {project_name}
-  IMAGE_NAME: ${{ gitea.repository }}
 
 jobs:
   build-aio:
@@ -42527,6 +42715,8 @@ jobs:
           REGISTRY="${SERVER_URL#https://}"
           REGISTRY="${REGISTRY#http://}"
           echo "REGISTRY=${REGISTRY}" >> $GITEA_ENV
+          # Container registries require a lowercase image path
+          echo "IMAGE_NAME=$(echo "${{ gitea.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITEA_ENV
 
       - name: Log in to Container Registry
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
@@ -42548,6 +42738,8 @@ jobs:
             echo "IS_TAG=false" >> $GITEA_ENV
           fi
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
+          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
 
       - name: Determine tags (all-in-one)
         id: tags
@@ -42587,7 +42779,7 @@ jobs:
             org.opencontainers.image.title=${{ env.PROJECT_NAME }}-aio
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - all-in-one (debian + postgresql + valkey + tor)
             org.opencontainers.image.version=${{ env.VERSION }}
-            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -42599,7 +42791,7 @@ jobs:
             manifest:org.opencontainers.image.title=${{ env.PROJECT_NAME }}-aio
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - all-in-one (debian + postgresql + valkey + tor)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -43389,6 +43581,8 @@ pipeline {
                     }
                     env.COMMIT_ID = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     env.BUILD_DATE = sh(script: 'date +"%a %b %d, %Y at %H:%M:%S %Z"', returnStdout: true).trim()
+                    // OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
+                    env.BUILD_DATE_RFC3339 = sh(script: 'date -u +"%Y-%m-%dT%H:%M:%SZ"', returnStdout: true).trim()
                     // OFFICIAL_SITE (optional): site.txt wins; otherwise use Jenkins credentials or leave empty
                     // Never guess or assume - must be explicitly defined by user
                     env.OFFICIAL_SITE = sh(script: '[ -f site.txt ] && cat site.txt || echo "${OFFICIAL_SITE:-}"', returnStdout: true).trim()
@@ -43980,7 +44174,7 @@ pipeline {
                             --label "org.opencontainers.image.description=${PROJECT_NAME} - standard image (alpine)" \
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.version=${VERSION}" \
-                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
+                            --label "org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
                             --label "org.opencontainers.image.revision=${COMMIT_ID}" \
                             --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
@@ -43992,7 +44186,7 @@ pipeline {
                             --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - standard image (alpine)" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
-                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
+                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
                             --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
                             --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
@@ -44046,7 +44240,7 @@ pipeline {
                             --label "org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + postgresql + valkey + tor)" \
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.version=${VERSION}" \
-                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
+                            --label "org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
                             --label "org.opencontainers.image.revision=${COMMIT_ID}" \
                             --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
@@ -44057,7 +44251,7 @@ pipeline {
                             --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + postgresql + valkey + tor)" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
-                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
+                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
                             --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
                             --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
@@ -44101,7 +44295,7 @@ pipeline {
                             --label "org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.version=devel" \
-                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
+                            --label "org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
                             --label "org.opencontainers.image.revision=${COMMIT_ID}" \
                             --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
@@ -44113,7 +44307,7 @@ pipeline {
                             --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.version=devel" \
-                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
+                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
                             --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
                             --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
@@ -44845,29 +45039,25 @@ make test
 **In CI/CD Pipeline (REQUIRED):**
 
 ```yaml
-# .github/workflows/ci.yml (coverage job)
+# .github/workflows/ci.yml (test job with coverage)
 test:
   runs-on: ubuntu-latest
+  container:
+    image: casjaysdev/go:latest
   steps:
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
     - name: Run tests with coverage
-      run: |
-        # coverage.out goes to the mounted workspace (/app), not /tmp — two separate docker run
-        # invocations cannot share /tmp; the workspace mount is the only shared path between them.
-        # The runner workspace is ephemeral so this is safe.
-        docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app casjaysdev/go:latest \
-          go test -cover -coverprofile=coverage.out ./...
+      run: go test -cover -coverprofile=coverage.out ./...
 
     - name: Check coverage is >= 60%
       run: |
-        COVERAGE=$(docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app casjaysdev/go:latest \
-          go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-        if [ $(echo "$COVERAGE < 60" | bc -l) -eq 1 ]; then
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+        if [ "$(echo "$COVERAGE < 60" | bc -l)" -eq 1 ]; then
           echo "ERROR: Coverage is $COVERAGE%, must be >= 60%"
           exit 1
         fi
-        echo "Coverage: $COVERAGE% (>= 60% required) ✓"
+        echo "Coverage: $COVERAGE% (>= 60% required)"
 ```
 
 ### How to Achieve the Coverage Gates (≥60% unit, 100% endpoints)

@@ -33000,6 +33000,49 @@ docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -
 
 For GUI smoke tests in CI, use a virtual X server (e.g., `Xvfb`) and a headless Wayland compositor (e.g., `cage`, `weston --backend=headless`) **inside** the container or as a sidecar service — both backends MUST be exercised, not just one.
 
+## Workflow Error Messaging
+
+Use `::error::` workflow commands for validation failures — they appear as red annotations on the Actions summary page, not just buried in logs:
+
+```bash
+echo "::error::Tag 'foo' does not exist in this repository"
+echo "::error file=.github/workflows/release.yml,line=12::message tied to a source location"
+```
+
+Always write messages so a developer reading only the step name + message understands what failed and what to do next.
+
+## Release Pre-flight Validation
+
+The GitHub Releases API returns HTTP 422 `"tag_name is not a valid tag"` when the tag does not exist at API call time or is malformed. The correct fix is for the **release job to own the tag** — delete it if it exists, then recreate it at the current HEAD. This ensures the tag always exists and points to the right commit, and makes the workflow idempotent.
+
+The `release` job already has `contents: write` to push assets — this covers tag push as well.
+
+```yaml
+- uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+  with:
+    # required: full history needed to inspect and push tags
+    fetch-depth: 0
+
+- name: Ensure release tag
+  run: |
+    ref="${{ github.ref }}"
+    if [[ "$ref" != refs/tags/* ]]; then
+      echo "::error::release.yml triggered on non-tag ref '$ref'. Releases require a tag push (refs/tags/v...)."
+      exit 1
+    fi
+    tag="${ref#refs/tags/}"
+    if printf '%s' "$tag" | grep -qP '[[:space:][:cntrl:]]'; then
+      echo "::error::Tag '$tag' contains whitespace or control characters and is not a valid GitHub tag name."
+      exit 1
+    fi
+    # Delete existing tag (local + remote) then recreate at current HEAD
+    git tag -d "$tag" 2>/dev/null || true
+    git push origin ":refs/tags/$tag" 2>/dev/null || true
+    git tag "$tag"
+    git push origin "refs/tags/$tag"
+    echo "Tag '$tag' ensured at $(git rev-parse HEAD)"
+```
+
 ## Release Integrity
 
 Tagged/manual releases should publish:
@@ -33059,7 +33102,7 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 | File | Trigger | Purpose |
 |------|---------|---------|
 | `ci.yml` | Push, PR to default branch; security jobs also run on weekly cron | Build + test + lint + coverage + secret scanning + image scanning + workflow-policy |
-| `release.yml` | Tag push (`v*`, `*.*.*`) | Production releases |
+| `release.yml` | Tag push (`v*`, `*.*.*`) + manual dispatch | Production releases |
 | `beta.yml` | Push to `beta` branch | Beta releases |
 | `daily.yml` | Daily at 3am UTC + push to main/master | Daily builds |
 | `docker.yml` | Any push (all branches) + version tags + daily schedule | Docker images (`build-standard` + `build-devel` jobs) |
@@ -33115,7 +33158,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -33173,13 +33216,26 @@ jobs:
           # required: truffleHog needs full history
           fetch-depth: 0
 
+      # Empty base/head = full-history scan (schedule runs and new-branch pushes)
+      - name: Determine scan range
+        id: range
+        run: |
+          BASE=""; HEAD=""
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            BASE="${{ github.event.before }}"; HEAD="${{ github.sha }}"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"; HEAD="${{ github.event.pull_request.head.sha }}"
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+
       - name: TruffleHog secret scan
         uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.95.9
         with:
           # NEVER use default_branch — it resolves to HEAD post-push and skips the scan
-          base: ${{ github.event.before }}
-          head: ${{ github.sha }}
-          extra_args: --only-verified
+          base: ${{ steps.range.outputs.base }}
+          head: ${{ steps.range.outputs.head }}
+          extra_args: --results=verified,unknown
 
   workflow-policy:
     runs-on: ubuntu-latest
@@ -33188,7 +33244,7 @@ jobs:
       - name: Verify all third-party actions are pinned to a 40-char SHA
         run: |
           set -eo pipefail
-          bad=$(grep -RhnE '^\s*uses:\s*[^@]+@(v?[0-9]|main|master)' .github/ .gitea/ .forgejo/ 2>/dev/null || true)
+          bad=$(grep -RnE '^[[:space:]]*uses:' .github/ .gitea/ .forgejo/ 2>/dev/null | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
           if [[ -n "$bad" ]]; then
             echo "::error::Unpinned actions found (must be 40-char SHAs):"
             echo "$bad"
@@ -33205,15 +33261,18 @@ jobs:
 
   image-scan:
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('docker/Dockerfile') != '' }}
     steps:
+      # hashFiles() is not valid in a job-level if — checkout first, then gate each step
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+        if: hashFiles('docker/Dockerfile') != ''
       - name: Build local image for scanning
+        if: hashFiles('docker/Dockerfile') != ''
         run: |
           docker build -f docker/Dockerfile -t scan-target:ci .
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37  # v0.70.0
+        if: hashFiles('docker/Dockerfile') != ''
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           image-ref: scan-target:ci
           severity: CRITICAL,HIGH
@@ -33226,7 +33285,7 @@ jobs:
 - Jenkins: `Security` stage uses `parallel {}`; truffleHog and Trivy each run via `docker.image(...).inside { ... }`.
 - All providers: same gates, same severities, same exit conditions — no weaker subset on any provider.
 
-> **Note:** Security jobs (`secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan`) are defined within `ci.yml`. They run on push, PR, and weekly schedule (`cron: '0 6 * * 1'`). Add `if: github.event_name != 'schedule'` to build/test/coverage/artifact jobs to skip non-security work on scheduled runs. Secret scanning is mandatory on every public repo via truffleHog (Apache-2.0). Use `github.event.before` / `github.event.after` for the scan range — never `default_branch`, which after a push resolves to the same commit as HEAD and silently skips the scan.
+> **Note:** Security jobs (`secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan`) are defined within `ci.yml`. They run on push, PR, and weekly schedule (`cron: '0 6 * * 1'`). Add `if: github.event_name != 'schedule'` to build/test/coverage/artifact jobs to skip non-security work on scheduled runs. Secret scanning is mandatory on every public repo via truffleHog (Apache-2.0). Compute the scan range in a "Determine scan range" step (empty base/head = full-history scan on schedule runs and new-branch pushes) — never `default_branch`, which after a push resolves to the same commit as HEAD and silently skips the scan.
 
 ## Release Workflow — Stable (GitHub Actions)
 
@@ -33240,13 +33299,14 @@ on:
     tags:
       - 'v*'
       - '[0-9]*.[0-9]*.[0-9]*'
+  workflow_dispatch: {}
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
@@ -33341,9 +33401,33 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          # required: full history needed to inspect and push tags
+          fetch-depth: 0
+
+      - name: Ensure release tag
+        run: |
+          ref="${{ github.ref }}"
+          if [[ "$ref" != refs/tags/* ]]; then
+            echo "::error::release.yml triggered on non-tag ref '$ref'. Releases require a tag push (refs/tags/v...)."
+            exit 1
+          fi
+          tag="${ref#refs/tags/}"
+          if printf '%s' "$tag" | grep -qP '[[:space:][:cntrl:]]'; then
+            echo "::error::Tag '$tag' contains whitespace or control characters and is not a valid GitHub tag name."
+            exit 1
+          fi
+          # Delete existing tag (local + remote) then recreate at current HEAD
+          git tag -d "$tag" 2>/dev/null || true
+          git push origin ":refs/tags/$tag" 2>/dev/null || true
+          git tag "$tag"
+          git push origin "refs/tags/$tag"
+          echo "Tag '$tag' ensured at $(git rev-parse HEAD)"
 
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
@@ -33374,8 +33458,23 @@ jobs:
             --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
             -czf binaries/${{ env.PROJECT_NAME }}-${{ env.VERSION }}-source.tar.gz .
 
+      - name: Generate SBOM
+        run: |
+          docker run --rm --name "${{ env.PROJECT_NAME }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+            -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+            casjaysdev/go:latest cyclonedx-gomod app -json -output "binaries/${{ env.PROJECT_NAME }}-bom.json"
+
+      - name: Generate checksums
+        run: |
+          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: binaries/*
+
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: binaries/*
@@ -33400,13 +33499,30 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Compute version
+        id: v
+        run: |
+          if [ -f release.txt ]; then
+            VERSION="$(cat release.txt)"
+          else
+            VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: [version]
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -33437,11 +33553,7 @@ jobs:
 
       - name: Set build info
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITHUB_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
@@ -33491,7 +33603,7 @@ jobs:
 
 
   release:
-    needs: build
+    needs: [build, version]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -33507,17 +33619,17 @@ jobs:
 
       - name: Set version
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITHUB_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
 
+      - name: Generate checksums
+        run: |
+          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
+
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: ${{ env.VERSION }}
           files: binaries/*
@@ -33543,17 +33655,34 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: daily-${{ github.ref }}
+  group: daily-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/beta' }}
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Compute version
+        id: v
+        run: |
+          if [ -f release.txt ]; then
+            VERSION="$(cat release.txt)"
+          else
+            VERSION="$(date -u +%Y%m%d%H%M%S)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: [version]
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -33584,11 +33713,7 @@ jobs:
 
       - name: Set build info
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
@@ -33638,7 +33763,7 @@ jobs:
 
 
   release:
-    needs: build
+    needs: [build, version]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -33654,14 +33779,14 @@ jobs:
 
       - name: Set version
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
+
+      - name: Generate checksums
+        run: |
+          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
 
       - name: Delete previous daily release
         run: |
@@ -33671,7 +33796,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: daily
           name: "Daily Build ${{ env.VERSION }}"
@@ -33722,7 +33847,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: docker-${{ github.ref }}
+  group: docker-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/beta' }}
 
 env:
@@ -33952,7 +34077,7 @@ For self-hosted runners, change `runs-on: ubuntu-latest` to your runner label.
 | File | Trigger | Purpose |
 |------|---------|---------|
 | `ci.yml` | Push and pull requests; weekly schedule for security jobs | Build, test, lint, coverage, security jobs |
-| `release.yml` | Tag push (`v*`, `*.*.*`) | Production releases |
+| `release.yml` | Tag push (`v*`, `*.*.*`) + manual dispatch | Production releases |
 | `beta.yml` | Push to `beta` branch | Beta releases |
 | `daily.yml` | Daily at 3am UTC + push to main/master | Daily builds |
 | `docker.yml` | Any push (all branches) + version tags + daily schedule | Docker images (`build-standard` + `build-devel` jobs) |
@@ -33969,13 +34094,14 @@ on:
     tags:
       - 'v*'
       - '[0-9]*.[0-9]*.[0-9]*'
+  workflow_dispatch: {}
 
 concurrency:
   group: release-${{ gitea.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
@@ -34073,6 +34199,28 @@ jobs:
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          # required: full history needed to inspect and push tags
+          fetch-depth: 0
+
+      - name: Ensure release tag
+        run: |
+          ref="${{ gitea.ref }}"
+          if [[ "$ref" != refs/tags/* ]]; then
+            echo "::error::release.yml triggered on non-tag ref '$ref'. Releases require a tag push (refs/tags/v...)."
+            exit 1
+          fi
+          tag="${ref#refs/tags/}"
+          if printf '%s' "$tag" | grep -qP '[[:space:][:cntrl:]]'; then
+            echo "::error::Tag '$tag' contains whitespace or control characters and is not a valid Gitea tag name."
+            exit 1
+          fi
+          # Delete existing tag (local + remote) then recreate at current HEAD
+          git tag -d "$tag" 2>/dev/null || true
+          git push origin ":refs/tags/$tag" 2>/dev/null || true
+          git tag "$tag"
+          git push origin "refs/tags/$tag"
+          echo "Tag '$tag' ensured at $(git rev-parse HEAD)"
 
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
@@ -34103,13 +34251,21 @@ jobs:
             --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
             -czf binaries/${{ env.PROJECT_NAME }}-${{ env.VERSION }}-source.tar.gz .
 
+      - name: Generate SBOM
+        run: |
+          docker run --rm --name "${{ env.PROJECT_NAME }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+            -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+            casjaysdev/go:latest cyclonedx-gomod app -json -output "binaries/${{ env.PROJECT_NAME }}-bom.json"
+
+      - name: Generate checksums
+        run: |
+          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
+
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: binaries/*
-          generate_release_notes: true
-          make_latest: true
 ```
 
 ## Beta Workflow (Gitea/Forgejo Actions)
@@ -34129,13 +34285,30 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Compute version
+        id: v
+        run: |
+          if [ -f release.txt ]; then
+            VERSION="$(cat release.txt)"
+          else
+            VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
+          fi
+          echo "version=$VERSION" >> "$GITEA_OUTPUT"
+
   build:
+    needs: [version]
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -34166,11 +34339,7 @@ jobs:
 
       - name: Set build info
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITEA_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
@@ -34220,7 +34389,7 @@ jobs:
 
 
   release:
-    needs: build
+    needs: [build, version]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -34236,22 +34405,21 @@ jobs:
 
       - name: Set version
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITEA_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
 
+      - name: Generate checksums
+        run: |
+          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
+
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: ${{ env.VERSION }}
           files: binaries/*
           prerelease: true
-          generate_release_notes: true
 ```
 
 ## Daily Workflow (Gitea/Forgejo Actions)
@@ -34272,17 +34440,34 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: daily-${{ gitea.ref }}
+  group: daily-${{ gitea.ref }}-${{ gitea.event_name }}
   cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/devel' || gitea.ref == 'refs/heads/dev' || gitea.ref == 'refs/heads/beta' }}
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PROJECT_NAME: {project_name}
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Compute version
+        id: v
+        run: |
+          if [ -f release.txt ]; then
+            VERSION="$(cat release.txt)"
+          else
+            VERSION="$(date -u +%Y%m%d%H%M%S)"
+          fi
+          echo "version=$VERSION" >> "$GITEA_OUTPUT"
+
   build:
+    needs: [version]
     runs-on: ubuntu-latest
     container:
       image: casjaysdev/go:latest
@@ -34313,11 +34498,7 @@ jobs:
 
       - name: Set build info
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITEA_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
@@ -34367,7 +34548,7 @@ jobs:
 
 
   release:
-    needs: build
+    needs: [build, version]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -34383,25 +34564,25 @@ jobs:
 
       - name: Set version
         run: |
-          if [ -f release.txt ]; then
-            echo "VERSION=$(cat release.txt)" >> $GITEA_ENV
-          else
-            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITEA_ENV
-          fi
+          echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
+
+      - name: Generate checksums
+        run: |
+          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
 
       - name: Delete previous daily release
         run: |
           # Use Gitea API to delete previous daily release
           curl -X DELETE \
             -H "Authorization: token ${{ secrets.GITEA_TOKEN }}" \
-            "${{ gitea.server_url }}/api/{api_version}/repos/${{ gitea.repository }}/releases/tags/daily" || true
+            "${{ gitea.server_url }}/api/v1/repos/${{ gitea.repository }}/releases/tags/daily" || true
           git push origin :refs/tags/daily 2>/dev/null || true
 
       - name: Create Release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: daily
           name: "Daily Build ${{ env.VERSION }}"
@@ -34429,7 +34610,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: docker-${{ gitea.ref }}
+  group: docker-${{ gitea.ref }}-${{ gitea.event_name }}
   cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/devel' || gitea.ref == 'refs/heads/dev' || gitea.ref == 'refs/heads/beta' }}
 
 env:
@@ -35956,7 +36137,7 @@ Never use a GitHub Actions badge for a GitLab or Gitea project — the CI badge 
 [![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
 
 # Gitea/Forgejo (use shields.io with custom endpoint or static badge)
-[![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/{api_version}/repos/{project_org}/{project_name}/releases/latest&query=$.tag_name&label=release)](https://git.example.com/{project_org}/{project_name}/releases)
+[![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/v1/repos/{project_org}/{project_name}/releases/latest&query=$.tag_name&label=release)](https://git.example.com/{project_org}/{project_name}/releases)
 [![License](https://img.shields.io/github/license/{project_org}/{project_name})](LICENSE.md)
 [![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
 
