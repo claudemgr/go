@@ -49007,7 +49007,7 @@ var localeFS embed.FS
 | **Config defaults** | Config values shown to users (e.g., `reject_message`) MUST fall back to translated keys |
 | **Wireframes** | ASCII wireframes in this spec show English for documentation only — actual UI renders via `t()` |
 | **Key naming** | Use dot-separated lowercase: `admin.dashboard.title` |
-| **Interpolation** | Use `{variable}` syntax: `"Hello, {name}"` |
+| **Interpolation** | Named `{variable}` tokens only: `"Hello, {name}"` — substituted by LITERAL string replacement (`TranslateFormat`), never by `fmt.Sprintf` (a translation is not a format string); `%s`/`%d` verbs and positional `{0}` placeholders are forbidden in locale files |
 | **Plurals** | Nested under key with `zero`, `one`, `two`, `few`, `many`, `other` |
 | **HTML content** | Store plain text in translations, apply HTML in templates |
 | **Context** | Same word with different meanings gets different keys (e.g., `common.close` vs `nav.close`) |
@@ -49022,8 +49022,13 @@ funcMap := template.FuncMap{
     "t": func(lang, key string) string {
         return i18n.Translate(lang, key)
     },
-    "tf": func(lang, key string, args ...interface{}) string {
-        return i18n.TranslateFormat(lang, key, args...)
+    "tf": func(lang, key string, kv ...interface{}) string {
+        // key/value pairs from the template: {{tf .Lang "key" "token" .Value}}
+        args := make(map[string]string, len(kv)/2)
+        for i := 0; i+1 < len(kv); i += 2 {
+            args[fmt.Sprint(kv[i])] = fmt.Sprint(kv[i+1])
+        }
+        return i18n.TranslateFormat(lang, key, args)
     },
     "tp": func(lang, key string, count int) string {
         return i18n.TranslatePlural(lang, key, count)
@@ -49040,9 +49045,9 @@ func t(r *http.Request, key string) string {
     return i18n.Translate(lang, key)
 }
 
-func tf(r *http.Request, key string, args ...interface{}) string {
+func tf(r *http.Request, key string, args map[string]string) string {
     lang := i18n.LangFromRequest(r)
-    return i18n.TranslateFormat(lang, key, args...)
+    return i18n.TranslateFormat(lang, key, args)
 }
 
 // LangFromRequest extracts language preference from request.
@@ -49092,6 +49097,20 @@ func Translate(lang, key string) string {
     // last resort: return the key itself
     return key
 }
+
+// TranslateFormat replaces named {token} placeholders in the translated
+// string with the supplied values. Interpolation is LITERAL string
+// replacement — the translation is NEVER used as a fmt format string
+// (no %s/%d verbs, no positional {0}), so a stray '%' in a translation
+// can never corrupt output. Tokens with no supplied value stay visible
+// as-is (a visible bug beats a silent one); extra args are ignored.
+func TranslateFormat(lang, key string, args map[string]string) string {
+    s := Translate(lang, key)
+    for k, v := range args {
+        s = strings.ReplaceAll(s, "{"+k+"}", v)
+    }
+    return s
+}
 ```
 
 ```html
@@ -49099,7 +49118,7 @@ func Translate(lang, key string) string {
 <h1>{{t .Lang "admin.dashboard.title"}}</h1>
 
 <!-- With interpolation -->
-<p>{{tf .Lang "admin.dashboard.ssl_expires_in" .Days}}</p>
+<p>{{tf .Lang "admin.dashboard.ssl_expires_in" "count" .Days}}</p>
 
 <!-- Plurals -->
 <span>{{tp .Lang "plurals.items" .Count}}</span>
@@ -49122,7 +49141,7 @@ function t(key) {
 function tf(key, vars) {
     let str = t(key);
     for (const [k, v] of Object.entries(vars)) {
-        str = str.replace(`{${k}}`, v);
+        str = str.replaceAll(`{${k}}`, v);
     }
     return str;
 }
