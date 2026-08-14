@@ -4895,9 +4895,11 @@ PROJECT_ORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/
 # Version precedence: release.txt (wins if it exists) > VERSION env var > "devel" fallback
 VERSION := $(shell cat release.txt 2>/dev/null || echo "$${VERSION:-devel}")
 
-# Build info - ISO 8601 UTC
-# Format: "2025-12-04T13:05:13Z"
-BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+# BUILD_EPOCH: Unix build timestamp (seconds, UTC) - the single captured time source
+BUILD_EPOCH := $(shell date -u +%s)
+# BUILD_DATE derived from BUILD_EPOCH (ISO 8601 / RFC 3339 UTC) - used only for
+# docker build-args/OCI labels; the binary derives BuildDate from BuildEpoch itself
+BUILD_DATE := $(shell date -u -d @$(BUILD_EPOCH) +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "N/A")
 # COMMIT_ID used directly - no VCS_REF alias
 
@@ -4909,11 +4911,11 @@ COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "N/A")
 # NEVER infer from project name, domain, or any other source
 OFFICIAL_SITE := $(shell [ -f site.txt ] && cat site.txt || echo "${OFFICIAL_SITE:-}")
 
-# Linker flags to embed build info
+# Linker flags to embed build info (no BuildDate - the binary derives it from BuildEpoch)
 LDFLAGS := -s -w \
 	-X 'main.Version=$(VERSION)' \
 	-X 'main.CommitID=$(COMMIT_ID)' \
-	-X 'main.BuildDate=$(BUILD_DATE)' \
+	-X 'main.BuildEpoch=$(BUILD_EPOCH)' \
 	-X 'main.OfficialSite=$(OFFICIAL_SITE)'
 
 # Directories
@@ -5039,6 +5041,11 @@ release: build
 		cp "$$f" $(RELDIR)/; \
 	done
 
+	# Consolidated sha256.txt/sha512.txt over every release asset (version.txt,
+	# binaries, source archive) - the file list is pre-captured so both checksum
+	# files cover the identical asset set and never hash each other or themselves
+	@cd $(RELDIR) && FILES="$$(ls)" && sha256sum $$FILES > sha256.txt && sha512sum $$FILES > sha512.txt
+
 	# Create source archive (exclude VCS and build artifacts)
 	@tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
 		--exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
@@ -5079,6 +5086,7 @@ docker:
 		--push \
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg BUILD_DATE="$(BUILD_DATE)" \
+		--build-arg BUILD_EPOCH="$(BUILD_EPOCH)" \
 		--build-arg COMMIT_ID="$(COMMIT_ID)" \
 		-t $(REGISTRY):$(VERSION) \
 		-t $(REGISTRY):latest \
@@ -5152,7 +5160,7 @@ clean:
 5. Builds local binary: `binaries/{project_name}`
 6. Builds all platform binaries: `binaries/{project_name}-{os}-{arch}` (and `-cli-` variants if `src/client/` exists)
 7. Uses `CGO_ENABLED=0` for static binaries
-8. Embeds Version, CommitID, BuildDate, OfficialSite via `-ldflags`
+8. Embeds Version, CommitID, BuildEpoch, OfficialSite via `-ldflags` (BuildDate is derived from BuildEpoch in `init()`, not an ldflag)
 9. All builds via Docker (`casjaysdev/go:latest`)
 
 **`make local`**
@@ -5178,7 +5186,7 @@ clean:
 3. Context is project root, Dockerfile at `docker/Dockerfile`
 4. Builds for `linux/amd64` and `linux/arm64`
 5. Pushes to `$REGISTRY:{version}` and `:latest`
-6. Passes VERSION, BUILD_DATE, COMMIT_ID as build args
+6. Passes VERSION, BUILD_DATE, BUILD_EPOCH, COMMIT_ID as build args
 7. Layer caching: Go modules cached in builder stage
 
 **`make test`**
@@ -5305,7 +5313,7 @@ make build
 - Each release MUST publish artifacts for at minimum: `{project_name}-linux-amd64`, `{project_name}-linux-arm64`, `{project_name}-darwin-amd64`, `{project_name}-darwin-arm64`, `{project_name}-windows-amd64.exe`, `{project_name}-windows-arm64.exe`, `{project_name}-freebsd-amd64`, `{project_name}-freebsd-arm64` (subset acceptable only when IDEA.md narrows platform scope); CLI client artifacts (`{project_name}-cli-*`) are published for the same platform matrix when `src/client/` exists
 - A static-linkage verification step is part of release: `ldd` / `otool -L` / `dumpbin /dependents` output is captured and checked against an allowlist (kernel vDSO, Apple system frameworks, Windows kernel32/user32 etc.) — anything outside the allowlist fails the release
 - No companion files (no `.so`, `.dylib`, `.dll`, no asset bundles, no font directories) ship next to the binary
-- Include SHA-256 checksums for every published artifact, named `{artifact}.sha256`
+- Include two aggregate checksum files covering every release asset — `sha256.txt` (SHA-256) and `sha512.txt` (SHA-512), standard `{hash}  {filename}` format — uploaded as release assets; never per-artifact sidecar files
 - Include release notes that describe actual changes
 - Include an SBOM (always — generated via `cyclonedx-gomod`; see PART 24 for the invocation). Include provenance/attestation via `actions/attest-build-provenance` when the release platform supports it; always set `provenance: false` on `docker/build-push-action` steps
 - If GUI packaging exists (MSI, DMG, AppImage, deb, rpm, etc.), the package wraps the same single static binary plus desktop integration metadata; package metadata lives in `packaging/`
@@ -5354,6 +5362,8 @@ make build
 | Git tag | `v1.2.3`, `v0.2.0`, or `1.2.3` (numeric versions) |
 | Release name | `v{version}` (always with v: `v1.2.3`, `v0.2.0`) |
 | version.txt | `{version}` (without `v`: `1.2.3`, `0.2.0`) |
+| sha256.txt | SHA-256 checksums of every uploaded binary (`{hash}  {filename}` lines) |
+| sha512.txt | SHA-512 checksums of every uploaded binary (`{hash}  {filename}` lines) |
 | GitHub release | Yes, marked as latest |
 
 **Examples:** Git tag `v1.2.3` → Release `v1.2.3`, version.txt `1.2.3`. Git tag `0.2.0` → Release `v0.2.0`, version.txt `0.2.0`.
@@ -5366,6 +5376,8 @@ make build
 | Version format | `{YYYYMMDDHHMMSS}-beta` — TEXT, NO `v` prefix |
 | Release name | `{YYYYMMDDHHMMSS}-beta` (e.g., `20251205143022-beta`) |
 | version.txt | `{YYYYMMDDHHMMSS}-beta` |
+| sha256.txt | SHA-256 checksums of every uploaded binary (`{hash}  {filename}` lines) |
+| sha512.txt | SHA-512 checksums of every uploaded binary (`{hash}  {filename}` lines) |
 | GitHub release | Yes, marked as pre-release |
 
 ### Daily Build
@@ -5373,13 +5385,16 @@ make build
 | Property | Value |
 |----------|-------|
 | Trigger | Daily schedule (3am UTC) + push to main/master |
-| Version format | `{YYYYMMDDHHMMSS}` — TIMESTAMP, NO `v` prefix |
-| Release name | `daily` (single rolling release) |
-| version.txt | `{YYYYMMDDHHMMSS}` (e.g., `20251218060432`) |
+| Git tag | `daily` (single rolling tag, NOT a timestamp) |
+| Version format | Short commit id (`git rev-parse --short HEAD`) — NO `v` prefix |
+| Release name | `Daily Build {VERSION}` |
+| version.txt | Same as version format (e.g., `a1b2c3d`) |
+| sha256.txt | SHA-256 checksums of every uploaded binary (`{hash}  {filename}` lines) |
+| sha512.txt | SHA-512 checksums of every uploaded binary (`{hash}  {filename}` lines) |
 | GitHub release | Yes, **replaces previous daily** |
 | Max releases | **1** (always overwrites previous daily) |
 
-**Daily Build Rules:** Only ONE daily release exists at any time; each daily build **deletes and replaces** the previous `daily` release, preventing accumulation of thousands of releases.
+**Daily Build Rules:** Only ONE daily release exists at any time, identified by the rolling `daily` tag; each daily build **deletes and recreates** that `daily` release (`prerelease: true`), preventing accumulation of thousands of releases. Identity is the commit itself — `VERSION` is always the short commit id of the commit that triggered the build, never a stamped `release.txt` value or a timestamp.
 
 ### Version Tag Summary (Quick Reference)
 
@@ -5388,7 +5403,7 @@ make build
 | **Stable** | `v1.2.3` or `1.2.3` | ✓ YES (numbers) | `v1.2.3` | `1.2.3` |
 | **Stable** | `v0.2.0` or `0.2.0` | ✓ YES (numbers) | `v0.2.0` | `0.2.0` |
 | **Beta** | (branch push) | ✗ NO (timestamp) | `20251205-beta` | `20251205-beta` |
-| **Daily** | (branch push) | ✗ NO (timestamp) | `daily` | `20251218` |
+| **Daily** | `daily` (rolling tag) | ✗ NO (commit id) | `Daily Build {VERSION}` | `a1b2c3d` |
 | **Dev** | `dev` | ✗ NO (text) | `dev` | `dev` |
 
 **NEVER:** `vdev`, `vbeta`, `vdaily` (text versions never get v) · `v20251218` (timestamps never get v) · `vv1.2.3` (don't double the v).
@@ -5554,7 +5569,7 @@ RUN apk add --no-cache git bash
 
 ARG TARGETARCH
 ARG VERSION=dev
-ARG BUILD_DATE
+ARG BUILD_EPOCH
 ARG COMMIT_ID
 # Optional: set via --build-arg OFFICIAL_SITE=... (empty by default)
 ARG OFFICIAL_SITE
@@ -5565,10 +5580,10 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source and build
+# Copy source and build (no BuildDate ldflag - the binary derives it from BuildEpoch)
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
+    -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
     -o /app/binary/{project_name} ./src
 
 # =============================================================================
@@ -5579,6 +5594,7 @@ FROM alpine:latest
 # ARGs for build-time values (set by docker build --build-arg)
 ARG VERSION=dev
 ARG BUILD_DATE
+ARG BUILD_EPOCH
 ARG COMMIT_ID
 ARG LICENSE=MIT
 
@@ -6460,7 +6476,7 @@ Sources are checked in that order — the first one present wins; a later source
 Inject at build time via `-ldflags` `-X` flags:
 - version
 - commit ID
-- build date (ISO 8601 / RFC 3339 UTC)
+- build epoch (Unix seconds, UTC) — the single captured time source
 - official site (optional)
 
 **Example variable declarations:**
@@ -6471,12 +6487,33 @@ var (
     Version      = "devel"
     // overridden by: -ldflags="-X main.CommitID=$(git rev-parse --short HEAD)"
     CommitID     = "N/A"
-    // overridden by: -ldflags="-X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    // BuildDate is derived from BuildEpoch in init(); N/A when BuildEpoch is unset
     BuildDate    = "N/A"
+    // BuildEpoch is the Unix build timestamp (seconds, UTC); "0" when unset
+    // overridden by: -ldflags="-X main.BuildEpoch=$(date -u +%s)"
+    BuildEpoch   = "0"
     // overridden by: -ldflags="-X main.OfficialSite=$(cat site.txt)" — empty = users must use --server
     OfficialSite = ""
 )
+
+// buildEpoch parses the embedded BuildEpoch ldflag; 0 when unset or invalid
+func buildEpoch() int64 {
+    n, err := strconv.ParseInt(BuildEpoch, 10, 64)
+    if err != nil {
+        return 0
+    }
+    return n
+}
+
+// init derives BuildDate (RFC 3339 UTC) from the embedded BuildEpoch
+func init() {
+    if n := buildEpoch(); n > 0 {
+        BuildDate = time.Unix(n, 0).UTC().Format("2006-01-02T15:04:05Z")
+    }
+}
 ```
+
+Requires `"strconv"` and `"time"` in this file's imports.
 
 **Full release build command (logical form — run inside the Docker container, not on the host):**
 ```bash
@@ -6485,7 +6522,7 @@ go build \
   -ldflags="-s -w \
     -X main.Version=$(cat release.txt) \
     -X main.CommitID=$(git rev-parse --short HEAD) \
-    -X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+    -X main.BuildEpoch=$(date -u +%s) \
     -X main.OfficialSite=$(cat site.txt 2>/dev/null || true)" \
   -o binaries/{project_name}-linux-amd64 ./src
 ```
@@ -6498,7 +6535,8 @@ Every binary MUST have these values embedded at build time:
 |----------|---------|--------------|
 | `Version` | `1.2.3` | Semantic version from release.txt |
 | `CommitID` | `a1b2c3d` | Git short commit hash |
-| `BuildDate` | `2025-12-04T13:05:13Z` | Build timestamp (ISO 8601 / RFC 3339 UTC per `version_conventions.md`) |
+| `BuildDate` | `2025-12-04T13:05:13Z` | Derived from `BuildEpoch` in `init()` (RFC 3339 UTC) — not an ldflag |
+| `BuildEpoch` | `1765112713` | Unix build timestamp (seconds, UTC), the single captured time source — used by the updater's daily-channel check and to derive `BuildDate` |
 | `OfficialSite` | `https://api.example.com` | Default server URL (empty if self-hosted) |
 
 **Build date format:** Uses build system timezone or `TZ` env var.
@@ -18035,7 +18073,7 @@ Same underlying health response as `/server/healthz`, but formatted using the st
 
 - Stable: Semantic versioning `MAJOR.MINOR.PATCH` (e.g., `1.0.0`)
 - Beta: `YYYYMMDDHHMMSS-beta` (e.g., `20251205143022-beta`)
-- Daily: `YYYYMMDDHHMMSS` (e.g., `20251218060432`)
+- Daily: rolling tag `daily`, deleted and recreated nightly; VERSION = short commit id (`git rev-parse --short HEAD`, e.g., `a1b2c3d`) — identity is the commit, never a stamped `release.txt` value or a timestamp
 
 ### Sources (Priority Order)
 
@@ -20399,7 +20437,7 @@ formatURL(host, 8443, true)
 
 **Footer timestamp format:** `%B %d, %Y at %H:%M:%S %Z` → `December 04, 2025 at 13:05:13 EST` — anything user-facing MUST use this format; use `%Y-%m-%dT%H:%M:%S%:z` (RFC 3339) only where machine-readability matters (API responses, logs, health endpoints)
 
-**"Last update" MUST use build date, NEVER hardcoded.** Use `{build_datetime}` template variable which comes from `BUILD_DATE` at compile time. This ensures the footer always shows when the binary was built, not a static date in the source code.
+**"Last update" MUST use build date, NEVER hardcoded.** Use `{build_datetime}` template variable which comes from `BuildDate`, derived from the embedded `BuildEpoch` at startup (`init()`). This ensures the footer always shows when the binary was built, not a static date in the source code.
 
 **⚠️ DYNAMIC WIDTH: Banner width adapts to terminal size at runtime. Examples below show ≥80 col format. See "Responsive Startup Banner" section for all size variants (<40, 40-59, 60-79, ≥80 cols).**
 
@@ -30172,7 +30210,7 @@ Restoring...
 |--------|--------------|-------------|---------|
 | `stable` (default) | Release | `v*`, `*.*.*` | `v1.0.0` |
 | `beta` | Pre-release | `*-beta` | `202512051430-beta` |
-| `daily` | Pre-release | `YYYYMMDDHHMMSS` | `20251205143022` |
+| `daily` | Rolling pre-release | `daily` (recreated nightly) | `daily` |
 
 ### Examples
 
@@ -30218,7 +30256,7 @@ server:
 |---------|-----------|-----------|
 | `stable` (default) | Full releases only (`v*`, `*.*.*`) | Newest stable |
 | `beta` | Beta pre-releases (`*-beta`) + all stable releases | Newest of both — beta users are never stuck behind a stable release |
-| `daily` | Daily pre-releases (`YYYYMMDDHHMMSS`) + beta + stable | Newest overall |
+| `daily` | Rolling `daily` release (rebuilt nightly) + beta + stable | Newest overall |
 
 ### Defer Semantics (`defer_days`)
 
@@ -30405,13 +30443,16 @@ import (
     "os"
     "path/filepath"
     "runtime"
+    "strconv"
     "strings"
+    "time"
 )
 
 type Release struct {
-    TagName    string  `json:"tag_name"`
-    Prerelease bool    `json:"prerelease"`
-    Assets     []Asset `json:"assets"`
+    TagName     string    `json:"tag_name"`
+    Prerelease  bool      `json:"prerelease"`
+    PublishedAt time.Time `json:"published_at"`
+    Assets      []Asset   `json:"assets"`
 }
 
 type Asset struct {
@@ -30473,11 +30514,30 @@ func CheckForUpdate(ctx context.Context, currentVersion, branch string) (*Releas
     // first match is the newest release across the channel and all
     // more-stable channels (beta users are never stuck behind a stable release)
     for _, r := range releases {
-        if matchesBranch(r, branch) && r.TagName != currentVersion {
+        if !matchesBranch(r, branch) {
+            continue
+        }
+        if r.TagName == "daily" {
+            // Rolling tag: a newer nightly exists when the release was published after this binary was built
+            if r.PublishedAt.Unix() > buildEpoch() {
+                return &r, nil
+            }
+            continue
+        }
+        if r.TagName != currentVersion {
             return &r, nil
         }
     }
     return nil, nil
+}
+
+// buildEpoch parses the embedded BuildEpoch ldflag; 0 when unset or invalid
+func buildEpoch() int64 {
+    n, err := strconv.ParseInt(BuildEpoch, 10, 64)
+    if err != nil {
+        return 0
+    }
+    return n
 }
 
 // DoUpdate downloads and installs the update
@@ -30521,7 +30581,7 @@ func DoUpdate(ctx context.Context, release *Release) error {
     }
     tmpFile.Close()
 
-    // Verify SHA256 checksum against the release's checksums.txt (MANDATORY)
+    // Verify SHA256 checksum against the release's sha256.txt (MANDATORY)
     expectedHash, err := fetchExpectedChecksum(ctx, release, assetName)
     if err != nil {
         return fmt.Errorf("failed to fetch checksum: %w", err)
@@ -30564,18 +30624,18 @@ func getBinaryName() string {
     return name
 }
 
-// fetchExpectedChecksum downloads the release's checksums.txt asset and
+// fetchExpectedChecksum downloads the release's sha256.txt asset and
 // returns the SHA256 hash recorded for assetName
 func fetchExpectedChecksum(ctx context.Context, release *Release, assetName string) (string, error) {
     var checksumsURL string
     for _, asset := range release.Assets {
-        if asset.Name == "checksums.txt" {
+        if asset.Name == "sha256.txt" {
             checksumsURL = asset.BrowserDownloadURL
             break
         }
     }
     if checksumsURL == "" {
-        return "", fmt.Errorf("release has no checksums.txt asset")
+        return "", fmt.Errorf("release has no sha256.txt asset")
     }
 
     req, err := http.NewRequestWithContext(ctx, "GET", checksumsURL, nil)
@@ -30613,8 +30673,8 @@ func matchesBranch(r Release, branch string) bool {
         return true
     }
     isBeta := strings.HasSuffix(r.TagName, "-beta")
-    // Daily builds are timestamps: YYYYMMDDHHMMSS
-    isDaily := len(r.TagName) == 14 && !strings.Contains(r.TagName, ".")
+    // The daily channel is a single rolling release: tag "daily", rebuilt nightly
+    isDaily := r.TagName == "daily"
     switch branch {
     case "beta":
         return isBeta
@@ -32997,10 +33057,8 @@ for TARGET in "linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows
     -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false -e GOOS="$GOOS" -e GOARCH="$GOARCH" \
     casjaysdev/go:latest \
     go build -buildvcs=false -trimpath \
-      -ldflags="-s -w -X main.Version=$(cat release.txt) -X main.CommitID=$(git rev-parse --short HEAD) -X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      -ldflags="-s -w -X main.Version=$(cat release.txt) -X main.CommitID=$(git rev-parse --short HEAD) -X main.BuildEpoch=$(date -u +%s)" \
       -o "binaries/$ARTIFACT" ./src
-
-  sha256sum "binaries/$ARTIFACT" > "binaries/$ARTIFACT.sha256"
 
   # Verify static linkage on Linux
   if [ "$GOOS" = "linux" ]; then
@@ -33009,6 +33067,12 @@ for TARGET in "linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows
       sh -c "ldd binaries/$ARTIFACT 2>&1 | grep -qE 'not a dynamic executable|statically linked'"
   fi
 done
+
+# Consolidated sha256.txt/sha512.txt over every release asset in the dir — the file
+# list is pre-captured so both checksum files cover the identical asset set and
+# never hash each other or themselves; the updater downloads sha256.txt and
+# verifies the matching line before installing
+( cd binaries && FILES="$(ls)" && sha256sum $FILES > sha256.txt && sha512sum $FILES > sha512.txt )
 
 # Generate the SBOM (CycloneDX JSON) — published alongside the release artifacts.
 docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
@@ -33092,7 +33156,7 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 **CI/CD workflows MUST:**
 - Use explicit `go build` commands with all flags visible
 - Use CI-native caching (NOT local host paths)
-- Set VERSION, COMMIT_ID, BUILD_DATE explicitly
+- Set VERSION, COMMIT_ID, BUILD_DATE, BUILD_EPOCH explicitly
 - Build all platforms in matrix
 - Auto-cancel older in-progress runs for the same ref on push workflows targeting `main`, `master`, `devel`, `dev`, or `beta`
 
@@ -33149,9 +33213,10 @@ All workflows MUST set these environment variables:
 # Set in "Set build info" step, NOT as static env:
 #   if [ -f release.txt ]; then echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV; else echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV; fi
 #   echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-#   echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+#   BUILD_EPOCH="$(date -u +%s)"; echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
+#   echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV  # docker build-args/OCI labels only
 # Then use in build step:
-#   LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+#   LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
 ```
 
 ## CI Workflow (GitHub Actions)
@@ -33367,7 +33432,9 @@ jobs:
             echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
           fi
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          BUILD_EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -33382,7 +33449,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -33393,7 +33460,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -33484,7 +33551,15 @@ jobs:
 
       - name: Generate checksums
         run: |
-          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
+          # Consolidated sha256.txt/sha512.txt over every release asset (server + CLI
+          # binaries, version.txt, source tarball, SBOM) — the file list is pre-captured
+          # so both checksum files cover the identical asset set and never hash each
+          # other or themselves; the updater downloads sha256.txt and verifies the
+          # matching line before installing
+          cd binaries
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
@@ -33573,7 +33648,9 @@ jobs:
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          BUILD_EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -33588,7 +33665,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -33599,7 +33676,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -33644,7 +33721,15 @@ jobs:
 
       - name: Generate checksums
         run: |
-          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
+          # Consolidated sha256.txt/sha512.txt over every release asset (server + CLI
+          # binaries, version.txt, source tarball, SBOM) — the file list is pre-captured
+          # so both checksum files cover the identical asset set and never hash each
+          # other or themselves; the updater downloads sha256.txt and verifies the
+          # matching line before installing
+          cd binaries
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
@@ -33692,11 +33777,8 @@ jobs:
       - name: Compute version
         id: v
         run: |
-          if [ -f release.txt ]; then
-            VERSION="$(cat release.txt)"
-          else
-            VERSION="$(date -u +%Y%m%d%H%M%S)"
-          fi
+          # Daily identity is the commit itself, not a stamped release.txt version
+          VERSION="$(git rev-parse --short HEAD)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
   build:
@@ -33733,7 +33815,9 @@ jobs:
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          BUILD_EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -33748,7 +33832,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -33759,7 +33843,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -33804,7 +33888,15 @@ jobs:
 
       - name: Generate checksums
         run: |
-          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
+          # Consolidated sha256.txt/sha512.txt over every release asset (server + CLI
+          # binaries, version.txt, source tarball, SBOM) — the file list is pre-captured
+          # so both checksum files cover the identical asset set and never hash each
+          # other or themselves; the updater downloads sha256.txt and verifies the
+          # matching line before installing
+          cd binaries
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Delete previous daily release
         run: |
@@ -33909,7 +34001,9 @@ jobs:
             echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
             echo "IS_TAG=false" >> $GITHUB_ENV
           fi
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          BUILD_EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 
       - name: Determine tags (standard)
         id: tags
@@ -33940,6 +34034,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             org.opencontainers.image.vendor={project_org}
@@ -33994,7 +34089,9 @@ jobs:
       - name: Set build info
         run: |
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          BUILD_EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 
       - name: Build and push (devel)
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
@@ -34007,6 +34104,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel
           build-args: |
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             org.opencontainers.image.vendor={project_org}
@@ -34162,7 +34260,9 @@ jobs:
             echo "VERSION=${GITEA_REF_NAME#v}" >> $GITEA_ENV
           fi
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          BUILD_EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -34177,7 +34277,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -34188,7 +34288,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -34277,7 +34377,15 @@ jobs:
 
       - name: Generate checksums
         run: |
-          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
+          # Consolidated sha256.txt/sha512.txt over every release asset (server + CLI
+          # binaries, version.txt, source tarball, SBOM) — the file list is pre-captured
+          # so both checksum files cover the identical asset set and never hash each
+          # other or themselves; the updater downloads sha256.txt and verifies the
+          # matching line before installing
+          cd binaries
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
@@ -34359,7 +34467,9 @@ jobs:
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          BUILD_EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -34374,7 +34484,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -34385,7 +34495,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -34430,7 +34540,15 @@ jobs:
 
       - name: Generate checksums
         run: |
-          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
+          # Consolidated sha256.txt/sha512.txt over every release asset (server + CLI
+          # binaries, version.txt, source tarball, SBOM) — the file list is pre-captured
+          # so both checksum files cover the identical asset set and never hash each
+          # other or themselves; the updater downloads sha256.txt and verifies the
+          # matching line before installing
+          cd binaries
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
@@ -34477,11 +34595,8 @@ jobs:
       - name: Compute version
         id: v
         run: |
-          if [ -f release.txt ]; then
-            VERSION="$(cat release.txt)"
-          else
-            VERSION="$(date -u +%Y%m%d%H%M%S)"
-          fi
+          # Daily identity is the commit itself, not a stamped release.txt version
+          VERSION="$(git rev-parse --short HEAD)"
           echo "version=$VERSION" >> "$GITEA_OUTPUT"
 
   build:
@@ -34518,7 +34633,9 @@ jobs:
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          BUILD_EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -34533,7 +34650,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -34544,7 +34661,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -34589,7 +34706,15 @@ jobs:
 
       - name: Generate checksums
         run: |
-          for f in binaries/*; do sha256sum "$f" > "$f.sha256"; done
+          # Consolidated sha256.txt/sha512.txt over every release asset (server + CLI
+          # binaries, version.txt, source tarball, SBOM) — the file list is pre-captured
+          # so both checksum files cover the identical asset set and never hash each
+          # other or themselves; the updater downloads sha256.txt and verifies the
+          # matching line before installing
+          cd binaries
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Delete previous daily release
         run: |
@@ -34683,7 +34808,9 @@ jobs:
             echo "VERSION=$(git rev-parse --short HEAD)" >> $GITEA_ENV
             echo "IS_TAG=false" >> $GITEA_ENV
           fi
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          BUILD_EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
 
       - name: Determine tags (standard)
         id: tags
@@ -34717,6 +34844,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             org.opencontainers.image.vendor={project_org}
@@ -34778,7 +34906,9 @@ jobs:
       - name: Set build info
         run: |
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          BUILD_EPOCH="$(date -u +%s)"
+          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
 
       - name: Build and push (devel)
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
@@ -34791,6 +34921,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel
           build-args: |
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             org.opencontainers.image.vendor={project_org}
@@ -34909,7 +35040,8 @@ stages:
     # in casjaysdev/go:latest — never `apk add` or `go install` inside a CI job.
     - export VERSION="${CI_COMMIT_TAG#v}"
     - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
-    - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
+    - export BUILD_EPOCH="$(date -u +%s)"
+    - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
     # OFFICIAL_SITE (optional): site.txt wins; otherwise use CI/CD Variables or leave empty
     # Never guess or assume - must be explicitly defined by user
     - |
@@ -34918,7 +35050,7 @@ stages:
       else
         export OFFICIAL_SITE="${OFFICIAL_SITE:-}"
       fi
-    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
+    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
 
 # =============================================================================
 # RELEASE BUILDS (Tag Push: v* or semver)
@@ -35086,9 +35218,20 @@ release:
   script:
     - echo "Creating release ${CI_COMMIT_TAG}"
     - echo "${CI_COMMIT_TAG#v}" > version.txt
+    # Consolidated sha256.txt/sha512.txt over every release asset (version.txt +
+    # binaries) - the job runs in the full repo checkout, not an isolated directory,
+    # so the file list is explicitly scoped rather than a bare `ls`; pre-capturing it
+    # once (GitLab concatenates script items into one shell, so the var carries)
+    # ensures both checksum files cover the identical asset set and never hash
+    # each other or themselves
+    - FILES="version.txt ${PROJECT_NAME}-*"
+    - sha256sum $FILES > sha256.txt
+    - sha512sum $FILES > sha512.txt
   artifacts:
     paths:
       - version.txt
+      - sha256.txt
+      - sha512.txt
       - ${PROJECT_NAME}-*
   release:
     tag_name: $CI_COMMIT_TAG
@@ -35096,6 +35239,10 @@ release:
     description: "Release created by GitLab CI"
     assets:
       links:
+        - name: "sha256.txt"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/sha256.txt?job=release"
+        - name: "sha512.txt"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/sha512.txt?job=release"
         - name: "${PROJECT_NAME}-linux-amd64"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-linux-amd64?job=build:linux-amd64"
         - name: "${PROJECT_NAME}-linux-arm64"
@@ -35126,9 +35273,10 @@ build:beta:
     # All tooling is pre-installed in casjaysdev/go:latest — never `apk add` in a CI job
     - export VERSION="$(date +%Y%m%d%H%M%S)-beta"
     - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
-    - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
+    - export BUILD_EPOCH="$(date -u +%s)"
+    - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
     - if [ -f site.txt ]; then export OFFICIAL_SITE="$(cat site.txt)"; else export OFFICIAL_SITE="${OFFICIAL_SITE:-}"; fi
-    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
+    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
   script:
     # Build all 8 platforms
     - GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-linux-amd64 ./src
@@ -35165,11 +35313,13 @@ build:daily:
   stage: build
   before_script:
     # All tooling is pre-installed in casjaysdev/go:latest — never `apk add` in a CI job
-    - export VERSION="$(date +%Y%m%d%H%M%S)"
+    # Daily identity is the commit itself, not a stamped release.txt/timestamp version
+    - export VERSION="${CI_COMMIT_SHORT_SHA}"
     - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
-    - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
+    - export BUILD_EPOCH="$(date -u +%s)"
+    - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
     - if [ -f site.txt ]; then export OFFICIAL_SITE="$(cat site.txt)"; else export OFFICIAL_SITE="${OFFICIAL_SITE:-}"; fi
-    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
+    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
   script:
     # Build all 8 platforms
     - GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-linux-amd64 ./src
@@ -35229,7 +35379,8 @@ docker:build:
         VERSION="$CI_COMMIT_SHORT_SHA"
         TAGS="-t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
       fi
-      BUILD_DATE="$(date -Iseconds)"
+      BUILD_EPOCH="$(date -u +%s)"
+      BUILD_DATE="$(date -u -d "@${BUILD_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)"
     - |
       # Build multi-arch with OCI labels and manifest annotations
       docker buildx build \
@@ -35238,6 +35389,7 @@ docker:build:
         --build-arg VERSION="${VERSION}" \
         --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
+        --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
         --label "org.opencontainers.image.title=${PROJECT_NAME}" \
@@ -35287,13 +35439,15 @@ docker:build:devel:
     - docker buildx create --name multiarch-builder --use 2>/dev/null || docker buildx use multiarch-builder
   script:
     - |
-      BUILD_DATE="$(date -Iseconds)"
+      BUILD_EPOCH="$(date -u +%s)"
+      BUILD_DATE="$(date -u -d "@${BUILD_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)"
       docker buildx build \
         -f docker/Dockerfile.dev \
         --platform linux/amd64,linux/arm64 \
         --build-arg VERSION="${CI_COMMIT_SHORT_SHA}" \
         --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
+        --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
         --label "org.opencontainers.image.title=${PROJECT_NAME}" \
@@ -35474,19 +35628,21 @@ pipeline {
                         env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-beta'
                     } else if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
                         // Daily build - matches daily.yml
+                        // Daily identity is the commit itself, not a stamped release.txt/timestamp version
                         env.BUILD_TYPE = 'daily'
-                        env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim()
+                        env.VERSION = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     } else {
                         // Other branches - dev build
                         env.BUILD_TYPE = 'dev'
                         env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-dev'
                     }
                     env.COMMIT_ID = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    env.BUILD_DATE = sh(script: 'date +"%a %b %d, %Y at %H:%M:%S %Z"', returnStdout: true).trim()
+                    env.BUILD_EPOCH = sh(script: 'date -u +%s', returnStdout: true).trim()
+                    env.BUILD_DATE = sh(script: "date -u -d @${env.BUILD_EPOCH} +\"%Y-%m-%dT%H:%M:%SZ\"", returnStdout: true).trim()
                     // OFFICIAL_SITE (optional): site.txt wins; otherwise use Jenkins credentials or leave empty
                     // Never guess or assume - must be explicitly defined by user
                     env.OFFICIAL_SITE = sh(script: '[ -f site.txt ] && cat site.txt || echo "${OFFICIAL_SITE:-}"', returnStdout: true).trim()
-                    env.LDFLAGS = "-s -w -X 'main.Version=${env.VERSION}' -X 'main.CommitID=${env.COMMIT_ID}' -X 'main.BuildDate=${env.BUILD_DATE}' -X 'main.OfficialSite=${env.OFFICIAL_SITE}'"
+                    env.LDFLAGS = "-s -w -X 'main.Version=${env.VERSION}' -X 'main.CommitID=${env.COMMIT_ID}' -X 'main.BuildEpoch=${env.BUILD_EPOCH}' -X 'main.OfficialSite=${env.OFFICIAL_SITE}'"
                     env.HAS_CLI = sh(script: '[ -d src/client ] && echo true || echo false', returnStdout: true).trim()
                 }
                 sh 'mkdir -p ${BINDIR} ${RELDIR}'
@@ -35835,6 +35991,12 @@ pipeline {
                         --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
                         --exclude='*.tar.gz' \
                         -czf ${RELDIR}/${PROJECT_NAME}-${VERSION}-source.tar.gz .
+
+                    # Consolidated sha256.txt/sha512.txt over every release asset (version.txt,
+                    # binaries, source archive) - the file list is pre-captured so both checksum
+                    # files cover the identical asset set and never hash each other or themselves;
+                    # the updater downloads sha256.txt and verifies the matching line before installing
+                    ( cd ${RELDIR} && FILES="$(ls)" && sha256sum $FILES > sha256.txt && sha512sum $FILES > sha512.txt )
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
@@ -35854,6 +36016,12 @@ pipeline {
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
+
+                    # Consolidated sha256.txt/sha512.txt over every release asset (version.txt,
+                    # binaries) - the file list is pre-captured so both checksum files cover the
+                    # identical asset set and never hash each other or themselves; the updater
+                    # downloads sha256.txt and verifies the matching line before installing
+                    ( cd ${RELDIR} && FILES="$(ls)" && sha256sum $FILES > sha256.txt && sha512sum $FILES > sha512.txt )
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
@@ -35873,6 +36041,12 @@ pipeline {
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
+
+                    # Consolidated sha256.txt/sha512.txt over every release asset (version.txt,
+                    # binaries) - the file list is pre-captured so both checksum files cover the
+                    # identical asset set and never hash each other or themselves; the updater
+                    # downloads sha256.txt and verifies the matching line before installing
+                    ( cd ${RELDIR} && FILES="$(ls)" && sha256sum $FILES > sha256.txt && sha512sum $FILES > sha512.txt )
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
@@ -35913,6 +36087,7 @@ pipeline {
                             --build-arg VERSION="${VERSION}" \
                             --build-arg COMMIT_ID="${COMMIT_ID}" \
                             --build-arg BUILD_DATE="${BUILD_DATE}" \
+                            --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
                             --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.title=${PROJECT_NAME}" \
@@ -35967,6 +36142,7 @@ pipeline {
                             --build-arg VERSION="${COMMIT_ID}" \
                             --build-arg COMMIT_ID="${COMMIT_ID}" \
                             --build-arg BUILD_DATE="${BUILD_DATE}" \
+                            --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
                             --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.title=${PROJECT_NAME}" \

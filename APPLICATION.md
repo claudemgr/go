@@ -380,7 +380,7 @@ Distribution artifact names use Go's native GOOS/GOARCH terms directly — no ma
 **Other rules:**
 - Local (in-tree) primary binary name: `{project_name}` (no platform/arch suffix during local development inside the Docker image)
 - If optional helper binaries exist, use `{project_name}-{tool}` for the in-tree name and `{project_name}-{tool}-{GOOS}-{GOARCH}{.ext}` for distribution
-- Checksum files mirror the artifact name plus `.sha256` (e.g., `{project_name}-linux-amd64.sha256`)
+- Release checksums are aggregate: `sha256.txt` and `sha512.txt` in the artifact directory cover every published artifact (standard `sha256sum` / `sha512sum` `{hash}  {filename}` lines) — no per-artifact sidecar checksum files
 
 **Single-binary rule:** the default user experience is "download one file, run it." The primary binary MUST be self-sufficient (PART 0 → "Self-Contained Assets"). Helper binaries are not a substitute for putting features into the primary binary; if a feature can live behind a CLI subcommand of the primary binary, it MUST.
 
@@ -658,7 +658,7 @@ Bare `go …` invocations on the host are forbidden by PART 0 → "No Host Toolc
 
 - **Pure Go by default** — `CGO_ENABLED=0` always; every dependency is pure Go unless a specific exception is documented in `IDEA.md` (PART 0 → "Go-Only Application")
 - Release builds use `go build` with `-ldflags="-s -w"` to strip symbols, reducing binary size
-- Use `-ldflags="-X main.Version=…"` (and similar `-X` flags) to inject version, commit ID, and build date at compile time
+- Use `-ldflags="-X main.Version=…"` (and similar `-X` flags) to inject version, commit ID, and build epoch at compile time (`BuildDate` is derived from `BuildEpoch` at process start, never embedded)
 - The final artifact MUST be a single statically linked binary per target (PART 0 → "Single Static Binary")
 - Set `GOOS`, `GOARCH`, and `CGO_ENABLED=0` as environment variables when cross-compiling inside the Docker image
 - All runtime assets are embedded at compile time via `//go:embed`; the repo's `assets/` directory is build-time input only (PART 0 → "Self-Contained Assets")
@@ -666,30 +666,53 @@ Bare `go …` invocations on the host are forbidden by PART 0 → "No Host Toolc
 
 ## Build Metadata
 
-Inject version, commit ID, build date, and official site via `-ldflags`:
+Inject version, commit ID, build epoch, and official site via `-ldflags`. `BuildDate` is never embedded — it is derived from `BuildEpoch` at process start:
 
 ```go
-// Version injected at build time via -ldflags
+// Build info - BuildEpoch is set via -ldflags at build time; BuildDate is derived from it
 var (
     // overridden by: -ldflags="-X main.Version=$(cat release.txt)"
     Version      = "devel"
     // overridden by: -ldflags="-X main.CommitID=$(git rev-parse --short HEAD)"
     CommitID     = "N/A"
-    // overridden by: -ldflags="-X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    // BuildDate is derived from BuildEpoch in init(); "N/A" when BuildEpoch is unset
     BuildDate    = "N/A"
+    // overridden by: -ldflags="-X 'main.BuildEpoch=${BUILD_EPOCH}'" - Unix build timestamp (seconds, UTC)
+    BuildEpoch   = "0"
     // overridden by: -ldflags="-X main.OfficialSite=$(cat site.txt)"
     OfficialSite = ""
 )
+
+// buildEpoch parses the embedded BuildEpoch ldflag; 0 when unset or invalid.
+// Requires "strconv" in this file's import block.
+func buildEpoch() int64 {
+    n, err := strconv.ParseInt(BuildEpoch, 10, 64)
+    if err != nil {
+        return 0
+    }
+    return n
+}
+
+// init derives BuildDate (RFC 3339 UTC) from the embedded BuildEpoch
+// Requires "time" in this file's import block.
+func init() {
+    if n := buildEpoch(); n > 0 {
+        BuildDate = time.Unix(n, 0).UTC().Format("2006-01-02T15:04:05Z")
+    }
+}
 ```
 
 **Full release build command (logical form — run inside the Docker container, not on the host):**
 ```bash
+# BUILD_EPOCH is the single captured time source - captured once per build
+BUILD_EPOCH="$(date -u +%s)"
+
 go build \
   -buildvcs=false -trimpath \
   -ldflags="-s -w \
     -X main.Version=$(cat release.txt) \
     -X main.CommitID=$(git rev-parse --short HEAD) \
-    -X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+    -X 'main.BuildEpoch=${BUILD_EPOCH}' \
     -X main.OfficialSite=$(cat site.txt 2>/dev/null || true)" \
   -o binaries/{project_name}-linux-amd64 ./src
 ```
@@ -738,7 +761,7 @@ The `assets/` directory in the repo holds source files (fonts, icons, default th
 - Each release MUST publish artifacts for at minimum: `{project_name}-linux-amd64`, `{project_name}-linux-arm64`, `{project_name}-darwin-amd64`, `{project_name}-darwin-arm64`, `{project_name}-windows-amd64.exe`, `{project_name}-windows-arm64.exe`, `{project_name}-freebsd-amd64`, `{project_name}-freebsd-arm64` (subset acceptable only when IDEA.md narrows platform scope)
 - A static-linkage verification step is part of release: `ldd` / `otool -L` / `dumpbin /dependents` output is captured and checked against an allowlist (kernel vDSO, Apple system frameworks, Windows kernel32/user32 etc.) — anything outside the allowlist fails the release
 - No companion files (no `.so`, `.dylib`, `.dll`, no asset bundles, no font directories) ship next to the binary
-- Include SHA-256 checksums for every published artifact, named `{artifact}.sha256`
+- Include aggregate `sha256.txt` and `sha512.txt` checksum files covering every published artifact, uploaded as release assets alongside the binaries
 - Include release notes that describe actual changes
 - Include an SBOM (always — generated via `cyclonedx-gomod`; see PART 10 → "Suggested CI Steps" for the invocation). Include provenance/attestation via `actions/attest-build-provenance` when the release platform supports it; always set `provenance: false` on `docker/build-push-action` steps
 - If GUI packaging exists (MSI, DMG, AppImage, deb, rpm, etc.), the package wraps the same single static binary plus desktop integration metadata; package metadata lives in `packaging/`
@@ -959,16 +982,21 @@ docker run --rm \
 Inject at build time via `-ldflags` `-X` flags:
 - version
 - commit ID
-- build date
+- build epoch (Unix seconds, UTC — the single captured build time)
 - official site (optional)
+
+`BuildDate` is not an ldflag — it is derived from `BuildEpoch` at process start (see PART 5 → "Build Metadata" for the `buildEpoch()` helper and `init()` derivation).
 
 **Example variable declarations:**
 ```go
-// Version injected at build time via -ldflags
+// Build info - BuildEpoch is set via -ldflags at build time; BuildDate is derived from it
 var (
     Version      = "devel"
     CommitID     = "N/A"
+    // BuildDate is derived from BuildEpoch in init(); "N/A" when BuildEpoch is unset
     BuildDate    = "N/A"
+    // BuildEpoch is the Unix build timestamp (seconds, UTC) set via -ldflags; "0" when unset
+    BuildEpoch   = "0"
     OfficialSite = ""
 )
 ```
@@ -982,13 +1010,17 @@ RELDIR      := releases
 
 VERSION     ?= $(shell cat release.txt 2>/dev/null || echo "devel")
 COMMIT_ID   := $(shell git rev-parse --short HEAD 2>/dev/null || echo "N/A")
-BUILD_DATE  := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+# BUILD_EPOCH is the single captured time source - captured once per build
+BUILD_EPOCH := $(shell date -u +%s)
+# Derived from BUILD_EPOCH - used only for the Docker OCI created annotation; not an ldflag
+BUILD_DATE  := $(shell date -u -d @$(BUILD_EPOCH) +"%Y-%m-%dT%H:%M:%SZ")
 SITE        := $(shell cat site.txt 2>/dev/null || true)
 
+# BuildDate is NOT embedded - it is derived from BuildEpoch at process start
 LDFLAGS := -s -w \
   -X main.Version=$(VERSION) \
   -X main.CommitID=$(COMMIT_ID) \
-  -X main.BuildDate=$(BUILD_DATE) \
+  -X 'main.BuildEpoch=$(BUILD_EPOCH)' \
   -X main.OfficialSite=$(SITE)
 
 GO_CACHE  ?= $(HOME)/go/pkg/mod
@@ -1044,6 +1076,7 @@ release:
 	done
 	@cp $(BINDIR)/$(PROJECTNAME)-* $(RELDIR)/
 	@echo "$(VERSION)" > $(RELDIR)/version.txt
+	@cd $(RELDIR) && FILES="$$(ls)" && sha256sum $$FILES > sha256.txt && sha512sum $$FILES > sha512.txt
 
 docker:
 	docker buildx build \
@@ -1051,6 +1084,7 @@ docker:
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT_ID=$(COMMIT_ID) \
 		--build-arg BUILD_DATE=$(BUILD_DATE) \
+		--build-arg BUILD_EPOCH=$(BUILD_EPOCH) \
 		-t $(REGISTRY):$(VERSION) -t $(REGISTRY):latest \
 		-f docker/Dockerfile .
 
@@ -1674,6 +1708,8 @@ Build failed → this is a bug, not a note for later; diagnose the root cause an
 
 CI runs every Go step inside `casjaysdev/go:latest`. CI MUST NOT install a Go toolchain on the runner and call `go` directly — and MUST NOT run quality-gate commands inside the runtime image (`docker/Dockerfile`), which contains only the final binary. Use `casjaysdev/go:latest` for all build, test, lint, and vet steps.
 
+**Single time source (all providers — GitHub Actions, Gitea/Forgejo, GitLab CI, Jenkins):** every CI job that builds binaries or images captures `BUILD_EPOCH="$(date -u +%s)"` exactly once (GitHub / Gitea / Forgejo: `echo "BUILD_EPOCH=${BUILD_EPOCH}" >> "$GITHUB_ENV"`; GitLab CI and Jenkins: a shell/environment variable set at the top of the stage). Every ldflags string passes `-X 'main.BuildEpoch=${BUILD_EPOCH}'`, every image build passes `--build-arg BUILD_EPOCH="${BUILD_EPOCH}"`, and `BUILD_DATE` is only ever derived from it — `BUILD_DATE="$(date -u -d "@${BUILD_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)"` — where an OCI `org.opencontainers.image.created` annotation needs it. `BUILD_DATE` is never independently captured and never embedded via ldflags.
+
 ### Required Concurrency and Retention Headers
 
 Every push/PR workflow (`ci.yml`) MUST declare:
@@ -1700,6 +1736,11 @@ Every `actions/upload-artifact` step MUST set a finite `retention-days`:
 ```bash
 # Prepare output directory for release artifacts (binaries, checksums, SBOM)
 mkdir -p binaries
+
+# BUILD_EPOCH is the single captured time source - captured once per job.
+# BUILD_DATE is derived from it and used only for Docker OCI created annotations - never an ldflag
+BUILD_EPOCH="$(date -u +%s)"
+BUILD_DATE="$(date -u -d "@${BUILD_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)"
 
 # Run quality gates inside casjaysdev/go:latest
 docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
@@ -1740,10 +1781,8 @@ for TARGET in "linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows
     -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false -e GOOS="$GOOS" -e GOARCH="$GOARCH" \
     casjaysdev/go:latest \
     go build -buildvcs=false -trimpath \
-      -ldflags="-s -w -X main.Version=$(cat release.txt) -X main.CommitID=$(git rev-parse --short HEAD) -X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      -ldflags="-s -w -X main.Version=$(cat release.txt) -X main.CommitID=$(git rev-parse --short HEAD) -X 'main.BuildEpoch=${BUILD_EPOCH}'" \
       -o "binaries/$ARTIFACT" ./src
-
-  sha256sum "binaries/$ARTIFACT" > "binaries/$ARTIFACT.sha256"
 
   # Verify static linkage on Linux
   if [ "$GOOS" = "linux" ]; then
@@ -1757,6 +1796,11 @@ done
 docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
   -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest cyclonedx-gomod app -json -output "binaries/{project_name}-bom.json"
+
+# Generate aggregate checksums over every release artifact - the file list is
+# pre-captured so sha256.txt / sha512.txt never hash themselves; both files are
+# uploaded as release assets alongside the binaries
+(cd binaries && FILES="$(ls)" && sha256sum $FILES > sha256.txt && sha512sum $FILES > sha512.txt)
 ```
 
 For GUI smoke tests in CI, use a virtual X server (e.g., `Xvfb`) and a headless Wayland compositor (e.g., `cage`, `weston --backend=headless`) **inside** the container or as a sidecar service — both backends MUST be exercised, not just one.
@@ -1808,7 +1852,7 @@ The `release` job already has `contents: write` to push assets — this covers t
 
 Tagged/manual releases should publish:
 - binaries/packages
-- SHA-256 checksum file
+- aggregate `sha256.txt` and `sha512.txt` checksum files covering every artifact
 - release notes
 - SBOM (`CycloneDX` from `cyclonedx-gomod`; `SPDX JSON` is acceptable if a project chooses that format instead) — always
 - provenance / attestation — when the release platform supports it
@@ -2110,7 +2154,7 @@ All gates run inside the project Docker image — never on the host.
 - [ ] Version comes from `release.txt` when present
 - [ ] Official site comes from `site.txt` when present
 - [ ] Release notes match actual changes
-- [ ] Checksums (SHA-256) are published for every artifact
+- [ ] Aggregate `sha256.txt` and `sha512.txt` checksum files are published, covering every artifact
 - [ ] Each release artifact is a single statically linked binary — no companion `.so` / `.dylib` / `.dll` / asset bundle
 - [ ] Static-linkage check (`ldd` / `otool -L` / `dumpbin /dependents`) was run and recorded for every published target
 - [ ] `LICENSE.md` regenerated and committed if `go.sum` changed; CI license-drift check is green

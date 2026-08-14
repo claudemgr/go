@@ -660,7 +660,7 @@ if cacheSize > 1024*1024*1024 {
 | **NEVER use Makefile in CI** | Workflows have explicit commands with all env vars |
 | **GitHub/Gitea/Jenkins must match** | Same platforms, same env vars, same logic |
 | **VERSION precedence** | `release.txt` wins when present; otherwise use the workflow/build-specific fallback (tag, beta timestamp, etc.) |
-| **LDFLAGS** | `-s -w -X 'main.Version=...' -X 'main.CommitID=...' -X 'main.BuildDate=...' -X 'main.OfficialSite=...'` |
+| **LDFLAGS** | `-s -w -X 'main.Version=...' -X 'main.CommitID=...' -X 'main.BuildEpoch=...' -X 'main.OfficialSite=...'` (BuildDate is NOT an ldflag — derived from BuildEpoch in `init()`) |
 | **Docker builds on EVERY push** | Any branch push triggers Docker image build |
 | **Docker tags** | Any push → `{commit}`; beta → adds `beta`; tag → `{version}`, `latest`, `YYMM`, `{commit}` |
 | **Devel image is a job in docker.yml** | `:devel` is built from `docker/Dockerfile.dev` by the `build-devel` job inside the same `docker.yml` workflow (schedule + non-tag push, gated by `if:`) — never a separate file |
@@ -20454,7 +20454,7 @@ When not in cluster mode:
 
 - Stable: Semantic versioning `MAJOR.MINOR.PATCH` (e.g., `1.0.0`)
 - Beta: `YYYYMMDDHHMMSS-beta` (e.g., `20251205143022-beta`)
-- Daily: `YYYYMMDDHHMMSS` (e.g., `20251218060432`)
+- Daily: short commit id (e.g., `a1b2c3d`) - the daily release's identity is the commit, not a timestamp
 
 ### Sources (Priority Order)
 
@@ -22870,7 +22870,7 @@ formatURL(host, 8443, true)
 
 **Footer timestamp format:** `%B %d, %Y at %H:%M:%S %Z` → `December 04, 2025 at 13:05:13 EST` — anything user-facing MUST use this format; use `%Y-%m-%dT%H:%M:%S%:z` (RFC 3339) only where machine-readability matters (API responses, logs, health endpoints)
 
-**"Last update" MUST use build date, NEVER hardcoded.** Use `{build_datetime}` template variable which comes from `BUILD_DATE` at compile time. This ensures the footer always shows when the binary was built, not a static date in the source code.
+**"Last update" MUST use build date, NEVER hardcoded.** Use `{build_datetime}` template variable, which derives from `BuildEpoch` (embedded via `-ldflags` at compile time) through the `init()`-computed `BuildDate`. This ensures the footer always shows when the binary was built, not a static date in the source code.
 
 **⚠️ DYNAMIC WIDTH: Banner width adapts to terminal size at runtime. Examples below show ≥80 col format. See "Responsive Startup Banner" section for all size variants (<40, 40-59, 60-79, ≥80 cols).**
 
@@ -36511,7 +36511,7 @@ POST /api/{api_version}/server/{admin_path}/config/backup/restore
 |--------|--------------|-------------|---------|
 | `stable` (default) | Release | `v*`, `*.*.*` | `v1.0.0` |
 | `beta` | Pre-release | `*-beta` | `202512051430-beta` |
-| `daily` | Pre-release | `YYYYMMDDHHMMSS` | `20251205143022` |
+| `daily` | Pre-release | `daily` (rolling tag, deleted and recreated nightly) | `daily` |
 
 ### Examples
 
@@ -36557,7 +36557,7 @@ server:
 |---------|-----------|-----------|
 | `stable` (default) | Full releases only (`v*`, `*.*.*`) | Newest stable |
 | `beta` | Beta pre-releases (`*-beta`) + all stable releases | Newest of both — beta users are never stuck behind a stable release |
-| `daily` | Daily pre-releases (`YYYYMMDDHHMMSS`) + beta + stable | Newest overall |
+| `daily` | The rolling `daily` pre-release (rebuilt nightly) + beta + stable | Newest overall |
 
 ### Defer Semantics (`defer_days`)
 
@@ -36743,6 +36743,7 @@ import (
     "os"
     "path/filepath"
     "runtime"
+    "strconv"
     "strings"
     "time"
 )
@@ -36822,7 +36823,19 @@ func CheckForUpdate(ctx context.Context, currentVersion, branch string) (*Releas
             newest = r
         }
     }
-    if newest == nil || newest.TagName == currentVersion || !newest.PublishedAt.After(currentPublished) {
+    if newest == nil {
+        return nil, nil
+    }
+    if newest.TagName == "daily" {
+        // The daily channel is a single rolling release recreated nightly; its tag
+        // never matches currentVersion, so compare publish time against this
+        // binary's own build time instead
+        if newest.PublishedAt.Unix() <= buildEpoch() {
+            return nil, nil
+        }
+        return newest, nil
+    }
+    if newest.TagName == currentVersion || !newest.PublishedAt.After(currentPublished) {
         return nil, nil
     }
     return newest, nil
@@ -36837,7 +36850,7 @@ func DoUpdate(ctx context.Context, release *Release) error {
         if asset.Name == assetName {
             downloadURL = asset.BrowserDownloadURL
         }
-        if asset.Name == assetName+".sha256" {
+        if asset.Name == "sha256.txt" {
             checksumURL = asset.BrowserDownloadURL
         }
     }
@@ -36846,7 +36859,7 @@ func DoUpdate(ctx context.Context, release *Release) error {
     }
     // Checksum verification is MANDATORY - refuse to update without it
     if checksumURL == "" {
-        return fmt.Errorf("no checksum asset found for %s - refusing unverified update", assetName)
+        return fmt.Errorf("no sha256.txt asset found in release - refusing unverified update")
     }
 
     // Download to temp file
@@ -36876,7 +36889,7 @@ func DoUpdate(ctx context.Context, release *Release) error {
     tmpFile.Close()
 
     // Verify SHA256 checksum before touching the installed binary (update flow step 3)
-    expectedHash, err := fetchChecksum(ctx, checksumURL)
+    expectedHash, err := fetchChecksum(ctx, checksumURL, assetName)
     if err != nil {
         return fmt.Errorf("failed to fetch checksum: %w", err)
     }
@@ -36920,8 +36933,8 @@ func getBinaryName() string {
 
 // matchesBranch implements cumulative channels: beta = beta + stable, daily = all
 func matchesBranch(r Release, branch string) bool {
-    // Daily builds are timestamps: YYYYMMDDHHMMSS
-    isDaily := len(r.TagName) == 14 && !strings.Contains(r.TagName, ".")
+    // The daily channel is a single rolling release: tag "daily", rebuilt nightly
+    isDaily := r.TagName == "daily"
     isBeta := strings.HasSuffix(r.TagName, "-beta")
     isStable := !r.Prerelease && !isDaily && !isBeta
     switch branch {
@@ -36932,6 +36945,15 @@ func matchesBranch(r Release, branch string) bool {
     default:
         return isStable
     }
+}
+
+// buildEpoch parses the embedded BuildEpoch ldflag; 0 when unset or invalid
+func buildEpoch() int64 {
+    n, err := strconv.ParseInt(BuildEpoch, 10, 64)
+    if err != nil {
+        return 0
+    }
+    return n
 }
 ```
 
@@ -37020,12 +37042,13 @@ func restartBSDService() error {
 
 ### Update Checksum Verification
 
-**All downloads MUST be verified against checksums from the release:**
+**All downloads MUST be verified against the release's `sha256.txt` asset before the installed binary is touched:**
 
 ```go
-// fetchChecksum downloads the .sha256 asset and returns the expected hex digest
-// (first whitespace-separated field, tolerating "hash  filename" format)
-func fetchChecksum(ctx context.Context, url string) (string, error) {
+// fetchChecksum downloads the release's sha256.txt (standard sha256sum
+// output: "{hash}  {filename}" per line) and returns the hex digest for the
+// line matching assetName
+func fetchChecksum(ctx context.Context, url, assetName string) (string, error) {
     req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
     if err != nil {
         return "", err
@@ -37038,15 +37061,17 @@ func fetchChecksum(ctx context.Context, url string) (string, error) {
     if resp.StatusCode != 200 {
         return "", fmt.Errorf("checksum download failed: %d", resp.StatusCode)
     }
-    body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+    body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
     if err != nil {
         return "", err
     }
-    fields := strings.Fields(string(body))
-    if len(fields) == 0 {
-        return "", fmt.Errorf("empty checksum file")
+    for _, line := range strings.Split(string(body), "\n") {
+        fields := strings.Fields(line)
+        if len(fields) == 2 && fields[1] == assetName {
+            return fields[0], nil
+        }
     }
-    return fields[0], nil
+    return "", fmt.Errorf("no checksum entry for %s in sha256.txt", assetName)
 }
 
 // verifyChecksum verifies SHA256 checksum
@@ -38487,9 +38512,13 @@ PROJECT_ORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/
 # Version precedence: VERSION env (?= respects it) > release.txt > "devel" fallback
 VERSION ?= $(shell cat release.txt 2>/dev/null || echo "devel")
 
-# Build info — ISO 8601 / RFC 3339 UTC per version_conventions.md
+# BuildEpoch — Unix build timestamp (seconds, UTC); the single captured time
+# source. Lets the updater detect a newer daily build; BUILD_DATE below is
+# derived from it, not captured independently.
+BUILD_EPOCH := $(shell date -u +%s)
+# Build info — ISO 8601 / RFC 3339 UTC per version_conventions.md, derived from BUILD_EPOCH
 # Format: "2025-12-04T13:05:13Z"
-BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+BUILD_DATE := $(shell date -u -d @$(BUILD_EPOCH) +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "N/A")
 # COMMIT_ID used directly - no VCS_REF alias
 
@@ -38502,10 +38531,11 @@ COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "N/A")
 OFFICIAL_SITE := $(shell [ -f site.txt ] && cat site.txt || echo "$${OFFICIAL_SITE:-}")
 
 # Linker flags to embed build info
+# BuildDate is NOT embedded here - it is derived from BuildEpoch in the app's init()
 LDFLAGS := -s -w \
 	-X 'main.Version=$(VERSION)' \
 	-X 'main.CommitID=$(COMMIT_ID)' \
-	-X 'main.BuildDate=$(BUILD_DATE)' \
+	-X 'main.BuildEpoch=$(BUILD_EPOCH)' \
 	-X 'main.OfficialSite=$(OFFICIAL_SITE)'
 
 # Directories
@@ -38689,6 +38719,7 @@ docker:
 		--platform linux/amd64,linux/arm64 \
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg BUILD_DATE="$(BUILD_DATE)" \
+		--build-arg BUILD_EPOCH="$(BUILD_EPOCH)" \
 		--build-arg COMMIT_ID="$(COMMIT_ID)" \
 		--build-arg OFFICIAL_SITE="$(OFFICIAL_SITE)" \
 		-t $(REGISTRY):$(VERSION) \
@@ -38751,7 +38782,8 @@ Every binary MUST have these values embedded at build time:
 |----------|---------|-------------|
 | `Version` | `1.2.3` | Semantic version from release.txt |
 | `CommitID` | `a1b2c3d` | Git short commit hash |
-| `BuildDate` | `2025-12-04T13:05:13Z` | Build timestamp (ISO 8601 / RFC 3339 UTC per `version_conventions.md`) |
+| `BuildDate` | `2025-12-04T13:05:13Z` | Build timestamp (ISO 8601 / RFC 3339 UTC per `version_conventions.md`) — derived from `BuildEpoch` in `init()`, NOT set via `-ldflags` |
+| `BuildEpoch` | `1765112713` | Unix build timestamp (seconds, UTC), set via `-ldflags` — the single captured time source; used by the updater's daily-channel check and to derive `BuildDate` |
 | `OfficialSite` | `https://api.example.com` | Default server URL (empty if self-hosted) |
 
 **Go code requirement** (in `main.go` or `version.go`):
@@ -38761,13 +38793,23 @@ Every binary MUST have these values embedded at build time:
 var (
     Version      = "devel"
     CommitID     = "N/A"
+    // BuildDate is derived from BuildEpoch in init(); "N/A" when BuildEpoch is unset
     BuildDate    = "N/A"
+    // BuildEpoch is the Unix build timestamp (seconds, UTC) set via -ldflags; "0" when unset
+    BuildEpoch   = "0"
     // Empty = users must use --server flag
     OfficialSite = ""
 )
+
+// init derives BuildDate (RFC 3339 UTC) from the embedded BuildEpoch
+func init() {
+    if n := buildEpoch(); n > 0 {
+        BuildDate = time.Unix(n, 0).UTC().Format("2006-01-02T15:04:05Z")
+    }
+}
 ```
 
-**Build date format:** Uses build system timezone or `TZ` env var.
+**Build date format:** RFC 3339 UTC, derived from `BuildEpoch` at process start — not build-system timezone dependent.
 
 **OfficialSite usage:** If set, CLI/Agent use this as default `--server` value. If empty, users must provide `--server` flag or configure in cli.yml/agent.yml.
 
@@ -38797,7 +38839,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 5. Builds local binary: `binaries/{project_name}`
 6. Builds all platform binaries: `binaries/{project_name}-{os}-{arch}`
 7. Uses `CGO_ENABLED=0` for static binaries
-8. Embeds Version, CommitID, BuildDate via `-ldflags`
+8. Embeds Version, CommitID, BuildEpoch, OfficialSite via `-ldflags` (BuildDate is derived from BuildEpoch in `init()`, not embedded)
 9. All builds via Docker (`casjaysdev/go:latest`)
 
 ### `make release`
@@ -38817,7 +38859,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 3. Context is project root, Dockerfile at `docker/Dockerfile`
 4. Builds for `linux/amd64` and `linux/arm64`
 5. Tags as `$REGISTRY:{version}` and `:latest` — no push (pushing is CI/CD's responsibility)
-6. Passes VERSION, BUILD_DATE, COMMIT_ID as build args
+6. Passes VERSION, BUILD_DATE, BUILD_EPOCH, COMMIT_ID as build args
 7. Layer caching: Go modules cached in builder stage
 
 ### `make test`
@@ -38997,7 +39039,9 @@ The **only** time binaries are copied is during CI/CD release process, where the
 
 | File | Description | Example Content |
 |------|-------------|-----------------|
-| `version.txt` | Version string only | `1.2.3`, `20251218060432-beta`, `20251218060432` |
+| `version.txt` | Version string only | `1.2.3`, `20251218060432-beta`, `a1b2c3d` |
+| `sha256.txt` | SHA-256 checksums for all uploaded binaries (`sha256sum` output) | `{hash}  {filename}` per line |
+| `sha512.txt` | SHA-512 checksums for all uploaded binaries (`sha512sum` output) | `{hash}  {filename}` per line |
 | `{project_name}-{version}-source.tar.gz` | Source code archive | Excludes `.git`, `.github`, `binaries/`, `releases/` |
 
 ### version.txt Content
@@ -39006,7 +39050,7 @@ The **only** time binaries are copied is during CI/CD release process, where the
 |--------------|---------------------|
 | Stable | `1.2.3` (semver without `v` prefix) |
 | Beta | `20251205143022-beta` (timestamp-beta) |
-| Daily | `20251218060432` (timestamp only) |
+| Daily | `a1b2c3d` (short commit id - the daily release's identity is the commit, not a timestamp) |
 
 ## Release Types
 
@@ -39044,15 +39088,15 @@ The **only** time binaries are copied is during CI/CD release process, where the
 | Property | Value |
 |----------|-------|
 | Trigger | Daily schedule (3am UTC) + push to main/master |
-| Version format | `{YYYYMMDDHHMMSS}` - TIMESTAMP, NO `v` prefix |
-| Release name | `daily` (single rolling release) |
-| version.txt | `{YYYYMMDDHHMMSS}` (e.g., `20251218060432`) |
+| Version format | Short commit id (`git rev-parse --short HEAD`) - NO `v` prefix |
+| Release name | `daily` (single rolling release; the release NAME shown in-app is `Daily Build {commit_id}`) |
+| version.txt | Short commit id (e.g., `a1b2c3d`) |
 | GitHub release | Yes, **replaces previous daily** |
 | Max releases | **1** (always overwrites previous daily) |
 
 **Example:**
-- Daily build → Release name `daily`, version.txt `20251218060432`
-- NO `v` prefix (not a semantic version)
+- Daily build → Release tag `daily`, version.txt `a1b2c3d`
+- NO `v` prefix (not a semantic version); NO timestamp - daily identity is the commit
 
 **Daily Build Rules:**
 - Only ONE daily release exists at any time
@@ -39066,12 +39110,12 @@ The **only** time binaries are copied is during CI/CD release process, where the
 | **Stable** | `v1.2.3` or `1.2.3` | ✓ YES (numbers) | `v1.2.3` | `1.2.3` |
 | **Stable** | `v0.2.0` or `0.2.0` | ✓ YES (numbers) | `v0.2.0` | `0.2.0` |
 | **Beta** | (branch push) | ✗ NO (timestamp) | `20251205-beta` | `20251205-beta` |
-| **Daily** | (branch push) | ✗ NO (timestamp) | `daily` | `20251218` |
+| **Daily** | (branch push) | ✗ NO (commit id) | `daily` | `a1b2c3d` |
 | **Dev** | `dev` | ✗ NO (text) | `dev` | `dev` |
 
 **NEVER:**
 - ❌ `vdev`, `vbeta`, `vdaily` (text versions never get v)
-- ❌ `v20251218` (timestamps never get v)
+- ❌ `va1b2c3d` (commit ids never get v)
 - ❌ `vv1.2.3` (don't double the v)
 
 ## Version Files
@@ -39080,6 +39124,8 @@ The **only** time binaries are copied is during CI/CD release process, where the
 |------|---------|--------------|
 | `release.txt` | Source of truth for stable version | Manual |
 | `releases/version.txt` | Included in release archive | During release build |
+| `releases/sha256.txt` | SHA-256 checksums for all release binaries | During release build |
+| `releases/sha512.txt` | SHA-512 checksums for all release binaries | During release build |
 
 ## Release Summary
 
@@ -39315,6 +39361,7 @@ RUN apk add --no-cache git bash
 ARG TARGETARCH
 ARG VERSION=dev
 ARG BUILD_DATE
+ARG BUILD_EPOCH
 ARG COMMIT_ID
 # Optional: set via --build-arg OFFICIAL_SITE=... (empty by default)
 ARG OFFICIAL_SITE
@@ -39328,7 +39375,7 @@ RUN go mod download
 # Copy source and build
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
+    -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
     -o /app/binary/{project_name} ./src
 
 # =============================================================================
@@ -39339,6 +39386,7 @@ FROM alpine:latest
 # ARGs for build-time values (set by docker build --build-arg)
 ARG VERSION=dev
 ARG BUILD_DATE
+ARG BUILD_EPOCH
 ARG COMMIT_ID
 ARG LICENSE=MIT
 
@@ -39884,10 +39932,11 @@ COPY src/ ./src/
 ARG VERSION=dev
 ARG COMMIT_ID=unknown
 ARG BUILD_DATE=unknown
+ARG BUILD_EPOCH=0
 ARG OFFICIAL_SITE=
 
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
+    -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'" \
     -o {project_name} ./src
 
 # =============================================================================
@@ -40741,7 +40790,7 @@ networks:
 **CI/CD workflows MUST:**
 - Use explicit `go build` commands with all flags visible
 - Use CI-native caching (NOT local host paths)
-- Set VERSION, COMMIT_ID, BUILD_DATE explicitly
+- Set VERSION, COMMIT_ID, BUILD_EPOCH explicitly (BUILD_DATE is derived from BUILD_EPOCH for Docker OCI labels only — it is not an ldflag)
 - Build all platforms in matrix
 - Auto-cancel older in-progress runs for the same ref on push workflows targeting `main`, `master`, `devel`, `dev`, or `beta`
 
@@ -40786,9 +40835,10 @@ All workflows MUST set these environment variables:
 # Set in "Set build info" step, NOT as static env:
 #   if [ -f release.txt ]; then echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV; else echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV; fi
 #   echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-#   echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+#   BUILD_EPOCH=$(date -u +%s); echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+#   echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 # Then use in build step:
-#   LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+#   LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
 ```
 
 ## CI Workflow (GitHub Actions)
@@ -40937,7 +40987,9 @@ jobs:
             echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
           fi
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -40952,7 +41004,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -40963,7 +41015,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -40987,7 +41039,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
@@ -41077,11 +41129,9 @@ jobs:
       - name: Generate checksums
         run: |
           cd binaries
-          for f in *; do
-            [ -f "$f" ] || continue
-            case "$f" in *.sha256) continue ;; esac
-            sha256sum "$f" > "$f.sha256"
-          done
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
@@ -41174,7 +41224,9 @@ jobs:
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -41189,7 +41241,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -41200,7 +41252,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -41224,7 +41276,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
@@ -41258,11 +41310,9 @@ jobs:
       - name: Generate checksums
         run: |
           cd binaries
-          for f in *; do
-            [ -f "$f" ] || continue
-            case "$f" in *.sha256) continue ;; esac
-            sha256sum "$f" > "$f.sha256"
-          done
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
@@ -41310,11 +41360,9 @@ jobs:
       - name: Compute version
         id: v
         run: |
-          if [ -f release.txt ]; then
-            VERSION="$(cat release.txt)"
-          else
-            VERSION="$(date -u +%Y%m%d%H%M%S)"
-          fi
+          # Daily identity is the commit, not a timestamp - the daily
+          # release is a single rolling release, not a versioned tag
+          VERSION="$(git rev-parse --short HEAD)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
   build:
@@ -41351,7 +41399,9 @@ jobs:
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -41366,7 +41416,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -41377,7 +41427,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -41401,7 +41451,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
@@ -41435,11 +41485,9 @@ jobs:
       - name: Generate checksums
         run: |
           cd binaries
-          for f in *; do
-            [ -f "$f" ] || continue
-            case "$f" in *.sha256) continue ;; esac
-            sha256sum "$f" > "$f.sha256"
-          done
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Delete previous daily release
         run: |
@@ -41547,9 +41595,9 @@ jobs:
             echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
             echo "IS_TAG=false" >> $GITHUB_ENV
           fi
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
-          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
-          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 
       - name: Determine tags (standard)
         id: tags
@@ -41580,6 +41628,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             org.opencontainers.image.vendor={project_org}
@@ -41588,7 +41637,7 @@ jobs:
             org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - standard image (alpine)
             org.opencontainers.image.version=${{ env.VERSION }}
-            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41601,7 +41650,7 @@ jobs:
             manifest:org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - standard image (alpine)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             manifest:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41636,9 +41685,9 @@ jobs:
           # ghcr.io requires a lowercase image path
           echo "IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
-          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
-          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 
       - name: Build and push (devel)
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
@@ -41652,6 +41701,7 @@ jobs:
           build-args: |
             VERSION=devel
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             org.opencontainers.image.vendor={project_org}
@@ -41660,7 +41710,7 @@ jobs:
             org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - development image (alpine, debug mode)
             org.opencontainers.image.version=devel
-            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41673,7 +41723,7 @@ jobs:
             manifest:org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - development image (alpine, debug mode)
             manifest:org.opencontainers.image.version=devel
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             manifest:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41754,9 +41804,9 @@ jobs:
             echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
             echo "IS_TAG=false" >> $GITHUB_ENV
           fi
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
-          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
-          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 
       - name: Determine tags (all-in-one)
         id: tags
@@ -41789,6 +41839,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             org.opencontainers.image.vendor={project_org}
@@ -41796,7 +41847,7 @@ jobs:
             org.opencontainers.image.title=${{ env.PROJECT_NAME }}-aio
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - all-in-one (debian + postgresql + valkey + tor)
             org.opencontainers.image.version=${{ env.VERSION }}
-            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41808,7 +41859,7 @@ jobs:
             manifest:org.opencontainers.image.title=${{ env.PROJECT_NAME }}-aio
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - all-in-one (debian + postgresql + valkey + tor)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
             manifest:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -41942,7 +41993,9 @@ jobs:
             echo "VERSION=${GITEA_REF_NAME#v}" >> $GITEA_ENV
           fi
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -41957,7 +42010,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -41968,7 +42021,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -41992,7 +42045,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
@@ -42077,11 +42130,9 @@ jobs:
       - name: Generate checksums
         run: |
           cd binaries
-          for f in *; do
-            [ -f "$f" ] || continue
-            case "$f" in *.sha256) continue ;; esac
-            sha256sum "$f" > "$f.sha256"
-          done
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
@@ -42167,7 +42218,9 @@ jobs:
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -42182,7 +42235,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -42193,7 +42246,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -42217,7 +42270,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
@@ -42251,11 +42304,9 @@ jobs:
       - name: Generate checksums
         run: |
           cd binaries
-          for f in *; do
-            [ -f "$f" ] || continue
-            case "$f" in *.sha256) continue ;; esac
-            sha256sum "$f" > "$f.sha256"
-          done
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
@@ -42302,11 +42353,9 @@ jobs:
       - name: Compute version
         id: v
         run: |
-          if [ -f release.txt ]; then
-            VERSION="$(cat release.txt)"
-          else
-            VERSION="$(date -u +%Y%m%d%H%M%S)"
-          fi
+          # Daily identity is the commit, not a timestamp - the daily
+          # release is a single rolling release, not a versioned tag
+          VERSION="$(git rev-parse --short HEAD)"
           echo "version=$VERSION" >> "$GITEA_OUTPUT"
 
   build:
@@ -42343,7 +42392,9 @@ jobs:
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -42358,7 +42409,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
@@ -42369,7 +42420,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
@@ -42393,7 +42444,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildEpoch=${{ env.BUILD_EPOCH }}' -X 'main.OfficialSite=${{ env.OFFICIAL_SITE }}'"
           go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${{ env.PROJECT_NAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
@@ -42427,11 +42478,9 @@ jobs:
       - name: Generate checksums
         run: |
           cd binaries
-          for f in *; do
-            [ -f "$f" ] || continue
-            case "$f" in *.sha256) continue ;; esac
-            sha256sum "$f" > "$f.sha256"
-          done
+          FILES="$(ls)"
+          sha256sum $FILES > sha256.txt
+          sha512sum $FILES > sha512.txt
 
       - name: Delete previous daily release
         run: |
@@ -42524,9 +42573,9 @@ jobs:
             echo "VERSION=$(git rev-parse --short HEAD)" >> $GITEA_ENV
             echo "IS_TAG=false" >> $GITEA_ENV
           fi
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
-          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
-          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
 
       - name: Determine tags (standard)
         id: tags
@@ -42560,6 +42609,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             org.opencontainers.image.vendor={project_org}
@@ -42568,7 +42618,7 @@ jobs:
             org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - standard image (alpine)
             org.opencontainers.image.version=${{ env.VERSION }}
-            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -42581,7 +42631,7 @@ jobs:
             manifest:org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - standard image (alpine)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -42623,9 +42673,9 @@ jobs:
       - name: Set build info
         run: |
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
-          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
-          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
 
       - name: Build and push (devel)
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
@@ -42639,6 +42689,7 @@ jobs:
           build-args: |
             VERSION=devel
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             org.opencontainers.image.vendor={project_org}
@@ -42647,7 +42698,7 @@ jobs:
             org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - development image (alpine, debug mode)
             org.opencontainers.image.version=devel
-            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -42660,7 +42711,7 @@ jobs:
             manifest:org.opencontainers.image.base.name=${{ env.PROJECT_NAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - development image (alpine, debug mode)
             manifest:org.opencontainers.image.version=devel
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -42747,9 +42798,9 @@ jobs:
             echo "VERSION=$(git rev-parse --short HEAD)" >> $GITEA_ENV
             echo "IS_TAG=false" >> $GITEA_ENV
           fi
-          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
-          # OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
-          echo "BUILD_DATE_RFC3339=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
 
       - name: Determine tags (all-in-one)
         id: tags
@@ -42782,6 +42833,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
+            BUILD_EPOCH=${{ env.BUILD_EPOCH }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
             org.opencontainers.image.vendor={project_org}
@@ -42789,7 +42841,7 @@ jobs:
             org.opencontainers.image.title=${{ env.PROJECT_NAME }}-aio
             org.opencontainers.image.description=${{ env.PROJECT_NAME }} - all-in-one (debian + postgresql + valkey + tor)
             org.opencontainers.image.version=${{ env.VERSION }}
-            org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -42801,7 +42853,7 @@ jobs:
             manifest:org.opencontainers.image.title=${{ env.PROJECT_NAME }}-aio
             manifest:org.opencontainers.image.description=${{ env.PROJECT_NAME }} - all-in-one (debian + postgresql + valkey + tor)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE_RFC3339 }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
@@ -42908,7 +42960,8 @@ stages:
     # in casjaysdev/go:latest — never `apk add` or `go install` inside a CI job.
     - export VERSION="${CI_COMMIT_TAG#v}"
     - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
-    - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
+    - export BUILD_EPOCH="$(date -u +%s)"
+    - export BUILD_DATE="$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")"
     # OFFICIAL_SITE (optional): site.txt wins; otherwise use CI/CD Variables or leave empty
     # Never guess or assume - must be explicitly defined by user
     - |
@@ -42917,7 +42970,7 @@ stages:
       else
         export OFFICIAL_SITE="${OFFICIAL_SITE:-}"
       fi
-    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
+    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
 
 # =============================================================================
 # RELEASE BUILDS (Tag Push: v* or semver)
@@ -43093,9 +43146,20 @@ release:
   script:
     - echo "Creating release ${CI_COMMIT_TAG}"
     - echo "${CI_COMMIT_TAG#v}" > version.txt
+    # Consolidated sha256.txt/sha512.txt over every release asset (version.txt +
+    # binaries) - the job runs in the full repo checkout, not an isolated directory,
+    # so the file list is explicitly scoped rather than a bare `ls`; pre-capturing it
+    # once (GitLab concatenates script items into one shell, so the var carries)
+    # ensures both checksum files cover the identical asset set and never hash
+    # each other or themselves
+    - FILES="version.txt ${PROJECT_NAME}-*"
+    - sha256sum $FILES > sha256.txt
+    - sha512sum $FILES > sha512.txt
   artifacts:
     paths:
       - version.txt
+      - sha256.txt
+      - sha512.txt
       - ${PROJECT_NAME}-*
   release:
     tag_name: $CI_COMMIT_TAG
@@ -43119,6 +43183,12 @@ release:
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-amd64?job=build:freebsd-amd64"
         - name: "${PROJECT_NAME}-freebsd-arm64"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:freebsd-arm64"
+        - name: "sha256.txt"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/sha256.txt?job=release"
+        - name: "sha512.txt"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/sha512.txt?job=release"
+        - name: "version.txt"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/version.txt?job=release"
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
 
@@ -43133,7 +43203,8 @@ build:beta:
     # all tooling is pre-installed in casjaysdev/go:latest — never `apk add` inside a CI job
     - export VERSION="$(date +%Y%m%d%H%M%S)-beta"
     - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
-    - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
+    - export BUILD_EPOCH="$(date -u +%s)"
+    - export BUILD_DATE="$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")"
     # OFFICIAL_SITE (optional): site.txt wins; otherwise use CI/CD Variables or leave empty
     - |
       if [ -f site.txt ]; then
@@ -43141,7 +43212,7 @@ build:beta:
       else
         export OFFICIAL_SITE="${OFFICIAL_SITE:-}"
       fi
-    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
+    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
   script:
     # Build all 8 platforms
     - GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-linux-amd64 ./src
@@ -43170,9 +43241,16 @@ build:beta:
     - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-windows-arm64.exe ./src/agent; fi
     - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-amd64 ./src/agent; fi
     - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-arm64 ./src/agent; fi
+    # Job runs in the full repo checkout - scope the asset list explicitly rather
+    # than a bare `ls`; pre-captured so both checksum files cover the identical set
+    - FILES="${PROJECT_NAME}-*"
+    - sha256sum $FILES > sha256.txt
+    - sha512sum $FILES > sha512.txt
   artifacts:
     paths:
       - ${PROJECT_NAME}-*
+      - sha256.txt
+      - sha512.txt
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_BRANCH == "beta"
@@ -43186,9 +43264,12 @@ build:daily:
   stage: build
   before_script:
     # all tooling is pre-installed in casjaysdev/go:latest — never `apk add` inside a CI job
-    - export VERSION="$(date +%Y%m%d%H%M%S)"
+    # Daily identity is the commit, not a timestamp - the daily
+    # release is a single rolling release, not a versioned tag
+    - export VERSION="${CI_COMMIT_SHORT_SHA}"
     - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
-    - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
+    - export BUILD_EPOCH="$(date -u +%s)"
+    - export BUILD_DATE="$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")"
     # OFFICIAL_SITE (optional): site.txt wins; otherwise use CI/CD Variables or leave empty
     - |
       if [ -f site.txt ]; then
@@ -43196,7 +43277,7 @@ build:daily:
       else
         export OFFICIAL_SITE="${OFFICIAL_SITE:-}"
       fi
-    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
+    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildEpoch=${BUILD_EPOCH}' -X 'main.OfficialSite=${OFFICIAL_SITE}'"
   script:
     # Build all 8 platforms
     - GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-linux-amd64 ./src
@@ -43225,9 +43306,16 @@ build:daily:
     - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-windows-arm64.exe ./src/agent; fi
     - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-amd64 ./src/agent; fi
     - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-agent-freebsd-arm64 ./src/agent; fi
+    # Job runs in the full repo checkout - scope the asset list explicitly rather
+    # than a bare `ls`; pre-captured so both checksum files cover the identical set
+    - FILES="${PROJECT_NAME}-*"
+    - sha256sum $FILES > sha256.txt
+    - sha512sum $FILES > sha512.txt
   artifacts:
     paths:
       - ${PROJECT_NAME}-*
+      - sha256.txt
+      - sha512.txt
     expire_in: 1 day
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
@@ -43264,7 +43352,8 @@ docker:build:
         VERSION="dev-$CI_COMMIT_SHORT_SHA"
         TAGS="-t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
       fi
-      BUILD_DATE="$(date -Iseconds)"
+      BUILD_EPOCH="$(date -u +%s)"
+      BUILD_DATE="$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")"
     - |
       # Build multi-arch with OCI labels and manifest annotations
       docker buildx build \
@@ -43273,6 +43362,7 @@ docker:build:
         --build-arg VERSION="${VERSION}" \
         --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
+        --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
         --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
@@ -43334,7 +43424,8 @@ docker:build-aio:
         VERSION="dev-$CI_COMMIT_SHORT_SHA"
         TAGS="-t ${IMAGE}:${CI_COMMIT_SHORT_SHA}-aio"
       fi
-      BUILD_DATE="$(date -Iseconds)"
+      BUILD_EPOCH="$(date -u +%s)"
+      BUILD_DATE="$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")"
     - |
       # Build multi-arch all-in-one with OCI labels and manifest annotations
       docker buildx build \
@@ -43343,6 +43434,7 @@ docker:build-aio:
         --build-arg VERSION="${VERSION}" \
         --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
+        --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
         --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
@@ -43393,7 +43485,8 @@ docker:build-devel:
     - docker buildx create --name multiarch-builder --use 2>/dev/null || docker buildx use multiarch-builder
   script:
     - |
-      BUILD_DATE="$(date -Iseconds)"
+      BUILD_EPOCH="$(date -u +%s)"
+      BUILD_DATE="$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")"
     - |
       # Build multi-arch devel image with OCI labels and manifest annotations
       docker buildx build \
@@ -43402,6 +43495,7 @@ docker:build-devel:
         --build-arg VERSION="devel" \
         --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
+        --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
         --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
         --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
@@ -43582,21 +43676,22 @@ pipeline {
                         env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-beta'
                     } else if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
                         // Daily build - matches daily.yml
+                        // Daily identity is the commit, not a timestamp - the daily
+                        // release is a single rolling release, not a versioned tag
                         env.BUILD_TYPE = 'daily'
-                        env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim()
+                        env.VERSION = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     } else {
                         // Other branches - dev build
                         env.BUILD_TYPE = 'dev'
                         env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-dev'
                     }
                     env.COMMIT_ID = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    env.BUILD_DATE = sh(script: 'date +"%a %b %d, %Y at %H:%M:%S %Z"', returnStdout: true).trim()
-                    // OCI image.created label requires RFC 3339 - the pretty BUILD_DATE is for the binary build-arg only
-                    env.BUILD_DATE_RFC3339 = sh(script: 'date -u +"%Y-%m-%dT%H:%M:%SZ"', returnStdout: true).trim()
+                    env.BUILD_EPOCH = sh(script: 'date -u +%s', returnStdout: true).trim()
+                    env.BUILD_DATE = sh(script: "date -u -d @${env.BUILD_EPOCH} +\"%Y-%m-%dT%H:%M:%SZ\"", returnStdout: true).trim()
                     // OFFICIAL_SITE (optional): site.txt wins; otherwise use Jenkins credentials or leave empty
                     // Never guess or assume - must be explicitly defined by user
                     env.OFFICIAL_SITE = sh(script: '[ -f site.txt ] && cat site.txt || echo "${OFFICIAL_SITE:-}"', returnStdout: true).trim()
-                    env.LDFLAGS = "-s -w -X 'main.Version=${env.VERSION}' -X 'main.CommitID=${env.COMMIT_ID}' -X 'main.BuildDate=${env.BUILD_DATE}' -X 'main.OfficialSite=${env.OFFICIAL_SITE}'"
+                    env.LDFLAGS = "-s -w -X 'main.Version=${env.VERSION}' -X 'main.CommitID=${env.COMMIT_ID}' -X 'main.BuildEpoch=${env.BUILD_EPOCH}' -X 'main.OfficialSite=${env.OFFICIAL_SITE}'"
                     env.HAS_CLI = sh(script: '[ -d src/client ] && echo true || echo false', returnStdout: true).trim()
                     env.HAS_AGENT = sh(script: '[ -d src/agent ] && echo true || echo false', returnStdout: true).trim()
                 }
@@ -44099,6 +44194,11 @@ pipeline {
                         --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
                         --exclude='*.tar.gz' \
                         -czf ${RELDIR}/${PROJECT_NAME}-${VERSION}-source.tar.gz .
+
+                    cd ${RELDIR}
+                    FILES="$(ls)"
+                    sha256sum $FILES > sha256.txt
+                    sha512sum $FILES > sha512.txt
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
@@ -44118,6 +44218,11 @@ pipeline {
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
+
+                    cd ${RELDIR}
+                    FILES="$(ls)"
+                    sha256sum $FILES > sha256.txt
+                    sha512sum $FILES > sha512.txt
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
@@ -44137,6 +44242,11 @@ pipeline {
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
+
+                    cd ${RELDIR}
+                    FILES="$(ls)"
+                    sha256sum $FILES > sha256.txt
+                    sha512sum $FILES > sha512.txt
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
@@ -44176,6 +44286,7 @@ pipeline {
                             --build-arg VERSION="${VERSION}" \
                             --build-arg COMMIT_ID="${COMMIT_ID}" \
                             --build-arg BUILD_DATE="${BUILD_DATE}" \
+                            --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
                             --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
                             --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
@@ -44184,7 +44295,7 @@ pipeline {
                             --label "org.opencontainers.image.description=${PROJECT_NAME} - standard image (alpine)" \
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.version=${VERSION}" \
-                            --label "org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
+                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
                             --label "org.opencontainers.image.revision=${COMMIT_ID}" \
                             --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
@@ -44196,7 +44307,7 @@ pipeline {
                             --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - standard image (alpine)" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
-                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
+                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
                             --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
                             --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
@@ -44243,6 +44354,7 @@ pipeline {
                             --build-arg VERSION="${VERSION}" \
                             --build-arg COMMIT_ID="${COMMIT_ID}" \
                             --build-arg BUILD_DATE="${BUILD_DATE}" \
+                            --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
                             --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
                             --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
@@ -44250,7 +44362,7 @@ pipeline {
                             --label "org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + postgresql + valkey + tor)" \
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.version=${VERSION}" \
-                            --label "org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
+                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
                             --label "org.opencontainers.image.revision=${COMMIT_ID}" \
                             --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
@@ -44261,7 +44373,7 @@ pipeline {
                             --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - all-in-one (debian + postgresql + valkey + tor)" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
-                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
+                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
                             --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
                             --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
@@ -44297,6 +44409,7 @@ pipeline {
                             --build-arg VERSION="devel" \
                             --build-arg COMMIT_ID="${COMMIT_ID}" \
                             --build-arg BUILD_DATE="${BUILD_DATE}" \
+                            --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
                             --build-arg OFFICIAL_SITE="${OFFICIAL_SITE}" \
                             --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --label "org.opencontainers.image.authors=${PROJECT_ORG}" \
@@ -44305,7 +44418,7 @@ pipeline {
                             --label "org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.version=devel" \
-                            --label "org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
+                            --label "org.opencontainers.image.created=${BUILD_DATE}" \
                             --label "org.opencontainers.image.revision=${COMMIT_ID}" \
                             --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
@@ -44317,7 +44430,7 @@ pipeline {
                             --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.version=devel" \
-                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE_RFC3339}" \
+                            --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
                             --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
                             --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
                             --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
