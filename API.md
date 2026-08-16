@@ -15956,7 +15956,27 @@ When a Tor request is detected, `GetURLVars(r)` / `BuildURL(r, path)` return:
 
 This check is **priority 0** in the FQDN resolution table — evaluated before reverse proxy headers, always trusted, no IP check against `trusted_proxies` required.
 
-All server functionality works normally on Tor — only clearnet URLs and clearnet email addresses must not appear in responses.
+**Tor parity principle:** a Tor request MUST behave **exactly like the equivalent clearnet request** — same routes, same features, same responses — with only two classes of difference:
+
+1. **Clearnet-identifying data is swapped or omitted** — absolute URLs use `tor.onion_address`; the clearnet FQDN and clearnet contact email never appear (see "Tor Privacy Rules" below).
+2. **Operations genuinely impossible over Tor fail loudly, never silently** — when a feature cannot work for a Tor request (an OAuth provider that rejects `.onion` redirect URIs, a third-party API with no `.onion` while outbound Tor is disabled, etc.), return a clear error/warning whose message is written for that specific context and names the Tor-specific reason. Never degrade silently, never fall back to a clearnet URL, never report false success.
+
+Everything not covered by those two points works exactly as it does on clearnet.
+
+### Tor HTTP Semantics (No HTTPS Upgrade)
+
+Tor hidden services are always plain `http://` — the `.onion` address is itself the cryptographic identity and the Tor circuit provides end-to-end encryption, so TLS/HTTPS semantics do not apply. For every request detected as a Tor request:
+
+| HTTPS mechanism | Behavior on a Tor request |
+|-----------------|---------------------------|
+| **HTTP→HTTPS redirect** | Never issued — there is no HTTPS endpoint to redirect to; a redirect would break the hidden service. |
+| **`Strict-Transport-Security` (HSTS)** | Never sent — HSTS would make the browser refuse the `http://` onion, taking the site offline. |
+| **CSP `upgrade-insecure-requests`** | Omitted from the CSP for Tor responses — it would rewrite same-origin `http://{onion}` references to a nonexistent `https://{onion}`. |
+| **Clearnet HTTPS-only mode** | Never inherited — a clearnet port-443 / HTTPS-only configuration does NOT propagate to the onion; the onion stays `http://` regardless. |
+| **`Secure` cookie flag** | Still set — a `.onion` is a W3C "potentially trustworthy" secure context in Tor Browser, so `Secure` cookies are stored and sent normally; `secure: auto` treats a matched Tor request as a secure context. |
+| **Canonical / `Location` / absolute links** | Built via `BuildURL(r, path)` → `http://{onion_address}`; never `https://`, never the clearnet host. |
+
+These rules apply only to requests detected as Tor requests. Clearnet requests keep full HTTPS enforcement (redirect, HSTS, upgrade-insecure-requests) unchanged.
 
 ### Tor Privacy Rules
 
@@ -20127,31 +20147,30 @@ formatURL(host, 8443, true)
 
 **Overlay Network Protocol Rules (Tor, I2P, etc.):**
 
-| Network | Default | HTTPS-Only Mode | Certificate |
-|---------|---------|-----------------|-------------|
-| Clearnet | HTTP/HTTPS | Port 443 | Let's Encrypt or local |
-| Tor (.onion) | HTTP | When clearnet is HTTPS-only | Self-signed (LE doesn't support .onion) |
-| I2P (.i2p) | HTTP | When clearnet is HTTPS-only | Self-signed (LE doesn't support .i2p) |
+| Network | Protocol | Certificate |
+|---------|----------|-------------|
+| Clearnet | HTTP/HTTPS (HTTPS-only on port 443) | Let's Encrypt or local |
+| Tor (.onion) | Always HTTP | None (TLS terminates in the Tor layer) |
+| I2P (.i2p) | Always HTTP | None (TLS terminates in the I2P layer) |
 
 **Rules:**
-- Overlay networks inherit HTTPS-only mode from clearnet configuration
-- If clearnet port is 443 (HTTPS-only) → overlay also uses HTTPS
-- If clearnet is dual port (80,443) → overlay uses HTTP (encryption provided by overlay)
-- Overlay HTTPS requires self-signed certificates (Let's Encrypt doesn't support .onion/.i2p)
+- Overlay networks are ALWAYS `http://` regardless of clearnet configuration (see PART 12)
+- Clearnet HTTPS-only mode (port 443) does NOT propagate to overlays — the onion/i2p address stays `http://`
+- Let's Encrypt doesn't support .onion/.i2p, and the overlay layer already provides end-to-end encryption, so no certificate is ever issued or self-signed for an overlay
 
 **Banner Examples:**
 
 | Clearnet Config | Tor URL | I2P URL |
 |-----------------|---------|---------|
 | `--port 8080` | `http://{onion_address}` | `http://{i2p_address}` |
-| `--port 443` | `https://{onion_address}` | `https://{i2p_address}` |
+| `--port 443` | `http://{onion_address}` | `http://{i2p_address}` |
 | `--port 80,443` | `http://{onion_address}` | `http://{i2p_address}` |
 | `--port 8080,8443` | `http://{onion_address}` | `http://{i2p_address}` |
 
-**Why HTTP for overlays in dual mode?**
+**Why HTTP for overlays?**
 - Tor/I2P provide end-to-end encryption at the network layer
 - HTTPS adds overhead without additional security benefit
-- Only use HTTPS on overlays when HTTPS-only mode is required (port 443)
+- The `.onion`/`.i2p` address is itself the cryptographic identity — an `https://` upgrade would only break the hidden service (no redirect, no HSTS, no upgrade-insecure-requests; see "Tor HTTP Semantics")
 
 **Footer timestamp format:** `%B %d, %Y at %H:%M:%S %Z` → `December 04, 2025 at 13:05:13 EST` — anything user-facing MUST use this format; use `%Y-%m-%dT%H:%M:%S%:z` (RFC 3339) only where machine-readability matters (API responses, logs, health endpoints)
 
