@@ -15994,6 +15994,23 @@ These are concrete cases of parity-principle point 2 — features that cannot wo
 | **Payment gateways, webhooks, outbound callbacks to clearnet** | The target is a clearnet URL; an onion-origin request to it defeats anonymity or is rejected. | Route through a Tor-aware integration if one exists; otherwise fail loudly and tell the caller the action isn't available over Tor. |
 | **Absolute / cross-network links** | A link to the clearnet FQDN pushes the client off Tor and leaks the clearnet identity. | Build every absolute URL (canonical tags, redirects, webhook/callback URLs, email links) from `tor.onion_address` for Tor requests. |
 
+### Tor Request Logging & Identity
+
+For a Tor request the connection's remote address is the local Tor daemon (loopback), so it is meaningless as a client identifier and misleading in logs — it collides with genuine localhost traffic and looks like an identifier when it is not. Wherever the app would record or display a client IP — access logs, audit trails, admin UI, rate-limit keys — substitute the **Tor circuit ID** exported via `HiddenServiceExportCircuitID haproxy` (read from the PROXY-protocol header), clearly marked as a Tor circuit (e.g. `tor:{circuit_id}`). When circuit-ID export is not enabled, use the literal sentinel `tor` instead. **Never** log or display `127.0.0.1` for a Tor request.
+
+### Tor Timestamp Normalization (UTC)
+
+User-facing timestamps normally render the server's local timezone (`%B %d, %Y at %H:%M:%S %Z` → e.g. `EST`). Served over the onion that leaks the operator's timezone, and thus their rough location — a server-side deanonymization vector. For Tor requests, render all user-facing timestamps in **UTC** (force the zone to `UTC`, never the server's local zone). Audit any other locale-, timezone-, or `Accept-Language`-derived output for the same operator-location leak and normalize or omit it for Tor requests.
+
+### Onion-Location Advertisement (Clearnet Responses)
+
+When `tor.onion_address` is set, **clearnet** responses advertise the hidden service so Tor Browser shows the ".onion available" indicator and can upgrade automatically:
+
+- Send `Onion-Location: http://{onion_address}{request_path}` on clearnet **HTML document** responses only (2xx, top-level navigations) — never on the onion's own responses, never on API/JSON responses, never on static assets or redirects.
+- The value is built from `tor.onion_address` (never the clearnet host) and always uses `http://` (see "Tor HTTP Semantics"); construct it with `BuildURL` against the onion host so the request path and query are preserved.
+- An equivalent `<meta http-equiv="onion-location" content="http://{onion_address}{request_path}">` in the HTML `<head>` is acceptable where a response header cannot be set; do not send both.
+- This is the only Tor-related header that appears on **clearnet** responses; the onion's own responses never carry `Onion-Location`.
+
 ### Tor Privacy Rules
 
 These rules apply to **all responses** when the request is detected as a Tor request:
