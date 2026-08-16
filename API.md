@@ -40558,7 +40558,7 @@ Tor integration uses **external Tor binary** via `github.com/cretz/bine`. This m
 
 **Key Architecture Points:**
 - **Server binary owns Tor** - starts, stops, and manages Tor process lifecycle
-- **Hidden service maps to server port** - `.onion:80` → `localhost:{server_port}`
+- **Hidden service maps to a dedicated Tor backend port** - `.onion:80` → `localhost:{tor_backend_port}` (a random-unused loopback port bound just for Tor, never the clearnet port)
 - **Server enforces permissions** - creates all dirs/files with correct owner/group/perms
 - **HiddenServiceVersion 3** - v3 onion addresses (56 characters, ed25519) via torrc HiddenServiceDir
 - **Localhost auto control port** - Tor control uses `127.0.0.1:auto` on all OSes
@@ -40764,7 +40764,7 @@ When `use_network` is enabled, the torrc includes `SocksPort auto` for outbound 
 | Hidden service target | `localhost:{tor_backend_port}` (dedicated PROXY listener) |
 | Security | Control bound to localhost only |
 
-**Note:** The hidden service forwards to the server's HTTP port on ALL platforms, and the control connection uses the same localhost auto-port model on all platforms.
+**Note:** The hidden service forwards to a dedicated Tor backend loopback port (random-unused, PROXY-protocol-aware — never the clearnet HTTP port) on ALL platforms, and the control connection uses the same localhost auto-port model on all platforms.
 
 ## Tor Process Management
 
@@ -41201,7 +41201,7 @@ func (s *TorService) Close() error {
 // PROXY-protocol loopback listener the service forwards to.
 //
 // PORT DETECTION: SocksPort/ControlPort use runtime detection via "auto" - never
-// saved/hardcoded. torBackendPort is a fixed loopback port the app binds first.
+// saved/hardcoded. torBackendPort is a dedicated random-unused loopback port the app binds first.
 // - SocksPort auto: Tor picks available high port at startup
 // - ControlPort 127.0.0.1:auto: Tor picks available high port on all OSes
 // - bine reads actual port from control connection after Tor starts
@@ -41557,8 +41557,10 @@ func main() {
 
     // Dedicated PROXY-protocol loopback listener for Tor backend traffic
     // (separate from the public clearnet listener; carries the HAProxy
-    // PROXY v1 header with the per-rendezvous circuit ID)
-    torBackendPort := 8081
+    // PROXY v1 header with the per-rendezvous circuit ID). Allocated with the
+    // same random-unused-port detection the server uses for its own port
+    // (64000-64999 range), so it is never a fixed or user-facing port.
+    torBackendPort := getRandomAvailablePort()
 
     // Get Tor configuration (from config file)
     // Uses TorConfig struct with all settings
