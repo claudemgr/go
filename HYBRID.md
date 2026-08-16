@@ -39517,18 +39517,54 @@ func DefaultTorConfig() TorConfig {
     }
 }
 
+// resolveTorBinary locates the tor executable: an explicit cfg.Binary override
+// wins, then common install locations, then $PATH. Returns an error when no tor
+// binary is available - in which case Tor stays disabled and no port is allocated.
+func resolveTorBinary(cfg *TorConfig) (string, error) {
+    if cfg.Binary != "" {
+        if _, err := os.Stat(cfg.Binary); err == nil {
+            return cfg.Binary, nil
+        }
+        return "", fmt.Errorf("configured tor binary not found: %s", cfg.Binary)
+    }
+    for _, p := range []string{
+        "/usr/bin/tor",
+        "/usr/sbin/tor",
+        "/usr/local/bin/tor",
+        "/opt/homebrew/bin/tor",
+    } {
+        if _, err := os.Stat(p); err == nil {
+            return p, nil
+        }
+    }
+    if p, err := exec.LookPath("tor"); err == nil {
+        return p, nil
+    }
+    return "", fmt.Errorf("tor binary not found - hidden service disabled")
+}
+
 // startDedicatedTor starts a Tor process owned by this server binary.
-// torBackendPort is a DEDICATED loopback listener (PROXY-protocol-aware) that the
-// hidden service forwards to - SEPARATE from the public clearnet HTTP port.
+// It resolves the tor binary first; if none is found it returns an error and NO
+// backend port is allocated (Tor stays disabled). Otherwise it allocates a
+// DEDICATED loopback listener (PROXY-protocol-aware) the hidden service forwards
+// to - SEPARATE from the public clearnet HTTP port - using the same random-unused
+// port detection the server uses for its own port.
 // cfg contains all Tor configuration settings (validated before calling).
-// The hidden service maps: .onion:{virtual_port} → 127.0.0.1:torBackendPort
+// The hidden service maps: .onion:{virtual_port} → 127.0.0.1:{backend port}
 //
 // IMPORTANT: With HiddenServiceExportCircuitID haproxy, Tor prepends a HAProxy
 // PROXY-protocol v1 header (carrying the per-circuit ID) to every backend
 // connection. The public clearnet listener must NOT receive that header, so this
 // port is a dedicated loopback listener wrapped with go-proxyproto.
 // Hidden service is ALWAYS enabled if Tor binary is found.
-func startDedicatedTor(ctx context.Context, torBackendPort int, cfg *TorConfig) (*TorService, error) {
+func startDedicatedTor(ctx context.Context, cfg *TorConfig) (*TorService, error) {
+    // Resolve the tor binary first - if none is found, Tor is simply not enabled
+    // and we return before allocating a port or writing any files.
+    torBinary, err := resolveTorBinary(cfg)
+    if err != nil {
+        return nil, err
+    }
+
     configDir := paths.GetConfigDir()
     dataDir := paths.GetDataDir()
 
@@ -39537,6 +39573,12 @@ func startDedicatedTor(ctx context.Context, torBackendPort int, cfg *TorConfig) 
     if err := ensureTorDirs(); err != nil {
         return nil, fmt.Errorf("failed to create tor directories: %w", err)
     }
+
+    // Allocate the dedicated PROXY-protocol loopback port only now that Tor is
+    // confirmed available, using the same random-unused-port detection the server
+    // uses for its own port (64000-64999). Not persisted: a fresh port is chosen
+    // each run and torrc is regenerated to match.
+    torBackendPort := getRandomAvailablePort()
 
     // Paths
     torrcPath := filepath.Join(configDir, "tor", "torrc")
@@ -39548,17 +39590,13 @@ func startDedicatedTor(ctx context.Context, torBackendPort int, cfg *TorConfig) 
     // Generate torrc content from config (includes the HiddenServiceDir block)
     torrcContent := getTorConfig(cfg, hsDir, torBackendPort)
 
-    // Create torrc only if it doesn't exist (persistent)
-    // torrc is preserved across restarts - only operator-edited server.yml can update it
-    created, err := ensureTorrc(torrcPath, []byte(torrcContent))
-    if err != nil {
-        return nil, fmt.Errorf("failed to ensure torrc: %w", err)
+    // Regenerate torrc every startup: it is derived state from TorConfig + the
+    // current backend port. The .onion identity persists via the keys under
+    // HiddenServiceDir, NOT via torrc, so overwriting torrc is always safe.
+    if err := updateTorrc(torrcPath, []byte(torrcContent)); err != nil {
+        return nil, fmt.Errorf("failed to write torrc: %w", err)
     }
-    if created {
-        log.Printf("Created new torrc at %s", torrcPath)
-    } else {
-        log.Printf("Using existing torrc at %s", torrcPath)
-    }
+    log.Printf("Regenerated torrc at %s (backend port %d)", torrcPath, torBackendPort)
 
     // Build platform-specific StartConf
     conf := &tor.StartConf{
@@ -39575,10 +39613,8 @@ func startDedicatedTor(ctx context.Context, torBackendPort int, cfg *TorConfig) 
         // DebugWriter: os.Stderr,
     }
 
-    // Use custom Tor binary path if specified in config
-    if cfg.Binary != "" {
-        conf.ExePath = cfg.Binary
-    }
+    // Use the tor binary resolved above (honors the cfg.Binary override).
+    conf.ExePath = torBinary
 
     // Start OUR OWN Tor process - completely separate from system Tor
     // Server starts → Tor starts; Server stops → Tor stops
@@ -39735,7 +39771,8 @@ func (s *TorService) Close() error {
 // PROXY-protocol loopback listener the service forwards to.
 //
 // PORT DETECTION: SocksPort/ControlPort use runtime detection via "auto" - never
-// saved/hardcoded. torBackendPort is a dedicated random-unused loopback port the app binds first.
+// saved/hardcoded. torBackendPort is a dedicated random-unused loopback port allocated
+// inside startDedicatedTor once the tor binary is found.
 // - SocksPort auto: Tor picks available high port at startup
 // - ControlPort 127.0.0.1:auto: Tor picks available high port on all OSes
 // - bine reads actual port from control connection after Tor starts
@@ -39915,19 +39952,18 @@ type TorManager struct {
     // Tor configuration settings
     config     *TorConfig
     dataDir    string
-    // Dedicated PROXY-protocol loopback port the hidden service forwards to
-    torBackendPort int
     ctx        context.Context
     cancel     context.CancelFunc
 }
 
-// NewTorManager creates a new Tor manager with the given configuration
-func NewTorManager(ctx context.Context, torBackendPort int, config *TorConfig) *TorManager {
+// NewTorManager creates a new Tor manager with the given configuration.
+// The dedicated PROXY-protocol backend port is allocated inside startDedicatedTor
+// (only when a tor binary is found), not by the caller.
+func NewTorManager(ctx context.Context, config *TorConfig) *TorManager {
     return &TorManager{
-        config:     config,
-        dataDir:    filepath.Join(paths.GetDataDir(), "tor"),
-        torBackendPort: torBackendPort,
-        ctx:        ctx,
+        config:  config,
+        dataDir: filepath.Join(paths.GetDataDir(), "tor"),
+        ctx:     ctx,
     }
 }
 
@@ -39941,7 +39977,7 @@ func (tm *TorManager) Start() error {
 
 // startLocked starts Tor (must be called with mutex held)
 func (tm *TorManager) startLocked() error {
-    service, err := startDedicatedTor(tm.ctx, tm.torBackendPort, tm.config)
+    service, err := startDedicatedTor(tm.ctx, tm.config)
     if err != nil {
         return err
     }
@@ -39978,18 +40014,8 @@ func (tm *TorManager) UpdateConfig(config *TorConfig) error {
         tm.service = nil
     }
 
-    // Regenerate torrc with new settings (overwrite existing)
-    configDir := paths.GetConfigDir()
-    torrcPath := filepath.Join(configDir, "tor", "torrc")
-    // hsDir is {data_dir}/tor/site (tm.dataDir is {data_dir}/tor)
-    torrcContent := getTorConfig(config, filepath.Join(tm.dataDir, "site"), tm.torBackendPort)
-
-    if err := updateTorrc(torrcPath, []byte(torrcContent)); err != nil {
-        return fmt.Errorf("failed to update torrc: %w", err)
-    }
-    log.Printf("Updated torrc with new settings")
-
-    // Start Tor with new config
+    // startLocked -> startDedicatedTor regenerates torrc (with a freshly allocated
+    // backend port) from the new config, so no separate torrc write is needed here.
     return tm.startLocked()
 }
 
@@ -40089,20 +40115,16 @@ func main() {
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
-    // Dedicated PROXY-protocol loopback listener for Tor backend traffic
-    // (separate from the public clearnet listener; carries the HAProxy
-    // PROXY v1 header with the per-rendezvous circuit ID). Allocated with the
-    // same random-unused-port detection the server uses for its own port
-    // (64000-64999 range), so it is never a fixed or user-facing port.
-    torBackendPort := getRandomAvailablePort()
-
     // Get Tor configuration (from config file)
     // Uses TorConfig struct with all settings
     torConfig := config.Tor
 
-    // Start Tor - torrc HiddenServicePort forwards .onion:{virtual_port} → 127.0.0.1:torBackendPort
-    // TorConfig contains all settings including outbound network options
-    torService, err := startDedicatedTor(ctx, torBackendPort, &torConfig)
+    // Start Tor. startDedicatedTor resolves the tor binary first; if none is found
+    // it returns an error and NO backend port is allocated (Tor stays disabled).
+    // When Tor is available it allocates a dedicated PROXY-protocol loopback port
+    // (same random-unused detection as the server's own port, 64000-64999) and
+    // forwards .onion:{virtual_port} → 127.0.0.1:{backend port}.
+    torService, err := startDedicatedTor(ctx, &torConfig)
     if err != nil {
         log.Printf("Warning: Tor disabled - %v", err)
         // Continue without Tor
@@ -40238,44 +40260,9 @@ func ensureTorDirs() error {
     return nil
 }
 
-// ensureTorrc creates torrc only if it doesn't exist (persistent)
-// Returns true if file was created, false if it already existed
-func ensureTorrc(path string, content []byte) (bool, error) {
-    // Ensure parent dir exists
-    if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-        return false, fmt.Errorf("create parent dir: %w", err)
-    }
-
-    // Check if torrc already exists - DON'T overwrite
-    if _, err := os.Stat(path); err == nil {
-        // File exists - preserve it, just fix permissions
-        if err := os.Chmod(path, 0600); err != nil {
-            return false, fmt.Errorf("chmod file: %w", err)
-        }
-        // Not created, already existed
-        return false, nil
-    }
-
-    // File doesn't exist - create it
-    if err := os.WriteFile(path, content, 0600); err != nil {
-        return false, fmt.Errorf("write file: %w", err)
-    }
-
-    // Enforce ownership
-    uid := os.Getuid()
-    gid := os.Getgid()
-    if runtime.GOOS != "windows" {
-        if err := os.Chown(path, uid, gid); err != nil {
-            return false, fmt.Errorf("chown file: %w", err)
-        }
-    }
-
-    // Created new file
-    return true, nil
-}
-
-// updateTorrc overwrites torrc with new content (for config changes)
-// Only called when the operator explicitly updates Tor config in server.yml
+// updateTorrc (over)writes torrc with the given content.
+// Called at every startup to regenerate torrc from config (the backend port
+// changes each run) and whenever new Tor settings are saved.
 func updateTorrc(path string, content []byte) error {
     // Ensure parent dir exists
     if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
