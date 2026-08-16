@@ -39094,7 +39094,7 @@ Tor integration uses **external Tor binary** via `github.com/cretz/bine`. This m
 - **Server binary owns Tor** - starts, stops, and manages Tor process lifecycle
 - **Hidden service maps to server port** - `.onion:80` → `localhost:{server_port}`
 - **Server enforces permissions** - creates all dirs/files with correct owner/group/perms
-- **HiddenServiceVersion 3** - v3 onion addresses (56 characters, ed25519) via ADD_ONION
+- **HiddenServiceVersion 3** - v3 onion addresses (56 characters, ed25519) via torrc HiddenServiceDir
 - **Localhost auto control port** - Tor control uses `127.0.0.1:auto` on all OSes
 - **SafeLogging enabled** - Scrubs sensitive info from Tor logs
 
@@ -39289,13 +39289,13 @@ When `use_network` is enabled, the torrc includes `SocksPort auto` for outbound 
 
 ### All Platforms
 - **Control connection**: TCP `127.0.0.1:auto`
-- **Hidden service target**: Server's HTTP port via localhost (bine handles via ADD_ONION)
+- **Hidden service target**: dedicated PROXY-protocol loopback listener (torrc `HiddenServicePort`)
 - **No fixed control ports** - Tor picks a free localhost port at startup
 
 | Feature | All OSes |
 |---------|----------|
 | Control connection | TCP `127.0.0.1:auto` |
-| Hidden service target | `localhost:{server_port}` |
+| Hidden service target | `localhost:{tor_backend_port}` (dedicated PROXY listener) |
 | Security | Control bound to localhost only |
 
 **Note:** The hidden service forwards to the server's HTTP port on ALL platforms, and the control connection uses the same localhost auto-port model on all platforms.
@@ -39333,7 +39333,7 @@ This prevents conflicts with any existing Tor installation on the system.
    ├─ SocksPort: auto (if outbound enabled) or 0 (hidden service only)
    ├─ Completely isolated from system Tor
    ├─ Wait for bootstrap completion
-   ├─ Create hidden service via ADD_ONION
+   ├─ Read .onion from HiddenServiceDir hostname file (declared in torrc)
    └─ Initialize Dialer (if outbound enabled)
 
 5. On application shutdown:
@@ -39433,30 +39433,27 @@ Use `github.com/cretz/bine` (pure Go, CGO_ENABLED=0 compatible):
 ```go
 import (
     "context"
-    "crypto"
     "fmt"
     "log"
     "net/http"
     "os"
     "path/filepath"
+    "strings"
     "sync"
     "time"
 
-    "github.com/cretz/bine/control"
     "github.com/cretz/bine/tor"
-    "github.com/cretz/bine/torutil/ed25519"
+    "github.com/pires/go-proxyproto"
 )
 
 // TorService manages the Tor hidden service and outbound connections.
 // Server binary fully owns and controls the Tor process lifecycle.
 type TorService struct {
     tor        *tor.Tor
-    // .onion address (without .onion suffix)
-    serviceID  string
-    // ED25519 private key for persistent address
-    key        crypto.PrivateKey
-    // Server's HTTP port that hidden service forwards to
-    serverPort int
+    // Full .onion address (with suffix), read from {HiddenServiceDir}/hostname
+    onionAddress string
+    // Dedicated PROXY-protocol loopback port the hidden service forwards to
+    torBackendPort int
     // For outbound Tor connections (nil if disabled)
     dialer     *tor.Dialer
 }
@@ -39521,14 +39518,17 @@ func DefaultTorConfig() TorConfig {
 }
 
 // startDedicatedTor starts a Tor process owned by this server binary.
-// serverPort is the server's HTTP port that the hidden service will forward to.
+// torBackendPort is a DEDICATED loopback listener (PROXY-protocol-aware) that the
+// hidden service forwards to - SEPARATE from the public clearnet HTTP port.
 // cfg contains all Tor configuration settings (validated before calling).
-// The hidden service maps: .onion:{virtual_port} → 127.0.0.1:serverPort
+// The hidden service maps: .onion:{virtual_port} → 127.0.0.1:torBackendPort
 //
-// IMPORTANT: serverPort is the port where the server's HTTP listener is ALREADY running.
-// Tor forwards incoming .onion connections to this existing listener.
+// IMPORTANT: With HiddenServiceExportCircuitID haproxy, Tor prepends a HAProxy
+// PROXY-protocol v1 header (carrying the per-circuit ID) to every backend
+// connection. The public clearnet listener must NOT receive that header, so this
+// port is a dedicated loopback listener wrapped with go-proxyproto.
 // Hidden service is ALWAYS enabled if Tor binary is found.
-func startDedicatedTor(ctx context.Context, serverPort int, cfg *TorConfig) (*TorService, error) {
+func startDedicatedTor(ctx context.Context, torBackendPort int, cfg *TorConfig) (*TorService, error) {
     configDir := paths.GetConfigDir()
     dataDir := paths.GetDataDir()
 
@@ -39541,10 +39541,12 @@ func startDedicatedTor(ctx context.Context, serverPort int, cfg *TorConfig) (*To
     // Paths
     torrcPath := filepath.Join(configDir, "tor", "torrc")
     torDataDir := filepath.Join(dataDir, "tor")
-    keyPath := filepath.Join(dataDir, "tor", "site", "hs_ed25519_secret_key")
+    // Tor auto-generates and persists the v3 key + hostname under HiddenServiceDir
+    hsDir := filepath.Join(dataDir, "tor", "site")
+    hostnamePath := filepath.Join(hsDir, "hostname")
 
-    // Generate torrc content from config
-    torrcContent := getTorConfig(cfg)
+    // Generate torrc content from config (includes the HiddenServiceDir block)
+    torrcContent := getTorConfig(cfg, hsDir, torBackendPort)
 
     // Create torrc only if it doesn't exist (persistent)
     // torrc is preserved across restarts - only operator-edited server.yml can update it
@@ -39595,53 +39597,20 @@ func startDedicatedTor(ctx context.Context, serverPort int, cfg *TorConfig) (*To
         return nil, fmt.Errorf("failed to enable tor network: %w", err)
     }
 
-    // Load or generate ED25519 key for persistent .onion address
-    var key crypto.PrivateKey
-    if keyData, err := os.ReadFile(keyPath); err == nil && len(keyData) > 0 {
-        // Load existing key for persistent address
-        key, err = ed25519.FromCryptoPrivateKey(keyData)
-        if err != nil {
-            t.Close()
-            return nil, fmt.Errorf("failed to parse existing key: %w", err)
-        }
-    }
-
-    // Create hidden service via ADD_ONION control command
-    // This forwards .onion:{virtual_port} → 127.0.0.1:serverPort (existing HTTP server)
-    addOnionReq := &control.AddOnionRequest{
-        // Port mapping: virtual port (from config) → server's HTTP port
-        Ports: []*control.KeyVal{
-            control.NewKeyVal(fmt.Sprintf("%d", cfg.VirtualPort), fmt.Sprintf("127.0.0.1:%d", serverPort)),
-        },
-    }
-
-    if key != nil {
-        // Use existing key for persistent .onion address
-        addOnionReq.Key = control.ED25519KeyFromBlob(key.(ed25519.PrivateKey))
-    } else {
-        // Generate new ED25519-V3 key (v3 onion address)
-        addOnionReq.Key = control.GenKey(control.KeyAlgoED25519V3)
-    }
-
-    // Call ADD_ONION via control connection
-    resp, err := t.Control.AddOnion(addOnionReq)
+    // The hidden service is already declared in the torrc (HiddenServiceDir block).
+    // During bootstrap Tor generated (or loaded) the v3 ed25519 key and wrote the
+    // .onion into {hsDir}/hostname - no ADD_ONION, no manual key handling here.
+    onionBytes, err := os.ReadFile(hostnamePath)
     if err != nil {
         t.Close()
-        return nil, fmt.Errorf("failed to create onion service: %w", err)
+        return nil, fmt.Errorf("failed to read onion hostname: %w", err)
     }
-
-    // Save key for persistent address (if newly generated)
-    if key == nil && resp.Key != nil {
-        if err := saveOnionKey(keyPath, resp.Key); err != nil {
-            log.Printf("Warning: failed to save onion key: %v", err)
-        }
-    }
+    onionAddress := strings.TrimSpace(string(onionBytes))
 
     svc := &TorService{
-        tor:        t,
-        serviceID:  resp.ServiceID,
-        key:        key,
-        serverPort: serverPort,
+        tor:            t,
+        onionAddress:   onionAddress,
+        torBackendPort: torBackendPort,
     }
 
     // Initialize outbound dialer if enabled (server-wide setting)
@@ -39656,13 +39625,13 @@ func startDedicatedTor(ctx context.Context, serverPort int, cfg *TorConfig) (*To
         }
     }
 
-    log.Printf("Tor hidden service started: %s.onion:%d → 127.0.0.1:%d", resp.ServiceID, cfg.VirtualPort, serverPort)
+    log.Printf("Tor hidden service started: %s:%d → 127.0.0.1:%d", onionAddress, cfg.VirtualPort, torBackendPort)
     return svc, nil
 }
 
 // OnionAddress returns the full .onion address
 func (s *TorService) OnionAddress() string {
-    return s.serviceID + ".onion"
+    return s.onionAddress
 }
 
 // OutboundEnabled returns true if Tor outbound connections are available
@@ -39698,15 +39667,8 @@ func (s *TorService) Close() error {
     return nil
 }
 
-// saveOnionKey saves the ED25519 private key for persistent .onion address
-func saveOnionKey(path string, key control.Key) error {
-    // Ensure directory exists
-    if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-        return err
-    }
-    // Write key with restricted permissions
-    return os.WriteFile(path, key.Blob(), 0600)
-}
+// The onion key and hostname are generated and persisted by Tor itself under
+// HiddenServiceDir ({data_dir}/tor/site) - the app never writes the key.
 ```
 
 ### Port Allocation
@@ -39730,24 +39692,24 @@ func saveOnionKey(path string, key control.Key) error {
 │ Tor Network                                                         │
 │ xyz...abc.onion:80                                                  │
 └─────────────┬───────────────────────────────────────────────────────┘
-              │ forwards to (via ADD_ONION)
+              │ forwards to (via HiddenServicePort)
               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │ Server's Tor Process (owned by server binary)                      │
 │ Control: 127.0.0.1:auto                                             │
 └─────────────┬───────────────────────────────────────────────────────┘
-              │ connects to
+              │ connects to (prepends HAProxy PROXY v1 header)
               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│ Server's HTTP Listener                                              │
-│ 127.0.0.1:{server_port}  (server's existing HTTP port)             │
+│ Dedicated PROXY-protocol backend listener (go-proxyproto)          │
+│ 127.0.0.1:{tor_backend_port}  (SEPARATE from clearnet port)        │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-- **bine uses `control.AddOnion()`** with port mapping: `80 → 127.0.0.1:{server_port}`
-- **Tor forwards to server's existing HTTP port** - no new listener created
+- **torrc `HiddenServicePort {virtual_port} 127.0.0.1:{tor_backend_port}`** maps the onion to the dedicated backend
+- **Tor forwards to a dedicated PROXY-protocol loopback listener** - NOT the public clearnet port
 - **Same on ALL platforms** - control uses the same localhost auto-port model
-- **Server port is NOT a Tor port** - it's the server's normal HTTP listener
+- **Backend port is loopback-only** - it exists solely to receive Tor's PROXY-wrapped connections
 
 **Control connection:**
 - **All OSes**: TCP on `127.0.0.1:auto` - localhost only
@@ -39758,25 +39720,28 @@ func saveOnionKey(path string, key control.Key) error {
 
 ### Tor Configuration Optimizations
 
-**Hidden Service → Server Port Mapping:**
-- **Uses `control.AddOnion()`** - NOT torrc-based HiddenServiceDir
-- Hidden service forwards `.onion:80` → `127.0.0.1:{server_port}` (server's existing HTTP port)
-- Port mapping specified via `control.KeyVal`: virtual port 80 → target `127.0.0.1:{server_port}`
-- Tor connects to server's existing HTTP listener - no new ports opened
+**Hidden Service → Backend Port Mapping:**
+- **Uses torrc `HiddenServiceDir` + `HiddenServicePort`** - NOT ADD_ONION
+- Hidden service forwards `.onion:{virtual_port}` → `127.0.0.1:{tor_backend_port}` (dedicated PROXY-protocol listener)
+- Port mapping declared in torrc: `HiddenServicePort {virtual_port} 127.0.0.1:{tor_backend_port}`
+- App binds a dedicated PROXY-aware loopback listener - separate from the clearnet port
 
 ```go
 // getTorConfig generates torrc content from TorConfig settings
 //
-// NOTE: Hidden service is created via control.AddOnion(), NOT torrc
-// The torrc only configures Tor daemon settings, not the hidden service itself
+// NOTE: The hidden service IS declared in this torrc via the HiddenServiceDir
+// block (HiddenServiceDir/HiddenServicePort/HiddenServiceExportCircuitID) - NOT
+// via ADD_ONION. hsDir is the HiddenServiceDir; torBackendPort is the dedicated
+// PROXY-protocol loopback listener the service forwards to.
 //
-// PORT DETECTION: All ports use runtime detection via "auto" - never saved/hardcoded
+// PORT DETECTION: SocksPort/ControlPort use runtime detection via "auto" - never
+// saved/hardcoded. torBackendPort is a fixed loopback port the app binds first.
 // - SocksPort auto: Tor picks available high port at startup
 // - ControlPort 127.0.0.1:auto: Tor picks available high port on all OSes
 // - bine reads actual port from control connection after Tor starts
 //
 // NEVER uses default Tor ports (9050, 9051) - uses localhost auto ports
-func getTorConfig(cfg *TorConfig) string {
+func getTorConfig(cfg *TorConfig, hsDir string, torBackendPort int) string {
     // All OSes use the same localhost auto-port control connection.
     // "auto" = Tor picks an available high port at runtime (never saved)
     controlConfig := "ControlPort 127.0.0.1:auto"
@@ -39841,7 +39806,10 @@ ExitPolicy reject *:*
 ORPort 0
 DirPort 0
 
-# Hidden service optimizations (actual HS created via ADD_ONION)
+# Guard-discovery-attack defense (vanguards-lite) - built into Tor >= 0.4.7; keep enabled, never disable
+VanguardsLiteEnabled 1
+
+# Hidden service optimizations
 HiddenServiceSingleHopMode 0
 
 # Faster startup
@@ -39850,7 +39818,16 @@ FetchDirInfoExtraEarly 1
 
 # Reduce memory usage
 DisableDebuggerAttachment 1
-`, socksConfig, controlConfig, safeLogging, cfg.BandwidthRate, cfg.BandwidthBurst, accountingConfig)
+
+# ============================================================
+# Hidden Service (v3) - Tor generates and persists the key + hostname here
+# ============================================================
+HiddenServiceDir %s
+HiddenServiceVersion 3
+HiddenServicePort %d 127.0.0.1:%d
+# Export per-rendezvous-circuit ID via HAProxy PROXY protocol (opaque token, not an IP)
+HiddenServiceExportCircuitID haproxy
+`, socksConfig, controlConfig, safeLogging, cfg.BandwidthRate, cfg.BandwidthBurst, accountingConfig, hsDir, cfg.VirtualPort, torBackendPort)
 }
 ```
 
@@ -39872,25 +39849,29 @@ DisableDebuggerAttachment 1
 - `SocksPort auto` → Tor picks available high port, bine reads it after startup
 - `ControlPort 127.0.0.1:auto` → Tor picks available high port on localhost
 
-**Hidden Service Settings (via `control.AddOnion()`, not torrc):**
+**Hidden Service Settings (via torrc `HiddenServiceDir`, not ADD_ONION):**
 
-The hidden service is created using bine's `control.AddOnion()` method, which sends the ADD_ONION command to Tor:
+The hidden service is declared in the generated torrc; Tor creates and persists everything under `HiddenServiceDir`:
 
-| Setting | How Applied | Description |
-|---------|-------------|-------------|
-| Version 3 | `control.GenKey(control.KeyAlgoED25519V3)` | v3 onion (56 chars, ed25519) |
-| Target port | `control.NewKeyVal("80", "127.0.0.1:{port}")` | Forwards to server's HTTP port |
-| Virtual port | Key in KeyVal (e.g., "80") | `.onion` port users connect to |
-| Key persistence | `{data_dir}/tor/site/hs_ed25519_secret_key` | Server saves/loads key for persistent address |
+| Setting | torrc directive | Description |
+|---------|-----------------|-------------|
+| Version 3 | `HiddenServiceVersion 3` | v3 onion (56 chars, ed25519) |
+| Target port | `HiddenServicePort {virtual_port} 127.0.0.1:{tor_backend_port}` | Forwards to dedicated PROXY-protocol listener |
+| Virtual port | First value of `HiddenServicePort` (e.g., `80`) | `.onion` port users connect to |
+| Circuit ID export | `HiddenServiceExportCircuitID haproxy` | Per-circuit ID via PROXY protocol (opaque token, not an IP) |
+| Guard defense | `VanguardsLiteEnabled 1` | Guard-discovery-attack defense (built into Tor; keep enabled) |
+| Key persistence | `{data_dir}/tor/site/` (`hs_ed25519_secret_key`, `hostname`) | Tor generates and persists the key + address |
 
 **Required bine imports:**
 ```go
-// AddOnion, KeyVal, GenKey
-"github.com/cretz/bine/control"
 // Start, Tor, StartConf
 "github.com/cretz/bine/tor"
-// ED25519 key handling
-"github.com/cretz/bine/torutil/ed25519"
+```
+
+**Required PROXY-protocol import (dedicated Tor backend listener):**
+```go
+// Parses HAProxy PROXY v1 header to read the exported circuit ID
+"github.com/pires/go-proxyproto"
 ```
 
 ### Tor Process Lifecycle
@@ -39934,18 +39915,18 @@ type TorManager struct {
     // Tor configuration settings
     config     *TorConfig
     dataDir    string
-    // Server's HTTP port to forward to
-    serverPort int
+    // Dedicated PROXY-protocol loopback port the hidden service forwards to
+    torBackendPort int
     ctx        context.Context
     cancel     context.CancelFunc
 }
 
 // NewTorManager creates a new Tor manager with the given configuration
-func NewTorManager(ctx context.Context, serverPort int, config *TorConfig) *TorManager {
+func NewTorManager(ctx context.Context, torBackendPort int, config *TorConfig) *TorManager {
     return &TorManager{
         config:     config,
         dataDir:    filepath.Join(paths.GetDataDir(), "tor"),
-        serverPort: serverPort,
+        torBackendPort: torBackendPort,
         ctx:        ctx,
     }
 }
@@ -39960,7 +39941,7 @@ func (tm *TorManager) Start() error {
 
 // startLocked starts Tor (must be called with mutex held)
 func (tm *TorManager) startLocked() error {
-    service, err := startDedicatedTor(tm.ctx, tm.serverPort, tm.config)
+    service, err := startDedicatedTor(tm.ctx, tm.torBackendPort, tm.config)
     if err != nil {
         return err
     }
@@ -40000,7 +39981,8 @@ func (tm *TorManager) UpdateConfig(config *TorConfig) error {
     // Regenerate torrc with new settings (overwrite existing)
     configDir := paths.GetConfigDir()
     torrcPath := filepath.Join(configDir, "tor", "torrc")
-    torrcContent := getTorConfig(config)
+    // hsDir is {data_dir}/tor/site (tm.dataDir is {data_dir}/tor)
+    torrcContent := getTorConfig(config, filepath.Join(tm.dataDir, "site"), tm.torBackendPort)
 
     if err := updateTorrc(torrcPath, []byte(torrcContent)); err != nil {
         return fmt.Errorf("failed to update torrc: %w", err)
@@ -40028,7 +40010,7 @@ func (tm *TorManager) RegenerateAddress() (string, error) {
         return "", fmt.Errorf("failed to remove old keys: %w", err)
     }
 
-    // Start Tor - new keys will be generated by control.AddOnion
+    // Start Tor - new key/hostname will be generated by Tor under HiddenServiceDir
     if err := tm.startLocked(); err != nil {
         return "", err
     }
@@ -40107,16 +40089,18 @@ func main() {
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
-    // Server's HTTP port (already listening)
-    serverPort := 8080
+    // Dedicated PROXY-protocol loopback listener for Tor backend traffic
+    // (separate from the public clearnet listener; carries the HAProxy
+    // PROXY v1 header with the per-rendezvous circuit ID)
+    torBackendPort := 8081
 
     // Get Tor configuration (from config file)
     // Uses TorConfig struct with all settings
     torConfig := config.Tor
 
-    // Start Tor - forwards .onion:{virtual_port} → 127.0.0.1:serverPort
+    // Start Tor - torrc HiddenServicePort forwards .onion:{virtual_port} → 127.0.0.1:torBackendPort
     // TorConfig contains all settings including outbound network options
-    torService, err := startDedicatedTor(ctx, serverPort, &torConfig)
+    torService, err := startDedicatedTor(ctx, torBackendPort, &torConfig)
     if err != nil {
         log.Printf("Warning: Tor disabled - %v", err)
         // Continue without Tor
