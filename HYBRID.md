@@ -16284,6 +16284,22 @@ Tor hidden services are always plain `http://` — the `.onion` address is itsel
 
 These rules apply only to requests detected as Tor requests. Clearnet requests keep full HTTPS enforcement (redirect, HSTS, upgrade-insecure-requests) unchanged.
 
+### Tor Capability Limitations (Examples)
+
+These are concrete cases of parity-principle point 2 — features that cannot work, or must adapt, for a Tor request. The list is illustrative, not exhaustive; whenever one is reached on a Tor request, either substitute a Tor-appropriate behavior or fail loudly with a context-specific message — never silently, and never by reaching out to a clearnet endpoint.
+
+| Feature | Why it differs over Tor | Correct behavior |
+|---------|-------------------------|------------------|
+| **Client IP address / geolocation** | Onion routing hides the client; the request arrives from the local Tor daemon, so the connection's remote address is loopback (`127.0.0.1`). The real client IP and its country are unknowable by design. | Never log or display a "real" IP for Tor requests; skip GeoIP; derive locale from the `Accept-Language` header, never from IP geolocation. |
+| **IP-based rate limiting / allow-deny lists / abuse blocking** | Every Tor request appears to come from loopback, so per-IP counters and CIDR rules collapse into a single bucket. | Rate-limit Tor traffic by session, account, API token, or a global onion-wide limit instead of by IP; never apply clearnet IP allow/deny lists to Tor requests. |
+| **Public-CA / Let's Encrypt certificates** | ACME cannot validate a `.onion` and there is no HTTPS endpoint on the hidden service. | None needed — the Tor circuit already encrypts end-to-end (see "Tor HTTP Semantics"). |
+| **HTTP/3 (QUIC)** | QUIC runs over UDP; Tor carries TCP only. | Serve HTTP/1.1 or HTTP/2 over the onion; never advertise `Alt-Svc: h3` to a Tor request. |
+| **Third-party clearnet embeds** — external CDNs, fonts, scripts, remote images, analytics | Loading a clearnet URL from a `.onion` page either fails or deanonymizes the user by forcing a non-Tor request. | Serve every asset same-origin from the onion; ship fonts/scripts/images locally; disable third-party analytics for Tor requests. |
+| **Third-party OAuth / SSO login** | Many providers reject `.onion` redirect URIs and will not federate to a hidden service. | Offer local or onion-native auth for Tor; if an external provider is required and unavailable, show a clear "not available over Tor" message — never redirect to a clearnet callback. |
+| **CAPTCHA (reCAPTCHA, hCaptcha) and other clearnet security services** | These are clearnet endpoints; calling them from a `.onion` leaks the request off Tor and usually fails. | Use a self-hosted / Tor-friendly challenge or a proof-of-work / rate-limit alternative. |
+| **Payment gateways, webhooks, outbound callbacks to clearnet** | The target is a clearnet URL; an onion-origin request to it defeats anonymity or is rejected. | Route through a Tor-aware integration if one exists; otherwise fail loudly and tell the user the action isn't available over Tor. |
+| **Absolute / cross-network links and email links** | A link to the clearnet FQDN pushes the user off Tor and leaks the clearnet identity. | Build every absolute URL (canonical tags, redirects, webhook/callback URLs, reset/verification email links) from `tor.onion_address` for Tor requests. |
+
 ### Tor Privacy Rules
 
 These rules apply to **all responses** when the request is detected as a Tor request:
