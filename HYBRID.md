@@ -763,7 +763,6 @@ The server persona has two optional feature blocks. **Both are DISABLED by defau
 | Feature | PART | Requires | Default |
 |---|---|---|---|
 | Server admin (admin user + admin routes) | PART 28 | — | Disabled |
-| Client & agent support | PART 29 | — | Disabled |
 
 Gate rules:
 
@@ -8452,7 +8451,7 @@ Token revocation is operator-only via CLI: `{project_name} --maintenance token r
 
 | Aspect | Rule |
 |---|---|
-| Format | `sys_` + 36 random characters (distinct from `tok_` operator/resource tokens and, when PART 29 is enabled, agent tokens) |
+| Format | `sys_` + 36 random characters (distinct from `tok_` operator/resource tokens) |
 | Generation | On a user's first run of any persona, generate the token and write it raw to `{user_config_dir}/user.token` (0600, owned by that user) |
 | Server-side storage | Only `SHA-256(token)` is stored, in the `system_users` table (`username`, `uid`, `token_hash`, `created_at`, `rotated_at`, `last_used_at`, `status`) — the raw token is never stored server-side and never logged |
 | Enrollment | Over the user's own broker socket: the instance submits the hash via `main.sock`, and the kernel peer credential (UID) is the identity proof (PART 4 → "Identity & Trust") — the server process never reads user home directories |
@@ -11759,7 +11758,7 @@ Flags:
 
 **What official site affects:**
 - README.md: Default production site URL in examples
-- CLI/Agent: Default `--server` URL (so users don't need to specify)
+- CLI: Default `--server` URL (so users don't need to specify)
 
 **What official site does NOT affect:**
 - Docker labels (use `{project_org}`, `{project_name}`, `{fqdn}`)
@@ -11804,9 +11803,9 @@ Enter choice [1-4]:
 
 - **No escalation** — help at every level (main, subcommand, nested) must never call `sudo`, require root/admin, or check privilege state; exit immediately with the help text.
 
-#### Boolean/Truthy-Falsey Handling (CLI & Agent)
+#### Boolean/Truthy-Falsey Handling (CLI)
 
-**CLI and Agent binaries use the SAME truthy/falsey parsing as the server.**
+**The CLI binary uses the SAME truthy/falsey parsing as the server.**
 
 See PART 5: Boolean Handling for the complete implementation.
 
@@ -13567,7 +13566,6 @@ See **Database Schema for Configuration** section in PART 5 for full table defin
 | Core: settings/config, cache, `rate_limits`, `audit_log`, `app_secrets`, `learned_origins` | Always | PART 5 |
 | Core: `system_users` (per-system-user tokens) | Always | PART 8 |
 | Admin panel tables (admin sessions, panel state) | Admin panel enabled | PART 28 |
-| Agent tables (agents, agent tokens, agent check-ins) | Agents enabled | PART 29 |
 
 **Rule:** each optional PART defines its own `CREATE TABLE IF NOT EXISTS` statements. `EnsureSchema` includes those statements in `createStatements` only when the feature's IDEA.md flag is enabled. A disabled feature MUST leave zero tables behind — never pre-create tables "just in case".
 
@@ -20902,7 +20900,7 @@ Startup (for configured FQDN)
 
 ## Optional-Feature Gating
 
-**The server admin panel (PART 28) and the standalone client & agent (PART 29) are the ONLY optional features — disabled by default and enabled per-project via IDEA.md.** Everything in this PART that references the admin panel (`/server/{admin_path}/*` routes, `admin.tmpl`, `partial/admin/*`, the admin token login) applies ONLY when PART 28 is enabled. When disabled (the default), those routes, templates, and UI elements do not exist and MUST NOT be built. **Exception (core, never gated):** the per-system-user `sys_` token login and the Instance Switcher are part of the core frontend and exist in every build (see PART 8 → "Per-System-User Tokens").
+**The server admin panel (PART 28) is the ONLY optional feature — disabled by default and enabled per-project via IDEA.md.** Everything in this PART that references the admin panel (`/server/{admin_path}/*` routes, `admin.tmpl`, `partial/admin/*`, the admin token login) applies ONLY when PART 28 is enabled. When disabled (the default), those routes, templates, and UI elements do not exist and MUST NOT be built. **Exception (core, never gated):** the per-system-user `sys_` token login and the Instance Switcher are part of the core frontend and exist in every build (see PART 8 → "Per-System-User Tokens").
 
 ## Requirements
 
@@ -20944,7 +20942,7 @@ Startup (for configured FQDN)
 | **Same validation** | Frontend validates same rules as backend |
 | **Real-time feedback** | Frontend shows success/error from backend responses |
 
-**User-facing features work in browser. System/agent endpoints are API-only (see PART 13).**
+**User-facing features work in browser. System endpoints are API-only (see PART 13).**
 
 ### Frontend Route Structure
 
@@ -23795,7 +23793,7 @@ async function requestPersistentStorage() {
 
 ## Unified Response Format
 
-**ALL responses (server → client/agent) use this exact format. Simple to parse everywhere.**
+**ALL responses (server → client) use this exact format. Simple to parse everywhere.**
 
 ### Success Response
 
@@ -23821,9 +23819,9 @@ Canonical shape is defined in PART 13 — this is a summary, not a re-definition
 
 `details` is optional structured context (e.g. per-field validation errors) and may be absent.
 
-### Standard Error Codes (server sends, client/agent parses)
+### Standard Error Codes (server sends, client parses)
 
-| Error Code | HTTP | Message | Client/Agent Display |
+| Error Code | HTTP | Message | Client Display |
 |------------|------|---------|---------------------|
 | `BAD_REQUEST` | 400 | "Invalid request format" | Invalid request |
 | `VALIDATION_FAILED` | 400 | "Validation failed: {field}" | Check input: {field} |
@@ -23842,10 +23840,10 @@ Canonical shape is defined in PART 13 — this is a summary, not a re-definition
 
 ### Parsing Rules
 
-**All consumers (client binary, agent binary, WebUI, external tools) parse the same way:**
+**All consumers (client binary, WebUI, external tools) parse the same way:**
 
 ```go
-// Universal API response parser - works for server, client, agent
+// Universal API response parser - works for server, client
 type APIResponse struct {
     OK      bool            `json:"ok"`
     Data    json.RawMessage `json:"data,omitempty"`
@@ -23862,7 +23860,7 @@ func ParseAPIResponse(body []byte) (*APIResponse, error) {
     return &r, nil
 }
 
-// Usage in client/agent
+// Usage in client
 resp, _ := ParseAPIResponse(body)
 if !resp.OK {
     // Display: resp.Message (human) or handle by resp.Error (code)
@@ -23871,7 +23869,7 @@ if !resp.OK {
 // Success: use resp.Data
 ```
 
-### Client/Agent Message Display
+### Client Message Display
 
 | Context | What to Show |
 |---------|--------------|
@@ -23944,7 +23942,7 @@ if !resp.OK {
 
 ## Text Response Format
 
-**CLI/agent text output uses standardized format. Easy to parse with grep/awk/cut.**
+**CLI text output uses standardized format. Easy to parse with grep/awk/cut.**
 
 ### Success Response (text/plain)
 
@@ -23987,7 +23985,7 @@ ERROR: VALIDATION_FAILED: email must be valid
 
 ## Server Response Rules
 
-**These rules apply SERVER-WIDE to ALL responses (API, frontend AJAX, CLI, agent, webhooks).**
+**These rules apply SERVER-WIDE to ALL responses (API, frontend AJAX, CLI, webhooks).**
 
 ### Content-Type Detection
 
@@ -23997,7 +23995,7 @@ ERROR: VALIDATION_FAILED: email must be valid
 | `.txt` suffix (API only) | `text/plain` | Text |
 | `Accept: application/json` | `application/json` | JSON |
 | `Accept: text/plain` | `text/plain` | Text |
-| CLI/Agent (auto-detected) | `text/plain` | Text |
+| CLI (auto-detected) | `text/plain` | Text |
 | Browser (no Accept header) | `text/html` | HTML |
 | Frontend AJAX/fetch | Auto-detect from `Accept` | JSON/Text |
 
@@ -25895,7 +25893,7 @@ When the admin panel is enabled (PART 28) these are also editable at `/server/{a
 
 ## CSRF Protection
 
-**CSRF protects cookie-authenticated browser forms from cross-site forgery. It does NOT apply to Bearer/API-token requests, public endpoints, read-only methods, or callers that don't carry browser cookies — applying it there breaks legitimate clients (CLI tools, agents, webhooks, OAuth callbacks) without adding security value.**
+**CSRF protects cookie-authenticated browser forms from cross-site forgery. It does NOT apply to Bearer/API-token requests, public endpoints, read-only methods, or callers that don't carry browser cookies — applying it there breaks legitimate clients (CLI tools, webhooks, OAuth callbacks) without adding security value.**
 
 ### When CSRF Validation Runs
 
@@ -32365,7 +32363,6 @@ docker run --rm \
         echo 'client not built - skipping'
     fi
 
-    echo '=== Agent Tests (if exists) ==='
 
     echo '=== Stopping Server ==='
     kill \$SERVER_PID
@@ -32561,7 +32558,6 @@ incus exec "$CONTAINER_NAME" -- bash -c "
         echo 'client not installed - skipping'
     fi
 
-    echo '=== Agent Tests (if exists) ==='
 
     echo '=== Service Stop Test ==='
     # inside VM — not a host-service mutation
@@ -35579,7 +35575,6 @@ build:beta:
     - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-arm64.exe ./src/client; fi
     - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-amd64 ./src/client; fi
     - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-arm64 ./src/client; fi
-    # Build Agent if exists
     # Export VERSION via dotenv so release:beta (which only sees predefined CI
     # variables or dotenv-exported ones) can reuse the exact identity embedded
     # via LDFLAGS above, instead of recomputing its own timestamp
@@ -35691,7 +35686,6 @@ build:daily:
     - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-windows-arm64.exe ./src/client; fi
     - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-amd64 ./src/client; fi
     - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" -o ${PROJECT_NAME}-cli-freebsd-arm64 ./src/client; fi
-    # Build Agent if exists
   artifacts:
     paths:
       - ${PROJECT_NAME}-*
@@ -37821,7 +37815,6 @@ make test
 | **Email Templates** | Subject lines, body text, headings, CTAs, regulatory/compliance notices |
 | **Server CLI Output** | Help text, status messages, error messages, startup banners |
 | **Client CLI Output** | Help text, command descriptions, error messages, TUI labels, operator output |
-| **Agent Output** | Help text, status messages, error messages, startup banners, registration prompts |
 | **Health Page** | Status labels, section headings, field labels |
 | **Cookie Consent** | Banner text, category descriptions, button labels |
 | **Privacy/Terms** | Full legal page content |
@@ -38736,7 +38729,7 @@ func sendOperatorAlert(recipient, alertType, lang string) {
 }
 ```
 
-### CLI/Agent/Server Output Translation
+### CLI/Server Output Translation
 
 **ALL binaries support `--lang` flag for output language. Language detection priority:**
 
@@ -38782,7 +38775,7 @@ func validateLang(lang string) string {
 **How language flows through the system:**
 
 ```
-CLI/Agent (--lang es)
+CLI (--lang es)
     │
     ├─ Local output: help, status, errors → translated via embedded locales
     │
@@ -38796,7 +38789,7 @@ CLI/Agent (--lang es)
                    └─ Blocklist reject_message: uses t(r, "errors.forbidden")
 ```
 
-**CLI/Agent sends `Accept-Language` header on all API requests:**
+**The CLI sends `Accept-Language` header on all API requests:**
 
 ```go
 func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request, error) {
@@ -38830,7 +38823,6 @@ func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request,
 #   {project_name}-cli [comando] [opciones]
 # ...
 
-# Agent output in Spanish
 
 # Server banner in Spanish
 LANG=es_ES.UTF-8 {project_name}
@@ -40992,7 +40984,6 @@ I2P Eepsite: Running (i2pd)
 /server/{admin_path}/config/security/tokens    # API token management
 /server/{admin_path}/config/security/firewall  # Firewall rules
 /server/{admin_path}/config/users/             # System users (read-only view of system_users)
-/server/{admin_path}/config/agents/            # Agent management (if agents)
 ```
 
 ### Route Hierarchy Rules
@@ -41024,7 +41015,6 @@ I2P Eepsite: Running (i2pd)
 /server/{admin_path}/email             # ✗ WRONG - use /server/{admin_path}/config/email
 /server/{admin_path}/tor               # ✗ WRONG - use /server/{admin_path}/config/network/tor
 /server/{admin_path}/tokens            # ✗ WRONG - use /server/{admin_path}/config/security/tokens
-/server/{admin_path}/agents            # ✗ WRONG - use /server/{admin_path}/config/agents
 
 # CORRECT
 /server/{admin_path}/{admin_username}/profile      # ✓ Admin's own profile
@@ -41044,7 +41034,6 @@ I2P Eepsite: Running (i2pd)
 /api/{api_version}/server/{admin_path}/config/setup             # Setup flow
 /api/{api_version}/server/{admin_path}/config/settings          # Server settings
 /api/{api_version}/server/{admin_path}/config/users             # System users (read-only)
-/api/{api_version}/server/{admin_path}/config/agents            # Agent management
 ```
 
 ### Route Conflict Prevention
@@ -42800,386 +42789,11 @@ The admin panel MUST include a scheduler section with:
 | `/api/{api_version}/server/{admin_path}/config/logs/{type}` | GET | Get log entries |
 | `/api/{api_version}/server/{admin_path}/config/logs/{type}/download` | GET | Download log file |
 
-## Agent Management (OPTIONAL - When Agent is Enabled)
-
-**Agent management routes are only available when the project includes an agent component.**
-
-**See PART 29 for full agent binary and setup details.**
-
-### Admin Panel (`/server/{admin_path}/config/agents`)
-
-**Main agent dashboard showing all registered agents:**
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  /server/{admin_path}/config/agents                                                         │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Connected Agents                                              [+ Add Agent] │
-│  ─────────────────────────────────────────────────────────────────────────  │
-│                                                                             │
-│  │ Name              │ Status    │ Connected     │ Last Seen    │ Health   │
-│  ├───────────────────┼───────────┼───────────────┼──────────────┼──────────│
-│  │ web-server-01     │ ● Online  │ 2 hours       │ Just now     │ ✓ Good   │
-│  │ web-server-02     │ ● Online  │ 2 hours       │ 5 seconds ago│ ✓ Good   │
-│  │ db-primary        │ ● Online  │ 5 days        │ 2 seconds ago│ ⚠ Warn   │
-│  │ db-replica        │ ○ Offline │ —             │ 3 days ago   │ ✗ Error  │
-│  │ cache-01          │ ● Online  │ 12 hours      │ 1 second ago │ ✓ Good   │
-│  └───────────────────┴───────────┴───────────────┴──────────────┴──────────┘
-│                                                                             │
-│  Summary: 4 online, 1 offline                                               │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Table Columns:**
-| Column | Description |
-|--------|-------------|
-| **Name** | Agent hostname (link to detail page) |
-| **Status** | ● Online / ○ Offline |
-| **Connected** | Duration since agent connected (or — if offline) |
-| **Last Seen** | Time since last heartbeat/report |
-| **Health** | ✓ Good / ⚠ Warn / ✗ Error (based on agent metrics) |
-
-### Admin Panel (`/server/{admin_path}/config/agents/{name}`)
-
-**Detailed view of a single agent:**
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  /server/{admin_path}/config/agents/web-server-01                         [← Back to List] │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  web-server-01                                             ● Online         │
-│  ───────────────────────────────────────────────────────────────────────    │
-│                                                                             │
-│  ┌─ System Info ─────────────────────────────────────────────────────────┐  │
-│  │                                                                       │  │
-│  │  Hostname:    web-server-01                                           │  │
-│  │  OS:          Linux (Ubuntu 22.04)                                    │  │
-│  │  Arch:        amd64                                                   │  │
-│  │  Agent Ver:   1.0.0                                                   │  │
-│  │  Uptime:      45 days, 3 hours                                        │  │
-│  │  Tags:        production, web-tier, us-east-1                         │  │
-│  │                                                                       │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-│  ┌─ Connection ──────────────────────────────────────────────────────────┐  │
-│  │                                                                       │  │
-│  │  Status:      ● Connected                                             │  │
-│  │  Connected:   2 hours 15 minutes ago                                  │  │
-│  │  Last Report: Just now (every minute)                                 │  │
-│  │  IP Address:  192.168.1.100                                           │  │
-│  │                                                                       │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-│  ┌─ System Metrics ──────────────────────────────────────────────────────┐  │
-│  │                                                                       │  │
-│  │  CPU:     ████████░░░░░░░░░░░░  42%                                   │  │
-│  │  Memory:  ██████████████░░░░░░  72% (5.8 gigabytes / 8 gigabytes)     │  │
-│  │  Disk:    ████████████░░░░░░░░  62% (124 gigabytes / 200 gigabytes)   │  │
-│  │  Network: ↓ 1.2 megabytes/s  ↑ 450 kilobytes/s                        │  │
-│  │  Load:    2.45 / 4.12 / 3.87                                          │  │
-│  │                                                                       │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-│  ┌─ Actions ─────────────────────────────────────────────────────────────┐  │
-│  │                                                                       │  │
-│  │  [Refresh Now]  [View Logs]  [Edit Tags]  [Regenerate Token]          │  │
-│  │                                                                       │  │
-│  │  [Remove Agent]  ← Requires confirmation                              │  │
-│  │                                                                       │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Admin Panel (`/server/{admin_path}/config/agents/add`)
-
-**Simple agent registration page:**
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  /server/{admin_path}/config/agents/add                                   [← Back to List] │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Add New Agent                                                              │
-│  ───────────────────────────────────────────────────────────────────────    │
-│                                                                             │
-│  Agent Name (optional):                                                     │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                                                                     │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-│  Leave blank to use hostname. Equivalent to: hostname -s                    │
-│                                                                             │
-│  Tags (optional):                                                           │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │ production, web-tier                                                │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-│  Comma-separated. Used for filtering and grouping.                          │
-│                                                                             │
-│  Token Expiry:                                                              │
-│  ○ 1 hour                                                                   │
-│  ● 24 hours (recommended)                                                   │
-│  ○ 7 days                                                                   │
-│  ○ Never expires                                                            │
-│                                                                             │
-│  [Generate Agent Token]                                                     │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-         ↓ (Token generated)
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  ✅ Agent Token Generated                                                    │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Run this command on the target machine:                                       │
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │ curl -q -LSsf https://app.example.com/install-agent | sh -s -- \    │    │
-│  │   --server https://app.example.com \                                │    │
-│  │   --token adm_agt_abc123def456ghi789jkl012mno345pqr678              │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-│  [Copy to Clipboard]                                                        │
-│                                                                             │
-│  Or manually:                                                               │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │ projectname-agent --server https://app.example.com \                │    │
-│  │   --token adm_agt_abc123def456ghi789jkl012mno345pqr678              │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-│  [Copy to Clipboard]                                                        │
-│                                                                             │
-│  ⚠️  Token expires in 24 hours and can only be used once.                   │
-│                                                                             │
-│  [Done]                                                                     │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Server generates the complete command string:**
-```go
-func GenerateAgentConnectionCommand(serverURL, token string) string {
-    return fmt.Sprintf("projectname-agent --server %s --token %s", serverURL, token)
-}
-```
-
-**Agent Name Default:**
-```go
-// Go equivalent of hostname -s
-func getDefaultAgentName() string {
-    hostname, err := os.Hostname()
-    if err != nil {
-        return "unknown"
-    }
-    // hostname -s returns short hostname (before first dot)
-    if idx := strings.Index(hostname, "."); idx > 0 {
-        return hostname[:idx]
-    }
-    return hostname
-}
-```
-
-### Agent Connection Notifications
-
-**When an agent connects, server WebUI shows real-time notification:**
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  🔔 Notification                                                      [×]   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ✅ web-server-01 has connected                                             │
-│  Agent is now sending data to server for admin scope                        │
-│                                                                             │
-│  [View Agent]  [Dismiss]                                                    │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Notification message:** "{name} has connected. Agent is now sending data to server for admin scope"
-
-**Notification triggers:**
-- Agent first connection (registration complete)
-- Agent reconnection after disconnect
-- Agent status change (online/offline)
-
-### Admin Panel (`/server/{admin_path}/config/agents/remove`)
-
-**Agent removal page with confirmation:**
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  /server/{admin_path}/config/agents/remove                                [← Back to List] │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Remove Agent                                                               │
-│  ───────────────────────────────────────────────────────────────────────    │
-│                                                                             │
-│  Select agent to remove:                                                    │
-│                                                                             │
-│  ┌───────────────────┬───────────┬──────────────────────────────────────┐   │
-│  │ Name              │ Status    │ Last Seen                            │   │
-│  ├───────────────────┼───────────┼──────────────────────────────────────┤   │
-│  │ ○ web-server-01   │ ● Online  │ Just now                             │   │
-│  │ ○ web-server-02   │ ● Online  │ 5 seconds ago                        │   │
-│  │ ○ db-primary      │ ● Online  │ 2 seconds ago                        │   │
-│  │ ○ db-replica      │ ○ Offline │ 3 days ago                           │   │
-│  │ ○ cache-01        │ ● Online  │ 1 second ago                         │   │
-│  └───────────────────┴───────────┴──────────────────────────────────────┘   │
-│                                                                             │
-│  [Remove Selected]                                                          │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-         ↓ (Agent selected, click Remove)
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│  ⚠️  Remove Agent                                                           │
-│                                                                             │
-│  Are you sure you want to remove agent "db-replica"?                        │
-│                                                                             │
-│  This will:                                                                 │
-│  • Revoke the agent's authentication token                                  │
-│  • Remove the agent from the dashboard                                      │
-│  • Delete all historical metrics for this agent                             │
-│                                                                             │
-│  The agent binary on the remote machine will NOT be uninstalled.               │
-│  You must manually run: projectname-agent --service --uninstall             │
-│                                                                             │
-│              [No, Cancel]        [Yes, Remove Agent]                        │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Agents API
-
-**All agents are admin-scoped: they belong to the server and are managed by the server admin.**
-
-| Scope | Base Route | Owner Token | Agent Token |
-|-------|------------|-------------|-------------|
-| Admin | `/api/{api_version}/server/{admin_path}/config/agents/` | `adm_` | `adm_agt_` |
-
-**Endpoints (replace `{base}` with the base route above):**
-
-| Endpoint | Method | Token | Description |
-|----------|--------|-------|-------------|
-| `{base}` | GET | Owner | List agents |
-| `{base}` | POST | Owner | Create agent token |
-| `{base}/{name}` | GET | Owner | Get agent details |
-| `{base}/{name}` | PATCH | Owner | Update agent (tags, name) |
-| `{base}/{name}` | DELETE | Owner | Remove agent |
-| `{base}/{name}/token` | POST | Owner | Regenerate agent token |
-| `{base}/{name}/metrics` | GET | Owner | Get agent metrics history |
-| `{base}/register` | POST | Agent | Agent self-registration (one-time) |
-| `{base}/heartbeat` | POST | Agent | Agent health check / keepalive |
-| `{base}/report` | POST | Agent | Submit collected data (project-specific) |
-
-**Token Access:**
-- Owner token (`adm_`): Full agent management (CRUD, view metrics)
-- Agent tokens (`adm_agt_`): Limited to register, heartbeat, report (own data only)
-
-**Example:**
-```
-# Admin agent (server infrastructure)
-POST /api/{api_version}/server/{admin_path}/config/agents/register
-Authorization: Bearer adm_agt_abc123...
-```
-
-**Agent Data Views (Project-Specific):**
-
-Agent data can be exposed via project-specific routes for different audiences:
-
-| Route | Description | Example |
-|-------|-------------|---------|
-| `/server/{admin_path}/config/agents/*` | Admin management UI | Full control |
-| `/{custom}/status` | Public status page | Status dashboard |
-
-Define project-specific data views in IDEA.md.
-
-### Agent Database Schema
-
-```sql
--- agents table (admin scope only)
-CREATE TABLE agents (
-    -- UUID
-    id TEXT PRIMARY KEY,
-    -- hostname or custom name
-    name TEXT NOT NULL,
-
-    -- 'adm_agt_'
-    token_prefix TEXT NOT NULL,
-    -- SHA-256 hash of full token
-    token_hash TEXT NOT NULL,
-
-    -- System info (from agent)
-    hostname TEXT,
-    -- linux, windows, darwin
-    os TEXT,
-    -- amd64, arm64
-    arch TEXT,
-    -- Agent version
-    version TEXT,
-
-    -- Tags
-    -- JSON array: ["prod", "web"]
-    tags TEXT,
-
-    -- Connection tracking
-    -- pending, online, offline
-    status TEXT DEFAULT 'pending',
-    ip_address TEXT,
-    connected_at TIMESTAMP,
-    last_seen_at TIMESTAMP,
-
-    -- Metadata
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    -- Agent names are unique
-    UNIQUE(name)
-);
-
--- agent_metrics table (for historical data)
-CREATE TABLE agent_metrics (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-
-    -- Metrics
-    cpu_percent REAL,
-    memory_percent REAL,
-    memory_used_bytes INTEGER,
-    memory_total_bytes INTEGER,
-    disk_percent REAL,
-    disk_used_bytes INTEGER,
-    disk_total_bytes INTEGER,
-    network_rx_bytes INTEGER,
-    network_tx_bytes INTEGER,
-    load_1 REAL,
-    load_5 REAL,
-    load_15 REAL,
-
-    -- Custom metrics (JSON)
-    custom_metrics TEXT,
-
-    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_agent_metrics_agent_time ON agent_metrics(agent_id, recorded_at);
-```
-
 ---
 
-# PART 29: CLIENT & AGENT (OPTIONAL - DISABLED BY DEFAULT; NON-NEGOTIABLE WHEN ENABLED)
+# PART 29: CLIENT (companion to PART 8)
 
-**This PART is DISABLED BY DEFAULT.** It applies ONLY when `IDEA.md` `## Business logic` explicitly enables agent support for `{project_name}` (the project genuinely needs remote agents per the "When Agent is Needed" decision material in this PART). When agent support is not enabled, this PART is inert: no agent subcommand, no agent API routes, no agent tokens, no agent database tables, and no `agent.yml` exist anywhere in the project. When agent support IS enabled, every rule in this PART is NON-NEGOTIABLE.
-
-**One binary:** in HYBRID projects the agent is NOT a separate binary. It is the same single binary (PART 0, PART 2) running in agent mode via the `{project_name} agent` subcommand, using the frozen `{internal_name}` for all on-disk and service identity (PART 3). A dedicated agent build exists only if `IDEA.md` explicitly declares one.
-
-**Admin panel gating:** the agent admin views in this PART exist only when the admin panel (PART 28) is ALSO enabled. Agent support itself does NOT require the admin panel — agents are fully manageable via the server CLI and API using admin-scope tokens.
-
-**Client extension gating:** the client subsections below (API token authentication, config file permissions for tokens, token revocation handling) are client-side companions to the per-system-user token system (PART 8 → "Per-System-User Tokens") and apply to any client build/mode, even if agent support is not enabled.
+**The client is REQUIRED for every project and is fully specified in PART 8 → "Client".** This PART is not optional; it adds ONLY the client-side companions to the per-system-user token system (PART 8 → "Per-System-User Tokens") that PART 8 does not restate — API token authentication, config-file permissions for tokens, token revocation handling, CLI auto-update, and flag-to-config save rules. These apply to any client build/mode.
 
 ## Client
 
@@ -43274,1000 +42888,15 @@ export {PROJECT_NAME}_TOKEN="sys_abc123..."
 
 **On `401 TOKEN_REVOKED`:** the CLI MUST also delete the cached token from `cli.yml` / `token` so the next invocation prompts for fresh credentials instead of replaying the dead token. Same behavior on `401 TOKEN_EXPIRED`.
 
-**No 3-channel propagation like agents:** CLI is short-lived and request-driven, so the simple "next request returns 401, CLI exits gracefully" pattern is sufficient. There's no long-poll/WebSocket channel to push a control message.
+**No push-based revocation channel:** CLI is short-lived and request-driven, so the simple "next request returns 401, CLI exits gracefully" pattern is sufficient. There's no long-poll/WebSocket channel to push a control message.
 
 ## CLI Auto-Update
 
-Fully specified in **PART 8 → "CLI Auto-Update (Same Pattern as Server Self-Update)"** — check version via autodiscover, download from the server, verify SHA-256, atomic replace, re-exec (the same flow as the server self-update in PART 21). One addition when this PART is enabled: the agent uses the SAME self-update flow (see "Agent" below); `/api/autodiscover` returns agent version info alongside `cli_versions` and server info.
+Fully specified in **PART 8 → "CLI Auto-Update (Same Pattern as Server Self-Update)"** — check version via autodiscover, download from the server, verify SHA-256, atomic replace, re-exec (the same flow as the server self-update in PART 21).
 
 ## Flag-to-Config Save Rules
 
 See **PART 8 → "Flag-to-Config Save Rules"** — flags only update `cli.yml` when the current value is empty or invalid; otherwise they apply to the current invocation only. Those rules apply unchanged to `--server` and `--token`.
-
-## Agent (NON-NEGOTIABLE WHEN ENABLED)
-
-**Agent support is only needed for very specific project types.** Most projects do NOT need an agent. The decision material below is exactly what the `IDEA.md` `## Business logic` gate at the top of this PART encodes — enable agent support only when it answers YES.
-
-### When Agent is Needed vs Not Needed
-
-**Key Question: Does the server need to reach INTO remote machines to collect data or execute commands?**
-
-| Scenario | Agent Needed? | Why |
-|----------|---------------|-----|
-| Server collects CPU/RAM/disk from 50 machines | ✅ YES | Agent runs on each machine, pushes metrics |
-| Users upload files via web form | ❌ NO | User initiates, server receives |
-| API serves random quotes | ❌ NO | Server has all data locally |
-| Execute shell commands on remote servers | ✅ YES | Agent receives commands, executes locally |
-| CI/CD pipeline runner on build machines | ✅ YES | Agent pulls jobs, runs builds |
-| Pastebin with user submissions | ❌ NO | Pull-based, users push data |
-| Centralized log aggregation | ✅ YES | Agent tails local logs, ships to server |
-| Weather API (fetches from external sources) | ❌ NO | Server fetches, no machine access needed |
-| Backup orchestration across servers | ✅ YES | Agent runs backup commands locally |
-| Git hosting (Gitea, Forgejo) | ❌ NO | Users push/pull via git protocol |
-
-### Project Examples: Agent vs No Agent
-
-**Projects that DO need an agent:**
-
-| Project Type | Example Names | What Agent Does |
-|--------------|---------------|-----------------|
-| **System Monitoring** | Zabbix, Nagios, Beszel, Netdata | Collects CPU, RAM, disk, network stats from each machine |
-| **Remote Desktop/Shell** | MeshCentral, RustDesk, Teleport | Provides remote access tunnel from the machine |
-| **Log Management** | Fluentd, Filebeat, Vector, Loki | Tails log files, ships to central server |
-| **CI/CD Runners** | GitLab Runner, GitHub Actions Runner, Drone | Pulls jobs from server, executes builds |
-| **Backup Agents** | Restic, Borg, Velero, Bacula | Runs backup commands, ships data to server |
-| **Config Management** | Puppet Agent, Salt Minion, CFEngine | Pulls and applies configuration from server |
-| **Security Scanning** | OSSEC, Wazuh, Falco, Lynis | Monitors files, processes, runs audits |
-| **Container Orchestration** | Kubernetes Kubelet, Nomad Client | Runs containers as directed by control plane |
-| **Network Monitoring** | Prometheus Node Exporter, Telegraf | Exposes machine metrics for scraping |
-| **Update Management** | Landscape Client, WSUS Client | Checks for and applies updates |
-
-**Projects that do NOT need an agent:**
-
-| Project Type | Example Names | Why No Agent |
-|--------------|---------------|--------------|
-| **Content APIs** | Jokes API, Quotes API, Facts API | Data is on server, clients just fetch |
-| **Pastebin/URL Shortener** | Hastebin, YOURLS, Shlink | Users push content, server stores it |
-| **Git Hosting** | Gitea, Forgejo, GitLab | Git protocol handles push/pull |
-| **Image Hosting** | Immich, Photoprism, Piwigo | Users upload, server stores/serves |
-| **Chat/Forum** | Mattermost, Discourse, Flarum | Users connect via web/API |
-| **Wiki/Docs** | Wiki.js, BookStack, Outline | Users edit via web interface |
-| **File Sharing** | Nextcloud, Seafile, FileBrowser | Web/WebDAV uploads, no machine access |
-| **Media Server** | Jellyfin, Plex, Navidrome | Serves content from local storage |
-| **Auth/SSO** | Authentik, Authelia, Keycloak | Applications connect to auth server |
-| **Status Pages** | Uptime Kuma, Gatus, Cachet | Server checks endpoints (pull-based) |
-
-### Agent Architecture Decision Tree
-
-```
-Does your server need to:
-│
-├─► Collect data FROM remote machines (metrics, logs, files)?
-│   └─► YES → Agent needed (runs on each machine, pushes to server)
-│
-├─► Execute commands ON remote machines (shell, backup, updates)?
-│   └─► YES → Agent needed (receives commands from server)
-│
-├─► Run jobs/tasks ON remote machines (builds, scans)?
-│   └─► YES → Agent needed (pulls jobs, executes locally)
-│
-├─► Provide remote access TO machines (shell, desktop, file transfer)?
-│   └─► YES → Agent needed (establishes reverse tunnel)
-│
-└─► Just serve an API/web interface that clients call?
-    └─► NO agent - users/clients connect TO your server
-```
-
-### Agent vs Webhook/API Callback
-
-**Don't confuse agents with webhooks:**
-
-| Mechanism | Direction | Use Case |
-|-----------|-----------|----------|
-| **Agent** | Machine ↔ Server (persistent) | Continuous metrics, remote commands, bidirectional |
-| **Webhook** | External → Server (triggered) | Event notifications, CI triggers |
-| **API Poll** | Server → External (scheduled) | Weather data, external service status |
-
-**Agent = persistent daemon on remote machine communicating with central server**
-
-### Agent Communication Patterns (CRITICAL)
-
-**Agents can SEND, RECEIVE, or BOTH depending on the project type.**
-
-| Pattern | Direction | Description |
-|---------|-----------|-------------|
-| **Send Only** | Agent → Server | Agent pushes data to server (metrics, logs, status) |
-| **Receive Only** | Server → Agent | Agent receives commands/config from server |
-| **Bidirectional** | Agent ↔ Server | Agent both sends data AND receives commands |
-
-#### Send Only (Agent → Server)
-
-Agent collects local data and pushes to server. Server does NOT send commands back.
-
-| Project Type | Examples | What Agent Sends |
-|--------------|----------|------------------|
-| **Metrics Collection** | Beszel Agent, Telegraf, collectd | CPU, RAM, disk, network stats |
-| **Log Shipping** | Filebeat, Fluentd, Vector, Promtail | Log entries, parsed logs |
-| **Health Reporting** | Consul Agent (client mode), Serf | Node health, service status |
-| **Event Streaming** | Kafka producers, NATS publishers | Application events |
-| **Uptime Monitoring** | Uptime Kuma push mode, Healthchecks.io | Heartbeats, alive signals |
-
-**Characteristics:**
-- Simple, stateless agents
-- Server is passive receiver
-- Agent initiates all communication
-- No command execution on agent
-- Lower security risk (no remote code execution)
-
-#### Receive Only (Server → Agent)
-
-Agent receives configuration or commands from server. Agent does NOT push data back (or minimal status only).
-
-| Project Type | Examples | What Agent Receives |
-|--------------|----------|---------------------|
-| **Config Management (pull)** | Puppet Agent, CFEngine | Configuration manifests, policies |
-| **Update Distribution** | WSUS Client, Landscape Client | Package updates, patches |
-| **DNS Updates** | Dynamic DNS clients | Zone changes, record updates |
-| **Certificate Distribution** | Vault Agent, cert-manager | TLS certificates, secrets |
-| **Feature Flags** | LaunchDarkly SDK, Unleash | Flag states, targeting rules |
-
-**Characteristics:**
-- Agent polls server for changes
-- Server pushes config/commands
-- Minimal feedback (success/failure only)
-- Agent applies changes locally
-
-#### Bidirectional (Agent ↔ Server) - MOST COMMON
-
-Agent both sends data AND receives commands. Full two-way communication.
-
-| Project Type | Examples | Agent Sends | Agent Receives |
-|--------------|----------|-------------|----------------|
-| **CI/CD Runners** | Jenkins Agent, GitLab Runner, GitHub Actions Runner, Drone Runner, Buildkite Agent | Build logs, artifacts, test results, status | Job definitions, build commands, environment vars |
-| **Remote Management** | MeshCentral Agent, RustDesk, Teleport, Apache Guacamole | Screen capture, file data, command output | Mouse/keyboard input, file transfers, shell commands |
-| **Container Orchestration** | Kubernetes Kubelet, Nomad Client, Docker Swarm Agent | Pod status, resource usage, container logs | Pod specs, deployments, scaling commands |
-| **Backup Orchestration** | Veeam Agent, Commvault, Bacula File Daemon | Backup status, file metadata, transfer progress | Backup schedules, retention policies, restore commands |
-| **Security/SIEM** | Wazuh Agent, OSSEC, Velociraptor | Security events, file integrity, process info | Detection rules, response actions, hunt queries |
-| **Config Management (push)** | SaltStack Minion, Ansible (with callback) | Execution results, state reports | State definitions, ad-hoc commands |
-| **Edge Computing** | Azure IoT Edge, AWS Greengrass | Telemetry, processed data | Deployment manifests, ML models |
-| **Database Replication** | MySQL Replica, PostgreSQL Standby | Replication lag, health status | WAL segments, replication commands |
-
-**Characteristics:**
-- Persistent connection (WebSocket, gRPC, or long-poll)
-- Full command-and-control capability
-- Rich status reporting
-- Higher complexity and security considerations
-- Requires authentication and authorization
-
-### Communication Pattern Decision Matrix
-
-| If your agent needs to... | Pattern | Example |
-|---------------------------|---------|---------|
-| Only report metrics/logs | **Send Only** | Beszel, Filebeat |
-| Only receive config updates | **Receive Only** | Puppet, WSUS |
-| Report status AND execute commands | **Bidirectional** | Jenkins, MeshCentral |
-| Provide remote shell/desktop | **Bidirectional** | RustDesk, Teleport |
-| Run builds/jobs on demand | **Bidirectional** | GitLab Runner, Drone |
-| Execute backups on schedule from server | **Bidirectional** | Veeam, Bacula |
-| Only push heartbeats | **Send Only** | Healthchecks.io |
-| Apply configurations pulled from server | **Receive Only** | Puppet, CFEngine |
-| Both apply config AND report detailed state | **Bidirectional** | Salt, Ansible+callback |
-
-### Security Implications by Pattern
-
-| Pattern | Risk Level | Key Concerns |
-|---------|------------|--------------|
-| **Send Only** | Low | Data exfiltration, DoS via flood |
-| **Receive Only** | Medium | Malicious config, unauthorized updates |
-| **Bidirectional** | High | Remote code execution, lateral movement |
-
-**Bidirectional agents require:**
-- Strong authentication (mTLS, tokens)
-- Authorization (what commands can execute)
-- Audit logging (who did what)
-- Input validation (prevent injection)
-- Sandboxing where possible
-
-### Determining If YOUR Project Needs Agent
-
-Answer these questions for your specific project:
-
-1. **Where does the data originate?**
-   - On user devices → No agent (users submit data)
-   - On remote servers you manage → Agent likely needed
-
-2. **Who initiates the connection?**
-   - User/client initiates → No agent (standard API)
-   - Server needs to reach machines → Agent needed
-
-3. **What runs on remote machines?**
-   - Nothing (just users with browsers) → No agent
-   - Background daemon collecting/executing → Agent needed
-
-4. **Is it push or pull?**
-   - Server pulls from external APIs → No agent
-   - Machines push data to server → Agent needed
-
-### Project Types That Need Agent
-
-| Category | Examples | Agent Purpose |
-|----------|----------|---------------|
-| **Monitoring** | Zabbix, Nagios, Prometheus Node Exporter | Machine metrics, health checks |
-| **Remote Management** | MeshCentral, RustDesk, TeamViewer | Remote shell, desktop, file transfer |
-| **System Monitor** | Beszel, Netdata, Glances | Real-time system stats |
-| **Log Shipping** | Fluentd, Filebeat, Vector | Tail and forward logs |
-| **Backup** | Restic, Borg, Duplicati | Execute local backups |
-| **Config Management** | Puppet, Ansible (pull mode), Salt | Apply configurations |
-| **Security/Compliance** | OSSEC, Wazuh, Lynis | Security scanning, audit |
-
-### Agent Runs Directly on the System, NOT Container
-
-**Agents MUST run directly on the target system, not in containers.**
-
-| Deployment | Supported | Reason |
-|------------|-----------|--------|
-| Direct on system | ✅ Yes | Full system access, accurate metrics |
-| systemd service | ✅ Yes | Preferred for Linux |
-| Windows service | ✅ Yes | Preferred for Windows |
-| launchd daemon | ✅ Yes | Preferred for macOS |
-| Docker container | ❌ No | Limited system visibility |
-| Kubernetes pod | ❌ No | Cannot monitor system properly |
-
-### Overview
-
-| Attribute | Value |
-|-----------|-------|
-| Invocation | `{project_name} agent` (agent mode of the single binary) |
-| Service identity | `{internal_name}-agent` (frozen `{internal_name}`; see PART 3) |
-| Versioning | Same as the main application (one binary, one version) |
-| Build | Same single artifact (PART 6); agent packages compile in when agent support is enabled |
-| Config file | `{config_dir}/agent.yml` (same dir as server) |
-| Data directory | `{data_dir}/` (same as server) |
-| Database | `{data_dir}/db/agent.db` (if needed, same dir as server) |
-| Privileges | **Root/Admin required** (for full system access) |
-| Update mechanism | Same as client (self-update) |
-
-### Agent Structure (Same as Server)
-
-**Agent mode shares the same CLI structure, banner, and modes as server mode (minus setup token).**
-
-| Component | Server | Agent | Notes |
-|-----------|--------|-------|-------|
-| Startup banner | ✅ | ✅ | Responsive, terminal-aware |
-| Mode line | ✅ | ✅ | Shows production/development |
-| Debug flag | ✅ | ✅ | Enables verbose logging |
-| Service management | ✅ | ✅ | install/uninstall/start/stop |
-| Self-update | ✅ | ✅ | --update flag |
-| Setup token | ✅ | ❌ | Agent uses server-issued token |
-| WebUI | ✅ | ❌ | Agent is headless |
-
-### Agent Startup Banner
-
-```
-┌────────────────────────────────────────┐
-│  ███╗   ███╗ ██████╗ ███╗   ██╗        │
-│  ████╗ ████║██╔═══██╗████╗  ██║        │
-│  ██╔████╔██║██║   ██║██╔██╗ ██║        │
-│  ██║╚██╔╝██║██║   ██║██║╚██╗██║        │
-│  ██║ ╚═╝ ██║╚██████╔╝██║ ╚████║        │
-│  ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═══╝        │
-│                                  AGENT │
-└────────────────────────────────────────┘
-
-🤖 monitor agent v1.0.0
-🔒 Running in mode: production
-
-📡 Server: https://monitor.example.com
-🏷️  Hostname: web-server-01
-🏷️  Tags: production, web-tier
-
-✅ Connected to server
-```
-
-**Compact banner (60-79 cols):**
-```
-🤖 monitor agent v1.0.0
-🔒 Mode: production
-📡 https://monitor.example.com
-🏷️  web-server-01
-✅ Connected
-```
-
-**Minimal banner (<60 cols):**
-```
-monitor agent 1.0.0
-web-server-01 → monitor.example.com
-Connected
-```
-
-**Plain banner (NO_COLOR / TERM=dumb):**
-```
-monitor agent v1.0.0
-Mode: production
-Server: https://monitor.example.com
-Hostname: web-server-01
-Tags: production, web-tier
-[OK] Connected to server
-```
-
-### Agent Flags
-
-**Same flag style as server binary, EXCEPT no `--port` or `--address` (agents don't serve web).**
-
-| Server Flag | Agent | Reason |
-|-------------|-------|--------|
-| `--port` | ❌ No | Agent doesn't serve HTTP |
-| `--address` | ❌ No | Agent doesn't listen for connections |
-| `--config` | ✅ Yes | Same config directory |
-| `--data` | ✅ Yes | Same data directory |
-| `--status` | ✅ Yes | Health check (exit 0=healthy, 1=unhealthy) |
-| `--service` | ✅ Yes | Service management |
-| `--update` | ✅ Yes | Self-update |
-
-```bash
-# Information
-# Show help
---help, -h
-# Show version (same format as server)
---version, -v
-# Print shell completions (auto-detect if SHELL omitted)
---shell completions [SHELL]
-# Print shell init command (auto-detect if SHELL omitted)
---shell init [SHELL]
-# Show status and health (exit 0=healthy, 1=unhealthy)
---status
-
-# Configuration
-# Config directory (default: {config_dir})
---config {path}
-# Data directory override
---data {path}
-# Log directory override
---log {path}
-
-# Connection (can also be set in agent.yml)
-# Server URL to connect to
---server {url}
-# Authentication token (from server)
---token {token}
-
-# Runtime
-# Force mode (auto-detected by default)
---mode {production|development|debug}
-# Enable debug logging (implies development features)
---debug
-# Color output (default: auto, respects NO_COLOR)
---color {auto|yes|no}
-# Language for output (default: auto, from LANG env)
---lang {code}
-
-# Commands (subcommands like server)
-# Show agent status
-status
-# Test server connection
-test
-# Interactive registration with server
-register
-
-# Service management (same as server)
---service {install|uninstall|start|stop|restart|status}
-
-# Updates (same as server/CLI)
-# Check for or perform self-update
---update [check|yes]
-```
-
-### Agent --help Output
-
-```bash
-$ {project_name} agent --help
-{project_name} agent {project_version} - Agent for {project_name}
-
-Usage:
-  {project_name} agent [flags]
-  {project_name} agent [command]
-
-Commands:
-status                                - Show agent status
-test                                  - Test server connection
-register                              - Interactive registration
-
-Flags:
--h, --help                             - Show help
--v, --version                          - Show version
---shell completions [SHELL]            - Print shell completions (auto-detect if SHELL omitted)
---shell init [SHELL]                   - Print shell init command (auto-detect if SHELL omitted)
---shell help                           - Show shell integration help
-
---config DIR                           - Config directory
---data DIR                             - Data directory
---log DIR                              - Log directory
---server URL                           - Server URL to connect to
---token TOKEN                          - Authentication token
-
---mode {production|development|debug}  - Application mode
---debug                                - Enable debug mode
---color {auto|yes|no}                  - Color output (default: auto)
---lang CODE                            - Language for output (default: auto)
---status                               - Show agent health
-
---service CMD                          - Service management (install|uninstall|start|stop|restart)
---update [CMD]                         - Check/perform self-update
-
-Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
-```
-
-### Agent Commands
-
-**Agent has subcommands similar to server:**
-
-```bash
-# Default: run agent (foreground)
-{project_name} agent
-
-# Status: show current agent status
-{project_name} agent status
-  Agent: monitor agent v1.0.0
-  Hostname: web-server-01
-  Server: https://monitor.example.com
-  Status: Connected (5m 32s)
-  Last Report: 2025-01-15 10:30:00
-  Next Report: 2025-01-15 10:31:00
-
-# Test: verify server connection
-{project_name} agent test
-  Testing connection to https://monitor.example.com...
-  ✅ Connection successful
-  ✅ Authentication valid
-  ✅ Agent registered
-
-# Connect: one-liner from server panel (preferred)
-{project_name} agent --server https://monitor.example.com --token agt_abc123def456...
-  Connecting to https://monitor.example.com...
-  ✅ Connection successful
-  ✅ Token validated
-  ✅ Agent registered as "web-server-01"
-
-  Config saved to: /etc/projectorg/projectname/agent.yml
-  Installing service...
-  ✅ Service installed and started
-
-  Agent is now sending data to the server.
-
-# Service management
-# Install as system service
-{project_name} agent --service --install
-# Start service
-{project_name} agent --service start
-# Stop service
-{project_name} agent --service stop
-# Show service status
-{project_name} agent --service status
-# Remove service
-{project_name} agent --service --uninstall
-```
-
-### Agent Setup Process
-
-**Agent setup is initiated from the SERVER side (admin panel when PART 28 is enabled; otherwise the server CLI/API), NOT via setup token:**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    AGENT SETUP FLOW                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. Generate token (server admin panel)                     │
-│     └─→ Server generates complete command string            │
-│     └─→ Display one-liner with [Copy to Clipboard]          │
-│                                                             │
-│  2. On Target Machine (one command)                            │
-│     └─→ Paste and run the one-liner:                        │
-│         {project_name} agent --server {url} --token {token}  │
-│     └─→ Agent connects, registers, saves config             │
-│     └─→ Server shows notification: "{name} has connected"   │
-│                                                             │
-│  3. Agent auto-starts and sends data                        │
-│     └─→ Agent installs itself as service (if root)          │
-│     └─→ Begins sending data to server                       │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Server generates the complete command:**
-```go
-func GenerateAgentCommand(serverURL, token string) string {
-    return fmt.Sprintf("%s agent --server %s --token %s",
-        projectName, serverURL, token)
-}
-```
-
-### Agent Token Format
-
-**Agent tokens are machine-scoped and issued by the server admin — via the admin panel (PART 28) when enabled, or the server CLI/API otherwise:**
-
-| Token Prefix | Issued By | Route |
-|--------------|-----------|-------|
-| `agt_` | Admin panel (PART 28) or server CLI/API | `/api/{api_version}/server/{admin_path}/config/agents/*` |
-
-```go
-// Agent token generation (server-side)
-func GenerateAgentToken() string {
-    return "agt_" + generateSecureRandom(32)
-}
-```
-
-### Agent Registration API
-
-**See PART 13 for full API structure.**
-
-**Endpoint:** `POST /api/{api_version}/server/{admin_path}/config/agents/register`
-
-**Request:**
-```json
-{
-  "token": "agt_abc123def456ghi789jkl012mno345pqr678",
-  "hostname": "web-server-01",
-  "os": "linux",
-  "arch": "amd64",
-  "version": "1.0.0",
-  "tags": ["production", "web-tier"]
-}
-```
-
-**Response (success):**
-```json
-{
-  "ok": true,
-  "data": {
-    "agent_id": "uuid-here",
-    "name": "web-server-01",
-    "server_time": "2025-01-15T10:00:00Z"
-  }
-}
-```
-
-**Response (error):**
-```json
-{
-  "ok": false,
-  "error": "TOKEN_INVALID",
-  "message": "Agent token is invalid or expired"
-}
-```
-
-### Agent Admin Views (Only When PART 28 Is Enabled)
-
-**These views exist ONLY when the admin panel (PART 28) is enabled. Agent support does NOT require them.**
-
-| View | Contents |
-|------|----------|
-| Agents list | Name, hostname, OS/arch, version, tags, last report time, connection status |
-| Agent detail | Full identity/labels, health history, recent reports, assigned work (project-specific) |
-| Token generation | Generated connect one-liner with [Copy to Clipboard] |
-| Actions | Revoke token, remove agent, regenerate one-liner |
-
-**When PART 28 is NOT enabled:** the same operations are performed via the client admin commands (`{project_name}-cli --admin agents ...`) and the agent API routes in this PART using admin-scope tokens. Agents are machine-scoped and visible only to the server admin.
-
-### agent.yml Configuration
-
-**EVERYTHING must be configurable via agent.yml. Sane defaults match server where applicable.**
-
-**File: `{config_dir}/agent.yml`** (same directory as server.yml)
-
-```yaml
-# /etc/{internal_org}/{internal_name}/agent.yml (root)
-# ~/.config/{internal_org}/{internal_name}/agent.yml (user)
-# Agent configuration - ALL options with defaults
-
-# Language for agent output and API requests
-# auto = detect from env, or "en", "es", etc.
-lang: auto
-
-# Server connection
-server:
-  # Server URL (required, set during registration)
-  primary: ""
-  # API version prefix (default: v1, must match server)
-  api_version: v1
-  # Admin path (default: admin, must match server)
-  admin_path: admin
-  # Request timeout (match server default)
-  timeout: 30s
-  # Retry attempts on failure
-  retry: 3
-  # Delay between retries
-  retry_delay: 5s
-  # Delay before reconnect attempt
-  reconnect_delay: 10s
-
-# Authentication
-auth:
-  # Agent token (agt_xxx, see PART 11)
-  token: ""
-  # Read token from file instead
-  token_file: ""
-
-# Agent identity
-identity:
-  # Hostname (auto-detect if empty)
-  hostname: ""
-  # Friendly name (defaults to hostname)
-  display_name: ""
-  # Tags for grouping ["production", "web-tier"]
-  tags: []
-  # Key-value labels {environment: prod, tier: web}
-  labels: {}
-
-# Data collection (project-specific)
-collection:
-  # Enable data collection
-  enabled: true
-  # Collection interval
-  interval: 60s
-  # Max items per batch
-  batch_size: 100
-  # Max buffered items if offline
-  buffer_size: 1000
-
-# Logging
-logging:
-  # debug, info, warn, error (match server default)
-  level: info
-  # Log file path (empty = {log_dir}/agent.log)
-  file: ""
-  # Max log file size (match server default)
-  max_size: 10MB
-  # Max log files to keep (match server default)
-  max_files: 5
-
-# Health reporting
-health:
-  # Report agent health to server
-  enabled: true
-  # Health check interval
-  interval: 30s
-
-# Debug
-# Enable debug mode (same as --debug)
-debug: false
-
-# Mode (auto-detected, can override)
-# production, development, debug (empty = auto-detect; debug is never auto-detected — explicit opt-in only)
-mode: ""
-```
-
-**Config precedence (highest to lowest):**
-
-| Priority | Source | Example |
-|----------|--------|---------|
-| 1 | CLI flag | `--server https://...` |
-| 2 | Environment variable | `{PROJECT_NAME}_AGENT_SERVER=https://...` |
-| 3 | Config file | `server.primary: https://...` |
-| 4 | Compiled default | (none for server, must be configured) |
-
-**Environment variable mapping:**
-```bash
-# Pattern: {PROJECT_NAME}_AGENT_{KEY} or {PROJECT_NAME}_{KEY}
-{PROJECT_NAME}_AGENT_SERVER_PRIMARY="https://example.com"
-{PROJECT_NAME}_AGENT_TOKEN="agt_abc123..."
-{PROJECT_NAME}_AGENT_HOSTNAME="web-server-01"
-{PROJECT_NAME}_AGENT_COLLECTION_INTERVAL=30
-{PROJECT_NAME}_DEBUG=true
-```
-
-### Agent Reconnect
-
-**There is exactly ONE server. If the connection to it fails, the agent retries the same server — everything is automatic.**
-
-| Feature | Behavior |
-|---------|----------|
-| **Discovery** | Agent calls `/api/autodiscover` on connect for server/version info |
-| **Retry** | On connection failure, retry `server.primary` per `server.retry` / `server.retry_delay` |
-| **Reconnect** | Keep retrying with backoff until the server is reachable again |
-| **No manual config** | No extra connection config beyond `server.primary` |
-
-**Agent Startup Sequence:**
-```
-1. Load agent.yml
-2. Connect to server.primary (retry per server.retry / server.retry_delay)
-3. Once connected → GET /api/autodiscover
-4. Begin normal operation
-```
-
-### Shared Directories with Server
-
-**Agent uses the SAME directory structure as server:**
-
-| Directory | Path | Shared With |
-|-----------|------|-------------|
-| Config | `{config_dir}/` | Server (agent.yml alongside server.yml) |
-| Data | `{data_dir}/` | Server |
-| Database | `{data_dir}/db/agent.db` | Server uses `server.db` in same dir |
-| Logs | `{log_dir}/agent.log` | Server uses `server.log` in same dir |
-| Cache | `{cache_dir}/` | Server |
-
-**Same privilege escalation as server (see PART 4)** - agent requires root/admin for full system access.
-
-### Agent vs Client vs Server
-
-| Aspect | Server | Client | Agent |
-|--------|--------|------------|-------|
-| **Runs as** | Service/daemon | Interactive/one-shot | Service/daemon |
-| **Purpose** | Serve API, WebUI | User interaction | Data collection |
-| **Initiated by** | System startup | User | System startup |
-| **Connection** | Listens for connections | Connects to server | Connects to server |
-| **Lifetime** | Long-running | Short-lived | Long-running |
-| **User interaction** | WebUI, API | Terminal, TUI | None (headless) |
-| **Updates** | Manual or scheduled | Self-update (same flow as server/agent) | Auto or server-pushed |
-
-### Execution Context
-
-**Client and Agent run in fundamentally different execution contexts:**
-
-| Aspect | Client | Agent |
-|--------|------------|-------|
-| **Execution context** | User-scope context | System context |
-| **Runs as** | Invoking user account (may be root/admin, but still user-scope) | root/Administrator |
-| **Config base path** | `~/` (user home) | `/` (system root) |
-| **Config directory** | `~/.config/{internal_org}/{internal_name}/` | `/etc/{internal_org}/{internal_name}/` |
-| **Data directory** | `~/.local/share/{internal_org}/{internal_name}/` | `/var/lib/{internal_org}/{internal_name}/` |
-| **Log directory** | `~/.local/log/{internal_org}/{internal_name}/` | `/var/log/{internal_org}/{internal_name}/` |
-| **Cache directory** | `~/.cache/{internal_org}/{internal_name}/` | `/var/cache/{internal_org}/{internal_name}/` |
-| **Privilege requirement** | No escalation required | Elevated (root/admin) |
-| **System access** | User-scope files/dirs only | Full system access |
-
-**Why Different Contexts?**
-
-| Component | Context | Reason |
-|-----------|---------|--------|
-| **Client** | User (`~/`) | User tool - accesses user's files, runs with user permissions, stores user-specific settings |
-| **Agent** | System (`/`) | System daemon - needs root for system metrics, hardware access, service management |
-
-**Path Examples:**
-
-```bash
-# Client (user context - runs as "alice")
-# Alice's config
-~/.config/{internal_org}/{internal_name}/cli.yml
-# Alice's data
-~/.local/share/{internal_org}/{internal_name}/
-# Alice's logs
-~/.local/log/{internal_org}/{internal_name}/cli.log
-
-# Agent (system context - runs as root)
-# System config
-/etc/{internal_org}/{internal_name}/agent.yml
-# System data
-/var/lib/{internal_org}/{internal_name}/
-# System logs
-/var/log/{internal_org}/{internal_name}/agent.log
-```
-
-**Platform-Specific Paths:**
-
-| Platform | Client Config | Agent Config |
-|----------|-------------------|--------------|
-| **Linux** | `~/.config/{internal_org}/{internal_name}/` | `/etc/{internal_org}/{internal_name}/` |
-| **macOS** | `~/.config/{internal_org}/{internal_name}/` | `/Library/Application Support/{internal_org}/{internal_name}/` |
-| **Windows** | `%APPDATA%\{internal_org}\{internal_name}\` | `%PROGRAMDATA%\{internal_org}\{internal_name}\` |
-| **FreeBSD** | `~/.config/{internal_org}/{internal_name}/` | `/usr/local/etc/{internal_org}/{internal_name}/` |
-
-### Purpose Matching
-
-**Client and Agent are companion surfaces designed FOR the Server. They match the server's intent, purpose, and functionality.**
-
-All three surfaces are built into the SAME binary and work together as a system:
-
-```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                          PROJECT BINARY ECOSYSTEM                          │
-├───────────────────────────────────────────────────────────────────────────┤
-│                                                                            │
-│  ┌─────────────────────┐                                                   │
-│  │       SERVER        │  Central server - serves API, WebUI, manages data│
-│  │    {project_name}    │  Runs as service/daemon                           │
-│  └──────────┬──────────┘                                                   │
-│             │                                                              │
-│             │ API                                                          │
-│             │                                                              │
-│       ┌─────┴─────┐                                                        │
-│       │           │                                                        │
-│       ▼           ▼                                                        │
-│  ┌─────────────────────┐     ┌─────────────────────────┐                   │
-│  │ {project_name} CLIENT │     │         AGENT           │                   │
-│  │  {project_name}-cli  │     │  {project_name} agent    │                   │
-│  └─────────────────────┘     └─────────────────────────┘                   │
-│                                                                            │
-│  {project_name} CLIENT:                AGENT:                                   │
-│  • Full remote admin              • Purpose-specific daemon                │
-│  • TUI/CLI/GUI modes              • Headless, no admin                     │
-│  • User context (~/)              • System context (/)                     │
-│  • --admin* flags                 • No --admin* flags                      │
-│                                                                            │
-└───────────────────────────────────────────────────────────────────────────┘
-```
-
-**Real-World Examples:**
-
-| Product | Server | Client | Agent |
-|---------|--------|------------|-------|
-| **Jenkins** | Jenkins Server (WebUI, job management) | Jenkins CLI (remote admin) | Jenkins Agent (executes builds on nodes) |
-| **Portainer** | Portainer Server (container management UI) | - | Portainer Agent (runs on Docker hosts) |
-| **Beszel** | Beszel Hub (monitoring dashboard) | - | Beszel Agent (collects machine metrics) |
-| **Zabbix** | Zabbix Server (monitoring, alerting) | zabbix_get (query agents) | Zabbix Agent (host monitoring) |
-| **Netdata** | Netdata Parent (aggregates metrics) | netdatacli (local control) | Netdata Child (streams to parent) |
-| **Prometheus** | Prometheus Server (scrapes, stores, alerts) | promtool (config validation) | Node Exporter (exposes machine metrics) |
-| **ManageEngine** | ManageEngine Server (IT management) | CLI tools | Desktop Central Agent (endpoint management) |
-| **Proxmox** | Proxmox VE (virtualization management) | pvesh (API access) | qemu-guest-agent (VM guest agent) |
-| **Kubernetes** | kube-apiserver (control plane) | kubectl (remote admin) | kubelet (runs pods on nodes) |
-| **Salt** | Salt Master (configuration management) | salt (command execution) | Salt Minion (applies configs on nodes) |
-| **Ansible AWX** | AWX Server (automation platform) | awx-cli (tower-cli) | - (agentless, but receptor for mesh) |
-
-**The Pattern:**
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  SERVER: Central control, WebUI, data storage, orchestration           │
-│  └─► Portainer, Zabbix Server, Jenkins, Proxmox VE, K8s API Server      │
-├─────────────────────────────────────────────────────────────────────────┤
-│  CLIENT: Full remote administration, scripting, automation │
-│  └─► kubectl, pvesh, salt, zabbix_get, jenkins-cli                      │
-├─────────────────────────────────────────────────────────────────────────┤
-│  AGENT: Runs on managed hosts, reports to server, executes tasks         │
-│  └─► Portainer Agent, Zabbix Agent, Jenkins Agent, kubelet, Salt Minion │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-**Component Responsibilities:**
-
-| Component | Purpose | Admin Capabilities | Modes |
-|-----------|---------|-------------------|-------|
-| **Server** | Central server | N/A (IS the admin) | Daemon/service |
-| **Client** | Full remote administration | ✅ `--admin*` flags, full server control | TUI, CLI, GUI |
-| **Agent** | Purpose-specific work | ❌ No admin flags | Daemon/service (headless) |
-
-### Agent Shares Server Structure
-
-**Agent has many of the same flags and startup procedures as Server, but in agent context.**
-
-The Agent is essentially the Server's "little sibling" - same professional structure, similar startup sequence, but connecting TO a server instead of BEING the server.
-
-**For detailed flag documentation, see:**
-- **"Agent Flags"** - Complete flag list and comparison
-- **"Agent Startup Banner"** - Banner examples for all screen sizes
-- **"Agent Commands"** - Subcommands and usage
-
-**Key Differences (Server vs Agent):**
-
-| Aspect | Server | Agent |
-|--------|--------|-------|
-| **Listens for connections** | ✅ Yes (`--port`, `--address`) | ❌ No |
-| **Connects to parent server** | ❌ No (IS the server) | ✅ Yes (`--server`, `--token`) |
-| **Setup** | ✅ Web-based (token entered at `/server/{admin_path}/config/setup`) | ❌ No (registers with server via connection string) |
-| **Admin operations** | N/A (IS the server) | ❌ No (Client's job) |
-| **WebUI** | ✅ Yes | ❌ No (headless) |
-| **Database** | ✅ `server.db` | ✅ `agent.db` (if needed) |
-
-**Startup Sequence Comparison:**
-
-```
-SERVER STARTUP                          AGENT STARTUP
-─────────────────                       ─────────────────
-1. Parse flags                          1. Parse flags
-2. Load config                          2. Load config
-3. Detect mode (prod/dev)               3. Detect mode (prod/dev)
-4. Show banner                          4. Show banner
-5. Initialize logging                   5. Initialize logging
-6. Connect to database                  6. Connect to SERVER ← different
-7. Start HTTP server                    7. Start reporter/collector ← different
-8. Listen for connections               8. Begin agent tasks ← different
-```
-
-### Client = Full Server Access
-
-**The Client is a COMPLETE interface to the server. It can do EVERYTHING the server offers.**
-
-| Client Capability | Description |
-|-----------------------|-------------|
-| **All user operations** | Everything a logged-in user can do |
-| **All admin operations** | `--admin*` flags for server administration |
-| **TUI mode** | Interactive terminal UI |
-| **CLI mode** | Scriptable command-line |
-| **GUI mode** | Native graphical interface (if available) |
-
-**Admin flags (Client only):**
-```bash
-# List all users
-{project_name}-cli --admin users list
-# Create user
-{project_name}-cli --admin users create ...
-# Server status
-{project_name}-cli --admin server status
-# View/edit config
-{project_name}-cli --admin server config
-# Create backup
-{project_name}-cli --admin backup create
-```
-
-### Agent = Purpose-Specific Worker
-
-**The Agent does ONE thing: its designated job. No admin, no user operations, no TUI.**
-
-| Agent Does | Agent Does NOT |
-|------------|----------------|
-| Connect to server | Admin operations |
-| Authenticate with agent token | User operations |
-| Perform its designated function | Interactive modes (TUI/GUI) |
-| Report status/data to server | Server configuration |
-| Execute server-assigned tasks | Anything outside its scope |
-
-**Example by project type:**
-
-| Project Type | Agent Purpose |
-|--------------|---------------|
-| **Monitoring** | Collect machine metrics (CPU, RAM, disk), send to server |
-| **CI/CD** | Pull jobs from server, execute builds, report results |
-| **Log aggregation** | Tail local logs, ship to server |
-| **Backup** | Execute backup commands, upload to server |
-| **Remote management** | Provide reverse tunnel for remote access |
-
-### Same Codebase, Same Project
-
-**Server, client, and agent surfaces are built from the same source tree into the single binary:**
-
-```
-src/
-├── common/           # Shared code used by server, client, and agent
-│   ├── banner/       # Startup banner (responsive, terminal-aware)
-│   ├── config/       # Configuration loading/parsing
-│   ├── display/      # Display environment detection
-│   ├── terminal/     # Terminal size/capabilities
-│   ├── theme/        # Color palette (dark/light/auto)
-│   ├── version/      # Version info (shared across all binaries)
-│   └── ...           # Other shared packages as needed
-├── server/           # Server-specific code
-├── client/           # Client-specific code (TUI, GUI, admin commands)
-└── agent/            # Agent-specific code (collectors, reporters)
-```
-
-| Aspect | Description |
-|--------|-------------|
-| **Same codebase** | All three built from `src/` |
-| **Same release** | `make build` produces the single artifact embedding all surfaces |
-| **Shared packages** | `src/common/` used by server, client, and agent |
-| **Same API** | Client and Agent use server's API |
-| **Same models** | Shared data structures across all components |
-
-### Agent Directory Structure
-
-**Source Code:**
-```
-src/
-├── server/               # Server-specific code
-├── client/               # CLI-specific code (if present)
-└── agent/                # Agent-specific code
-    ├── collector/        # Data collectors
-    │   ├── collector.go
-    │   ├── cpu.go
-    │   ├── memory.go
-    │   ├── disk.go
-    │   └── network.go
-    ├── reporter/         # Server reporting
-    │   └── reporter.go
-    ├── service/          # OS service management
-    │   ├── service.go
-    │   ├── linux.go
-    │   ├── windows.go
-    │   └── darwin.go
-    └── updater/          # Self-update logic
-        └── updater.go
-```
-
-### Build Output
-
-**There is no separate agent binary by default.** The single release artifact per platform (PART 6) embeds the server, client, and agent surfaces; agent mode is activated with the `{project_name} agent` subcommand. If `IDEA.md` explicitly declares a dedicated agent build, it follows the client-build naming pattern (`{project_name}-agent-{os}-{arch}`) and is produced by the same `make build`.
-
-**See PART 6 (Makefile) for full build details.**
 
 ---
 
@@ -44328,7 +42957,6 @@ src/
 - [ ] Server never refers to itself as an "API server" in code, docs, logs, or CLI output — it is "the server"
 - [ ] Optional server features (PARTs 28–29) are implemented ONLY when IDEA.md enables them — verified by requesting a disabled feature's routes (expect 404, not 401/403) and checking its tables do not exist
 - [ ] If server admin is enabled: admin user and admin routes are both active (one switch), the main server admin account is provisioned via the token-based setup wizard, and the admin token authenticates as that account (PART 28)
-- [ ] If agent support is enabled: agent routes/tokens follow PART 29; agent admin views exist only when server admin is also enabled
 - [ ] Every running instance registers on the per-user broker socket; the web instance switcher lists and attaches to the authenticated system user's instances only (PARTs 4, 15)
 - [ ] Per-system-user tokens: generated on first run, stored hash-only in `system_users`, rotation works via both web settings and `{project_name} token rotate`, and every socket operation is kernel peer-credential verified (PARTs 4, 8)
 - [ ] System service mode: the root-started service is the only TCP listener (single/dual port per PART 14); per-user instances bind no TCP ports in this mode and are reached only via their socket registries (PART 4 → "System Service Mode")
@@ -44408,7 +43036,7 @@ A compliant Go hybrid application+server project following this specification:
 - uses Go tooling (via `make` targets and Docker) consistently across development, testing, and CI/CD
 - maintains `CGO_ENABLED=0` across every build target without exception
 - never describes itself as an "API server" anywhere — always "server"
-- ships the optional server features (admin panel, client & agent — PARTs 28–29) only when IDEA.md enables them; both are disabled by default
+- ships the optional server admin panel (PART 28) only when IDEA.md enables it; it is disabled by default
 - registers every running instance on the per-user socket registry and offers web instance switching scoped to the authenticated system user (PARTs 2, 4, 8, 15)
 - in system service mode, serves every system user from a single root-started listener (single/dual port) that routes to per-user instances over their socket registries — never per-user port binds (PART 4 → "System Service Mode")
 
@@ -44472,7 +43100,6 @@ maintainer_email: {maintainer@example.com — or empty; used only if set}
 
 **Optional server features (both disabled by default — see PART 2 → "Optional Server Features (Disabled by Default)"; declare only when the server surface is in scope):**
 - Server admin (admin user + admin routes): {yes / no}
-- Client & agent support: {yes / no}
 
 **Features:**
 - **{Feature category 1}**: {brief description}
