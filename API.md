@@ -22408,7 +22408,7 @@ if ('serviceWorker' in navigator) {
 
 ```javascript
 // /sw.js - Service Worker
-const CACHE_VERSION = 'v1.0.0';
+const CACHE_VERSION = '{project_version}';
 const CACHE_NAME = `{app_name}-cache-${CACHE_VERSION}`;
 
 // Assets to pre-cache on install
