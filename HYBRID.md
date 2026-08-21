@@ -15551,6 +15551,8 @@ server:
 | Retention | Display | Show current retention policy |
 | Stats | Cards | Event counts by category/severity |
 
+**Export follows the "Import/Export UI Convention" section** — a plain link/GET response with `Content-Disposition: attachment`, never a JS Blob/download-attribute trick.
+
 **Log Viewer Columns:**
 | Column | Description |
 |--------|-------------|
@@ -22658,6 +22660,23 @@ textarea:user-invalid,
   border-color: var(--color-success);
 }
 ```
+
+## Import/Export UI Convention
+
+**Applies project-wide to every feature that lets a user export or import data** — audit log exports, GDPR/CCPA data exports, PGP key exports, settings/config export, domain lists, created/shortened links, and any future export/import feature. This is a generic rule, not a spec for one named feature.
+
+**Export — never a forced/silent direct download:**
+- Export is a plain `<a href="...">` link or a plain `<button>`/`<form method="get">` — **no JavaScript required**, consistent with the "Text Browsers" no-JS convention (see Terminology).
+- The server responds with the correct `Content-Type` and `Content-Disposition: attachment; filename="..."`. This hands the download to the browser's own native save flow — a "Save As" dialog if the browser is configured to ask where to save, the default downloads folder otherwise. That choice belongs to the browser/user, not the app; the app's job is only to return a real HTTP file response the browser can act on.
+- **Never** implement export via JavaScript `Blob` + `URL.createObjectURL()` + a synthetic clicked `<a download>`, and never make the File System Access API (`showSaveFilePicker()`) the *only* path — both require JavaScript and are unavailable (or fail silently) in Text Browsers and with JS disabled. A plain link/GET response is the platform-agnostic mechanism: it behaves the same in Chrome, Firefox, Safari, lynx, w3m, and any other HTTP client.
+- Keep the export control as bare/unstyled default browser chrome (a plain link or button) — do not hide it behind custom CSS or gate it behind a JS-only click handler.
+
+**Import — native file picker, not a JS-only upload widget:**
+- Import uses a plain `<input type="file">` inside a plain `<form method="post" enctype="multipart/form-data">` — the browser's native file picker, no JavaScript required to select or submit a file.
+- The server parses the uploaded file from the multipart body; server-side validation is always authoritative regardless of any client-side JS mirroring.
+- Keep `<input type="file">` bare/unstyled and present in the DOM — do not hide the native control behind a custom-styled JS trigger button, or the feature stops working with JavaScript disabled.
+
+**Applies to (non-exhaustive — this is a rule, not a feature list):** audit log export, GDPR/CCPA data export, PGP key export, settings/config export, domain lists, created/shortened links, and any future export- or import-capable feature.
 
 ## Accessibility
 
