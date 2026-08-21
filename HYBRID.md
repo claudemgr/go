@@ -21978,11 +21978,27 @@ html.theme-light {
 
 ---
 
-## Styling Convention: Everything Must Be Styled
+## Reuse Before Creating
 
-**Every UI element in this spec — every button, link, form, input, label, table, card, banner, badge, toast, modal, tooltip, status message, and any other visible element, in every feature described anywhere in this document — MUST be styled. None of it is left at raw/unstyled browser default.** This is a general project-wide rule, not scoped to any one feature or element type.
+**Before writing new code for anything — a function, a variable/constant, a UI component, or a style — check whether an equivalent already exists in the project and reuse or extend it. Only create something new when nothing existing covers the need.** This is a general project-wide rule; it governs every artifact type, not just CSS/UI, and it is not restricted to any one feature.
 
-**Reuse before creating:** before writing CSS for any element, check whether an existing class (`.btn`, `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.form-group`, alert/message classes, etc.) or an existing `--color-*`/`--font-*` custom property from the CSS Variable Reference above already covers it, and reuse it. Only write new CSS when nothing existing fits — and when new CSS is genuinely needed, it still draws its colors from the existing `--color-*` custom properties rather than hardcoding new values.
+### Functions
+
+Before writing a new function, search for an existing one with the same or similar behavior — in the same package, in `helpers.go`/`helpers.rs`, in existing handlers/validators/middleware — and call or extend it instead of re-implementing the logic. Two near-identical functions that differ only in a hardcoded value are a sign the existing function should take that value as a parameter instead of being copy-pasted.
+
+### Variables & Constants
+
+Before adding a new constant, config key, or enum value, check existing constants, the config schema, and enum definitions for one that already means the same thing. Two names for the same underlying value is a bug waiting to happen, not two separate settings.
+
+### Components
+
+Before building a new template, partial, or UI component, check for an existing one — buttons, modals, cards, form groups, banners, badges — and reuse or extend it instead of building a near-duplicate with a different name.
+
+### Styling (CSS)
+
+**Every UI element in this spec — every button, link, form, input, label, table, card, banner, badge, toast, modal, tooltip, status message, and any other visible element, in every feature described anywhere in this document — MUST be styled. None of it is left at raw/unstyled browser default.**
+
+Before writing CSS for any element, check whether an existing class (`.btn`, `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.form-group`, alert/message classes, etc.) or an existing `--color-*`/`--font-*` custom property from the CSS Variable Reference above already covers it, and reuse it. Only write new CSS when nothing existing fits — and when new CSS is genuinely needed, it still draws its colors from the existing `--color-*` custom properties rather than hardcoding new values.
 
 ```html
 <!-- CORRECT — new feature, reuses the existing button classes; no new class invented -->
@@ -22015,7 +22031,7 @@ html.theme-light {
 }
 ```
 
-This rule governs the entire spec — it is not restricted to buttons, not restricted to import/export controls, and not restricted to whatever the reader might assume is the "main" UI. Every section describing a UI element inherits this rule automatically; sections do not need to restate it.
+This rule governs the entire spec — it is not restricted to buttons, not restricted to import/export controls, and not restricted to whatever the reader might assume is the "main" UI. Every section describing a function, variable, component, or UI element inherits this rule automatically; sections do not need to restate it.
 
 ## Technology Stack
 
@@ -22714,7 +22730,7 @@ textarea:user-invalid,
 - The server parses the uploaded file from the multipart body; server-side validation is always authoritative regardless of any client-side JS mirroring.
 - Never hide the native `<input type="file">` behind a custom-styled JS trigger/fake button, or the feature stops working with JavaScript disabled.
 
-**Styling:** every element in the flow — trigger link/button, `<form>`, `<label>`, `<input type="file">`, filename/status/progress text, success/error messaging — follows "Styling Convention: Everything Must Be Styled" (above): fully styled, reusing existing classes and `--color-*` custom properties, no exceptions and no new one-off CSS when an existing class fits. "No-JS" governs markup/mechanism only (a real `<a>`/`<form>`, no JS-only click handler) — not appearance; CSS applies regardless of JavaScript.
+**Styling:** every element in the flow — trigger link/button, `<form>`, `<label>`, `<input type="file">`, filename/status/progress text, success/error messaging — follows the "Reuse Before Creating" section, Styling (CSS) subsection, (above): fully styled, reusing existing classes and `--color-*` custom properties, no exceptions and no new one-off CSS when an existing class fits. "No-JS" governs markup/mechanism only (a real `<a>`/`<form>`, no JS-only click handler) — not appearance; CSS applies regardless of JavaScript.
 
 **Applies to (non-exhaustive — this is a rule, not a feature list):** audit log export, GDPR/CCPA data export, PGP key export, settings/config export, domain lists, created/shortened links, and any future export- or import-capable feature.
 
