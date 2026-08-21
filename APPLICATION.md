@@ -1360,6 +1360,45 @@ apply its own light/dark widget theme.
 
 ---
 
+## Reuse Before Creating
+
+**Before writing new code for anything — a function, a variable/constant, or a UI component/style — check whether an equivalent already exists in the project and reuse or extend it. Only create something new when nothing existing covers the need.** This is a general project-wide rule; it governs every artifact type and is not restricted to any one feature.
+
+### Functions
+
+Before writing a new function, search for an existing one with the same or similar behavior — in the same package, in `helpers.go`, in existing handlers/validators/detection logic (e.g. the UI-mode detection and theme-detection functions above) — and call or extend it instead of re-implementing the logic. Two near-identical functions that differ only in a hardcoded value are a sign the existing function should take that value as a parameter instead of being copy-pasted.
+
+### Variables & Constants
+
+Before adding a new constant or config key, check existing constants (e.g. `UIModeTUI`/`UIModeGUI`/`UIModeCLI`) and the config schema for one that already means the same thing. Two names for the same underlying value is a bug waiting to happen, not two separate settings.
+
+### Components
+
+Before building a new TUI view, GUI widget, or CLI output helper, check for an existing one and reuse or extend it instead of building a near-duplicate with a different name.
+
+### Styling (TUI/CLI/GUI — not CSS)
+
+**This is a single native binary — there is no Web CSS to reuse.** Styling reuse instead means: never invent a second color palette, a second set of semantic role names, or a second theme-detection mechanism alongside the ones already defined above.
+
+- **TUI/CLI:** always style through the existing `TerminalPalette` struct and its semantic roles (`Foreground`, `Muted`, `Primary`, `Success`, `Warning`, `Error`, `Info`, `Border`) and the existing `TerminalPaletteDark`/`TerminalPaletteLight` instances — never a new hardcoded ANSI index or a second palette struct. New TUI/CLI output reuses existing `lipgloss` styles built from the palette; a genuinely new style still derives from a `TerminalPalette` role, never a literal color value.
+- **GUI:** never invent a custom color palette or literal hex values. Reuse the existing native-toolkit theming path (`gioui.org` / `fyne.io/fyne/v2`, OS light/dark detection) so widgets automatically match the user's OS theme — the same "no literal hex, detect and defer to the platform" rule already established in Color Palette (TUI/CLI/GUI) above.
+
+```go
+// CORRECT — new TUI element styled from the existing palette, no new
+// hardcoded ANSI index or duplicate palette struct
+style := lipgloss.NewStyle().Foreground(lipgloss.Color(palette.Warning))
+```
+
+```go
+// WRONG — hardcodes a new ANSI index instead of reusing the existing
+// TerminalPalette.Warning role
+style := lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+```
+
+This rule governs the entire spec — it is not restricted to the Color Palette section, and it is not restricted to whatever the reader might assume is the "main" UI surface (TUI vs. GUI vs. CLI). Every section describing a function, variable, or UI surface inherits this rule automatically; sections do not need to restate it.
+
+---
+
 # PART 8: TESTING, QUALITY, AND DEBUGGING
 
 ## Required Quality Gates
