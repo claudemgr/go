@@ -40921,7 +40921,7 @@ I2P Eepsite: Running (i2pd)
 
 **The admin panel is completely isolated from the public site.**
 
-**Note:** `/server/admin` is the default admin root. `{admin_path}` is configurable via `server.admin_path`. See "Configurable Admin Path" section below.
+**Note:** `/server/administration` is the default admin root (unambiguous — avoids confusion with a Linux `admin`/`sudo` group or account). `{admin_path}` is configurable via `server.admin_path`. See "Configurable Admin Path" section below.
 
 | Rule | Description |
 |------|-------------|
@@ -41094,24 +41094,24 @@ func validateAdminRoute(path string) error {
 
 ## Configurable Admin Path
 
-**The default `/server/admin` admin root can be changed for security (obscurity).**
+**The default `/server/administration` admin root can be changed for security (obscurity).**
 
 ### Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `server.admin_path` | `admin` | Path segment for admin panel (no leading slash) |
+| `server.admin_path` | `administration` | Path segment for admin panel (no leading slash) |
 
 **When changed, ALL admin routes update:**
-- `/server/admin/**` → `/server/{admin_path}/**`
-- `/api/{api_version}/server/admin/**` → `/api/{api_version}/server/{admin_path}/**`
+- `/server/administration/**` → `/server/{admin_path}/**`
+- `/api/{api_version}/server/administration/**` → `/api/{api_version}/server/{admin_path}/**`
 
 ### Validation Rules
 
 | Rule | Action |
 |------|--------|
-| **Cannot conflict with existing routes** | Error and revert to `admin` |
-| **Reserved paths blocked** | `api`, `static`, `assets`, `health`, `version`, etc. |
+| **Cannot conflict with existing routes** | Error and revert to `administration` |
+| **Reserved paths blocked** | `api`, `static`, `assets`, `health`, `version`, etc. — `administration` itself (the default) is NEVER added to this list, since the revert-on-error fallback above depends on `administration` always remaining a valid value |
 | **Valid characters only** | `[a-z0-9-]` (lowercase, numbers, hyphens) |
 | **Min/max length** | 2-32 characters |
 | **No leading/trailing hyphens** | `my-admin` ✓, `-admin-` ✗ |
@@ -41126,6 +41126,8 @@ func validateAdminPath(newPath string, router *mux.Router) error {
     // Normalize first
     newPath = normalizePath(newPath)
     // 1. Check reserved paths
+    // "administration" is the documented default admin_path and MUST NEVER
+    // be added here — doing so would make the default config reject itself.
     reserved := []string{
         "api", "health", "healthz", "metrics", "version", ".well-known",
         "about", "privacy", "contact", "help", "terms", "preferences",
@@ -41207,7 +41209,7 @@ async function changeAdminPath(newPath) {
 ```go
 // Global admin path accessor
 func AdminPath() string {
-    // default: "admin"
+    // default: "administration"
     return config.Get().Server.AdminPath
 }
 
@@ -41953,7 +41955,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
-| `admin_path` | Text | `admin` | Reload | Custom admin panel path (see PART 28) |
+| `admin_path` | Text | `administration` | Reload | Custom admin panel path (see PART 28) |
 | `rate_limit.enabled` | Toggle | On | No | Enable rate limiting |
 | `rate_limit.read.requests` | Number | `120` | No | Read (GET/HEAD) requests per window, per IP |
 | `rate_limit.write.requests` | Number | `10` | No | Write (POST/PUT/PATCH/DELETE) requests per window, per IP |

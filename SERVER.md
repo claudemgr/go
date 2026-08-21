@@ -1584,7 +1584,7 @@ On EVERY new conversation or after "context compacted" message:
 ## Key Placeholders
 - `{project_name}` = [actual project name]
 - `{project_org}` = [organization name]
-- `{admin_path}` = [admin URL path, default: admin]
+- `{admin_path}` = [admin URL path, default: administration]
 
 ## Account Types (CRITICAL)
 - **Server Admin** = manages the app (NOT a privileged OS user)
@@ -2113,7 +2113,7 @@ See the single authoritative table earlier in this file (search: `### Allowed Ro
 | `{official_site}` | Official project website | `https://jokes.example.com` |
 | `{fqdn}` | Fully qualified domain name | `api.example.com` |
 | `{baseurl}` | URL path prefix (auto-detected from reverse proxy) | `/`, `/myproject` |
-| `{admin_path}` | Admin panel URL path (configurable, default: `admin`) | `admin`, `manage`, `control` |
+| `{admin_path}` | Admin panel URL path (configurable, default: `administration`) | `administration`, `manage`, `control` |
 | `{api_version}` | API version prefix (default: `v1`) | `v1`, `v2` |
 
 **Directory placeholders (with platform-specific defaults):**
@@ -2265,7 +2265,7 @@ This distinction exists for clarity. When referring to OS-level resources that b
 | **TUI** | Terminal User Interface - interactive terminal app with menus/panels (client supports TUI mode) |
 | **Text Browsers** | INTERACTIVE browsers (lynx, w3m, links, elinks) that receive **no-JS HTML** and render it in text mode; NO JavaScript support - forms via POST, server-rendered only |
 | **HTTP Tools** | NON-INTERACTIVE tools (curl, wget, httpie) that receive pre-formatted text via HTML2TextConverter; they just dump output |
-| **Admin Panel** | WebUI at `/server/{admin_path}` for server administration (path is configurable, default: `admin`) |
+| **Admin Panel** | WebUI at `/server/{admin_path}` for server administration (path is configurable, default: `administration`) |
 | **WebUI** | Web User Interface - browser-based interface served by the server |
 | **SCM** | Windows Service Control Manager - manages Windows services (replaces PID files on Windows) |
 | **Hostname** | Short hostname (e.g., `web01`) - equivalent to `hostname -s` |
@@ -5403,7 +5403,7 @@ sudo mv {project_name}-cli-linux-amd64 /usr/local/bin/{project_name}-cli
 
 ## Configuration
 
-Configuration is auto-generated on first run. Edit via admin panel at `{proto}://{fqdn}/server/{admin_path}` (admin_path defaults to "admin").
+Configuration is auto-generated on first run. Edit via admin panel at `{proto}://{fqdn}/server/{admin_path}` (admin_path defaults to "administration").
 
 Key settings:
 - `server.port` - Listen port (default: random 64xxx)
@@ -9091,8 +9091,8 @@ server:
   address: "[::]"
   # production or development
   mode: production
-  # Admin panel path (default: admin) - see PART 17
-  admin_path: admin
+  # Admin panel path (default: administration) - see PART 17
+  admin_path: administration
   # API version prefix (default: v1) - used in /api/{api_version}/ routes
   api_version: v1
   healthz:
@@ -16160,7 +16160,7 @@ func extractContextFromPath(path string) (*Context, error) {
 
 | Account Type | Stored In | After Login Redirect |
 |--------------|-----------|---------------------|
-| **Server Admin** | `admins` table | `/server/{admin_path}` (default: `/server/admin`) |
+| **Server Admin** | `admins` table | `/server/{admin_path}` (default: `/server/administration`) |
 | **Regular User** | `users` table | `/users` or `?redirect=` param |
 
 **Login Flow:**
@@ -29930,7 +29930,7 @@ server:
 
 **The admin panel is completely isolated from the public site.**
 
-**Note:** `/server/admin` is the default admin root. `{admin_path}` is configurable via `server.admin_path`. See "Configurable Admin Path" section below.
+**Note:** `/server/administration` is the default admin root (unambiguous — avoids confusion with a Linux `admin`/`sudo` group or account). `{admin_path}` is configurable via `server.admin_path`. See "Configurable Admin Path" section below.
 
 | Rule | Description |
 |------|-------------|
@@ -30113,24 +30113,24 @@ func validateAdminRoute(path string) error {
 
 ## Configurable Admin Path
 
-**The default `/server/admin` admin root can be changed for security (obscurity).**
+**The default `/server/administration` admin root can be changed for security (obscurity).**
 
 ### Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `server.admin_path` | `admin` | Path segment for admin panel (no leading slash) |
+| `server.admin_path` | `administration` | Path segment for admin panel (no leading slash) |
 
 **When changed, ALL admin routes update:**
-- `/server/admin/**` → `/server/{admin_path}/**`
-- `/api/{api_version}/server/admin/**` → `/api/{api_version}/server/{admin_path}/**`
+- `/server/administration/**` → `/server/{admin_path}/**`
+- `/api/{api_version}/server/administration/**` → `/api/{api_version}/server/{admin_path}/**`
 
 ### Validation Rules
 
 | Rule | Action |
 |------|--------|
-| **Cannot conflict with existing routes** | Error and revert to `admin` |
-| **Reserved paths blocked** | `api`, `static`, `assets`, `health`, `version`, etc. |
+| **Cannot conflict with existing routes** | Error and revert to `administration` |
+| **Reserved paths blocked** | `api`, `static`, `assets`, `health`, `version`, etc. — `administration` itself (the default) is NEVER added to this list, since the revert-on-error fallback above depends on `administration` always remaining a valid value |
 | **Valid characters only** | `[a-z0-9-]` (lowercase, numbers, hyphens) |
 | **Min/max length** | 2-32 characters |
 | **No leading/trailing hyphens** | `my-admin` ✓, `-admin-` ✗ |
@@ -30145,6 +30145,8 @@ func validateAdminPath(newPath string, router *mux.Router) error {
     // Normalize first
     newPath = normalizePath(newPath)
     // 1. Check reserved paths
+    // "administration" is the documented default admin_path and MUST NEVER
+    // be added here — doing so would make the default config reject itself.
     reserved := []string{
         "api", "health", "healthz", "metrics", "version", ".well-known",
         "about", "privacy", "contact", "help", "terms", "preferences",
@@ -30226,7 +30228,7 @@ async function changeAdminPath(newPath) {
 ```go
 // Global admin path accessor
 func AdminPath() string {
-    // default: "admin"
+    // default: "administration"
     return config.Get().Server.AdminPath
 }
 
@@ -31175,7 +31177,7 @@ Admin Panel Header:
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
-| `admin_path` | Text | `admin` | Reload | Custom admin panel path (see PART 17) |
+| `admin_path` | Text | `administration` | Reload | Custom admin panel path (see PART 17) |
 | `rate_limit.enabled` | Toggle | On | No | Enable rate limiting |
 | `rate_limit.read.requests` | Number | `120` | No | Read (GET/HEAD) requests per window, per IP |
 | `rate_limit.write.requests` | Number | `10` | No | Write (POST/PUT/PATCH/DELETE) requests per window, per IP |
@@ -54720,8 +54722,8 @@ server:
   cluster: []
   # API version prefix (default: v1, must match server)
   api_version: v1
-  # Admin path (default: admin, must match server)
-  admin_path: admin
+  # Admin path (default: administration, must match server)
+  admin_path: administration
   # Request timeout (match server default)
   timeout: 30s
   # Retry attempts on failure
@@ -56799,8 +56801,8 @@ server:
   cluster: []
   # API version prefix (default: v1, must match server)
   api_version: v1
-  # Admin path (default: admin, must match server)
-  admin_path: admin
+  # Admin path (default: administration, must match server)
+  admin_path: administration
   # Request timeout (match server default)
   timeout: 30s
   # Retry attempts on failure
