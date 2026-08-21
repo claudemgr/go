@@ -31368,7 +31368,7 @@ All gates execute inside the project Docker container (PART 6 → "Docker Rule")
 - Keep minimal-system defaults sensible
 - Avoid unnecessary allocations and duplicate state copies in hot paths
 - Never spawn unbounded goroutines — always cap with a semaphore, worker pool, or context cancellation
-- **MUST sustain at least 500,000 concurrent active connections with no degradation** (no dropped connections, unbounded latency growth, crashes, or OOM) via non-blocking I/O, bounded worker pools, backpressure, and idle-connection reaping; scale horizontally behind a load balancer once a single instance hits its OS file-descriptor or hardware ceiling — this is why the security and resource-safety rules in this spec (bounded queues, closed handles, capped goroutines, panic/recover boundaries) are non-negotiable
+- **MUST sustain at least 500,000 concurrently OPEN connections with no degradation** (no dropped connections, unbounded latency growth, crashes, or OOM) via non-blocking I/O, bounded worker pools, backpressure, and idle-connection reaping — this is an idle-capable target (keep-alive/long-poll/websocket connections mostly idle between requests), NOT 500,000 requests executing in parallel, which stays CPU-bound and must go through the same capped worker pool; scale horizontally behind a load balancer once a single instance hits its OS file-descriptor or hardware ceiling — this is why the security and resource-safety rules in this spec (bounded queues, closed handles, capped goroutines, panic/recover boundaries) are non-negotiable
 
 
 ---

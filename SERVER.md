@@ -542,7 +542,7 @@ primaryIP := "192.168.1.50"
 - Allow config overrides for users who want manual control
 
 **Concurrency & connection scale requirement:**
-- MUST sustain at least 500,000 concurrent active connections with no degradation — no dropped connections, no unbounded latency growth, no crashes, no OOM
+- MUST sustain at least 500,000 concurrently OPEN connections held by the process at once, with no degradation — no dropped connections, no unbounded latency growth, no crashes, no OOM. This is an "idle-capable" target: keep-alive, long-poll, and websocket connections sitting mostly idle between requests. It is NOT a claim that 500,000 requests execute in parallel — work actively being processed at any instant is CPU-bound and must stay behind a capped worker pool sized to available cores, never scaled 1:1 with the connection count
 - Achieve this with non-blocking I/O (goroutines over Go's epoll-backed netpoller), bounded worker pools, backpressure/load shedding once saturated, and keep-alive/idle timeouts that reclaim dead connections
 - Scale horizontally behind a load balancer once a single instance's OS file-descriptor limit or hardware ceiling is reached — the code itself must not be the bottleneck
 - This is why the security and resource-safety rules elsewhere in this spec are non-negotiable: bounded queues, closed file handles/sockets, capped goroutines, panic/recover boundaries, and leak-free code are what keeps a fault that's harmless at 100 connections from becoming an outage at 500,000
@@ -64504,7 +64504,7 @@ make docker
 - [ ] Goroutine count stable
 - [ ] Connection pool sized correctly
 - [ ] File handles closed properly
-- [ ] Sustains 500,000+ concurrent active connections without degradation
+- [ ] Sustains 500,000+ concurrently open (idle-capable) connections without degradation — not 500,000 requests executing in parallel, which stays bounded by available CPU cores via a capped worker pool
 
 ### Caching
 
