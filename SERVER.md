@@ -4186,7 +4186,7 @@ User preferences like theme, language, and UI settings can be stored client-side
 
 These work for anonymous visitors and don't require user accounts. Server-side user preferences (stored in `user_preferences` table) require PART 34.
 
-**Cross-device preference sync (export/import — stateless, no PART 34 required):** only `theme` and `lang` are portable across browsers/devices — never `cookie_consent`/`ccpa_opt_out` (per-browser legal acknowledgments) or the build-stamp cookie. Since preferences aren't tied to identity, the same values always produce the same code/URL — the code/URL *is* the state, not a lookup key, so nothing is ever stored server-side. `GET /prefs/export` returns both a full import URL (`https://{host}/prefs/import?theme=dark&lang=fr`, plain query string, stable across schema changes) and a short code (`base64url` of the same query string, for manual retyping without paste). `GET /prefs/import?theme=dark&lang=fr` validates each value against its normal enum/BCP-47 allowlist — an imported value is still untrusted input — sets the matching cookies, and `303 See Other`s to a clean URL so the code never lingers in the address bar or history.
+**Cross-device preference sync (export/import — stateless, no PART 34 required):** only `theme` and `lang` are portable across browsers/devices — never `cookie_consent`/`ccpa_opt_out` (per-browser legal acknowledgments) or the build-stamp cookie. Since preferences aren't tied to identity, the same values always produce the same code/URL — the code/URL *is* the state, not a lookup key, so nothing is ever stored server-side. Guest preferences live at `/server/preferences` (distinct from the authenticated `/server/{admin_path}/{admin_username}/preferences` and PART-34 `/users/settings/preferences` routes), API-mirrored at `/api/{api_version}/server/preferences` — `preferences` MUST be added to the `{admin_path}` reserved-word list (see "Route Conflict Detection") so an operator can never set `admin_path=preferences` and collide with it. `GET /server/preferences/export` returns both a full import URL (`https://{host}/server/preferences/import?theme=dark&lang=fr`, plain query string, stable across schema changes) and a short code (`base64url` of the same query string, for manual retyping without paste). `GET /server/preferences/import?theme=dark&lang=fr` validates each value against its normal enum/BCP-47 allowlist — an imported value is still untrusted input — sets the matching cookies, and `303 See Other`s to a clean URL so the code never lingers in the address bar or history.
 
 ## AI Implementation Process
 
@@ -30147,7 +30147,7 @@ func validateAdminPath(newPath string, router *mux.Router) error {
     // 1. Check reserved paths
     reserved := []string{
         "api", "health", "healthz", "metrics", "version", ".well-known",
-        "about", "privacy", "contact", "help", "terms",
+        "about", "privacy", "contact", "help", "terms", "preferences",
         "docs", "auth", "security",
         "static", "assets",
     }

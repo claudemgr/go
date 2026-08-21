@@ -23367,10 +23367,11 @@ document.cookie = "lang=fr; path=/; max-age=31536000; SameSite=Lax";
 Preferences aren't tied to identity — any two guests who set the same `theme`/`lang` produce the same code/URL, because the code/URL *is* the preference values, not a lookup key. This lets a preference be carried to a new browser/device without an account and without the server ever storing anything.
 
 - Only `theme` and `lang` are exportable. `cookie_consent` and `ccpa_opt_out` are NEVER included — consent is a per-browser legal acknowledgment that must be re-affirmed on each device, not a portable preference. `{project_name}_build` is NEVER included — it is a device-local cache-purge stamp.
-- **Export** (`GET /prefs/export`, or a "Copy preferences" UI action): reads the current `theme`/`lang` cookies and returns two forms of the same state:
-  - **Full URL** — `https://{host}/prefs/import?theme=dark&lang=fr`: a plain query string, human-readable, and stable across schema changes (a link made before a new preference key existed just omits it on import).
-  - **Short code** — `base64url(theme=dark&lang=fr)`: the query string alone, for manual retyping on a device without copy/paste; the import form strips a leading `https://.../prefs/import?` if pasted with it.
-- **Import** (`GET /prefs/import?theme=dark&lang=fr`, or a paste-a-code field feeding the same route): validates each parameter against its normal enum/BCP-47 allowlist — reject or drop anything unknown or malformed, an imported value is still untrusted input — sets the matching cookies, then `303 See Other` to `/` (or the referring page) so the code never lingers in the visible URL or browser history.
+- Guest preferences live at `/server/preferences` (mirrors the authenticated `/server/{admin_path}/{admin_username}/preferences` pattern minus the identity segment, since guests have none), API-mirrored at `/api/{api_version}/server/preferences` — the export/import actions are sub-routes of it, never the standalone `/prefs/*` path.
+- **Export** (`GET /server/preferences/export`, API-mirrored at `GET /api/{api_version}/server/preferences/export`, or a "Copy preferences" UI action): reads the current `theme`/`lang` cookies and returns two forms of the same state:
+  - **Full URL** — `https://{host}/server/preferences/import?theme=dark&lang=fr`: a plain query string, human-readable, and stable across schema changes (a link made before a new preference key existed just omits it on import).
+  - **Short code** — `base64url(theme=dark&lang=fr)`: the query string alone, for manual retyping on a device without copy/paste; the import form strips a leading `https://.../server/preferences/import?` if pasted with it.
+- **Import** (`GET /server/preferences/import?theme=dark&lang=fr`, API-mirrored at `GET /api/{api_version}/server/preferences/import`, or a paste-a-code field feeding the same route): validates each parameter against its normal enum/BCP-47 allowlist — reject or drop anything unknown or malformed, an imported value is still untrusted input — sets the matching cookies, then `303 See Other` to `/` (or the referring page) so the code never lingers in the visible URL or browser history.
 - No account, no DB row, no PART 34 dependency — decode → validate → set cookie → redirect happens in the one request; nothing is written or looked up server-side.
 
 ### Offline Behavior
@@ -41127,7 +41128,7 @@ func validateAdminPath(newPath string, router *mux.Router) error {
     // 1. Check reserved paths
     reserved := []string{
         "api", "health", "healthz", "metrics", "version", ".well-known",
-        "about", "privacy", "contact", "help", "terms",
+        "about", "privacy", "contact", "help", "terms", "preferences",
         "docs", "auth", "security",
         "static", "assets",
     }
