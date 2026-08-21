@@ -24582,6 +24582,37 @@ html.theme-light {
 
 **Reuse before creating:** before writing CSS for any element, check whether an existing class (`.btn`, `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.form-group`, alert/message classes, etc.) or an existing `--color-*`/`--font-*` custom property from the CSS Variable Reference above already covers it, and reuse it. Only write new CSS when nothing existing fits — and when new CSS is genuinely needed, it still draws its colors from the existing `--color-*` custom properties rather than hardcoding new values.
 
+```html
+<!-- CORRECT — new feature, reuses the existing button classes; no new class invented -->
+<a href="/audit/export" class="btn btn-secondary">Export</a>
+```
+
+```css
+/* CORRECT — a genuinely new component still draws its colors from the
+   existing --color-* custom properties in the CSS Variable Reference,
+   instead of inventing new hex values */
+.domain-status-badge {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}
+```
+
+```css
+/* WRONG — duplicates .btn-secondary with a new one-off class and
+   hardcoded colors instead of reusing the existing class/variables */
+.my-export-btn {
+  background: #44475a;
+  color: #f8f8f2;
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid #6272a4;
+}
+```
+
 This rule governs the entire spec — it is not restricted to buttons, not restricted to import/export controls, and not restricted to whatever the reader might assume is the "main" UI. Every section describing a UI element inherits this rule automatically; sections do not need to restate it.
 
 ## Technology Stack
