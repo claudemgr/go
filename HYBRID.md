@@ -21978,6 +21978,14 @@ html.theme-light {
 
 ---
 
+## Styling Convention: Everything Must Be Styled
+
+**Every UI element in this spec — every button, link, form, input, label, table, card, banner, badge, toast, modal, tooltip, status message, and any other visible element, in every feature described anywhere in this document — MUST be styled. None of it is left at raw/unstyled browser default.** This is a general project-wide rule, not scoped to any one feature or element type.
+
+**Reuse before creating:** before writing CSS for any element, check whether an existing class (`.btn`, `.btn-primary`, `.btn-secondary`, `.btn-danger`, `.form-group`, alert/message classes, etc.) or an existing `--color-*`/`--font-*` custom property from the CSS Variable Reference above already covers it, and reuse it. Only write new CSS when nothing existing fits — and when new CSS is genuinely needed, it still draws its colors from the existing `--color-*` custom properties rather than hardcoding new values.
+
+This rule governs the entire spec — it is not restricted to buttons, not restricted to import/export controls, and not restricted to whatever the reader might assume is the "main" UI. Every section describing a UI element inherits this rule automatically; sections do not need to restate it.
+
 ## Technology Stack
 
 | Rule | Description | Details |
@@ -22675,7 +22683,7 @@ textarea:user-invalid,
 - The server parses the uploaded file from the multipart body; server-side validation is always authoritative regardless of any client-side JS mirroring.
 - Never hide the native `<input type="file">` behind a custom-styled JS trigger/fake button, or the feature stops working with JavaScript disabled.
 
-**Styling applies to EVERYTHING in the flow, not just the trigger button:** the trigger link/button, the `<form>` and its `<label>`, the `<input type="file">`, any filename/status/progress text, and any success or error messaging for the import/export result must ALL be styled using the existing design system — `.btn`/`.btn-secondary` for controls, `.form-group`/input styling for the file picker, existing alert/message classes for status and result feedback — all drawing colors from the `--color-*` custom properties in the CSS Variable Reference. Nothing in the flow is left at raw unstyled browser default, and nothing gets a new one-off CSS class when an existing one already fits. "No-JS" governs the markup and mechanism only (a real `<a>`/`<form>`, no JS-only click handler) — not appearance; CSS applies regardless of JavaScript.
+**Styling:** every element in the flow — trigger link/button, `<form>`, `<label>`, `<input type="file">`, filename/status/progress text, success/error messaging — follows "Styling Convention: Everything Must Be Styled" (above): fully styled, reusing existing classes and `--color-*` custom properties, no exceptions and no new one-off CSS when an existing class fits. "No-JS" governs markup/mechanism only (a real `<a>`/`<form>`, no JS-only click handler) — not appearance; CSS applies regardless of JavaScript.
 
 **Applies to (non-exhaustive — this is a rule, not a feature list):** audit log export, GDPR/CCPA data export, PGP key export, settings/config export, domain lists, created/shortened links, and any future export- or import-capable feature.
 
