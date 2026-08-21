@@ -29950,6 +29950,18 @@ server:
 
 **Admin credentials are stored in `users.db` (admins table), NOT in config file.**
 
+### Access Control on Admin Routes
+
+Any request to `/server/{admin_path}/**` is gated identically regardless of HTTP method or sub-path:
+
+| Requester | Result |
+|-----------|--------|
+| **Unauthenticated (no session)** | Redirect to the shared `/server/auth/login` form — same as any other protected route, no admin-specific hint |
+| **Authenticated Regular User (non-admin)** | Redirect to their own `/users` dashboard — NEVER shown the login form again, NEVER told an admin panel exists |
+| **Authenticated Server Admin** | Request proceeds normally |
+
+Unauthenticated and non-admin requests both fall through the same admin-auth middleware check; only the destination differs (login form vs. own dashboard). An outside observer probing `/server/{admin_path}` while unauthenticated cannot distinguish it from any other protected route, and a logged-in non-admin user is bounced to their own space, never given a bypass or a hint that an admin panel exists.
+
 ### Testing Admin Routes
 
 **Admin authentication MUST be tested, not bypassed:**

@@ -40940,6 +40940,17 @@ I2P Eepsite: Running (i2pd)
 
 **There are no application user accounts — identity is the operating system (PART 8). The admin token lives in `server.yml` (PART 11); the admin account record (profile, preferences, MFA) lives in the `admins` table.**
 
+### Access Control on Admin Routes
+
+Any request to `/server/{admin_path}/**` is gated identically regardless of HTTP method or sub-path:
+
+| Requester | Result |
+|-----------|--------|
+| **Unauthenticated (no valid admin token/session)** | Redirect to the shared `/server/auth/login` form — same as any other protected route, no admin-specific hint |
+| **Authenticated Server Admin** | Request proceeds normally |
+
+HYBRID has no application-level Normal User account type by default (identity is the OS per PART 8), so there is no authenticated-non-admin case to redirect elsewhere. If PART 34 Multi-User is enabled, follow the SERVER-style pattern instead: an authenticated non-admin user is redirected to their own dashboard, never shown the login form again and never given a hint that an admin panel exists.
+
 ### Testing Admin Routes
 
 **Admin authentication MUST be tested, not bypassed:**
