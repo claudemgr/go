@@ -41117,6 +41117,8 @@ func validateAdminRoute(path string) error {
 - `/server/administration/**` → `/server/{admin_path}/**`
 - `/api/{api_version}/server/administration/**` → `/api/{api_version}/server/{admin_path}/**`
 
+**`{admin_path}` is a single path segment relative to `/server/` — it is substituted directly after `/server/`, never in place of it.** Setting `server.admin_path: my-admin` produces `/server/my-admin`, NOT `/server/server/my-admin`. Because "Valid characters only" (below) forbids `/`, an operator cannot set `admin_path` to `server/my-admin`, `/my-admin`, or anything containing a slash — those are rejected like any other invalid value; `admin_path` NEVER embeds a `server/` prefix. Deeper sub-paths compose normally after that one segment: `/server/{admin_path}/me` → `/server/my-admin/me`.
+
 ### Validation Rules
 
 | Rule | Action |
