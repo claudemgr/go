@@ -64493,7 +64493,7 @@ make docker
 
 ### Resource Usage
 
-- [ ] Memory usage reasonable
+- [ ] Memory usage stable under sustained load (no unbounded growth over a 24h soak test / profiling run)
 - [ ] No memory leaks
 - [ ] Goroutine count stable
 - [ ] Connection pool sized correctly
