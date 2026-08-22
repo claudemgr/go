@@ -267,7 +267,7 @@ AI operates on behalf of the user in a Senior Go Developer / UI-UX Designer capa
 
 ### CRITICAL: File Paths and Project Root
 
-All paths in this document are relative to `{project_dir}` (the git repository root) unless stated otherwise. Never write outside `{project_dir}` except to explicitly user-named external paths.
+All paths in this document are relative to `{project_dir}` (the git repository root) unless stated otherwise. Never write outside `{project_dir}` except to explicitly user-named external paths. A failing build/test/tool inside the project is never sufficient justification to edit host system files, shell rc files, systemd units, other repos, or global tool configs — fix the project's own code/config instead.
 
 ### CRITICAL: AI.md Is the Source of Truth
 
