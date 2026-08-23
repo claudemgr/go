@@ -1233,7 +1233,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | `.readthedocs.yaml` | ✓ | ReadTheDocs configuration |
 | `.editorconfig` | Optional | Editor configuration |
 
-**Why two variants of PLAN/TODO exist:** humans and AI write tasks at different levels of detail. A human might write `[ ] fix bugs`; AI would write a structured task with reproduction steps, acceptance criteria, and file paths. The split lets each party use their natural style. **AI's job with human files:** read terse items, figure out what they mean (investigate, propose, ask if genuinely unclear — don't refuse for being short), do the work, then check the box. AI must NOT "improve" the wording into AI-style verbose form. The completion rituals (`TODO.AI.md` ✅ empty, `PLAN.AI.md` "Fully Implemented" rewrite) apply only to the AI-owned variants.
+**Why two variants of PLAN/TODO exist:** humans and AI write tasks at different levels of detail. A human might write `[ ] fix bugs`; AI would write a structured task with reproduction steps, acceptance criteria, and file paths. The split lets each party use their natural style. **AI's job with human files:** read terse items, figure out what they mean (investigate, propose, ask if genuinely unclear — don't refuse for being short), do the work, then check the box. AI must NOT "improve" the wording into AI-style verbose form. The completion rituals (`TODO.AI.md` ✅ items removed individually when done, `PLAN.AI.md` "Fully Implemented" rewrite) apply only to the AI-owned variants.
 
 **RULE: If a root file doesn't appear in this list, it MUST NOT exist - ask before creating.**
 
