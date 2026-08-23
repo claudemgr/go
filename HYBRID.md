@@ -4899,7 +4899,7 @@ BUILD_EPOCH := $(shell date -u +%s)
 # BUILD_DATE derived from BUILD_EPOCH (ISO 8601 / RFC 3339 UTC) - used only for
 # docker build-args/OCI labels; the binary derives BuildDate from BuildEpoch itself
 BUILD_DATE := $(shell date -u -d @$(BUILD_EPOCH) +"%Y-%m-%dT%H:%M:%SZ")
-COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "N/A")
+COMMIT_ID := $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo "N/A")
 # COMMIT_ID used directly - no VCS_REF alias
 
 # Official site URL (OPTIONAL - never guess or assume; see PART 7)
@@ -5385,7 +5385,7 @@ make build
 |----------|-------|
 | Trigger | Daily schedule (3am UTC) + push to main/master |
 | Git tag | `daily` (single rolling tag, NOT a timestamp) |
-| Version format | Short commit id (`git rev-parse --short HEAD`) — NO `v` prefix |
+| Version format | Short commit id (`git rev-parse --short=7 HEAD`) — NO `v` prefix |
 | Release name | `Daily Build {VERSION}` |
 | version.txt | Same as version format (e.g., `a1b2c3d`) |
 | sha256.txt | SHA-256 checksums of every uploaded binary (`{hash}  {filename}` lines) |
@@ -6484,7 +6484,7 @@ Inject at build time via `-ldflags` `-X` flags:
 var (
     // overridden by: -ldflags="-X main.Version=$(cat release.txt)"
     Version      = "devel"
-    // overridden by: -ldflags="-X main.CommitID=$(git rev-parse --short HEAD)"
+    // overridden by: -ldflags="-X main.CommitID=$(git rev-parse --short=7 HEAD)"
     CommitID     = "N/A"
     // BuildDate is derived from BuildEpoch in init(); N/A when BuildEpoch is unset
     BuildDate    = "N/A"
@@ -6520,7 +6520,7 @@ go build \
   -buildvcs=false -trimpath \
   -ldflags="-s -w \
     -X main.Version=$(cat release.txt) \
-    -X main.CommitID=$(git rev-parse --short HEAD) \
+    -X main.CommitID=$(git rev-parse --short=7 HEAD) \
     -X main.BuildEpoch=$(date -u +%s) \
     -X main.OfficialSite=$(cat site.txt 2>/dev/null || true)" \
   -o binaries/{project_name}-linux-amd64 ./src
@@ -18183,7 +18183,7 @@ Same underlying health response as `/server/healthz`, but formatted using the st
 
 - Stable: Semantic versioning `MAJOR.MINOR.PATCH` (e.g., `1.0.0`)
 - Beta: `YYYYMMDDHHMMSS-beta` (e.g., `20251205143022-beta`)
-- Daily: rolling tag `daily`, deleted and recreated nightly; VERSION = short commit id (`git rev-parse --short HEAD`, e.g., `a1b2c3d`) — identity is the commit, never a stamped `release.txt` value or a timestamp
+- Daily: rolling tag `daily`, deleted and recreated nightly; VERSION = short commit id (`git rev-parse --short=7 HEAD`, e.g., `a1b2c3d`) — identity is the commit, never a stamped `release.txt` value or a timestamp
 
 ### Sources (Priority Order)
 
@@ -33351,7 +33351,7 @@ for TARGET in "linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows
     -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false -e GOOS="$GOOS" -e GOARCH="$GOARCH" \
     casjaysdev/go:latest \
     go build -buildvcs=false -trimpath \
-      -ldflags="-s -w -X main.Version=$(cat release.txt) -X main.CommitID=$(git rev-parse --short HEAD) -X main.BuildEpoch=$(date -u +%s)" \
+      -ldflags="-s -w -X main.Version=$(cat release.txt) -X main.CommitID=$(git rev-parse --short=7 HEAD) -X main.BuildEpoch=$(date -u +%s)" \
       -o "binaries/$ARTIFACT" ./src
 
   # Verify static linkage on Linux
@@ -33506,7 +33506,7 @@ All workflows MUST set these environment variables:
 ```yaml
 # Set in "Set build info" step, NOT as static env:
 #   if [ -f release.txt ]; then echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV; else echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV; fi
-#   echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+#   echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
 #   BUILD_EPOCH="$(date -u +%s)"; echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
 #   echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV  # docker build-args/OCI labels only
 # Then use in build step:
@@ -33725,7 +33725,7 @@ jobs:
           else
             echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
           fi
-          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
           BUILD_EPOCH="$(date -u +%s)"
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
@@ -33941,7 +33941,7 @@ jobs:
       - name: Set build info
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
-          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
           BUILD_EPOCH="$(date -u +%s)"
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
@@ -34091,7 +34091,7 @@ jobs:
         id: v
         run: |
           # Daily identity is the commit itself, not a stamped release.txt version
-          VERSION="$(git rev-parse --short HEAD)"
+          VERSION="$(git rev-parse --short=7 HEAD)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
   build:
@@ -34127,7 +34127,7 @@ jobs:
       - name: Set build info
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
-          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
           BUILD_EPOCH="$(date -u +%s)"
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
@@ -34265,7 +34265,7 @@ jobs:
 | Version tag (`v*`, `*.*.*`) | `{version}`, `latest`, `YYMM` |
 
 **Notes:**
-- `{commit_id}` = short SHA (7 characters) from `git rev-parse --short HEAD`
+- `{commit_id}` = short SHA (7 characters) from `git rev-parse --short=7 HEAD`
 - `YYMM` = year/month (e.g., `2512`)
 - Built for `linux/amd64` and `linux/arm64` using `docker buildx`
 - Registry: `ghcr.io`
@@ -34323,14 +34323,14 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
           echo "YYMM=$(date +"%y%m")" >> $GITHUB_ENV
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF#refs/tags/}"
             echo "VERSION=${VERSION#v}" >> $GITHUB_ENV
             echo "IS_TAG=true" >> $GITHUB_ENV
           else
-            echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+            echo "VERSION=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
             echo "IS_TAG=false" >> $GITHUB_ENV
           fi
           BUILD_EPOCH="$(date -u +%s)"
@@ -34420,7 +34420,7 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
           BUILD_EPOCH="$(date -u +%s)"
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
@@ -34591,7 +34591,7 @@ jobs:
           else
             echo "VERSION=${GITEA_REF_NAME#v}" >> $GITEA_ENV
           fi
-          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
           BUILD_EPOCH="$(date -u +%s)"
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
           echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
@@ -34798,7 +34798,7 @@ jobs:
       - name: Set build info
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
-          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
           BUILD_EPOCH="$(date -u +%s)"
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
           echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
@@ -34940,7 +34940,7 @@ jobs:
         id: v
         run: |
           # Daily identity is the commit itself, not a stamped release.txt version
-          VERSION="$(git rev-parse --short HEAD)"
+          VERSION="$(git rev-parse --short=7 HEAD)"
           echo "version=$VERSION" >> "$GITEA_OUTPUT"
 
   build:
@@ -34976,7 +34976,7 @@ jobs:
       - name: Set build info
         run: |
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
-          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
           BUILD_EPOCH="$(date -u +%s)"
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
           echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
@@ -35153,7 +35153,7 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
           echo "YYMM=$(date +"%y%m")" >> $GITEA_ENV
           if [[ "${{ gitea.ref }}" == refs/tags/* ]]; then
             VERSION="${GITEA_REF_NAME}"
@@ -35161,7 +35161,7 @@ jobs:
             echo "VERSION=${VERSION#v}" >> $GITEA_ENV
             echo "IS_TAG=true" >> $GITEA_ENV
           else
-            echo "VERSION=$(git rev-parse --short HEAD)" >> $GITEA_ENV
+            echo "VERSION=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
             echo "IS_TAG=false" >> $GITEA_ENV
           fi
           BUILD_EPOCH="$(date -u +%s)"
@@ -35261,7 +35261,7 @@ jobs:
 
       - name: Set build info
         run: |
-          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
           BUILD_EPOCH="$(date -u +%s)"
           echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
           echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
@@ -35395,7 +35395,7 @@ stages:
     # NOTE: all tooling (git, bash, govulncheck, cyclonedx-gomod, etc.) is pre-installed
     # in casjaysdev/go:latest — never `apk add` or `go install` inside a CI job.
     - export VERSION="${CI_COMMIT_TAG#v}"
-    - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
+    - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
     - export BUILD_EPOCH="$(date -u +%s)"
     - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
     # OFFICIAL_SITE (optional): site.txt wins; otherwise use CI/CD Variables or leave empty
@@ -35639,7 +35639,7 @@ build:beta:
   before_script:
     # All tooling is pre-installed in casjaysdev/go:latest — never `apk add` in a CI job
     - export VERSION="$(date +%Y%m%d%H%M%S)-beta"
-    - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
+    - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
     - export BUILD_EPOCH="$(date -u +%s)"
     - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
     - if [ -f site.txt ]; then export OFFICIAL_SITE="$(cat site.txt)"; else export OFFICIAL_SITE="${OFFICIAL_SITE:-}"; fi
@@ -35749,8 +35749,8 @@ build:daily:
   before_script:
     # All tooling is pre-installed in casjaysdev/go:latest — never `apk add` in a CI job
     # Daily identity is the commit itself, not a stamped release.txt/timestamp version
-    - export VERSION="${CI_COMMIT_SHORT_SHA}"
-    - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
+    - export VERSION="${CI_COMMIT_SHA:0:7}"
+    - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
     - export BUILD_EPOCH="$(date -u +%s)"
     - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
     - if [ -f site.txt ]; then export OFFICIAL_SITE="$(cat site.txt)"; else export OFFICIAL_SITE="${OFFICIAL_SITE:-}"; fi
@@ -35802,10 +35802,10 @@ release:daily:
   script:
     # Daily identity is the commit itself, matching the version embedded via
     # LDFLAGS in build:daily - never a stamped release.txt or timestamp value
-    - echo "${CI_COMMIT_SHORT_SHA}" > version.txt
+    - echo "${CI_COMMIT_SHA:0:7}" > version.txt
     - tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
         --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
-        -czf ${PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-source.tar.gz .
+        -czf ${PROJECT_NAME}-${CI_COMMIT_SHA:0:7}-source.tar.gz .
     # Consolidated sha256.txt/sha512.txt over every release asset (version.txt,
     # binaries, source archive, SBOM) - the file list is explicitly scoped since
     # the job runs in the full repo checkout, not an isolated directory; pre-capturing
@@ -35823,16 +35823,16 @@ release:daily:
     expire_in: 1 day
   release:
     tag_name: "daily"
-    name: "Daily Build ${CI_COMMIT_SHORT_SHA}"
-    description: "Daily build: ${CI_COMMIT_SHORT_SHA}"
+    name: "Daily Build ${CI_COMMIT_SHA:0:7}"
+    description: "Daily build: ${CI_COMMIT_SHA:0:7}"
     assets:
       links:
         - name: "sha256.txt"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/sha256.txt?job=release:daily"
         - name: "sha512.txt"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/sha512.txt?job=release:daily"
-        - name: "${PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-source.tar.gz"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-${CI_COMMIT_SHORT_SHA}-source.tar.gz?job=release:daily"
+        - name: "${PROJECT_NAME}-${CI_COMMIT_SHA:0:7}-source.tar.gz"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-${CI_COMMIT_SHA:0:7}-source.tar.gz?job=release:daily"
         - name: "${PROJECT_NAME}-bom.json"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-bom.json?job=sbom:daily"
         - name: "${PROJECT_NAME}-linux-amd64"
@@ -35930,13 +35930,13 @@ docker:build:
       if [ -n "$CI_COMMIT_TAG" ]; then
         VERSION="${CI_COMMIT_TAG#v}"
         YYMM=$(date +%y%m)
-        TAGS="-t $CI_REGISTRY_IMAGE:$VERSION -t $CI_REGISTRY_IMAGE:latest -t $CI_REGISTRY_IMAGE:$YYMM -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+        TAGS="-t $CI_REGISTRY_IMAGE:$VERSION -t $CI_REGISTRY_IMAGE:latest -t $CI_REGISTRY_IMAGE:$YYMM -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
       elif [ "$CI_COMMIT_BRANCH" = "beta" ]; then
-        VERSION="beta-$CI_COMMIT_SHORT_SHA"
-        TAGS="-t $CI_REGISTRY_IMAGE:beta -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+        VERSION="beta-${CI_COMMIT_SHA:0:7}"
+        TAGS="-t $CI_REGISTRY_IMAGE:beta -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
       else
-        VERSION="$CI_COMMIT_SHORT_SHA"
-        TAGS="-t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+        VERSION="${CI_COMMIT_SHA:0:7}"
+        TAGS="-t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
       fi
       BUILD_EPOCH="$(date -u +%s)"
       BUILD_DATE="$(date -u -d "@${BUILD_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)"
@@ -35946,7 +35946,7 @@ docker:build:
         -f docker/Dockerfile \
         --platform linux/amd64,linux/arm64 \
         --build-arg VERSION="${VERSION}" \
-        --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
+        --build-arg COMMIT_ID="${CI_COMMIT_SHA:0:7}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
         --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
@@ -35957,7 +35957,7 @@ docker:build:
         --label "org.opencontainers.image.licenses=MIT" \
         --label "org.opencontainers.image.version=${VERSION}" \
         --label "org.opencontainers.image.created=${BUILD_DATE}" \
-        --label "org.opencontainers.image.revision=${CI_COMMIT_SHORT_SHA}" \
+        --label "org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
         --label "org.opencontainers.image.url=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.source=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.documentation=${CI_PROJECT_URL}" \
@@ -35969,7 +35969,7 @@ docker:build:
         --annotation "manifest:org.opencontainers.image.licenses=MIT" \
         --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
         --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
-        --annotation "manifest:org.opencontainers.image.revision=${CI_COMMIT_SHORT_SHA}" \
+        --annotation "manifest:org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
         --annotation "manifest:org.opencontainers.image.url=${CI_PROJECT_URL}" \
         --annotation "manifest:org.opencontainers.image.source=${CI_PROJECT_URL}" \
         --annotation "manifest:org.opencontainers.image.documentation=${CI_PROJECT_URL}" \
@@ -36003,8 +36003,8 @@ docker:build:devel:
       docker buildx build \
         -f docker/Dockerfile.dev \
         --platform linux/amd64,linux/arm64 \
-        --build-arg VERSION="${CI_COMMIT_SHORT_SHA}" \
-        --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
+        --build-arg VERSION="${CI_COMMIT_SHA:0:7}" \
+        --build-arg COMMIT_ID="${CI_COMMIT_SHA:0:7}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
         --build-arg BUILD_EPOCH="${BUILD_EPOCH}" \
         --label "org.opencontainers.image.vendor=${PROJECT_ORG}" \
@@ -36013,9 +36013,9 @@ docker:build:devel:
         --label "org.opencontainers.image.base.name=${PROJECT_NAME}" \
         --label "org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
         --label "org.opencontainers.image.licenses=MIT" \
-        --label "org.opencontainers.image.version=${CI_COMMIT_SHORT_SHA}" \
+        --label "org.opencontainers.image.version=${CI_COMMIT_SHA:0:7}" \
         --label "org.opencontainers.image.created=${BUILD_DATE}" \
-        --label "org.opencontainers.image.revision=${CI_COMMIT_SHORT_SHA}" \
+        --label "org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
         --label "org.opencontainers.image.url=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.source=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.documentation=${CI_PROJECT_URL}" \
@@ -36025,9 +36025,9 @@ docker:build:devel:
         --annotation "manifest:org.opencontainers.image.base.name=${PROJECT_NAME}" \
         --annotation "manifest:org.opencontainers.image.description=${PROJECT_NAME} - development image (alpine, debug mode)" \
         --annotation "manifest:org.opencontainers.image.licenses=MIT" \
-        --annotation "manifest:org.opencontainers.image.version=${CI_COMMIT_SHORT_SHA}" \
+        --annotation "manifest:org.opencontainers.image.version=${CI_COMMIT_SHA:0:7}" \
         --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
-        --annotation "manifest:org.opencontainers.image.revision=${CI_COMMIT_SHORT_SHA}" \
+        --annotation "manifest:org.opencontainers.image.revision=${CI_COMMIT_SHA:0:7}" \
         --annotation "manifest:org.opencontainers.image.url=${CI_PROJECT_URL}" \
         --annotation "manifest:org.opencontainers.image.source=${CI_PROJECT_URL}" \
         --annotation "manifest:org.opencontainers.image.documentation=${CI_PROJECT_URL}" \
@@ -36189,13 +36189,13 @@ pipeline {
                         // Daily build - matches daily.yml
                         // Daily identity is the commit itself, not a stamped release.txt/timestamp version
                         env.BUILD_TYPE = 'daily'
-                        env.VERSION = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                        env.VERSION = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
                     } else {
                         // Other branches - dev build
                         env.BUILD_TYPE = 'dev'
                         env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-dev'
                     }
-                    env.COMMIT_ID = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    env.COMMIT_ID = sh(script: 'git rev-parse --short=7 HEAD', returnStdout: true).trim()
                     env.BUILD_EPOCH = sh(script: 'date -u +%s', returnStdout: true).trim()
                     env.BUILD_DATE = sh(script: "date -u -d @${env.BUILD_EPOCH} +\"%Y-%m-%dT%H:%M:%SZ\"", returnStdout: true).trim()
                     // OFFICIAL_SITE (optional): site.txt wins; otherwise use Jenkins credentials or leave empty

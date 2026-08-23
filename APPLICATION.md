@@ -701,7 +701,7 @@ Inject version, commit ID, build epoch, and official site via `-ldflags`. `Build
 var (
     // overridden by: -ldflags="-X main.Version=$(cat release.txt)"
     Version      = "devel"
-    // overridden by: -ldflags="-X main.CommitID=$(git rev-parse --short HEAD)"
+    // overridden by: -ldflags="-X main.CommitID=$(git rev-parse --short=7 HEAD)"
     CommitID     = "N/A"
     // BuildDate is derived from BuildEpoch in init(); "N/A" when BuildEpoch is unset
     BuildDate    = "N/A"
@@ -739,7 +739,7 @@ go build \
   -buildvcs=false -trimpath \
   -ldflags="-s -w \
     -X main.Version=$(cat release.txt) \
-    -X main.CommitID=$(git rev-parse --short HEAD) \
+    -X main.CommitID=$(git rev-parse --short=7 HEAD) \
     -X 'main.BuildEpoch=${BUILD_EPOCH}' \
     -X main.OfficialSite=$(cat site.txt 2>/dev/null || true)" \
   -o binaries/{project_name}-linux-amd64 ./src
@@ -1037,7 +1037,7 @@ BINDIR      := binaries
 RELDIR      := releases
 
 VERSION     ?= $(shell cat release.txt 2>/dev/null || echo "devel")
-COMMIT_ID   := $(shell git rev-parse --short HEAD 2>/dev/null || echo "N/A")
+COMMIT_ID   := $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo "N/A")
 # BUILD_EPOCH is the single captured time source - captured once per build
 BUILD_EPOCH := $(shell date -u +%s)
 # Derived from BUILD_EPOCH - used only for the Docker OCI created annotation; not an ldflag
@@ -1848,7 +1848,7 @@ for TARGET in "linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows
     -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false -e GOOS="$GOOS" -e GOARCH="$GOARCH" \
     casjaysdev/go:latest \
     go build -buildvcs=false -trimpath \
-      -ldflags="-s -w -X main.Version=$(cat release.txt) -X main.CommitID=$(git rev-parse --short HEAD) -X 'main.BuildEpoch=${BUILD_EPOCH}'" \
+      -ldflags="-s -w -X main.Version=$(cat release.txt) -X main.CommitID=$(git rev-parse --short=7 HEAD) -X 'main.BuildEpoch=${BUILD_EPOCH}'" \
       -o "binaries/$ARTIFACT" ./src
 
   # Verify static linkage on Linux
