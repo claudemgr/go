@@ -57544,7 +57544,7 @@ Admin clicks "Invite New User"
 4. New user clicks link → sets their own password
 5. Account active after password set
 
-**Direct-create flow (equivalent, admin skips sharing the link manually less often):**
+**Direct-create flow (equivalent — Admin creates the record, then delivers the link):**
 1. Admin creates the user record at `/server/{admin_path}/config/users`
 2. System generates a one-time activation/password-setup link for that specific user
 3. If SMTP is enabled, the link is emailed automatically; otherwise a copyable link is shown for manual delivery
