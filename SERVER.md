@@ -3481,7 +3481,7 @@ type Config struct {
 enabled: false
 
 # User registration creation mode (when enabled)
-# Options: open (default), invite, admin_only, disabled
+# Options: open (default), private
 registration:
   mode: open
 ```
@@ -37866,7 +37866,7 @@ Common Configuration Keys:
   server.fqdn           Server FQDN (fully qualified domain name)
   branding.title        Server display title
   branding.description  Server description
-  registration.mode     Registration mode (public|private|disabled)
+  registration.mode     Registration mode (open|private)
   auth.session_timeout  Session timeout duration
   email.smtp_host       SMTP server hostname
   email.from_address    From email address
@@ -57459,7 +57459,7 @@ users:
   enabled: true
 
   registration:
-    # Registration mode: open, invite, admin_only, disabled
+    # Registration mode: open, private
     # Default: anyone can self-register
     mode: open
 ```
@@ -57468,23 +57468,21 @@ users:
 
 | Mode | Public Self-Registration | Admin Invite | Direct Admin Create | Default | Use Case |
 |------|--------------------------|--------------|---------------------|---------|----------|
-| **open** | ✓ Anyone | Optional | Optional | **YES** | Open community, public service |
-| **invite** | ✗ No | ✓ Required | ✗ No | No | Controlled access, invite-only onboarding |
-| **admin_only** | ✗ No | ✗ No | ✓ Required | No | Enterprise/internal tools where admins provision accounts |
-| **disabled** | ✗ No | ✗ No | ✗ No | No | Closed systems with no new regular-user accounts |
+| **open** | ✓ Anyone | ✓ Yes | ✓ Yes | **YES** | Open community, public service |
+| **private** | ✗ No | ✓ Yes | ✓ Yes | No | Controlled access, invite-only/enterprise onboarding |
 
-**Note:** Registration mode controls how NEW regular-user accounts are created. It does **not** control login for existing users or user profile visibility.
+**Note:** Registration mode controls only whether the **public** self-registration form is reachable. It does **not** control login for existing users, user profile visibility, or the Server Admin's ability to add Regular User accounts — Server Admin account management (PART 17) and Regular User account creation (this PART) are separate scopes, so Server Admin can always invite or directly create a Regular User account, in either mode. There is no "disabled" mode: to stop growth, an admin simply stops inviting/creating users under `private`.
 
 **External identity note:** OIDC/LDAP/SAML-backed regular users count as "new regular-user accounts" when the system creates the first local user record for that external identity. Their first-login account creation MUST respect `auto_register` and the username collision rules in PART 34.
 
 **Admin Permission Reminder (see PART 17):**
 - Admin CANNOT set user passwords (only user can, via invite link or reset)
 - Admin CANNOT view user passwords, 2FA secrets, or private data
-- Admin CAN: issue invite links, create users directly when the mode allows it, send password reset, suspend/unsuspend, disable 2FA
+- Admin CAN: issue invite links, create users directly, send password reset, suspend/unsuspend, disable 2FA — in both modes
 
 ### Mode: open (DEFAULT)
 
-**Anyone can register. This is the default when multi-user is enabled.**
+**Anyone can register. This is the default when multi-user is enabled. Server Admin may additionally invite or directly create users, using the same flows as `private` mode.**
 
 - `/server/auth/register` → Registration form
 - User submits username, email, password
@@ -57493,9 +57491,9 @@ users:
 - No admin action required
 - Use for: Public services, open communities, SaaS apps
 
-### Mode: invite
+### Mode: private
 
-**Only admin-issued invite links/codes can create accounts.**
+**No public self-registration form. Only Server Admin can add new Regular User accounts — by invite link or by direct creation. Both paths end the same way: the user sets their own password via a one-time link.**
 
 ```
 Admin Panel (/server/{admin_path}/config/users)
@@ -57539,46 +57537,31 @@ Admin clicks "Invite New User"
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Invite Flow:**
+**Invite flow:**
 1. Admin sets username for new user
 2. System generates one-time invite URL
 3. Admin shares URL with new user (email, chat, etc.)
 4. New user clicks link → sets their own password
 5. Account active after password set
 
-**Invite Rules (same as Server Admin invites):**
+**Direct-create flow (equivalent, admin skips sharing the link manually less often):**
+1. Admin creates the user record at `/server/{admin_path}/config/users`
+2. System generates a one-time activation/password-setup link for that specific user
+3. If SMTP is enabled, the link is emailed automatically; otherwise a copyable link is shown for manual delivery
+4. New user opens link → sets their own password (admin cannot set it)
+5. Account active after password set
+
+**Invite/activation rules (same as Server Admin invites):**
 - Single-use by default (`max_uses` = 1, invalidated after first use or expiry); admin may raise `max_uses` (0 = unlimited)
 - Default expiry: 7 days (configurable: 1h, 6h, 24h, 48h, 7d)
-- Only Server Admin can generate invites (users cannot invite other users)
+- Only Server Admin can generate invites or activation links (users cannot invite other users)
 
-**Invite mode behavior:**
+**Private mode behavior:**
 - `/server/auth/register` → 404 (no public registration form)
 - `/server/auth/invite/user/{token}` → Password setup form (if valid token)
-- Only Server Admin can initiate user creation
+- Only Server Admin can initiate user creation (invite or direct create)
+- Existing users can still log in
 - Use for: Internal tools, controlled access, enterprise deployments
-
-### Mode: admin_only
-
-**Only Server Admin can create the account record directly. No invite-only self-service flow exists.**
-
-- `/server/auth/register` → 404 (no public registration form)
-- Server Admin creates the user at `/server/{admin_path}/config/users`
-- System generates a one-time activation/password-setup link for that specific user
-- If SMTP is enabled, send the activation link automatically; otherwise show a copyable link for manual delivery
-- Admin still cannot set the user's password
-- Existing users can still log in
-- Use for: Enterprise provisioning, tightly controlled internal systems
-
-### Mode: disabled
-
-**No new regular-user accounts can be created.**
-
-- `/server/auth/register` → 404 (no public registration form)
-- New `/server/auth/invite/user/{token}` links are not issued
-- Existing unused invite/activation links must be rejected once mode is set to `disabled`
-- Server Admin cannot create new regular-user accounts through the normal UI/API
-- Existing users can still log in
-- Use for: Closed systems where account creation is frozen or intentionally unavailable
 
 ### Server Setup to User Registration Workflow
 
@@ -57602,22 +57585,22 @@ Admin clicks "Invite New User"
 │                                                                          │
 │  3. ADMIN OPTIONALLY CHANGES REGISTRATION MODE                           │
 │     └── /server/{admin_path}/config/settings → registration mode                       │
-│     └── Mode: open (default) | invite | admin_only | disabled            │
-│     └── Mode controls how NEW regular-user accounts are created          │
+│     └── Mode: open (default) | private                                   │
+│     └── Mode controls whether the public self-registration form exists   │
 │                                                                          │
 │  4. USER CREATION METHODS                                                │
-│     ┌────────────────────────────────────────────────────────────────────────┐ │
-│     │ Method                │ open │ invite │ admin_only │ disabled │      │ │
-│     ├────────────────────────────────────────────────────────────────────────┤ │
-│     │ /server/auth/register        │  ✓   │   ✗    │     ✗      │    ✗     │      │ │
-│     │ Admin invite→user     │  ✓   │   ✓    │     ✗      │    ✗     │      │ │
-│     │ Admin create→activate │  ✓   │   ✗    │     ✓      │    ✗     │      │ │
-│     └────────────────────────────────────────────────────────────────────────┘ │
+│     ┌───────────────────────────────────────────────┐                   │ │
+│     │ Method                 │ open │ private │      │                   │ │
+│     ├───────────────────────────────────────────────┤                   │ │
+│     │ /server/auth/register  │  ✓   │    ✗    │      │                   │ │
+│     │ Admin invite→user      │  ✓   │    ✓    │      │                   │ │
+│     │ Admin create→activate  │  ✓   │    ✓    │      │                   │ │
+│     └───────────────────────────────────────────────┘                   │ │
 │                                                                          │
-│  5. ADMIN-CONTROLLED FLOWS                                               │
+│  5. ADMIN-CONTROLLED FLOWS (available in both modes)                     │
 │     └── invite: Admin sets username → generates one-time invite URL      │
-│     └── admin_only: Admin creates account → system generates activation  │
-│        URL/email                                                          │
+│     └── direct create: Admin creates account → system generates          │
+│        activation URL/email                                              │
 │     └── User opens link → sets own password (admin cannot set)           │
 │     └── Account active                                                   │
 │                                                                          │
@@ -57631,17 +57614,13 @@ Admin clicks "Invite New User"
 | Fresh server (no setup) | N/A | N/A | N/A | **YES** |
 | Multi-user feature disabled | N/A | N/A | N/A | **YES** |
 | Multi-user enabled, mode=open | ✓ Open | ✓ Yes | ✓ Yes | **YES** |
-| Multi-user enabled, mode=invite | ✗ No | ✓ Yes | ✗ No | **YES** |
-| Multi-user enabled, mode=admin_only | ✗ No | ✗ No | ✓ Yes | **YES** |
-| Multi-user enabled, mode=disabled | ✗ No | ✗ No | ✗ No | **YES** |
+| Multi-user enabled, mode=private | ✗ No | ✓ Yes | ✓ Yes | **YES** |
 
-**All registration modes are VALID operational states, NOT errors.**
+**Both registration modes are VALID operational states, NOT errors.**
 
 **Mode summary:**
-- `open`: Anyone can self-register; admins may also invite or provision directly
-- `invite`: Only admin-issued invite links/codes create accounts
-- `admin_only`: Only direct admin-created accounts are allowed
-- `disabled`: No new regular-user accounts are allowed
+- `open`: Anyone can self-register; Server Admin may also invite or directly create users
+- `private`: No public self-registration form; only Server Admin can add users, by invite link or direct creation — both complete via a one-time link where the user sets their own password
 
 ## Regular User Behavior
 
@@ -59118,11 +59097,9 @@ server:
     enabled: false
 
     registration:
-      # Registration mode: open (default), invite, admin_only, disabled
-      # - open: Anyone can self-register
-      # - invite: Only admin-issued invite links/codes can create accounts
-      # - admin_only: Only Server Admin can create the account record directly
-      # - disabled: No new regular-user accounts can be created
+      # Registration mode: open (default), private
+      # - open: Anyone can self-register; Server Admin may also invite or directly create users
+      # - private: No public self-registration form; only Server Admin can add users, by invite or direct creation
       mode: open
 
       # Email verification (applies to open mode)
@@ -59220,9 +59197,7 @@ server:
 | Mode | Public Reg | Admin Invite | Direct Admin Create | Default |
 |------|------------|--------------|---------------------|---------|
 | **open** | ✓ Anyone | ✓ Allowed | ✓ Allowed | **YES** |
-| **invite** | ✗ No | ✓ Required | ✗ No | No |
-| **admin_only** | ✗ No | ✗ No | ✓ Required | No |
-| **disabled** | ✗ No | ✗ No | ✗ No | No |
+| **private** | ✗ No | ✓ Allowed | ✓ Allowed | No |
 
 **Key rule:** Registration mode defines how new regular-user accounts are created. Profile visibility remains a separate setting.
 
@@ -59236,7 +59211,7 @@ server:
 4. Account active
 ```
 
-**Invite Mode:**
+**Private Mode — invite:**
 ```
 1. Admin creates invite at /server/{admin_path}/config/users (sets username)
 2. Admin shares invite URL with new user
@@ -59244,7 +59219,7 @@ server:
 4. Account active
 ```
 
-**Admin-Only Mode:**
+**Private Mode — direct create:**
 ```
 1. Admin creates the user record at /server/{admin_path}/config/users
 2. System generates a one-time activation/password-setup link
