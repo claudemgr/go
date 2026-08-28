@@ -131,6 +131,14 @@ security assumptions, and any exceptions.)
 - `IDEA.md` is where project-specific values and product rules live
 - Loader files (`CLAUDE.md`, `.claude/CLAUDE.md`) stay short and point back to `AI.md`
 - If a loader file and `AI.md` disagree, `AI.md` wins
+- `.claude/memory/` holds durable, project-specific knowledge discovered during
+  development — decisions, gotchas, conventions unique to this codebase — distinct
+  from `AI.md` (spec) and the loader files above. Committed to the repo, not
+  gitignored. One markdown file per topic, YAML frontmatter (`name`, `description`,
+  `type: project`), indexed by `.claude/memory/MEMORY.md`, read on demand. Same
+  credential-masking rule as everywhere else. `~/.claude/**` (global) stays
+  read-only, deployed only via `claudemgr/config`'s `install.sh`; `.claude/memory/`
+  here is read/write in this repo directly
 
 ## ⚠️ CRITICAL: Keep Documentation in Sync
 
@@ -2156,6 +2164,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] `project_name`, `project_org`, `internal_name`, and `internal_org` exist
 - [ ] If a pre-existing `CLAUDE.md` or `.claude/CLAUDE.md` existed, project-specific content was migrated into IDEA.md
 - [ ] `CLAUDE.md` / `.claude/CLAUDE.md` are short loaders, not duplicate specs
+- [ ] `.claude/memory/` directory exists (with an empty `MEMORY.md` index if no entries yet) and is committed, not gitignored
 - [ ] `release.txt` exists if the project is using explicit release versioning
 - [ ] `site.txt` exists only if there is a real official site URL
 - [ ] `docker/Dockerfile`, `docker/docker-compose.yml`, `docker/docker-compose.dev.yml`, `docker/docker-compose.test.yml`, and `docker/entrypoint.sh` exist; `Dockerfile` is the runtime image
