@@ -432,6 +432,10 @@ On first read of a HYBRID project: (1) locate `AI.md`, confirm it is this specif
 
 As the project grows, maintain focused rule files under `.claude/` (or the project's chosen location) mapping to HYBRID PARTs — e.g. `ai-rules.md` (PART 0), `project-rules.md` (PART 1), `app-server-rules.md` (PART 2), `structure-rules.md` (PART 3), `mode-rules.md` (PART 4), `config-rules.md` (PART 5), `build-rules.md` (PART 6), `metadata-rules.md` (PART 7), `binary-cli-rules.md` (PART 8), `error-cache-rules.md` (PART 9), `db-rules.md` (PART 10), `security-rules.md` (PART 11), `server-config-rules.md` (PART 12), `api-rules.md` (PART 13), `tls-rules.md` (PART 14), `frontend-rules.md` (PART 15), `notifications-rules.md` (PART 16), `scheduler-rules.md` (PART 17), `geoip-rules.md` (PART 18), `metrics-rules.md` (PART 19), `backup-rules.md` (PART 20), `update-rules.md` (PART 21), `testing-rules.md` (PART 23), `cicd-rules.md` (PART 24), `docs-rules.md` (PART 25), `i18n-rules.md` (PART 26), `tor-rules.md` (PART 27). Only create the ones the project actually needs.
 
+### Project Memory (.claude/memory/)
+
+Distinct from `.claude/rules/` above (spec-derived cheatsheets, regenerated when AI.md changes): `.claude/memory/` holds durable, project-specific knowledge discovered during development — decisions, gotchas, conventions unique to this codebase — that AI.md never covers. Committed to the repo, not gitignored. Format: one markdown file per topic with YAML frontmatter (`name`, `description`, `type: project`), indexed by `.claude/memory/MEMORY.md`, read on demand. Same credential-masking rule as everywhere else — never store secrets. `~/.claude/**` (global) stays read-only, deployed only via `claudemgr/config`'s `install.sh`; `.claude/memory/` here is read/write in this repo directly. Full treatment: see SERVER.md § Claude Code Project Memory.
+
 ## Prohibited Actions
 
 - Running `go build`/`go run`/`go test`/produced binaries on the host.
