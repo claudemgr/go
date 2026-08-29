@@ -104,6 +104,8 @@ AI reads AI.md for the first time
 | `{PROJECT_ORG}` | UPPERCASE | Mutable | `MYORG` |
 | `{internal_name}` | lowercase | **Frozen** at first-time setup | `myapp` |
 | `{INTERNAL_NAME}` | UPPERCASE | **Frozen** | `MYAPP` |
+| `{internal_org}` | lowercase | **Frozen** at first-time setup | `myorg` |
+| `{INTERNAL_ORG}` | UPPERCASE | **Frozen** | `MYORG` |
 | `{plist_name}` | derived | Derived from `{project_org}` + `{internal_name}` | `io.github.myorg.myapp` |
 
 **`{internal_name}` rule:** set ONCE on first run (initial value = `{project_name}`), then immutable for the project's lifetime. Used for every on-disk identifier (`{config_dir}`, `{data_dir}`, `{log_dir}`, `{cache_dir}`, systemd unit, `{plist_name}`) so a project rename does not orphan paths or services.
@@ -32818,7 +32820,7 @@ Time: {timestamp}
 ```
 Subject: Welcome to {app_name}
 ---
-WELCOME TO {APP_NAME}
+WELCOME TO {app_name}
 
 This email was sent to: {recipient_email}
 From: {app_name} ({fqdn})
@@ -49065,7 +49067,7 @@ var localeFS embed.FS
       "test_email": "Correo de prueba - {app_name}"
     },
     "body": {
-      "welcome_heading": "BIENVENIDO A {APP_NAME}",
+      "welcome_heading": "BIENVENIDO A {app_name}",
       "admin_setup_heading": "CONFIGURACIÓN DE ADMINISTRADOR COMPLETADA",
       "password_reset_heading": "SOLICITUD DE RESTABLECIMIENTO DE CONTRASEÑA",
       "email_verification_heading": "VERIFICACIÓN DE CORREO ELECTRÓNICO",

@@ -1986,19 +1986,19 @@ Never use a GitHub Actions badge for a GitLab or Gitea project — the CI badge 
 # GitHub
 [![Release](https://img.shields.io/github/v/release/{project_org}/{project_name})](https://github.com/{project_org}/{project_name}/releases)
 [![License](https://img.shields.io/github/license/{project_org}/{project_name})](LICENSE.md)
-[![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
+[![Docs](https://readthedocs.org/projects/{rtd_project}/badge/?version=latest)](https://{rtd_url})
 
 # GitLab
 [![Release](https://gitlab.com/{project_org}/{project_name}/-/badges/release.svg)](https://gitlab.com/{project_org}/{project_name}/-/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
-[![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
+[![Docs](https://readthedocs.org/projects/{rtd_project}/badge/?version=latest)](https://{rtd_url})
 
 # Gitea/Forgejo (use shields.io with custom endpoint or static badge)
 [![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/v1/repos/{project_org}/{project_name}/releases/latest&query=$.tag_name&label=release)](https://git.example.com/{project_org}/{project_name}/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
-[![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
+[![Docs](https://readthedocs.org/projects/{rtd_project}/badge/?version=latest)](https://{rtd_url})
 
-# {RTD_PROJECT} and {RTD_URL} - Use one of:
+# {rtd_project} and {rtd_url} - Use one of:
 #   {project_org}-{project_name} / {project_org}-{project_name}.readthedocs.io
 #   {project_name} / {project_name}.readthedocs.io
 #   Custom project name / {custom_rtd_address}

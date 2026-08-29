@@ -669,7 +669,7 @@ if cacheSize > 1024*1024*1024 {
 | **VERSION precedence** | `release.txt` wins when present; otherwise use the workflow/build-specific fallback (tag, beta timestamp, etc.) |
 | **LDFLAGS** | `-s -w -X 'main.Version=...' -X 'main.CommitID=...' -X 'main.BuildEpoch=...' -X 'main.OfficialSite=...'` (BuildDate is derived from BuildEpoch at runtime, not embedded) |
 | **Docker builds on EVERY push** | Any branch push triggers Docker image build |
-| **Docker tags** | Any push → `{commit}`; beta → adds `beta`; tag → `{version}`, `latest`, `YYMM`, `{commit}` |
+| **Docker tags** | Any push → `{commit_id}`; beta → adds `beta`; tag → `{version}`, `latest`, `{yymm}`, `{commit_id}` |
 | **Devel image is a job in docker.yml** | `:devel` is built from `docker/Dockerfile.dev` by the `build-devel` job inside `docker.yml` (daily schedule `0 4 * * *` + non-tag push + `workflow_dispatch`) — never a separate workflow file, and never by the `build-standard` job |
 | **Workflow permissions** | Default to read-only / least privilege; grant write only to the specific release/publish job that needs it |
 | **Third-party action pinning** | External actions MUST be pinned to a full commit SHA — never float on `@main`, `@master`, or broad tags; verify runtime and maintenance status on every SHA update |
@@ -32393,7 +32393,7 @@ The **only** time binaries are copied is during CI/CD release process, where the
 | Trigger | Daily schedule (3am UTC) + push to main/master |
 | Version format | Short commit id (`git rev-parse --short=7 HEAD`) of the built commit - NO `v` prefix |
 | Tag name | `daily` (single rolling tag — never a timestamp) |
-| Release name | `Daily Build {VERSION}` |
+| Release name | `Daily Build {version}` |
 | version.txt | Short commit id (e.g., `a1b2c3d`) |
 | GitHub release | Yes, **deleted and recreated nightly** (rolling `daily` tag) |
 | Max releases | **1** (always overwrites previous daily) |
@@ -33459,8 +33459,8 @@ networks:
 |-----|-------------|---------|
 | `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest` | Latest stable release | `ghcr.io/myorg/myapp:latest` |
 | `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:{version}` | Specific version | `ghcr.io/myorg/myapp:1.2.3` |
-| `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:{YYMM}` | Year/month tag | `ghcr.io/myorg/myapp:2512` |
-| `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:{commit}` | Git commit (7 char) | `ghcr.io/myorg/myapp:abc1234` |
+| `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:{yymm}` | Year/month tag | `ghcr.io/myorg/myapp:2512` |
+| `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:{commit_id}` | Git commit (7 char) | `ghcr.io/myorg/myapp:abc1234` |
 
 ### Development Tags (Local)
 

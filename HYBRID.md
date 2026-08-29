@@ -23152,7 +23152,7 @@ self.addEventListener('push', event => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title || '{App Name}', options)
+    self.registration.showNotification(data.title || '{app_name}', options)
   );
 });
 
@@ -23507,9 +23507,9 @@ function hideOfflineIndicator() {
 **Complete manifest.json:**
 ```json
 {
-  "name": "{App Name}",
+  "name": "{app_name}",
   "short_name": "{app_name}",
-  "description": "{App description}",
+  "description": "{app_description}",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
@@ -23712,7 +23712,7 @@ function showIOSInstallInstructions() {
 
   if (isIOS && !isInStandalone) {
     showModal({
-      title: 'Install {App Name}',
+      title: 'Install {app_name}',
       content: `
         <ol>
           <li>Tap the Share button <img src="/static/icons/ios-share.svg" alt="Share"></li>
@@ -23761,7 +23761,7 @@ async function requestPersistentStorage() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#000000">
-  <meta name="description" content="{App description}">
+  <meta name="description" content="{app_description}">
 
   <!-- PWA Manifest -->
   <link rel="manifest" href="/manifest.json">
@@ -23776,7 +23776,7 @@ async function requestPersistentStorage() {
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="{app_name}">
 
-  <title>{App Name}</title>
+  <title>{app_name}</title>
   <link rel="stylesheet" href="{{ asset "css/app.css" }}">
 </head>
 <body>
