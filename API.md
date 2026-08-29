@@ -5015,7 +5015,7 @@ For code that runs in the application, NEVER use bare `/path`. Always use `{fqdn
 | **JavaScript** | `fetch('/api/{api_version}/items')` | `fetch(\`${window.location.origin}/api/${apiVersion}/items\`)` |
 | **HTML templates** | `href="/api/docs"` | `href="https://{{.FQDN}}/api/docs"` |
 | **Config files** | `url: /callback` | `url: https://{fqdn}/callback` |
-| **Email templates** | `<a href="/server/alert">` | `<a href="https://{{.FQDN}}/server/alert">` |
+| **Email templates** | `<a href="/server/alert">` | `<a href="https://{fqdn}/server/alert?token={token}">` (PART 17: `{variable}` syntax, not Go templates) |
 
 **Why:** Bare paths break when:
 - Behind reverse proxy with different base path
@@ -5085,7 +5085,7 @@ if cfg.Server.Healthz.Root.Enabled {
 | docs/*.md | `{official_site}/path` | `curl -q -LSsf https://api.example.com/api/v1/items` |
 | Go code | `{fqdn}/path` | `fmt.Sprintf("https://%s/path", cfg.FQDN)` |
 | JS code | `origin/path` | `${window.location.origin}/path` |
-| Email templates | `{fqdn}/path` | `https://{{.FQDN}}/server/security/report/{{.Token}}` |
+| Email templates | `{fqdn}/path` (PART 17: `{variable}` syntax, not Go templates) | `https://{fqdn}/server/security/report/{token}` |
 | Router registration | `/path` | `router.GET("/api/"+apiVersion+"/items", ...)` (internal only) |
 
 **Platform-Specific URLs:**
