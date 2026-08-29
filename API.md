@@ -368,7 +368,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-33; PART 3
 
 | Command | Purpose | Output Location | When to Use |
 |---------|---------|-----------------|-------------|
-| `make dev` | **Development & Debugging** | `${TMPDIR}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX/` | Active coding, quick tests |
+| `make dev` | **Development & Debugging** | `${TMPDIR}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX/` | Active coding, quick tests |
 | `make local` | **Production Testing** | `binaries/` (with version) | Test prod builds locally |
 | `make build` | **Full Release** | `binaries/` (all 8 platforms) | Before release |
 | `make test` | **Phase 1 — Toolchain Gate** | Coverage report | Before commits; after code changes |
@@ -388,7 +388,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-33; PART 3
 
 ```bash
 # After make dev, debug in Docker with tools
-BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-*/ 2>/dev/null | head -1)
+BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-*/ 2>/dev/null | head -1)
 docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$BUILD_DIR:/app" alpine:latest sh -c "
   # Required debug tools
   apk add --no-cache curl bash file jq
@@ -436,7 +436,7 @@ docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -
 make dev
 
 # 2. Debug in Docker (with tools)
-BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-*/ 2>/dev/null | head -1)
+BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-*/ 2>/dev/null | head -1)
 docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v "$BUILD_DIR:/app" alpine:latest sh -c "
   apk add --no-cache curl bash file jq
   /app/{project_name} --help
@@ -31628,7 +31628,7 @@ func (ws *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, s c
 
 | Target | Purpose | Output Location | When to Use |
 |--------|---------|-----------------|-------------|
-| `dev` | Quick development build | `${TMPDIR}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX/` | Active coding, quick tests |
+| `dev` | Quick development build | `${TMPDIR}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX/` | Active coding, quick tests |
 | `local` | Production test build | `binaries/` (with version) | Test prod builds locally |
 | `build` | Full release (all 8 platforms) | `binaries/` | Before release |
 | `test` | Run unit tests | Coverage report | After code changes |
@@ -31784,7 +31784,7 @@ binaries/
 
 | Context | Path |
 |---------|------|
-| Temp build | `$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")` |
+| Temp build | `$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")` |
 
 **If built with musl → strip binary before release. Final name has NO `-musl` suffix.**
 
@@ -32016,7 +32016,7 @@ test:
 	@echo "Running tests with coverage..."
 	@$(GO_DOCKER) sh -c " \
 		mkdir -p \"\$${TMPDIR:-/tmp}/$(PROJECT_ORG)\" && \
-		COVDIR=\$$(mktemp -d \"\$${TMPDIR:-/tmp}/$(PROJECT_ORG)/$(PROJECT_NAME)-XXXXXX\") && \
+		COVDIR=\$$(mktemp -d \"\$${TMPDIR:-/tmp}/$(PROJECT_ORG)/$(INTERNAL_NAME)-XXXXXX\") && \
 		go mod download && \
 		go test -v -cover -coverprofile=\$$COVDIR/coverage.out ./... && \
 		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep total | awk '{print \$$3}' | sed 's/%//') && \
@@ -32045,7 +32045,7 @@ dev:
 	@mkdir -p $(GO_CACHE) $(GO_BUILD)
 	@$(GO_DOCKER) go mod tidy
 	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECT_ORG)" && \
-		BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECT_ORG)/$(PROJECT_NAME)-XXXXXX") && \
+		BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECT_ORG)/$(INTERNAL_NAME)-XXXXXX") && \
 		echo "Quick dev build to $$BUILD_DIR..." && \
 		$(GO_DOCKER_RUN) -v $$BUILD_DIR:/build casjaysdev/go:latest \
 			go build -buildvcs=false -o /build/$(PROJECT_NAME) ./src && \
@@ -32181,7 +32181,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 3. No `-ldflags` (version info not embedded)
 4. Outputs to `{tempdir}/{project_org}/{internal_name}-XXXXXX/` (isolated, org-identifiable)
 5. Uses Docker (`casjaysdev/go:latest`) - keeps local machine clean
-6. Easy cleanup: `rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}"/${PROJECT_NAME}-*/` or auto-deleted on reboot
+6. Easy cleanup: `rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}"/${INTERNAL_NAME}-*/` or auto-deleted on reboot
 
 ### `make local`
 
@@ -32196,7 +32196,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 | Command | Purpose | Output | When to Use |
 |---------|---------|--------|-------------|
-| `make dev` | **Development & Debugging** | `${TMPDIR}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX/` | Active coding, quick tests, debugging |
+| `make dev` | **Development & Debugging** | `${TMPDIR}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX/` | Active coding, quick tests, debugging |
 | `make local` | **Production Testing** | `binaries/` (with version) | Test production builds locally before release |
 | `make build` | **Full Release Build** | `binaries/` (all 8 platforms) | Before tagging release, cross-platform verification |
 | `make test` | **Phase 1 — Toolchain Gate** | Coverage report | Before commits; after code changes |
@@ -32216,7 +32216,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 ```bash
 # After make dev, test in Docker with debug tools
-BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-*/ 2>/dev/null | head -1)
+BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-*/ 2>/dev/null | head -1)
 docker run --rm \
   --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
   -v "$BUILD_DIR:/app" \
@@ -33174,7 +33174,7 @@ $TEMP_DIR/
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 # Or use absolute path: PROJECT_ROOT="/path/to/your/project"
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 
 # Copy docker-compose.yml
@@ -36115,22 +36115,22 @@ pipeline {
         GIT_FQDN = 'github.com'
         // Jenkins credentials ID
         GIT_TOKEN = credentials('github-token')
-        REGISTRY = "ghcr.io/${PROJECT_ORG}/${PROJECT_NAME}"
+        REGISTRY = "ghcr.io/${PROJECT_ORG}/${INTERNAL_NAME}"
 
         // ----- GITEA / FORGEJO (self-hosted) -----
         // GIT_FQDN = 'git.example.com'  // Your Gitea/Forgejo domain
         // GIT_TOKEN = credentials('gitea-token')  // Jenkins credentials ID
-        // REGISTRY = "${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}"
+        // REGISTRY = "${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}"
 
         // ----- GITLAB (gitlab.com or self-hosted) -----
         // GIT_FQDN = 'gitlab.com'  // or your self-hosted GitLab domain
         // GIT_TOKEN = credentials('gitlab-token')  // Jenkins credentials ID
-        // REGISTRY = "registry.${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}"
+        // REGISTRY = "registry.${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}"
 
         // ----- DOCKER HUB -----
         // GIT_FQDN = 'github.com'  // Git provider (separate from registry)
         // GIT_TOKEN = credentials('github-token')
-        // REGISTRY = "docker.io/${PROJECT_ORG}/${PROJECT_NAME}"
+        // REGISTRY = "docker.io/${PROJECT_ORG}/${INTERNAL_NAME}"
 
         // =========================================================================
     }
@@ -36661,9 +36661,9 @@ pipeline {
                             --label "org.opencontainers.image.version=${VERSION}" \
                             --label "org.opencontainers.image.created=${BUILD_DATE}" \
                             --label "org.opencontainers.image.revision=${COMMIT_ID}" \
-                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
-                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
-                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
+                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
                             --annotation "manifest:org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --annotation "manifest:org.opencontainers.image.authors=${PROJECT_ORG}" \
                             --annotation "manifest:org.opencontainers.image.title=${PROJECT_NAME}" \
@@ -36673,9 +36673,9 @@ pipeline {
                             --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
                             --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
                             --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
-                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
-                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
-                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
                             ${tags} \
                             --push \
                             .
@@ -36713,9 +36713,9 @@ pipeline {
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.created=${BUILD_DATE}" \
                             --label "org.opencontainers.image.revision=${COMMIT_ID}" \
-                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
-                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
-                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
+                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
                             --annotation "manifest:org.opencontainers.image.vendor=${PROJECT_ORG}" \
                             --annotation "manifest:org.opencontainers.image.authors=${PROJECT_ORG}" \
                             --annotation "manifest:org.opencontainers.image.title=${PROJECT_NAME}" \
@@ -36724,9 +36724,9 @@ pipeline {
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
                             --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
-                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
-                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
-                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
+                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}" \
                             -t ${REGISTRY}:devel \
                             --push \
                             .
@@ -36785,17 +36785,17 @@ In the Jenkinsfile, uncomment the appropriate block:
 // ----- GITHUB (default) -----
 GIT_FQDN = 'github.com'
 GIT_TOKEN = credentials('github-token')
-REGISTRY = "ghcr.io/${PROJECT_ORG}/${PROJECT_NAME}"
+REGISTRY = "ghcr.io/${PROJECT_ORG}/${INTERNAL_NAME}"
 
 // ----- GITEA / FORGEJO (self-hosted) -----
 // GIT_FQDN = 'git.example.com'
 // GIT_TOKEN = credentials('gitea-token')
-// REGISTRY = "${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}"
+// REGISTRY = "${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}"
 
 // ----- GITLAB (gitlab.com or self-hosted) -----
 // GIT_FQDN = 'gitlab.com'
 // GIT_TOKEN = credentials('gitlab-token')
-// REGISTRY = "registry.${GIT_FQDN}/${PROJECT_ORG}/${PROJECT_NAME}"
+// REGISTRY = "registry.${GIT_FQDN}/${PROJECT_ORG}/${INTERNAL_NAME}"
 ```
 
 ### Triggers Comparison
@@ -36894,7 +36894,7 @@ When a test or debug step requires `reboot`, `systemctl`, `iptables`, `mount`, p
 ```bash
 # 1. Create temp directory (REQUIRED)
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 
 # 2. Copy ONLY docker-compose.test.yml to temp dir
@@ -36972,7 +36972,7 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 **REQUIRED:**
 - ✓ `/tmp/{project_org}/{internal_name}-XXXXXX/` - Full structure
 - ✓ `/tmp/cloudops/echoip-aB3xY9/` - Org + project + random
-- ✓ `mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX"` - Proper command
+- ✓ `mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX"` - Proper command
 
 **See "Inferring Variables from Path" section for how to detect `ORG` and `PROJECT`.**
 
@@ -36982,7 +36982,7 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 
 | Language | How to Create Prefixed Temp Dir |
 |----------|--------------------------------|
-| Shell | `mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}" && mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX"` |
+| Shell | `mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}" && mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX"` |
 | Go | `os.MkdirAll(filepath.Join(os.TempDir(), projectOrg), 0755); os.MkdirTemp(filepath.Join(os.TempDir(), projectOrg), projectName+"-")` |
 | Python | `os.makedirs(f"{tempfile.gettempdir()}/{project_org}", exist_ok=True); tempfile.mkdtemp(prefix=f"{project_name}-", dir=f"{tempfile.gettempdir()}/{project_org}")` |
 
@@ -37033,7 +37033,7 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
 | `/tmp/myfile` | `/tmp/cloudops/echoip-aB3xY9/myfile` | Always use org/project structure |
 | `/tmp/echoip` | `/tmp/cloudops/echoip-kL9mN2/` | Missing org, missing random suffix |
 | `/tmp/test-data/` | `/tmp/devtools/quotesvc-Qw5rT1/test-data/` | Generic path not allowed |
-| `mktemp -d` | `mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX"` | Must include org/project |
+| `mktemp -d` | `mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX"` | Must include org/project |
 | `os.TempDir()` alone | `os.MkdirTemp(filepath.Join(os.TempDir(), projectOrg), projectName+"-")` | Must nest under org |
 | Hardcoded org name | Detect from git remote or path | Auto-detect, never hardcode |
 
@@ -38288,7 +38288,7 @@ echo '=== All open API smoke tests passed ==='
 make build
 # run unit tests with coverage inside Docker
 make test
-# quick dev build → ${TMPDIR}/{project_org}/{project_name}-XXXXXX/
+# quick dev build → ${TMPDIR}/{project_org}/{internal_name}-XXXXXX/
 make dev
 # tag + cross-platform release binaries
 make release
@@ -38404,7 +38404,7 @@ make build
 
 # Create prefixed temp dir for test data
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
-TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
+TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
 mkdir -p $TEST_DIR/{config,data,logs}
 
 # Quick test in Docker (install tools first)
@@ -38435,7 +38435,7 @@ rm -rf $TEST_DIR
 ```bash
 # Create prefixed temp dir
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
-TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
+TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
 mkdir -p $TEST_DIR/{config,data,logs}
 
 # Build (Makefile-first)
@@ -38570,7 +38570,7 @@ rm -rf $TEST_DIR
 | Project binaries | `rm -rf binaries/{project_name}*` |
 | Project releases | `rm -rf releases/{project_name}*` |
 
-**Note:** Always use `mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX"` and save the path to a variable for cleanup. Temp dirs are auto-cleaned on reboot.
+**Note:** Always use `mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX"` and save the path to a variable for cleanup. Temp dirs are auto-cleaned on reboot.
 
 ### NEVER Delete Without Confirmation
 
@@ -43014,7 +43014,7 @@ userAgent := fmt.Sprintf("%s-cli/%s", projectName, version)
 |------|--------|
 | 1. Discover | CLI's `/api/autodiscover` response includes `cli_versions: { "linux-amd64": {"version": "1.2.3", "sha256": "..."}, ... }` and `cli_min_version`. CLI checks on every start (it's short-lived; no separate poll loop needed) and additionally on `{project_name}-cli --update check`. |
 | 2. Decide | If `current_version < cli_versions[os-arch].version`: prompt the user (interactive) OR auto-update silently (when `update.auto: true` AND non-interactive AND `--update yes` was passed earlier). If `current_version < cli_min_version`: refuse to make further requests until updated; print "this CLI is too old; the server requires {min_version} — run '{project_name}-cli --update yes' to upgrade." |
-| 3. Download | Fetch `{base}/cli/binaries/{project_name}-cli-{os}-{arch}` over HTTPS. Save to a tmp path (`/tmp/{project_org}/{project_name}-XXXXXX/cli.update.tmp` per the spec's tmp-dir rules). |
+| 3. Download | Fetch `{base}/cli/binaries/{project_name}-cli-{os}-{arch}` over HTTPS. Save to a tmp path (`/tmp/{project_org}/{internal_name}-XXXXXX/cli.update.tmp` per the spec's tmp-dir rules). |
 | 4. Verify SHA-256 | Same `verifyChecksum()` from PART 22 — match against the `sha256` from autodiscover. Mismatch → delete temp, abort with stderr error. |
 | 5. Atomic swap | Same platform-specific `replaceBinary()` from PART 22. The CLI is user-installed (typically `/usr/local/bin/` or `~/bin/`) — if the user lacks write permission to the install path, CLI prints "you do not have permission to update {binary_path}; ask your admin or move the binary to a writable path" and exits cleanly. |
 | 6. Re-exec | After successful replace, CLI `exec`s the new binary with the original argv to continue the in-progress command. (Server restarts via service manager; CLI just re-execs since it's foreground.) |
@@ -45699,7 +45699,7 @@ func detectInput(args []string) (content string, source string) {
 ```bash
 # Quick dev build (server + CLI if exist)
 make dev
-# Output: ${TMPDIR}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX/{project_name}, {project_name}-cli
+# Output: ${TMPDIR}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX/{project_name}, {project_name}-cli
 
 # Production test build
 make local
@@ -46585,7 +46585,7 @@ maintainer_email: jane@example.com
 ```bash
 # Temp dir workflow
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 cd "$TEMP_DIR" && docker compose up -d
