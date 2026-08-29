@@ -34249,11 +34249,11 @@ jobs:
 |---------|------|
 | **Any push** (all branches) | `{commit_id}` |
 | Push to beta branch | `beta`, `{commit_id}` |
-| Version tag (`v*`, `*.*.*`) | `{version}`, `latest`, `YYMM` |
+| Version tag (`v*`, `*.*.*`) | `{version}`, `latest`, `{yymm}` |
 
 **Notes:**
 - `{commit_id}` = short SHA (7 characters) from `git rev-parse --short=7 HEAD`
-- `YYMM` = year/month (e.g., `2512`)
+- `{yymm}` = year/month (e.g., `2512`)
 - Built for `linux/amd64` and `linux/arm64` using `docker buildx`
 - Registry: `ghcr.io`
 - `:devel` is built by the `build-devel` job in this same workflow, from `docker/Dockerfile.dev`, on a daily schedule and on every non-tag push — see the job in the YAML above.

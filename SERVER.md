@@ -671,7 +671,7 @@ if cacheSize > 1024*1024*1024 {
 | **VERSION precedence** | `release.txt` wins when present; otherwise use the workflow/build-specific fallback (tag, beta timestamp, etc.) |
 | **LDFLAGS** | `-s -w -X 'main.Version=...' -X 'main.CommitID=...' -X 'main.BuildEpoch=...' -X 'main.OfficialSite=...'` (BuildDate is NOT an ldflag — derived from BuildEpoch in `init()`) |
 | **Docker builds on EVERY push** | Any branch push triggers Docker image build |
-| **Docker tags** | Any push → `{commit}`; beta → adds `beta`; tag → `{version}`, `latest`, `YYMM`, `{commit}` |
+| **Docker tags** | Any push → `{commit_id}`; beta → adds `beta`; tag → `{version}`, `latest`, `{yymm}`, `{commit_id}` |
 | **Devel image is a job in docker.yml** | `:devel` is built from `docker/Dockerfile.dev` by the `build-devel` job inside the same `docker.yml` workflow (schedule + non-tag push, gated by `if:`) — never a separate file |
 | **Workflow permissions** | Default to read-only / least privilege; grant write only to the specific release/publish job that needs it |
 | **Third-party action pinning** | External actions MUST be pinned to a full commit SHA — never float on `@main`, `@master`, or broad tags; verify runtime and maintenance status on every SHA update |
@@ -41086,8 +41086,8 @@ networks:
 |-----|-------------|---------|
 | `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest` | Latest stable release | `ghcr.io/myorg/myapp:latest` |
 | `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:{version}` | Specific version | `ghcr.io/myorg/myapp:1.2.3` |
-| `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:{YYMM}` | Year/month tag | `ghcr.io/myorg/myapp:2512` |
-| `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:{commit}` | Git commit (7 char) | `ghcr.io/myorg/myapp:abc1234` |
+| `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:{yymm}` | Year/month tag | `ghcr.io/myorg/myapp:2512` |
+| `{PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:{commit_id}` | Git commit (7 char) | `ghcr.io/myorg/myapp:abc1234` |
 
 ### Development Tags (Local)
 
@@ -41920,11 +41920,11 @@ jobs:
 |---------|---------------|-----------------|
 | **Any push** (all branches) | `{commit_id}` | `{commit_id}-aio` |
 | Push to beta branch | `beta`, `{commit_id}` | `beta-aio`, `{commit_id}-aio` |
-| Version tag (`v*`, `*.*.*`) | `{version}`, `latest`, `YYMM` | `{version}-aio`, `latest-aio`, `YYMM-aio` |
+| Version tag (`v*`, `*.*.*`) | `{version}`, `latest`, `{yymm}` | `{version}-aio`, `latest-aio`, `{yymm}-aio` |
 
 **Notes:**
 - `{commit_id}` = short SHA (7 characters) from `git rev-parse --short=7 HEAD`
-- `YYMM` = year/month (e.g., `2512`)
+- `{yymm}` = year/month (e.g., `2512`)
 - Built for `linux/amd64` and `linux/arm64` using `docker buildx`
 - Registry: `ghcr.io`
 - Standard uses `latest`, All-in-One uses `latest-aio`
