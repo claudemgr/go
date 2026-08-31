@@ -26276,9 +26276,108 @@ When the operator sets `custom_html` in `server.yml`, the server logs at startup
 
 **No `<br />` spacers between rows** — rows are consecutive `<p>` elements; vertical rhythm comes from CSS (`footer p { margin: 0.25rem 0; }`), kept tight. Row order is fixed: onion address (Tor only) → page links → branding → last update. A disabled feature drops its row entirely without leaving a gap.
 
-### Admin Footer
+### Default Admin Footer (Admin Panel)
 
-Admin-panel-only — the admin footer (version link to `/server/{admin_path}/config/info`, docs link, live health indicator fed by `/server/healthz`) is specified in PART 28.
+Admin-panel-only (PART 28) — not rendered unless the admin panel is enabled.
+
+**Location:** `partial/admin/footer.tmpl`
+
+```html
+<footer class="admin-footer">
+  <div class="admin-footer-content">
+    <!-- Version info -->
+    <span class="admin-footer-version">
+      <a href="/server/{admin_path}/config/info">{project_name} {project_version}</a>
+    </span>
+
+    <span class="admin-footer-separator">•</span>
+
+    <!-- Documentation link -->
+    <span class="admin-footer-docs">
+      <a href="https://{RTD_URL}" target="_blank" rel="noopener">  <!-- Use actual RTD URL -->
+        Docs
+      </a>
+    </span>
+
+    <span class="admin-footer-separator">•</span>
+
+    <!-- Server status indicator -->
+    <span class="admin-footer-status">
+      {{ if .ServerStatus.Healthy }}
+        <span class="status-indicator status-ok" title="All systems operational">●</span>
+        <span>Healthy</span>
+      {{ else if .ServerStatus.Degraded }}
+        <span class="status-indicator status-warning" title="Some issues detected">●</span>
+        <span>Degraded</span>
+      {{ else }}
+        <span class="status-indicator status-error" title="System issues">●</span>
+        <span>Issues</span>
+      {{ end }}
+    </span>
+  </div>
+</footer>
+```
+
+**Admin Footer CSS:**
+```css
+.admin-footer {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+.admin-footer-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.admin-footer-separator {
+  color: var(--color-muted);
+}
+
+.admin-footer a {
+  color: var(--color-muted);
+  text-decoration: none;
+}
+
+.admin-footer a:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+/* Status indicators */
+.status-indicator {
+  font-size: 0.75rem;
+  margin-right: 0.25rem;
+}
+
+.status-ok { color: var(--color-success); }
+.status-warning { color: var(--color-warning); }
+.status-error { color: var(--color-error); }
+```
+
+**Admin Footer Contents:**
+
+| Element | Description |
+|---------|-------------|
+| Version | Links to `/server/{admin_path}/config/info` - shows project name and version |
+| Docs | External link to ReadTheDocs documentation |
+| Status | Server health indicator (green/yellow/red) with status text |
+
+**Admin Footer Rules:**
+
+| Rule | Description |
+|------|-------------|
+| **Compact** | Single line, minimal height |
+| **Informational** | Version, docs, status - no navigation |
+| **Status indicator** | Real-time server health from `/server/healthz` |
+| **Same position rules** | Bottom of page, scrolls with content, centered |
 
 ### Footer Configuration (config file)
 
