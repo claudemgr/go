@@ -25128,6 +25128,24 @@ Toasts require JavaScript. For standard (non-AJAX) form POSTs, the server MUST u
 </div>
 ```
 
+### Guest Header (No Login / Single-User Apps)
+
+**When the profile dropdown above does not apply — no authenticated session, or a single-user/anonymous-facing app (PART 34 Multi-User disabled) — the header MUST still expose a way to reach Preferences and switch theme. Do NOT rely on the footer alone for this**: a footer link satisfies "reachable" but not "discoverable" — the header is where users look first, and burying the only theme control in the footer is a UX regression versus the profile-menu case above.
+
+**Guest Header HTML Structure (same `.header-actions` region the profile menu would otherwise occupy):**
+```html
+<div class="header-actions">
+  <form action="/server/preferences" method="POST" class="theme-toggle-inline">
+    <button type="submit" name="theme" value="dark" aria-label="Dark theme">🌙</button>
+    <button type="submit" name="theme" value="light" aria-label="Light theme">☀️</button>
+    <button type="submit" name="theme" value="auto" aria-label="Auto theme">🔄</button>
+  </form>
+  <a href="/server/preferences" class="header-link" aria-label="Preferences">⚙️</a>
+</div>
+```
+
+No JS required — each button is a real form submit that sets the `theme` cookie server-side and redirects back (303 See Other), exactly like the authenticated theme toggle. External JS may intercept the submit to apply the theme class without a reload (progressive enhancement, not a requirement). The footer's `/server/preferences` link (see "Default Application Footer" above) remains — it's an additional path, not the only one.
+
 ### Profile Icon
 
 **User profile dropdown accessible via avatar/icon in header. Follows GitHub/GitLab patterns.**
@@ -25151,6 +25169,7 @@ Toasts require JavaScript. For standard (non-AJAX) form POSTs, the server MUST u
 | **Settings** | `/users/settings` | Account settings |
 | **Security** | `/users/security` | Password, 2FA, sessions |
 | **API Tokens** | `/users/tokens` | Manage API tokens |
+| **Preferences** | `/server/preferences` | Theme, language, cookie/privacy preferences |
 | *(divider)* | - | - |
 | **Theme** | - | Theme toggle (Dark/Light/Auto) |
 | *(divider)* | - | - |
@@ -25172,10 +25191,14 @@ Toasts require JavaScript. For standard (non-AJAX) form POSTs, the server MUST u
     <a href="/users/settings" class="dropdown-item" role="menuitem">Settings</a>
     <a href="/users/security" class="dropdown-item" role="menuitem">Security</a>
     <a href="/users/tokens" class="dropdown-item" role="menuitem">API Tokens</a>
+    <a href="/server/preferences" class="dropdown-item" role="menuitem">Preferences</a>
     <div class="dropdown-divider" role="separator"></div>
-    <div class="dropdown-item theme-toggle">
-      Theme: <button>Dark</button> | <button>Light</button> | <button>Auto</button>
-    </div>
+    <form action="/server/preferences" method="POST" class="dropdown-item theme-toggle">
+      Theme:
+      <button type="submit" name="theme" value="dark">Dark</button> |
+      <button type="submit" name="theme" value="light">Light</button> |
+      <button type="submit" name="theme" value="auto">Auto</button>
+    </form>
     <div class="dropdown-divider" role="separator"></div>
     <a href="/server/help" class="dropdown-item" role="menuitem">Help</a>
     <form action="/server/auth/logout" method="POST">
@@ -27381,7 +27404,8 @@ partial/
 | Element | Position | Purpose | Contents |
 |---------|----------|---------|----------|
 | `<nav>` | TOP | Navigation | Links to app sections, user menu |
-| `<footer>` | BOTTOM | Information | About, Privacy, Contact, Help, GitHub, version |
+| Header `.header-actions` | TOP | Cross-cutting UI state | Theme toggle, Preferences link (Guest Header when logged out, Profile dropdown when logged in — see above) |
+| `<footer>` | BOTTOM | Information | About, Privacy, Contact, Help, Preferences, GitHub, version |
 
 **Nav contains (app navigation):**
 - Home link
@@ -27394,6 +27418,7 @@ partial/
 - API link (users access via `/server/docs/swagger` if needed)
 - Admin link (don't advertise - admins know where it is)
 - Help link (belongs in footer)
+- Preferences link (lives next to the theme toggle in the header, not in nav — it's UI state, not app content; also always present in the footer for discoverability)
 
 **Default Navigation (nav.tmpl):**
 
@@ -28877,6 +28902,8 @@ When admin edits `custom_html`, show:
     <a href="/server/contact">Contact</a>
     <span>•</span>
     <a href="/server/help">Help</a>
+    <span>•</span>
+    <a href="/server/preferences">Preferences</a>
   </p>
 
   <!-- Application branding -->
@@ -30691,7 +30718,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 **Step 2: API Token**
 | Action | Notes |
 |--------|-------|
-| Auto-generate API token | User MUST copy (shown once) |
+| Auto-generate API token | User MUST copy (shown once) — display with a `.api-token` scroll-box and a `copy-btn` (see "Long Strings" above), never a bare `<code>` block; the value is unrecoverable after this step |
 | Token is tied to admin account | Used for API access |
 
 **Step 3: Server Configuration**
@@ -31223,7 +31250,9 @@ Admin Panel Header:
 | `/server/{admin_path}/config/info` | Server Info | Version, environment, deps |
 | `/server/{admin_path}/config/cluster/nodes` | Nodes | Cluster node management |
 | `/server/{admin_path}/config/cluster/add` | Add Node | Generate join token |
-| `/server/{admin_path}/help` | Help | Documentation links |
+| `/server/{admin_path}/config/pages/help` | Help | Edit help page content (matches the `config/pages/help` API route below and the `/server/{admin_path}/config/pages` grouping used by About/Privacy/Contact/Terms) |
+
+**Auth and body format — these WEB routes are NOT the same handler as the API mirror below.** Every route in this table is session-cookie authenticated (admin login session, see "Authentication Methods by Route Family" above) and its mutations (`Save`, `Create`, `Delete`, etc.) are plain HTML `<form method="post" enctype="application/x-www-form-urlencoded">` submissions — never JSON-only (no `ShouldBindJSON`-only handler), per PART 16 "No-JS-first": the admin panel MUST be fully usable with JavaScript disabled. The separate `/api/{api_version}/server/{admin_path}/config/*` routes are the machine-readable mirror: JSON body, `Authorization: Bearer adm_*` token, no session cookie. Do not point a WEB form at the Bearer-only API route or reuse one handler for both — a browser form POST has no `Authorization` header and will 401 against a Bearer-only endpoint.
 
 ### Settings Page Layout
 

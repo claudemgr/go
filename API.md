@@ -24377,7 +24377,8 @@ partial/
 | Element | Position | Purpose | Contents |
 |---------|----------|---------|----------|
 | `<nav>` | TOP | Navigation | Links to app sections |
-| `<footer>` | BOTTOM | Information | About, Privacy, Contact, Help, GitHub, version |
+| Header `.header-actions` | TOP | Cross-cutting UI state | Theme toggle, Preferences link |
+| `<footer>` | BOTTOM | Information | About, Privacy, Contact, Help, Preferences, GitHub, version |
 
 **Nav contains (app navigation):**
 - Home link
@@ -24386,6 +24387,7 @@ partial/
 **Nav does NOT contain:**
 - API link (users access via `/server/docs/swagger` if needed)
 - Help link (belongs in footer)
+- Preferences link (lives next to the theme toggle in the header, not in nav — it's UI state, not app content; also always present in the footer for discoverability)
 
 **Default Navigation (nav.tmpl):**
 
@@ -24412,15 +24414,18 @@ Mobile:
 ```
 
 ```html
-<!-- Header bar: site name + theme toggle -->
+<!-- Header bar: site name + theme toggle + preferences -->
 <header class="header">
   <a href="/" class="site-brand">{project_name}</a>
 
-  <!-- Theme toggle (always visible, far right) -->
+  <!-- Theme toggle + Preferences (always visible, far right) -->
   <div class="header-actions">
     <button class="theme-button" aria-label="Switch theme" title="Toggle theme">
       <svg class="icon-theme"><!-- theme icon --></svg>
     </button>
+    <a href="/server/preferences" class="header-link" aria-label="Preferences" title="Preferences">
+      <svg class="icon-preferences"><!-- gear icon --></svg>
+    </a>
   </div>
 </header>
 
@@ -25847,6 +25852,8 @@ When the operator sets `custom_html` in `server.yml`, the server logs at startup
     <a href="/server/contact">Contact</a>
     <span>•</span>
     <a href="/server/help">Help</a>
+    <span>•</span>
+    <a href="/server/preferences">Preferences</a>
   </p>
 
   <!-- Application branding -->

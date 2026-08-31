@@ -22569,11 +22569,29 @@ document.querySelectorAll(".site-banner .site-banner-dismiss").forEach((form) =>
 }
 ```
 
+### Guest Header (No Session)
+
+**Without a session (no per-system-user `sys_` token, no admin token — PART 28), the header MUST still expose a way to reach Preferences and switch theme. Do NOT rely on the footer alone for this**: a footer link satisfies "reachable" but not "discoverable" — the header is where users look first.
+
+**Guest Header HTML Structure (same `.header-actions` region the profile menu would otherwise occupy):**
+```html
+<div class="header-actions">
+  <form action="/server/preferences" method="POST" class="theme-toggle-inline">
+    <button type="submit" name="theme" value="dark" aria-label="Dark theme">🌙</button>
+    <button type="submit" name="theme" value="light" aria-label="Light theme">☀️</button>
+    <button type="submit" name="theme" value="auto" aria-label="Auto theme">🔄</button>
+  </form>
+  <a href="/server/preferences" class="header-link" aria-label="Preferences">⚙️</a>
+</div>
+```
+
+No JS required — each button is a real form submit that sets the `theme` cookie server-side and redirects back (303 See Other), exactly like the authenticated theme toggle. External JS may intercept the submit to apply the theme class without a reload (progressive enhancement, not a requirement).
+
 ### Profile Icon
 
 **Session dropdown accessible via icon in header. Follows GitHub/GitLab patterns.**
 
-**(Shown only when a session exists — a per-system-user `sys_` token login (core), or the admin token login when the admin panel is enabled — PART 28. Without a session the header shows the Theme Toggle only.)**
+**(Shown only when a session exists — a per-system-user `sys_` token login (core), or the admin token login when the admin panel is enabled — PART 28. Without a session the header shows the Guest Header above.)**
 
 **Profile Icon Behavior:**
 
@@ -22590,6 +22608,8 @@ document.querySelectorAll(".site-banner .site-banner-dismiss").forEach((form) =>
 | Item | Link | Description |
 |------|------|-------------|
 | **Username** | - | Display current system username (not clickable, header) |
+| **Preferences** | `/server/preferences` | Theme, language, cookie/privacy preferences |
+| *(divider)* | - | - |
 | **Theme** | - | Theme toggle (Dark/Light/Auto) |
 | *(divider)* | - | - |
 | **Help** | `/server/help` | Help documentation |
@@ -22606,9 +22626,14 @@ document.querySelectorAll(".site-banner .site-banner-dismiss").forEach((form) =>
     <div class="dropdown-header">
       <span class="username">johndoe</span>
     </div>
-    <div class="dropdown-item theme-toggle">
-      Theme: <button>Dark</button> | <button>Light</button> | <button>Auto</button>
-    </div>
+    <a href="/server/preferences" class="dropdown-item" role="menuitem">Preferences</a>
+    <div class="dropdown-divider" role="separator"></div>
+    <form action="/server/preferences" method="POST" class="dropdown-item theme-toggle">
+      Theme:
+      <button type="submit" name="theme" value="dark">Dark</button> |
+      <button type="submit" name="theme" value="light">Light</button> |
+      <button type="submit" name="theme" value="auto">Auto</button>
+    </form>
     <div class="dropdown-divider" role="separator"></div>
     <a href="/server/help" class="dropdown-item" role="menuitem">Help</a>
     <form action="/server/auth/logout" method="POST">
@@ -24805,19 +24830,21 @@ partial/
 | Element | Position | Purpose | Contents |
 |---------|----------|---------|----------|
 | `<nav>` | TOP | Navigation | Links to app sections, user menu |
-| `<footer>` | BOTTOM | Information | About, Privacy, Contact, Help, GitHub, version |
+| Header `.header-actions` | TOP | Cross-cutting UI state | Theme toggle, Preferences link (Guest Header when no session, Profile dropdown when signed in — see above) |
+| `<footer>` | BOTTOM | Information | About, Privacy, Contact, Help, Preferences, GitHub, version |
 
 **Nav contains (app navigation):**
 - Home link
 - App-specific sections (project-defined)
 - Session menu (right side):
-  - If signed in: Username dropdown → Theme, Help, Logout
+  - If signed in: Username dropdown → Theme, Preferences, Help, Logout
   - If signed out: Login link
 
 **Nav does NOT contain:**
 - API link (users access via `/server/docs/swagger` if needed)
 - Admin link (don't advertise - admins know where it is)
 - Help link (belongs in footer)
+- Preferences link (lives next to the theme toggle in the header, not in nav — it's UI state, not app content; also always present in the footer for discoverability)
 
 **Default Navigation (nav.tmpl):**
 
@@ -26299,6 +26326,8 @@ When the operator sets `custom_html` in `server.yml`, the server logs at startup
     <a href="/server/contact">Contact</a>
     <span>•</span>
     <a href="/server/help">Help</a>
+    <span>•</span>
+    <a href="/server/preferences">Preferences</a>
   </p>
 
   <!-- Application branding -->
@@ -26787,6 +26816,17 @@ func trackingScript(r *http.Request) template.HTML {
 ## Standard Pages
 
 **ALL applications MUST have these standard pages. Content is defined per-application.**
+
+**⚠️ CRITICAL: `/server/about` and `/server/help` MUST be comprehensive, real, project-specific content — never a stub, "coming soon" page, or generic placeholder text.** Both pages are public (no auth). This is unrelated to the admin-only `{admin_path}/config/pages/help` edit route below (PART 28) — never conflate the two: `/server/help` is the public help page every visitor sees; `{admin_path}/config/pages/help` is where an admin edits that page's stored content.
+
+## PAGE CONTENT SOURCING
+| Page | Content Source |
+|------|----------------|
+| /server/about | IDEA.md → name, tagline, description, features, links |
+| /server/help | IDEA.md → real endpoints, real curl examples, real FAQ |
+| /server/privacy | Config → `server.privacy.*` settings |
+| /server/terms | Config → customizable, default template |
+| /server/contact | Config → `server.contact.general.*` + `server.pages.contact.*` settings |
 
 ### /server/about
 
@@ -41785,7 +41825,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 **Step 2: API Token**
 | Action | Notes |
 |--------|-------|
-| Auto-generate API token | User MUST copy (shown once) |
+| Auto-generate API token | User MUST copy (shown once) — display with a `.api-token` scroll-box and a `copy-btn` (see "Long Strings" above), never a bare `<code>` block; the value is unrecoverable after this step |
 | Token is tied to admin account | Used for API access |
 
 **Step 3: Server Configuration**
@@ -42123,7 +42163,9 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `/server/{admin_path}/config/maintenance` | Maintenance | Maintenance mode |
 | `/server/{admin_path}/config/updates` | Updates | Check/apply updates |
 | `/server/{admin_path}/config/info` | Server Info | Version, environment, deps |
-| `/server/{admin_path}/help` | Help | Documentation links |
+| `/server/{admin_path}/config/pages/help` | Help | Edit help page content (matches the `config/pages/help` API route below and the `/server/{admin_path}/config/pages` grouping used by About/Privacy/Contact/Terms) |
+
+**Auth and body format — these WEB routes are NOT the same handler as the API mirror below.** Every route in this table is session-cookie authenticated (admin login session, see "Authentication Methods by Route Family" above) and its mutations (`Save`, `Create`, `Delete`, etc.) are plain HTML `<form method="post" enctype="application/x-www-form-urlencoded">` submissions — never JSON-only (no `ShouldBindJSON`-only handler), per PART 16 "No-JS-first": the admin panel MUST be fully usable with JavaScript disabled. The separate `/api/{api_version}/server/{admin_path}/config/*` routes are the machine-readable mirror: JSON body, `Authorization: Bearer adm_*` token, no session cookie. Do not point a WEB form at the Bearer-only API route or reuse one handler for both — a browser form POST has no `Authorization` header and will 401 against a Bearer-only endpoint.
 
 ### Settings Page Layout
 
