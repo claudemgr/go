@@ -1430,7 +1430,7 @@ For complete details, see AI.md PART 0, 1
 
 ## LONG STRINGS (REQUIRED CSS)
 ```css
-.long-string, .ip-address, .onion-address, .api-token, .hash {
+.long-string, .ip-address, .onion-address, .i2p-address, .api-token, .hash {
   word-break: break-all;
   overflow-wrap: break-word;
   font-family: monospace;
@@ -23912,18 +23912,20 @@ fi
 |-------------|----------------|---------|
 | IPv6 address | 39 chars | `2001:0db8:85a3:0000:0000:8a2e:0370:7334` |
 | Tor v3 .onion | 62 chars | `duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion` |
+| I2P .b32.i2p | 60 chars | `ukeu3k5oycgaauneqgtnvselmt4yemvoilkln7jpvamvfx7dnkdq.b32.i2p` |
 | API token | 32-64 chars | `tok_EXAMPLE1234567890abcdefghij...` |
 | SHA-256 hash | 64 chars | `e3b0c44298fc1c149afbf4c8996fb924...` |
 | UUID | 36 chars | `550e8400-e29b-41d4-a716-446655440000` |
 | Base64 data | Variable | Long encoded strings |
 
-**Required CSS for ALL elements that may contain long strings:**
+**Two treatments — pick by whether a copy button sits next to the value.**
+
+**No adjacent copy control → wrap in place** (table cells, list rows, plain inline text — the reader has no other way to see the full value):
 
 ```css
-/* Apply to elements containing: IPs, URLs, hashes, tokens, codes */
+/* Apply to elements containing: IPs, hashes, tokens, codes with no copy button nearby */
 .long-string,
 .ip-address,
-.onion-address,
 .api-token,
 .hash,
 .uuid,
@@ -23938,6 +23940,22 @@ fi
   /* Optional: smaller font on mobile */
   font-size: 0.875rem;
 }
+```
+
+**Adjacent copy button → single-line scroll-box, never wrap** (the copy button is the intended way to get the value, so hiding overflow behind a scroll costs nothing and keeps the pill from inflating to multiple lines):
+
+```css
+.onion-address,
+.i2p-address,
+.copy-value {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  font-family: monospace;
+  font-size: 0.875rem;
+}
 
 /* Alternative: horizontal scroll for code blocks */
 .code-block {
@@ -23947,13 +23965,17 @@ fi
 }
 ```
 
+Apply `.copy-value` to any other long-string element (setup token, API token, session ID) rendered next to a copy-to-clipboard button.
+
 **Where to apply:**
 
 | Context | CSS Class | Behavior |
 |---------|-----------|----------|
-| Inline display (tables, lists) | `.long-string` | Word-break to wrap |
+| Inline display, no copy button (tables, lists) | `.long-string` | Word-break to wrap |
+| Onion / I2P address (always has a copy button) | `.onion-address` / `.i2p-address` | Single-line scroll, never wrap |
+| Any other value with an adjacent copy button | `.copy-value` | Single-line scroll, never wrap |
 | Code blocks | `.code-block` | Horizontal scroll |
-| Copy-friendly fields | `.monospace-data` | Word-break + select all |
+| Copy-friendly fields with no copy button | `.monospace-data` | Word-break + select all |
 
 **NEVER let long strings overflow their container or break mobile layouts.**
 
