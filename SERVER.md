@@ -16330,6 +16330,9 @@ Allow: /
 Allow: /api
 Disallow: /server/{admin_path}
 Sitemap: {app_url}/sitemap.xml
+
+# AI crawlers - default: no additional restrictions (inherit User-agent: * above)
+# Per-bot stanzas are only rendered when that bot is explicitly denied below
 ```
 
 **Configuration:**
@@ -16341,7 +16344,38 @@ web:
       - /api
     deny:
       - /server/{admin_path}
+    # Per-AI-crawler access control (default: allow all - no AI blocking)
+    ai_bots:
+      # Applies to any recognized AI bot not listed individually below
+      default: allow
+      # Per-bot overrides: allow | deny
+      bots:
+        GPTBot: allow
+        ChatGPT-User: allow
+        ClaudeBot: allow
+        anthropic-ai: allow
+        Claude-Web: allow
+        CCBot: allow
+        Google-Extended: allow
+        Bytespider: allow
+        PerplexityBot: allow
+        Applebot-Extended: allow
+        Amazonbot: allow
+        Diffbot: allow
+        FacebookBot: allow
+        cohere-ai: allow
 ```
+
+**AI Crawler Rules:**
+- Default posture is **allow** - no AI bot is blocked unless the user explicitly sets it (or `ai_bots.default`) to `deny`.
+- `ai_bots.default: deny` flips the default for any bot not explicitly listed; explicit per-bot entries always take precedence over `default`.
+- Bots set to `allow` are covered by the existing `User-agent: *` block and get no separate stanza.
+- Bots set to `deny` render their own stanza:
+  ```
+  User-agent: {bot_name}
+  Disallow: /
+  ```
+- When `ai_bots.default: deny`, every recognized bot not explicitly set to `allow` also renders its own `Disallow: /` stanza, since a bot's own `User-agent` block overrides the wildcard `Allow: /` for that bot only.
 
 ### security.txt (RFC 9116)
 
