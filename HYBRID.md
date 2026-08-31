@@ -25644,6 +25644,8 @@ server:
   <meta name="description" content="{description}">
   <meta name="keywords" content="{keywords}">
   <meta name="author" content="{author}">
+  <meta name="robots" content="{robots}">
+  <link rel="canonical" href="{current_url}">
 
   <!-- OpenGraph -->
   <meta property="og:title" content="{title}">
@@ -25658,8 +25660,31 @@ server:
   <meta name="twitter:description" content="{description}">
   <meta name="twitter:image" content="{og_image}">
   <meta name="twitter:site" content="{twitter_handle}">
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "{title}",
+    "description": "{description}",
+    "url": "{current_url}"
+  }
+  </script>
 </head>
 ```
+
+### Robots Directive
+
+`{robots}` is computed server-side per route, never hardcoded:
+
+| Route type | Value |
+|------------|-------|
+| Public pages (homepage, docs, about) | `index,follow` |
+| `/admin`, `/api/*`, auth pages (login, register, reset) | `noindex,nofollow` |
+| Internal/health/debug endpoints | `noindex,nofollow` |
+
+Default to `index,follow` only for routes explicitly marked public; every other route defaults to `noindex,nofollow` (fail closed).
 
 ### Site Verification Meta Tags
 
