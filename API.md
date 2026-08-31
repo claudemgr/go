@@ -22301,13 +22301,13 @@ document.querySelectorAll(".site-banner .site-banner-dismiss").forEach((form) =>
 
 ### Theme Toggle
 
-**Theme toggle button in header. No user accounts; no profile dropdown.**
+**Theme toggle button in header, last item in the header-actions zone. No user accounts — but see "Header Layout" above for the profile/preferences zone that sits directly to its left, which is dependent on `owner_token` cookie state, not accounts/sessions.**
 
 **Theme Toggle Behavior:**
 
 | Feature | Description |
 |---------|-------------|
-| **Position** | Header, right side, last item |
+| **Position** | Header, right side, last item (after the profile/preferences zone) |
 | **Options** | Dark / Light / Auto (follows OS preference) |
 | **Persistence** | `theme` cookie (`light` \| `dark` \| `auto`) — server-readable, so the theme class is rendered on `<html>` with no init JS and no FOUC |
 | **Keyboard** | Enter/Space cycles modes |
@@ -24377,7 +24377,7 @@ partial/
 | Element | Position | Purpose | Contents |
 |---------|----------|---------|----------|
 | `<nav>` | TOP | Navigation | Links to app sections |
-| Header `.header-actions` | TOP | Cross-cutting UI state | Theme toggle, Preferences link |
+| Header `.header-actions` | TOP | Cross-cutting UI state | Profile/preferences zone (always `/server/preferences`; contents vary if an `owner_token` cookie exists), then theme toggle — in that order, right of the centered nav links |
 | `<footer>` | BOTTOM | Information | About, Privacy, Contact, Help, Preferences, GitHub, version |
 
 **Nav contains (app navigation):**
@@ -24392,18 +24392,15 @@ partial/
 **Default Navigation (nav.tmpl):**
 
 ```
-Desktop:
+Desktop (single row, 4 zones):
 ┌─────────────────────────────────────────────────────────────────┐
-│  {project_name}                                          [Theme] │  ← Header
-├─────────────────────────────────────────────────────────────────┤
-│  Home  |  [App Section 1]  |  [App Section 2]  |  ...           │  ← Nav
+│ {project_name}   Home | Section 1 | Section 2      [⚙] [Theme]  │  ← Header
 └─────────────────────────────────────────────────────────────────┘
+   ^logo/text       ^links (centered)              ^profile/prefs  ^theme
 
 Mobile:
 ┌─────────────────────────────────────────────────────────────────┐
-│  {project_name}                                          [Theme] │  ← Header
-├─────────────────────────────────────────────────────────────────┤
-│                                                      [☰ Menu]   │  ← Nav row
+│  {project_name}                            [☰]  [⚙] [Theme]     │  ← Header
 └─────────────────────────────────────────────────────────────────┘
                                               ┌───────────────────┐
                                               │  Home             │
@@ -24413,46 +24410,95 @@ Mobile:
                                               └───────────────────┘
 ```
 
+**Header Layout — single row, 4 zones, in this exact order:**
+
+```
+{logo/text}          {links}          {profile/preferences}  {theme_toggle}
+```
+
+Brand sits left, nav links are horizontally centered (not pushed right against
+the actions), and the actions cluster (profile/preferences, then theme toggle)
+sits right. Do NOT split header/nav into two separate rows on desktop — that
+pushes links flush right against the header edge with no centering, which is
+the layout bug this section fixes.
+
 ```html
-<!-- Header bar: site name + theme toggle + preferences -->
+<!-- Header bar: single row — brand | centered links | profile/preferences | theme toggle -->
 <header class="header">
   <a href="/" class="site-brand">{project_name}</a>
 
-  <!-- Theme toggle + Preferences (always visible, far right) -->
-  <div class="header-actions">
-    <button class="theme-button" aria-label="Switch theme" title="Toggle theme">
-      <svg class="icon-theme"><!-- theme icon --></svg>
-    </button>
-    <a href="/server/preferences" class="header-link" aria-label="Preferences" title="Preferences">
-      <svg class="icon-preferences"><!-- gear icon --></svg>
-    </a>
-  </div>
-</header>
-
-<!-- Nav bar: separate row below header (CSS-only mobile menu) -->
-<nav class="nav">
-  <!-- Hidden checkbox controls menu state - NO JavaScript -->
+  <!-- Hidden checkbox controls mobile menu state - NO JavaScript -->
   <input type="checkbox" id="nav-toggle" class="nav-checkbox" hidden>
 
-  <!-- Desktop: inline links | Mobile: hamburger only -->
-  <div class="nav-links">
+  <!-- Desktop: inline links, centered | Mobile: hamburger only -->
+  <nav class="nav-links">
     <a href="/">Home</a>
     <!-- App-specific sections (project-defined) -->
-  </div>
+  </nav>
 
   <!-- Mobile: hamburger toggle (checkbox label) -->
   <label for="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">☰</label>
 
-  <!-- Slide-in panel for mobile -->
+  <!-- Slide-in panel for mobile (links only — actions below stay in header) -->
   <div class="nav-panel">
     <label for="nav-toggle" class="nav-close" aria-label="Close menu">✕</label>
     <a href="/">Home</a>
     <!-- App-specific sections (project-defined) -->
   </div>
-
-  <!-- Overlay - clicking label unchecks checkbox, closing menu -->
   <label for="nav-toggle" class="nav-overlay"></label>
-</nav>
+
+  <!-- Actions: profile/preferences zone, then theme toggle (always visible, far right) -->
+  <div class="header-actions">
+    <!-- Profile/preferences zone — state-dependent, see "Profile/Preferences Zone" below.
+         Route is always /server/preferences regardless of state; only the menu
+         CONTENTS change with whether an owner_token cookie exists. -->
+    {{ if ownerTokenCookieExists }}
+      <div class="dropdown">
+        <button class="dropdown-toggle header-link" aria-label="Preferences and resource management">
+          <svg class="icon-preferences"><!-- gear icon --></svg>
+        </button>
+        <div class="dropdown-menu">
+          <a href="{{ .OwnedResourceURL }}" class="dropdown-item" role="menuitem">Manage my {{ .ResourceLabel }}</a>
+          <div class="dropdown-divider" role="separator"></div>
+          <a href="/server/preferences" class="dropdown-item" role="menuitem">Preferences</a>
+        </div>
+      </div>
+    {{ else }}
+      <a href="/server/preferences" class="header-link" aria-label="Preferences" title="Preferences">
+        <svg class="icon-preferences"><!-- gear icon --></svg>
+      </a>
+    {{ end }}
+    <button class="theme-button" aria-label="Switch theme" title="Toggle theme">
+      <svg class="icon-theme"><!-- theme icon --></svg>
+    </button>
+  </div>
+</header>
+```
+
+```css
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  /* Centers the link cluster in the remaining space between brand and actions */
+  flex: 1;
+  justify-content: center;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  /* Actions stay right-aligned without pushing nav-links off-center */
+  flex: 0 0 auto;
+}
 ```
 
 **Mobile Menu Behavior:**
@@ -24515,8 +24561,8 @@ Mobile:
 ```
 
 **Mobile Responsive Rules:**
-- Nav row below header: inline links or hamburger
-- Theme toggle ALWAYS in header (never in menu)
+- Links live in the single header row: inline links (desktop) or hamburger (mobile) — no separate nav row
+- Profile/preferences and theme toggle ALWAYS in header actions (never in the mobile slide-in menu)
 - Menu slides from right edge
 - Touch-friendly: minimum 44x44px tap targets
 - Overlay closes menu on tap (CSS label toggles checkbox - no JS)

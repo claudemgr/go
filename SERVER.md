@@ -27404,7 +27404,7 @@ partial/
 | Element | Position | Purpose | Contents |
 |---------|----------|---------|----------|
 | `<nav>` | TOP | Navigation | Links to app sections, user menu |
-| Header `.header-actions` | TOP | Cross-cutting UI state | Theme toggle, Preferences link (Guest Header when logged out, Profile dropdown when logged in — see above) |
+| Header `.header-actions` | TOP | Cross-cutting UI state | Profile/preferences zone (Guest Header when logged out, Profile dropdown when logged in — see above), then theme toggle — in that order, right of the centered nav links |
 | `<footer>` | BOTTOM | Information | About, Privacy, Contact, Help, Preferences, GitHub, version |
 
 **Nav contains (app navigation):**
@@ -27420,21 +27420,29 @@ partial/
 - Help link (belongs in footer)
 - Preferences link (lives next to the theme toggle in the header, not in nav — it's UI state, not app content; also always present in the footer for discoverability)
 
+**Header Layout — single row, 4 zones, in this exact order:**
+
+```
+{logo/text}          {links}          {profile/preferences}  {theme_toggle}
+```
+
+Brand sits left, nav links are horizontally centered (not pushed right against
+the actions), and the actions cluster (profile/preferences, then theme toggle)
+sits right. Do NOT split header/nav into two separate rows on desktop — that
+pushes links flush right against the header edge with no centering.
+
 **Default Navigation (nav.tmpl):**
 
 ```
-Desktop:
+Desktop (single row, 4 zones):
 ┌─────────────────────────────────────────────────────────────────┐
-│  {project_name}                                      [User Icon] │  ← Header
-├─────────────────────────────────────────────────────────────────┤
-│  Home  |  [App Section 1]  |  [App Section 2]  |  ...           │  ← Nav
+│ {project_name}   Home | Section 1 | Section 2   [User Icon][Thm] │  ← Header
 └─────────────────────────────────────────────────────────────────┘
+   ^logo/text       ^links (centered)          ^profile/prefs ^theme
 
 Mobile:
 ┌─────────────────────────────────────────────────────────────────┐
-│  {project_name}                                      [User Icon] │  ← Header
-├─────────────────────────────────────────────────────────────────┤
-│                                                      [☰ Menu]   │  ← Nav row
+│  {project_name}                       [☰]    [User Icon][Thm]   │  ← Header
 └─────────────────────────────────────────────────────────────────┘
                                               ┌───────────────────┐
                                               │  Home             │
@@ -27445,20 +27453,43 @@ Mobile:
 ```
 
 ```html
-<!-- Header bar: site name + user icon -->
+<!-- Header bar: single row — brand | centered links | profile/preferences | theme toggle -->
 <header class="header">
   <a href="/" class="site-brand">{project_name}</a>
 
-  <!-- User icon (always visible, far right) -->
-  <div class="user-menu">
+  <!-- Hidden checkbox controls mobile menu state - NO JavaScript -->
+  <input type="checkbox" id="nav-toggle" class="nav-checkbox" hidden>
+
+  <!-- Desktop: inline links, centered | Mobile: hamburger only -->
+  <nav class="nav-links">
+    <a href="/">Home</a>
+    <!-- App-specific sections (project-defined) -->
+  </nav>
+
+  <!-- Mobile: hamburger toggle (checkbox label) -->
+  <label for="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">☰</label>
+
+  <!-- Slide-in panel for mobile (links only — actions below stay in header) -->
+  <div class="nav-panel">
+    <label for="nav-toggle" class="nav-close" aria-label="Close menu">✕</label>
+    <a href="/">Home</a>
+    <!-- App-specific sections (project-defined) -->
+  </div>
+  <label for="nav-toggle" class="nav-overlay"></label>
+
+  <!-- Actions: profile/preferences zone, then theme toggle (always visible, far right) -->
+  <div class="header-actions">
+    <!-- Profile/preferences zone: Guest Header when logged out, Profile Icon
+         dropdown when logged in — see "Guest Header" / "Profile Icon" above
+         for the full markup. Simplified here to show placement only. -->
     {{ if .User }}
-      <!-- Logged in: user icon dropdown -->
       <div class="dropdown">
         <button class="dropdown-toggle user-icon" aria-label="User menu">
           <svg>...</svg>
         </button>
         <div class="dropdown-menu">
           <span class="dropdown-header">{{ .User.Username }}</span>
+          <a href="/server/preferences" class="dropdown-item" role="menuitem">Preferences</a>
           <a href="/users">Profile</a>
           <a href="/users/settings">Settings</a>
           <hr />
@@ -27466,38 +27497,41 @@ Mobile:
         </div>
       </div>
     {{ else }}
-      <!-- Logged out: login icon -->
-      <a href="/server/auth/login" class="user-icon" aria-label="Login">
-        <svg>...</svg>
+      <a href="/server/preferences" class="header-link" aria-label="Preferences" title="Preferences">
+        <svg class="icon-preferences"><!-- gear icon --></svg>
       </a>
     {{ end }}
+    <button class="theme-button" aria-label="Switch theme" title="Toggle theme">
+      <svg class="icon-theme"><!-- theme icon --></svg>
+    </button>
   </div>
 </header>
+```
 
-<!-- Nav bar: separate row below header (CSS-only mobile menu) -->
-<nav class="nav">
-  <!-- Hidden checkbox controls menu state - NO JavaScript -->
-  <input type="checkbox" id="nav-toggle" class="nav-checkbox" hidden>
+```css
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+}
 
-  <!-- Desktop: inline links | Mobile: hamburger only -->
-  <div class="nav-links">
-    <a href="/">Home</a>
-    <!-- App-specific sections (project-defined) -->
-  </div>
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  /* Centers the link cluster in the remaining space between brand and actions */
+  flex: 1;
+  justify-content: center;
+}
 
-  <!-- Mobile: hamburger toggle (checkbox label) -->
-  <label for="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">☰</label>
-
-  <!-- Slide-in panel for mobile -->
-  <div class="nav-panel">
-    <label for="nav-toggle" class="nav-close" aria-label="Close menu">✕</label>
-    <a href="/">Home</a>
-    <!-- App-specific sections (project-defined) -->
-  </div>
-
-  <!-- Overlay - clicking label unchecks checkbox, closing menu -->
-  <label for="nav-toggle" class="nav-overlay"></label>
-</nav>
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  /* Actions stay right-aligned without pushing nav-links off-center */
+  flex: 0 0 auto;
+}
 ```
 
 **Mobile Menu Behavior:**
@@ -27505,7 +27539,7 @@ Mobile:
 - Slides LEFT to open (right-to-left)
 - Slides RIGHT to close (left-to-right)
 - Overlay dims background, click to close
-- User icon stays in header (NOT in menu) - keeps menu clean
+- Profile/preferences and theme toggle stay in header (NOT in menu) - keeps menu clean
 
 **Smart Menu :**
 - If all nav links fit on screen → show inline links, NO hamburger
@@ -27560,8 +27594,8 @@ Mobile:
 ```
 
 **Mobile Responsive Rules:**
-- Nav row below header: inline links or hamburger
-- User icon ALWAYS in header (never in menu)
+- Links live in the single header row: inline links (desktop) or hamburger (mobile) — no separate nav row
+- Profile/preferences and theme toggle ALWAYS in header actions (never in the mobile slide-in menu)
 - Menu slides from right edge
 - Touch-friendly: minimum 44x44px tap targets
 - Overlay closes menu on tap (CSS label toggles checkbox - no JS)
