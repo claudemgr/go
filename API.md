@@ -10677,14 +10677,36 @@ PHASE 5: Server startup (actual server start)
     ├─ SIGUSR1 → reopen log files (for rotation)
     └─ SIGUSR2 → dump status to log
 
-20. Log startup complete:
-    ├─ Log "Listening on {address}:{port}"
+20. Resolve display URL and print startup banner (no HTTP request context
+    exists yet, so only the non-header-dependent resolution priorities apply
+    — see "Resolution Order (Reverse Proxy Preferred)"):
+    ├─ Resolve {fqdn}: DOMAIN env var → system `hostname` → $HOSTNAME env var
+    │  → public IPv6 → public IPv4 → `localhost` fallback (priorities 2-7;
+    │  priorities 0-1, Tor onion match and reverse-proxy headers, require a
+    │  request and do NOT apply here)
+    ├─ Resolve {proto}: TLS enabled on the bound listener → `https`,
+    │  else default `http` (priority 5; header-based priorities 1-4 do not
+    │  apply here)
+    ├─ Resolve {port}: server listen port from step 13, else proto default
+    │  (priority 3-4)
+    ├─ Resolve {app_mode} via GetAppModeString()
+    ├─ Resolve {startup_datetime} = current UTC timestamp at this step
+    └─ Build `urls` from the resolved {proto}/{fqdn}/{port} and call
+       PrintServerStartupBanner(appName, version, appMode, urls,
+       forceColor) — the banner's "Listening on" line ALWAYS shows the
+       resolved {fqdn}, never the raw bind {address} (see "Banner
+       Placeholders (Must Be Defined)" for the full placeholder list)
+
+21. Log startup complete:
+    ├─ Log "Listening on {address}:{port}" (raw bind address is fine in logs
+    │  — only logs may show {address}; the banner, API, and frontend must
+    │  always show the resolved {fqdn} from step 20)
     ├─ Log "Mode: {production|development|debug}"
     ├─ Log "Tor: {.onion address}" (if enabled)
     ├─ Log "I2P: {.b32.i2p address}" (if enabled and provider available)
     └─ If first_run: log path to generated `server.yml`
 
-21. Enter main loop (block until shutdown signal received)
+22. Enter main loop (block until shutdown signal received)
 ```
 
 | Step | Runs As | Why |
@@ -10703,7 +10725,7 @@ PHASE 5: Server startup (actual server start)
 | **IF USER (step 9):** | | |
 | 9. Setup user directories | **user** | Create ~/.config/, ~/.local/share/, etc. |
 | **COMMON PATH:** | | |
-| 10-21. Everything else | **user** | Dirs exist, privileged sockets bound (if any) |
+| 10-22. Everything else | **user** | Dirs exist, privileged sockets bound (if any) |
 
 **Security principle:** Drop privileges as EARLY as possible, but AFTER:
 1. Creating the service user/group
