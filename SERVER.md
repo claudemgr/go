@@ -10008,7 +10008,7 @@ data:
 
   cve:
     # NVD (NIST National Vulnerability Database)
-    source: "https://nvd.nist.gov/feeds/json/cve/1.1"
+    source: "https://services.nvd.nist.gov/rest/json/cves/2.0"
     # Only download CVEs relevant to project dependencies
     filter_by_cpe: true
 
@@ -31482,10 +31482,9 @@ server:
           format: cidr
           enabled: true
 
-        - name: "level1"
-          url: "https://www.iblocklist.com/lists/level1.gz"
-          # auto-detect from content/extension (P2P, gzipped)
-          format: auto
+        - name: "blocklist_de"
+          url: "https://lists.blocklist.de/lists/all.txt"
+          format: plain
           enabled: false
 
         - name: "abuse_ch_urlhaus"
@@ -31683,9 +31682,9 @@ Response for `GET /api/{api_version}/server/{admin_path}/config/network/blocklis
   "blocked_today": 147,
   "sources": [
     {
-      "name": "level1",
-      "url": "https://www.iblocklist.com/lists/level1.gz",
-      "format": "auto",
+      "name": "blocklist_de",
+      "url": "https://lists.blocklist.de/lists/all.txt",
+      "format": "plain",
       "enabled": true,
       "rule_count": 398211,
       "last_updated": "2026-04-17T04:00:12Z",
@@ -31712,7 +31711,7 @@ Response for `GET /api/{api_version}/server/{admin_path}/config/network/blocklis
 {
   "ip": "1.2.3.4",
   "blocked": true,
-  "matched_lists": ["level1", "spamhaus_drop"],
+  "matched_lists": ["blocklist_de", "spamhaus_drop"],
   "matched_range": "1.2.0.0/16"
 }
 ```
@@ -31735,9 +31734,9 @@ Response for `GET /api/{api_version}/server/{admin_path}/config/network/blocklis
 │                                                                         │
 │ ┌─ Sources ─────────────────────────────────────────────────────────┐   │
 │ │                                                                    │   │
-│ │ ☑ level1                     398,211 rules    Updated 2 hours ago  │   │
-│ │   https://www.iblocklist.com/lists/level1.gz                       │   │
-│ │   Format: auto  Size: 2.7 megabytes             [Update] [Remove]  │   │
+│ │ ☑ blocklist_de               398,211 rules    Updated 2 hours ago  │   │
+│ │   https://lists.blocklist.de/lists/all.txt                         │   │
+│ │   Format: plain Size: 2.7 megabytes             [Update] [Remove]  │   │
 │ │                                                                    │   │
 │ │ ☑ spamhaus_drop               84,520 rules    Updated 2 hours ago  │   │
 │ │   https://www.spamhaus.org/drop/drop.txt                           │   │
@@ -34413,8 +34412,8 @@ All databases come from [sapics/ip-location-db](https://github.com/sapics/ip-loc
 |----------|-----------------|---------|--------|
 | ASN | `@ip-location-db/asn-mmdb` → `asn.mmdb` | `https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb` | `autonomous_system_number`, `autonomous_system_organization` |
 | Country | `@ip-location-db/geo-whois-asn-country-mmdb` → `geo-whois-asn-country.mmdb` | `https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb` | `country_code` |
-| City (IPv4) | `@ip-location-db/dbip-city-mmdb` → `dbip-city-ipv4.mmdb` | `https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-city-mmdb/dbip-city-ipv4.mmdb` | `city`, `country_code`, `state1`, `state2`, `postcode`, `latitude`, `longitude`, `timezone` |
-| City (IPv6) | `@ip-location-db/dbip-city-mmdb` → `dbip-city-ipv6.mmdb` | `https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-city-mmdb/dbip-city-ipv6.mmdb` | (same fields as City IPv4) |
+| City (IPv4) | `@ip-location-db/dbip-city-mmdb` → `dbip-city-ipv4.mmdb` | `https://github.com/sapics/ip-location-db/releases/download/latest/dbip-city-ipv4.mmdb` | `city`, `country_code`, `state1`, `state2`, `postcode`, `latitude`, `longitude`, `timezone` |
+| City (IPv6) | `@ip-location-db/dbip-city-mmdb` → `dbip-city-ipv6.mmdb` | `https://github.com/sapics/ip-location-db/releases/download/latest/dbip-city-ipv6.mmdb` | (same fields as City IPv4) |
 
 **No separate "WHOIS" database.** Earlier drafts of this spec described a combined WHOIS lookup exposing a `registrant_org` field — no such dataset exists in ip-location-db. The `geo-whois-asn-country` package name is misleading: despite the name, it exposes only `country_code` (merged from RIR geofeed, whois, and ASN data at the NRO's publishing layer — the merge happens upstream, not in the file this project consumes). Organization-name data available to this project comes solely from the ASN database's `autonomous_system_organization` field (a BGP/RIR-derived AS holder name, not an RDAP/WHOIS registrant record) — use that field directly and do not label it "WHOIS" anywhere in code, config, or docs.
 
