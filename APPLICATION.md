@@ -2213,6 +2213,12 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 
 All gates run inside the project Docker image — never on the host.
 
+**Commit-time lint gate:** running `golangci-lint run ./...` directly satisfies the
+quality bar shown here, but does NOT satisfy `gitcommit`'s pre-commit lint gate —
+`lint-agent-mark.sh` only records the gate as passed when the `go-lint` agent itself
+reports a clean result. Invoke the `go-lint` agent before running `gitcommit`; a raw
+`golangci-lint` invocation leaves the commit permanently blocked.
+
 - [ ] `gofmt -l .` reports no files needing formatting (Docker-wrapped)
 - [ ] `golangci-lint run ./...` passes with no warnings (Docker-wrapped)
 - [ ] `go test ./...` passes (Docker-wrapped)

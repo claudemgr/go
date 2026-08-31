@@ -1608,7 +1608,7 @@ Purpose:
 6. Built-in scheduler, GeoIP, metrics, email, backup, update
 7. All settings configurable via API and config file
 8. Client binary for ALL projects
-9. Commit often via `gitcommit <command>` — small, focused commits, each with a fresh accurate `.git/COMMIT_MESS`. See "gitcommit Script" → "Commit Cadence". Do NOT hoard unrelated changes into one big commit. **Findings-based work (audits, reviews, numbered fix-lists) defaults to one commit per finding** — never batch distinct findings into one commit just because they share a file or session. **Feature work is the opposite — one commit for the whole feature, never split per part. Unrelated bugs found mid-feature go to `TODO.AI.md`, except app-breaking bugs, which must be fixed immediately.** **Subagents do not commit** — complete edits and report back to the parent instance; the parent reviews the diff and owns the commit.
+9. Commit often via `gitcommit --dir {project_dir} all` — small, focused commits, each with a fresh accurate `.git/COMMIT_MESS`. See "gitcommit Script" → "Commit Cadence". Do NOT hoard unrelated changes into one big commit. **Findings-based work (audits, reviews, numbered fix-lists) defaults to one commit per finding** — never batch distinct findings into one commit just because they share a file or session. **Feature work is the opposite — one commit for the whole feature, never split per part. Unrelated bugs found mid-feature go to `TODO.AI.md`, except app-breaking bugs, which must be fixed immediately.** **Subagents do not commit** — complete edits and report back to the parent instance; the parent reviews the diff and owns the commit.
 
 ## File Locations
 - Config: `{config_dir}/server.yml`
@@ -1879,7 +1879,7 @@ Both files use the same structure. Settings are merged: `settings.local.json` ov
 
 | Project Type | Additional Allows | Additional Denies |
 |--------------|-------------------|-------------------|
-| Go project | `Bash(go *)`, `Bash(golangci-lint *)` | - |
+| Go project | - | `Bash(go *)`, `Bash(golangci-lint *)` — host toolchain use is blocked; build/test/lint always run Docker-wrapped (see "No Host Toolchain or Binary Execution") |
 | Docker project | `Bash(docker *)`, `Bash(docker-compose *)` | `Bash(docker system prune *)` |
 | Node project | `Bash(npm *)`, `Bash(node *)` | `Bash(npm publish *)` |
 | Python project | `Bash(python *)`, `Bash(pip *)`, `Bash(uv *)` | `Bash(pip install --user *)` |
@@ -1887,7 +1887,7 @@ Both files use the same structure. Settings are merged: `settings.local.json` ov
 **CRITICAL Rules:**
 - NEVER allow `Bash(sudo *)` - privilege escalation should be explicit and manual
 - NEVER allow `Bash(rm -rf *)` or similar destructive patterns
-- ALWAYS deny `Bash(git commit *)` and `Bash(git push *)` - plain git commit/push are blocked because they bypass the signed-commit wrapper. AI commits via `gitcommit <command>` instead (see "gitcommit Script" rules)
+- ALWAYS deny `Bash(git commit *)` and `Bash(git push *)` - plain git commit/push are blocked because they bypass the signed-commit wrapper. AI commits via `gitcommit --dir {project_dir} all` instead (see "gitcommit Script" rules)
 - Use `PreToolUse` hooks to enforce project standards (formatting, no vendor names)
 - The `env` section sets environment variables for ALL Bash commands in the session
 - Settings are merged: project settings extend/override global `~/.claude/settings.json`
@@ -3287,8 +3287,8 @@ Spec version: {line count or hash}
 | Full | All tools available |
 | **PROHIBITED** | `git commit`, `git push` (plain git) — denied by sandbox/permission rules. They bypass commit signing AND the unified commit+push wrapper |
 | Allowed | `git status`, `git diff`, `git log`, `git branch`, `git add` (read + staging) |
-| Allowed | `gitcommit <command>` — signs, commits, AND pushes in one step. See "gitcommit Script" |
-| **Required** | Write `{project_dir}/.git/COMMIT_MESS` BEFORE running `gitcommit <command>`. Re-read it after writing to confirm accuracy |
+| Allowed | `gitcommit --dir {project_dir} all` — signs, commits, AND pushes in one step. See "gitcommit Script" |
+| **Required** | Write `{project_dir}/.git/COMMIT_MESS` BEFORE running `gitcommit --dir {project_dir} all`. Re-read it after writing to confirm accuracy |
 | **PROHIBITED (subagents)** | Writing `.git/COMMIT_MESS` or calling `gitcommit` — subagents complete edits and report back; the parent (main) instance reviews the diff and owns the commit |
 
 **AI commits via the `gitcommit` wrapper script, not plain `git commit`.** The wrapper resolves the signing key, picks up the commit message from `{project_dir}/.git/COMMIT_MESS`, signs the commit, and pushes to the remote — all in one invocation. Plain `git commit` and `git push` remain prohibited because they skip the wrapper. Because gitcommit pushes automatically, the message file MUST be verified accurate before invocation — there is no local staging window to catch mistakes. **Subagents (spawned via the Agent tool) are exempt from the commit workflow entirely — they make edits and return; the parent instance handles diff review, COMMIT_MESS, and gitcommit.**
@@ -3317,11 +3317,11 @@ Spec version: {line count or hash}
 | Action | Reason |
 |--------|--------|
 | **Modifying PARTS 0-33** | **Implementation patterns are fixed - NEVER modify** |
-| Plain `git commit` (any flag form) | Bypasses signing wrapper. Use `gitcommit <command>` instead |
+| Plain `git commit` (any flag form) | Bypasses signing wrapper. Use `gitcommit --dir {project_dir} all` instead |
 | Plain `git push` | gitcommit already pushes. Plain `git push` bypasses the wrapper entirely |
-| `gitcommit <command>` without first writing AND re-reading `.git/COMMIT_MESS` | The script reads the message from the file and pushes immediately. Wrong file = wrong commit on the remote |
+| `gitcommit --dir {project_dir} all` without first writing AND re-reading `.git/COMMIT_MESS` | The script reads the message from the file and pushes immediately. Wrong file = wrong commit on the remote |
 | `gitcommit -m "..."` / `gitcommit --message "..."` | Defeats the point. The message belongs in `.git/COMMIT_MESS` so it can be verified before committing |
-| Running `gitcommit <command>` mid-task with files in an inconsistent state | Every commit is pushed — half-finished work goes public. Finish the unit of work first |
+| Running `gitcommit --dir {project_dir} all` mid-task with files in an inconsistent state | Every commit is pushed — half-finished work goes public. Finish the unit of work first |
 | Subagent writing `.git/COMMIT_MESS` | Commit message must be written by the parent instance after reviewing the actual diff |
 | Subagent calling `gitcommit` | Only the parent (main) instance runs gitcommit — subagents complete edits and report back |
 | Bare `@name` in commit body | Any `@username` in a commit message creates a GitHub contributor notification/link — never use bare `@` unless intentionally crediting a real contributor; write names without `@` or wrap in backticks |
