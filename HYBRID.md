@@ -17886,6 +17886,16 @@ type StatsInfo struct {
             </button>
           </div>
         </li>
+        <!-- I2P row mirrors Tor exactly (PART 27.2) — only rendered when features.i2p.enabled -->
+        <li class="feature-enabled">
+          🔗 I2P: <span class="status status-ok">✅ healthy</span>
+          <div class="code-block">
+            <code class="code-content">abc123xyz456abcdef789xyz456abcdef789xyz456abcdef789xyz.b32.i2p</code>
+            <button class="copy-btn" data-copy="abc123xyz456abcdef789xyz456abcdef789xyz456abcdef789xyz.b32.i2p">
+              <span class="copy-icon">📋</span><span class="copy-text" aria-live="polite">Copy</span>
+            </button>
+          </div>
+        </li>
         <li class="feature-enabled">🌍 GeoIP</li>
         <!-- PROJECT-SPECIFIC: Add project-specific feature flags here if applicable -->
       </ul>
@@ -21868,6 +21878,15 @@ document.addEventListener('click', function(e) {
     <div class="code-block">
       <code class="code-content">abc123xyz789.onion</code>
       <button class="copy-btn" data-copy="abc123xyz789.onion">📋</button>
+    </div>
+  </li>
+  <!-- I2P row mirrors Tor exactly — only rendered when features.i2p.enabled -->
+  <li class="feature-enabled">
+    🔗 I2P:
+    <span class="status status-ok">✅ healthy</span>
+    <div class="code-block">
+      <code class="code-content">abc123xyz789.b32.i2p</code>
+      <button class="copy-btn" data-copy="abc123xyz789.b32.i2p">📋</button>
     </div>
   </li>
   <li class="feature-disabled">📊 GeoIP</li>

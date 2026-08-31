@@ -1411,14 +1411,16 @@ For complete details, see AI.md PART 0, 1
 
 ## LONG STRINGS (REQUIRED CSS)
 ```css
-.long-string, .ip-address, .onion-address, .i2p-address, .api-token, .hash {
+.long-string, .ip-address, .api-token, .hash {
   word-break: break-all;
   overflow-wrap: break-word;
   font-family: monospace;
 }
 ```
 
-Apply to: IPv6, Tor .onion, API tokens, hashes, UUIDs, Base64
+Apply to: IPv6, API tokens, hashes, UUIDs, Base64 — values with no adjacent copy button.
+
+`.onion-address` / `.i2p-address` are copy-button values, NOT covered by the wrap rule above — using wrap CSS on them breaks the copy target into multiple lines. They require the scroll-box treatment; see "### Long Strings (IPv6, Tor, Tokens, Hashes)" below for the full wrap-vs-scroll-box split and the required `.onion-address`/`.i2p-address` CSS.
 
 ## BREAKPOINTS (mobile-first)
 | Target | CSS |
@@ -17609,6 +17611,16 @@ type StatsInfo struct {
             </button>
           </div>
         </li>
+        <!-- I2P row mirrors Tor exactly (PART 31.2) — only rendered when features.i2p.enabled -->
+        <li class="feature-enabled">
+          🔗 I2P: <span class="status status-ok">✅ healthy</span>
+          <div class="code-block">
+            <code class="code-content">abc123xyz456abcdef789xyz456abcdef789xyz456abcdef789xyz.b32.i2p</code>
+            <button class="copy-btn" data-copy="abc123xyz456abcdef789xyz456abcdef789xyz456abcdef789xyz.b32.i2p">
+              <span class="copy-icon">📋</span><span class="copy-text" aria-live="polite">Copy</span>
+            </button>
+          </div>
+        </li>
         <li class="feature-enabled">🌍 GeoIP</li>
         <!-- PROJECT-SPECIFIC: Add project-specific feature flags here if applicable -->
       </ul>
@@ -21645,6 +21657,15 @@ document.addEventListener('click', function(e) {
     <div class="code-block">
       <code class="code-content">abc123xyz789.onion</code>
       <button class="copy-btn" data-copy="abc123xyz789.onion">📋</button>
+    </div>
+  </li>
+  <!-- I2P row mirrors Tor exactly — only rendered when features.i2p.enabled -->
+  <li class="feature-enabled">
+    🔗 I2P:
+    <span class="status status-ok">✅ healthy</span>
+    <div class="code-block">
+      <code class="code-content">abc123xyz789.b32.i2p</code>
+      <button class="copy-btn" data-copy="abc123xyz789.b32.i2p">📋</button>
     </div>
   </li>
   <li class="feature-disabled">📊 GeoIP</li>
