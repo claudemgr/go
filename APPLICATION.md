@@ -771,6 +771,10 @@ src/
     ├── tui/                # optional terminal UI
     └── cli/                # optional plain CLI commands/output
 assets/                     # BUILD-TIME ONLY: source tree embedded via //go:embed
+deps/                       # optional: committed, project-specific support
+                             # files not part of build/release output (e.g.
+                             # scripts or Dockerfiles for building a
+                             # dependency) — never a cache or temp/output dir
 docker/                     # REQUIRED: Dockerfile, compose.yaml, entrypoint.sh, README.md
 Makefile                    # build targets: build, release, docker, test, dev, clean
 scripts/                    # optional host-side Docker wrapper scripts; MUST NOT contain application logic

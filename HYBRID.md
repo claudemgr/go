@@ -1009,6 +1009,7 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 │   │   └── static/                  # static assets: CSS, JS, images (web frontend — PART 15)
 │   └── client/                # client binary (REQUIRED — talks to the server over the API, see PART 8)
 ├── assets/                 # BUILD-TIME ONLY: source tree embedded via //go:embed (fonts, icons, default themes, schemas, locales, default config)
+├── deps/                   # OPTIONAL: committed, project-specific support files not part of build/release output (e.g. scripts or Dockerfiles for building a dependency) — never a cache or temp/output dir
 ├── scripts/                # Production/install scripts (if any); host-side Docker wrapper scripts MUST NOT contain application logic
 ├── tests/                  # Repository-root executable integration test scripts (Go unit tests stay next to code as *_test.go)
 │   ├── run_tests.sh        # Auto-detect and run tests (REQUIRED)
