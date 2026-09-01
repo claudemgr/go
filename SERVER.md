@@ -34714,6 +34714,11 @@ server:
     deny_countries: []
     allow_countries: []
 
+    # Named, operator-authored country lists for reuse across allow/deny
+    # fields and environments. Ships empty — see "Country Blocking Presets"
+    # below for why no preset is bundled by default.
+    presets: {}
+
     # Which databases to download and use - all three are CC BY 4.0 and
     # require the attribution above whenever their data is used
     databases:
@@ -34731,6 +34736,7 @@ server:
 | `geoip.dir` | Directory the downloaded `.mmdb` files live in |
 | `geoip.deny_countries` | ISO 3166-1 alpha-2 codes to block; all others allowed |
 | `geoip.allow_countries` | ISO 3166-1 alpha-2 codes to allow exclusively; wins if both lists are set |
+| `geoip.presets` | Named operator-authored country lists (`name -> []code`), for reuse; empty by default — see Country Blocking Presets |
 | `geoip.databases.asn` | Enable ASN lookups |
 | `geoip.databases.country` | Enable country lookups |
 | `geoip.databases.city` | Enable city lookups |
@@ -34750,6 +34756,32 @@ server:
 - Country blocking requires the Country database; if it's missing or disabled, country blocking is skipped with a logged warning (fail-open per the risk-signal rule above)
 - Tor exit nodes are evaluated by exit-node country, not by any inferred user origin
 - Private/internal IPs (RFC 1918, RFC 4193, loopback) are never looked up or country-blocked
+
+## Country Blocking Presets (Operator-Defined, Never Auto-Applied)
+
+**The admin panel MUST let operators save the current `deny_countries` or
+`allow_countries` selection as a named, reusable preset** (`geoip.presets`,
+`name -> []code`) — so a list built once can be reapplied to other
+allow/deny fields or exported/imported across environments without
+hand-retyping ISO codes each time.
+
+**No preset ships pre-populated, and this project MUST NOT bundle a
+hardcoded regulatory country list (e.g. "OFAC sanctioned", "FATF high-risk")
+as a built-in default.** Every project in this family stays server-agnostic
+about jurisdiction and use case — sanctions/regulatory lists change over
+time, differ by regime, and a template-bundled list presented as current
+compliance guidance would go stale silently and could be relied on past the
+point it's accurate. That is the same "outcome asserted, mechanism/accuracy
+unverified" shape already fixed elsewhere in this spec (CVE CPE filtering,
+Trivy DB source) — bundling a specific sanctions list here would reintroduce
+it in a compliance-sensitive form.
+
+**Preset rules:**
+- A preset is only ever a name plus the country codes the operator entered — the project never fetches, infers, or auto-suggests preset contents from any external source
+- `deny_countries: []` / `allow_countries: []` remain the defaults on every fresh install regardless of what presets exist — allow all, deny none, unchanged by this feature
+- Selecting a preset in the admin UI only pre-fills `deny_countries`/`allow_countries` for the operator to review and save; it is never applied automatically or silently
+- If an operator needs a compliance-driven blocklist, they build and save it themselves as a preset, sourced from their own current legal/compliance review — never from a template default
+- Presets are a pure config-reuse convenience; the actually-enforced behavior is always driven by `deny_countries`/`allow_countries` at the time of the request, never by the preset name itself
 
 # PART 21: METRICS
 
