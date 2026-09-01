@@ -26519,6 +26519,7 @@ func trackingScript(r *http.Request) template.HTML {
 | Description | From branding config or project-specific |
 | Features | Key features list (project-specific) |
 | Links | GitHub, documentation, etc. |
+| Third-party attribution | GeoIP (DB-IP / NRO CC BY 4.0 notices — see PART 19: GEOIP), plus any other license-required attribution |
 
 **⚠️ CRITICAL: Content MUST come from IDEA.md - NEVER use generic placeholders.**
 
@@ -26571,8 +26572,16 @@ func trackingScript(r *http.Request) template.HTML {
       <li><a href="https://jokeapi.readthedocs.io">Documentation</a></li>
     </ul>
   </section>
+
+  <section class="attribution">
+    <h2>Third-Party Attribution</h2>
+    <p><a href="https://db-ip.com/">IP Geolocation by DB-IP</a></p>
+    <p>Country and ASN data licensed CC BY 4.0 by the Number Resource Organization (NRO).</p>
+  </section>
 </article>
 ```
+
+**GeoIP attribution content above is canonical — see PART 19: GEOIP → "License & Attribution" for the source of these notices; do not let this copy drift if that section is ever updated.**
 
 **Note:** Tor address is NOT shown here. Tor access is available via:
 - **Footer**: "Tor Support" link → `/server/help#tor-access` (shown when Tor is enabled)
@@ -28234,7 +28243,7 @@ All databases come from [sapics/ip-location-db](https://github.com/sapics/ip-loc
 | Country | CC BY 4.0 | NRO (RIR whois + geofeed + ASN data, merged) |
 | City | CC BY 4.0 | DB-IP |
 
-**Required, verbatim, on a page reachable from every screen that displays GeoIP-derived data (e.g. an "About" or footer link) AND in `LICENSE.md`'s third-party attribution section (see PART 2):**
+**Required, verbatim, on `/server/about` (see "Standard Pages" → /server/about) AND in `LICENSE.md`'s third-party attribution section (see PART 2):**
 
 ```html
 <a href="https://db-ip.com/">IP Geolocation by DB-IP</a>
