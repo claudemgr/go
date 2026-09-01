@@ -10011,8 +10011,14 @@ data:
   cve:
     # NVD (NIST National Vulnerability Database)
     source: "https://services.nvd.nist.gov/rest/json/cves/2.0"
-    # Only download CVEs relevant to project dependencies
-    filter_by_cpe: true
+    # Filtering the feed to "relevant" CVEs requires reliably deriving CPE
+    # (Common Platform Enumeration) strings from the project's dependency
+    # manifest. NVD's CPE dictionary doesn't map cleanly onto Go module
+    # paths, and no derivation is defined here — guessing wrong means a real
+    # CVE affecting a real dependency is silently never downloaded, with no
+    # error surfaced. Default to the full unfiltered feed; every CVE stays
+    # relevant until an actual, verified dependency-to-CPE mapping exists.
+    filter_by_cpe: false
 
   trivy:
     # Aqua Trivy vulnerability database (optional, for container scanning)
