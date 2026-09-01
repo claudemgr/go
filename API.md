@@ -9408,7 +9408,14 @@ data:
   trivy:
     # Aqua Trivy vulnerability database (optional, for container scanning)
     enabled: false
-    source: "https://ghcr.io/aquasecurity/trivy-db"
+    # trivy-db is an OCI artifact, not a plain HTTP-downloadable file — a
+    # bare `https://` GET against this repository path returns registry API
+    # JSON/HTML, never db.tar.gz. Pulling it requires an OCI registry client
+    # (e.g. go-containerregistry, the same library Trivy itself uses) that
+    # resolves the tag, fetches the manifest, and extracts the
+    # application/vnd.aquasec.trivy.db.layer.v1.tar+gzip layer blob. The tag
+    # is the DB schema version (currently 2), not "latest".
+    source: "ghcr.io/aquasecurity/trivy-db:2"
 ```
 
 ### Security Directory Structure
