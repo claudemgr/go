@@ -34211,7 +34211,7 @@ Every project MUST include these scheduled tasks:
 | `ssl_renewal` | Daily at 03:00 | Renew `{config_dir}/ssl/letsencrypt/{fqdn}/` certs 7 days before expiry | No |
 | `geoip_update` | Weekly (Sunday 03:00) | Download/update ip-location-db GeoIP databases | Yes |
 | `blocklist_update` | Daily at 04:00 | Download/update IP/domain blocklists | Yes |
-| `cve_update` | Daily at 05:00 | Download/update CVE/security databases | Yes |
+| `cve_update` | Daily at 05:00 | Download/update CVE (NVD) and Trivy vulnerability databases — trivy has no separate scheduled task despite its own directory/config; this task owns it too | Yes |
 | `update_check` | Daily at 06:00 | Check release channel for a newer version — notify-only unless `update.auto_install: true` (default false); honors `update.defer_days` | Yes |
 | `session_cleanup` | Every 15 minutes | Remove expired sessions | No |
 | `token_cleanup` | Every 15 minutes | Remove expired tokens | No |
