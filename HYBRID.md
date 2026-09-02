@@ -18562,7 +18562,7 @@ GET /api/{api_version}/items?status=active            ✓ Filtering
 | **Indentation** | 2 spaces — never tabs, never 4 spaces |
 | **Trailing newline** | Every JSON response ends with exactly one `\n` |
 | **No bare arrays at root** | Never emit a top-level JSON array — always wrap: `{ "data": [...] }`. Bare arrays cannot grow new sibling fields (pagination, metadata) without a breaking change, and some older clients reject them as JSON. |
-| **Success shape** | `{ "ok": true, "data": { ... } }` — `ok` is the discriminator; `data` carries the payload. Exception: health endpoints return the bare health object (see PART 12). |
+| **Success shape** | `{ "ok": true, "data": { ... } }` — `ok` is the discriminator; `data` carries the payload (object or array); list responses add a sibling `pagination` object (see "Standard Response Formats"). Exception: health endpoints return the bare health object (see PART 12). |
 | **Error shape** | `{ "ok": false, "error": "CODE", "message": "...", "details": {} }` — see PART 13 |
 
 ```go
@@ -19907,13 +19907,16 @@ Need additional compatible endpoints?"
 
 ```json
 {
-  "id": "item_123",
-  "name": "Example",
-  "created_at": "2024-01-15T10:30:00Z"
+  "ok": true,
+  "data": {
+    "id": "item_123",
+    "name": "Example",
+    "created_at": "2024-01-15T10:30:00Z"
+  }
 }
 ```
 
-*Returns the item directly without wrapper.*
+*The item is carried in `data` — every success response uses the `{ "ok": true, "data": ... }` envelope so it is programmatically distinguishable from errors.*
 
 #### Action Response (Create, Update, Delete)
 
@@ -19972,6 +19975,7 @@ Need additional compatible endpoints?"
 
 ```json
 {
+  "ok": true,
   "data": [],
   "pagination": {
     "page": 1,

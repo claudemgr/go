@@ -22392,13 +22392,16 @@ Need additional compatible endpoints?"
 
 ```json
 {
-  "id": "item_123",
-  "name": "Example",
-  "created_at": "2024-01-15T10:30:00Z"
+  "ok": true,
+  "data": {
+    "id": "item_123",
+    "name": "Example",
+    "created_at": "2024-01-15T10:30:00Z"
+  }
 }
 ```
 
-*Returns the item directly without wrapper.*
+*The item is carried in `data` — every success response uses the `{ "ok": true, "data": ... }` envelope so it is programmatically distinguishable from errors.*
 
 #### Action Response (Create, Update, Delete)
 
@@ -22455,6 +22458,7 @@ Need additional compatible endpoints?"
 
 ```json
 {
+  "ok": true,
   "data": [],
   "pagination": {
     "page": 1,
