@@ -14505,9 +14505,9 @@ func extractContextFromPath(path string) (*Context, error) {
 
 | Scenario | HTTP Status | Error |
 |----------|-------------|-------|
-| Invalid path format | 400 | `{"error": "invalid API path"}` |
-| Resource not found | 404 | `{"error": "resource not found"}` |
-| Rate limit exceeded | 429 | `{"error": "rate limit exceeded", "retry_after": 60}` |
+| Invalid path format | 400 | `{"ok": false, "error": "BAD_REQUEST", "message": "invalid API path"}` |
+| Resource not found | 404 | `{"ok": false, "error": "NOT_FOUND", "message": "resource not found"}` |
+| Rate limit exceeded | 429 | `{"ok": false, "error": "RATE_LIMITED", "message": "rate limit exceeded", "details": {"retry_after": 60}}` |
 
 ## Well-Known Files
 
@@ -26822,67 +26822,70 @@ func trackingScript(r *http.Request) template.HTML {
 
 ```json
 {
-  "summary": {
-    "data_stored_on_server": true,
-    "data_sold": false,
-    "user_control": true
-  },
-  "cookies": {
-    "essential": {
-      "enabled": true,
-      "description": "Required for the site to function. Includes security tokens (CSRF) and site preferences."
-    },
-    "preferences": {
-      "enabled": true,
-      "description": "Remember your settings such as theme (dark/light), language, and UI preferences."
-    },
-    "analytics": {
-      "enabled": true,
-      "description": "Help us understand how visitors use our site. Analytics data is anonymized and never sold."
-    }
-  },
+  "ok": true,
   "data": {
-    "sold": false,
-    "stored_on_server": true,
-    "sharing": [
-      {
-        "condition": "analytics",
-        "when": "Tracking configured AND user consents",
-        "data": "Anonymized: page views, browser type, country"
+    "summary": {
+      "data_stored_on_server": true,
+      "data_sold": false,
+      "user_control": true
+    },
+    "cookies": {
+      "essential": {
+        "enabled": true,
+        "description": "Required for the site to function. Includes security tokens (CSRF) and site preferences."
       },
-      {
-        "condition": "email",
-        "when": "SMTP configured for sending emails",
-        "data": "Email address, message content"
+      "preferences": {
+        "enabled": true,
+        "description": "Remember your settings such as theme (dark/light), language, and UI preferences."
       },
-      {
-        "condition": "user_initiated",
-        "when": "User explicitly shares content",
-        "data": "Whatever user chooses to share"
+      "analytics": {
+        "enabled": true,
+        "description": "Help us understand how visitors use our site. Analytics data is anonymized and never sold."
       }
-    ]
-  },
-  "tracking": {
-    "enabled": false,
-    "type": "",
-    "type_name": ""
-  },
-  "retention": {
-    "period": "Account data is retained while your account is active. Upon account deletion, all personal data is permanently deleted within 30 days.",
-    "export_available": true,
-    "deletion_available": true
-  },
-  "third_party": {
-    "services": []
-  },
-  "ccpa": {
-    "applicable": false,
-    "opt_out_url": "/server/privacy#ccpa-opt-out",
-    "user_opted_out": false
-  },
-  "content": {
-    "consent_message": "...",
-    "data_usage": "..."
+    },
+    "data": {
+      "sold": false,
+      "stored_on_server": true,
+      "sharing": [
+        {
+          "condition": "analytics",
+          "when": "Tracking configured AND user consents",
+          "data": "Anonymized: page views, browser type, country"
+        },
+        {
+          "condition": "email",
+          "when": "SMTP configured for sending emails",
+          "data": "Email address, message content"
+        },
+        {
+          "condition": "user_initiated",
+          "when": "User explicitly shares content",
+          "data": "Whatever user chooses to share"
+        }
+      ]
+    },
+    "tracking": {
+      "enabled": false,
+      "type": "",
+      "type_name": ""
+    },
+    "retention": {
+      "period": "Account data is retained while your account is active. Upon account deletion, all personal data is permanently deleted within 30 days.",
+      "export_available": true,
+      "deletion_available": true
+    },
+    "third_party": {
+      "services": []
+    },
+    "ccpa": {
+      "applicable": false,
+      "opt_out_url": "/server/privacy#ccpa-opt-out",
+      "user_opted_out": false
+    },
+    "content": {
+      "consent_message": "...",
+      "data_usage": "..."
+    }
   }
 }
 ```
@@ -30303,7 +30306,7 @@ on a Sunday counts as daily + weekly + monthly + yearly — uses highest priorit
 |-----------|----------------------|----------|
 | **CLI** | Interactive prompt | Prompts: `Enter backup password:` |
 | **WebUI** | Shows dialog | Password input dialog before restore |
-| **API** | Returns 400 error | `{"error": "password_required", "message": "Encrypted backup requires password"}` |
+| **API** | Returns 400 error | `{"ok": false, "error": "VALIDATION_FAILED", "message": "Encrypted backup requires password"}` |
 
 **CLI Restore:**
 
