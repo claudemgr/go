@@ -271,11 +271,11 @@ All paths in this document are relative to `{project_dir}` (the git repository r
 
 ### CRITICAL: AI.md Is the Source of Truth
 
-**About this file:** `AI.md` is the complete, authoritative specification for `{project_name}`. `IDEA.md` declares project-specific WHAT (scope, features, product identity); `SPEC.md` declares project-specific rule overrides. When code, docs, or prior sessions disagree with `AI.md`, `AI.md` wins — fix the drift, do not fix the spec to match the drift.
+**About this file:** `AI.md` is the complete, authoritative specification for `{project_name}`. `IDEA.md` declares project-specific WHAT (scope, features, product identity); `SPEC.md` declares project-specific rule overrides. When code, docs, or prior sessions disagree with `AI.md`, `AI.md` wins — fix the drift, do not fix the spec to match the drift. `SPEC.md` is the one file that can override `AI.md`: if the two conflict, `SPEC.md` wins — that is its purpose.
 
 ### CRITICAL: Keep Documentation in Sync
 
-`README.md`, `LICENSE.md`, man pages, `--help` output, and shell completions must never fall out of sync with actual behavior. Any change to CLI flags, config keys, routes, or modes updates every one of these in the same commit.
+`README.md`, `LICENSE.md`, man pages, `--help` output, and shell completions must never fall out of sync with actual behavior. Any change to CLI flags, config keys, routes, or modes updates every one of these in the same commit — and any API-surface change likewise updates the Swagger/OpenAPI spec and GraphQL schema docs (PART 13).
 
 ### CRITICAL: One Coherent Product
 
@@ -289,6 +289,17 @@ Single-process, single binary. Where APPLICATION-style specifications state the 
 ### CRITICAL: No Host Toolchain or Binary Execution
 
 Never run `go build`, `go run`, `go test`, or execute any produced binary directly on the host. All builds, tests, and binary execution happen in containers (`casjaysdev/go:latest` via Docker for builds/tests; Incus `debian:latest` for full OS/systemd integration testing of the server). See `~/.claude/memory/execution_hierarchy.md` and PART 6 (Toolchain, Build & Packaging).
+
+### CRITICAL: X11 AND Wayland Are Both Required
+
+If this project's GUI surface is in scope, it MUST support **both** X11 and Wayland as first-class display backends.
+
+- Wayland-only GUIs are not acceptable; X11-only GUIs are not acceptable
+- The chosen GUI stack/toolkit must be one that natively supports both, or the app must integrate both backends
+- Display detection at runtime must consider `WAYLAND_DISPLAY` AND `DISPLAY` and pick the appropriate backend
+- GUI smoke testing inside Docker MUST be runnable against both an X11 socket and a Wayland socket forwarded from the host
+- IDEA.md may declare GUI out of scope, but it may NOT declare "X11 only" or "Wayland only"
+- Reconciling X11/Wayland with the static-binary rule: use pure-Go display stacks that speak the X11/Wayland socket protocols directly, keeping `CGO_ENABLED=0` — X11 and Wayland are runtime-discovered display sockets, never link-time C dependencies
 
 ### CRITICAL: Go-Only Application
 
@@ -393,7 +404,7 @@ Every change is verified against ground truth before being reported as done — 
 |---|---|
 | Library/business logic | Run the relevant unit tests in-container; add a test if none covers it |
 | Behavior-preserving refactor | Run full test suite before and after; outputs must match |
-| CLI/TUI/GUI binary | Run the binary in-container (Incus) exercising the affected surface |
+| CLI/TUI/GUI binary | Run the binary in-container (Incus) exercising the affected surface; GUI changes are verified against both X11 and Wayland backends |
 | Single static binary requirement | `file` the produced binary; confirm no dynamic deps (`ldd` reports "not a dynamic executable" on Linux) |
 | Asset embedding | Confirm the binary runs with no external asset directory present |
 | Server routes (web + API) | Exercise both the web page and the JSON endpoint for the changed feature |
@@ -405,6 +416,10 @@ Every change is verified against ground truth before being reported as done — 
 | Logging/error paths | Trigger the error path; confirm the log line and the user-facing message differ appropriately (see PART 11) |
 | Security-sensitive change | Exercise the negative case (unauthenticated, malformed input, wrong token) |
 | Documentation/README | Diff rendered doc against the actual current behavior |
+| Frontend/web UI change | Load the affected page; verify light/dark themes, mobile-responsive layout, and that i18n keys resolve (PART 15, PART 26) |
+| Schema/migration change | Run migrations forward on a populated copy of the database in-container; confirm no data loss (PART 10) |
+| Health/observability change | Hit `/server/healthz` and the metrics endpoint; confirm no sensitive data appears in the output (PART 12, PART 19) |
+| i18n change | Every locale file contains the new/changed key and the English base file stays complete (PART 26) |
 | Type/lint/build correctness | Run `go vet`, `go build`, and the project lint gate in-container |
 
 Iterate until every applicable check passes — do not stop at "compiles." (Reference: Eivind Kjosbakken, *Towards Data Science*, 2026, on self-validating AI coding loops.)
@@ -427,6 +442,19 @@ New session → read `AI.md` (relevant PARTs) → read `IDEA.md`/`SPEC.md` → r
 ### Session Initialization
 
 On first read of a HYBRID project: (1) locate `AI.md`, confirm it is this specification; (2) read `IDEA.md` fully; (3) read `SPEC.md` if present; (4) read `TODO.AI.md`/`TODO.md`/`PLAN.AI.md`/`PLAN.md` if present; (5) check `git status --porcelain` for uncommitted drift; (6) confirm the project's actual directory layout matches PART 3; (7) confirm the build system matches PART 6; (8) confirm config matches PART 5; (9) proceed with the requested task.
+
+### Task → PART Reference
+
+| Task | Business Logic | Implementation |
+|------|----------------|----------------|
+| Operator token (`server.token`) | — | PART 11 |
+| Frontend/UI | IDEA.md | PART 15 |
+| API endpoints | IDEA.md | PART 13 |
+| Tests | IDEA.md | PART 23 |
+| Docker | — | PART 6 |
+| Config | IDEA.md | PART 5 |
+| CLI | — | PART 8 |
+| Translation/i18n | — | PART 26 |
 
 ### Rule Files to Create/Update
 
@@ -457,6 +485,34 @@ identify -format "%wx%h" file.png
 
 Resize with the first available tool in this order: `imagemagick` (`convert`/`magick`) → `graphicsmagick` (`gm convert`) → `libvips` (`vipsthumbnail`) → `sips` (macOS) → `ffmpeg`. Target a max dimension that keeps the image well under the read limit before invoking Read.
 
+## IDEA.md Migration
+
+**When this kicks in:** AI reads `IDEA.md` and finds it does NOT have all three required top-level sections (`## Project description`, `## Project variables`, `## Business logic`) in that order.
+
+**Detection:**
+```bash
+have_desc=$(grep -cE '^## Project description[[:space:]]*$' IDEA.md)
+have_vars=$(grep -cE '^## Project variables[[:space:]]*$' IDEA.md)
+have_logic=$(grep -cE '^## Business logic[[:space:]]*$' IDEA.md)
+
+if [ "$have_desc" = 1 ] && [ "$have_vars" = 1 ] && [ "$have_logic" = 1 ]; then
+  echo "IDEA.md is in current format"
+else
+  echo "IDEA.md needs migration: desc=$have_desc vars=$have_vars logic=$have_logic"
+fi
+```
+
+**Migration procedure (NEVER overwrite without confirmation):**
+1. **Detect** — run the check above; if all three sections exist exactly once, no migration needed
+2. **Backup** — `cp IDEA.md IDEA.md.preMigration.bak`; tell the user the backup path
+3. **Read the whole file** before proposing anything — do NOT skim
+4. **Map old content to the new sections** — pitch/overview → `## Project description`; variables/config keys → `## Project variables`; features/data models/endpoints/business rules → `## Business logic`
+5. **Inject required variables** if missing — `project_name` from `basename "$PWD"` (confirm with user); `project_org` from `basename "$(dirname "$PWD")"` (confirm with user); `internal_name` initial value MUST equal `project_name` (frozen forever after this)
+6. **Show the user the proposed rewrite** as a diff or full preview — wait for explicit approval before writing
+7. **Write the migrated file** only after approval; keep `.preMigration.bak` until the user confirms
+
+**Rules:** migration is one-time per project — do not re-run once in the three-section format. If old content doesn't fit cleanly, ASK — never invent a fourth section or silently drop content. If `internal_name` already differed from `project_name`, KEEP the existing value (the freeze rule applies). Verify the new `## Project variables` section is complete after migration.
+
 ## Translation Rule
 
 Every piece of user-facing text (UI labels, error messages shown to users, email templates, CLI help text) is a translation target under PART 26 (I18N & A11Y). Exceptions: internal logs, test fixtures, machine-readable output (JSON keys, exit codes).
@@ -478,7 +534,7 @@ Every piece of user-facing text (UI labels, error messages shown to users, email
 
 ### Audit (explicit-command-only)
 
-When explicitly asked to audit: (1) Code Compliance vs. this spec; (2) File Sync (docs vs. code); (3) Infrastructure Accuracy (Docker/CI vs. actual behavior); (4) AI Tool Configuration; (5) Documentation Sync; (6) FINAL CHECKPOINT — re-verify all of the above together; (7) fix issues found; (8) track remaining/large-batch issues in `AUDIT.AI.md`; (9) report to the user.
+When explicitly asked to audit: (1) Code Compliance vs. this spec; (2) File Sync (docs vs. code); (3) Infrastructure Accuracy (Docker/CI vs. actual behavior); (4) AI Tool Configuration; (5) Documentation Sync; (6) final checkpoint — re-verify all of the above together against the PART 30 checklists; (7) fix issues found; (8) track remaining/large-batch issues in `AUDIT.AI.md`; (9) report to the user.
 
 ## Common Drift Patterns
 
@@ -500,6 +556,173 @@ Never include AI attribution in commits, code comments, docs, or generated conte
 ## Remote Image / Screenshot Handling
 
 For a remote image URL: `curl -q -LSsf` to download it locally first, then Read the local file — never attempt to Read a bare URL.
+
+## Code Style Rules
+
+### Comment Placement
+
+**Comments MUST always be placed ABOVE the code they describe. NEVER inline or below.**
+
+```go
+// CORRECT
+// Calculate the total price including tax
+total := price * (1.0 + taxRate)
+
+// WRONG
+total := price * (1.0 + taxRate) // Calculate total price - WRONG (inline)
+```
+
+```yaml
+# CORRECT - comment above the key
+server:
+  # Server port number
+  port: 64580
+
+# WRONG - inline comments are forbidden
+# port: 64580  # Server port - WRONG (inline)
+```
+
+**Exception:** GitHub Actions SHA-pin version annotations stay inline — `uses: owner/action@{40-char-sha}  # vX.Y.Z` — Renovate reads and rewrites the same-line comment when bumping pins; never move it above the `uses:` line.
+
+**Comment validity by language:** JSON has NO comment syntax — never place comments in `.json` files or examples. CSS comments are `/* */` only — `//`/`#` are invalid CSS. JavaScript comments are `//` or `/* */` — never `#`.
+
+### Code Quality Rules
+
+| Rule | Description |
+|------|-------------|
+| **No inline comments** | Comments ALWAYS go above code, NEVER on the same line |
+| **No magic numbers** | Use named constants |
+| **No hardcoded strings** | Use constants or config |
+| **Error handling** | Always handle errors, never ignore |
+| **Input validation** | Validate ALL user input |
+| **SQL injection** | Parameterized queries only |
+| **XSS prevention** | Escape all output in templates |
+| **CSRF protection** | All forms must have CSRF tokens |
+| **`//nolint` suppressions** | Every `//nolint` directive MUST have an explanatory comment on the line immediately above it (the directive itself stays on its own line per Go linter convention) |
+| **Error discipline** | Never discard errors with `_` outside tests; wrap with context (`fmt.Errorf("doing X: %w", err)`); `panic` is forbidden outside `main` startup invariants and tests |
+
+### Formatting and Indentation
+
+| File Type | Indentation | Line Width | Trailing Newline | Format Tool |
+|-----------|-------------|------------|------------------|-------------|
+| **Go** | Tabs (required by `gofmt`) | No limit (soft 100, hard 120) | Single `\n` | `gofmt`/`goimports` |
+| **HTML** | 2 spaces | 120 | Single `\n` | Manual or prettier |
+| **JSON** | 2 spaces | 120 | Single `\n` | `json.MarshalIndent` |
+| **YAML** | 2 spaces | 120 | Single `\n` | Manual |
+| **CSS** | 2 spaces | 120 | Single `\n` | Manual or prettier |
+| **JavaScript** | 2 spaces | 120 | Single `\n` | Manual or prettier |
+| **Makefile** | Tabs (required) | 180 | Single `\n` | Manual |
+| **Shell scripts** | 2 spaces | 180 | Single `\n` | shellcheck/shfmt |
+| **Text responses** | N/A | N/A | Single `\n` | write response with trailing newline |
+
+**Universal rules:** any filetype not listed uses 2 spaces (4 if the ecosystem standard says so); tabs only where the format requires them. Every file ends with exactly ONE newline character — never blank lines at EOF (exceptions: raw-value secret/token files, verbatim-interpolated files, mid-line fragments, binary/generated artifacts). No trailing whitespace. Consistent indentation throughout each file.
+
+### Naming Conventions
+
+| Element | Convention | Example |
+|---------|------------|---------|
+| **Files** | `lowercase.go`, short, no underscores preferred; `_test.go` suffix for tests | `handler.go`, `email_test.go` |
+| **Packages** | `lowercase` (single word preferred) | `server`, `config`, `auth` |
+| **Functions/Methods** | `MixedCaps` — `CamelCase` exported, `camelCase` unexported | `GetUserByEmail()`, `validateInput()` |
+| **Types (structs/interfaces)** | `PascalCase` | `UserService`, `DBConnection` |
+| **Constants** | `CamelCase` (Go convention — no `SCREAMING_SNAKE`) | `MaxRetries`, `DefaultTimeout` |
+| **Variables** | `camelCase` | `userEmail`, `isValid`, `retryCount` |
+| **Interfaces** | `PascalCase` + `-er` suffix | `Reader`, `UserStore`, `Authenticator` |
+
+**Naming rules:** descriptive over cryptic (`GetUserByEmail()` not `GetUBE()`); no abbreviations (`configuration` not `cfg`) except well-known ones (`ID`, `URL`, `API`, `HTTP`, `HTML`, `JSON`, `SQL`, `CSS`, `JS`); verbs for functions, nouns for types; boolean prefixes (`isValid`, `hasAccess`, `canDelete`).
+
+**Intent-revealing names — names MUST reveal intent without reading the implementation.** Never use bare generic names for types, functions, or variables that could mean multiple things — `Mode`, `Type`, `Status`, `State`, `Config`, `Get()`, `Set()`, `Init()`, `New()`, `Load()`, `Save()`, `Run()`, `Start()`, `Stop()`, `Handle()`, `Process()`, `Validate()`, `Create()`, `Delete()`, `Update()`, `Check()`, `Detect()` all need a qualifying prefix/suffix that says what they operate on (e.g. `AppMode` not `Mode`, `GetUserByID()` not `Get()`, `IsAppModeDev()` not `IsDevelopment()`). The test: can someone understand the code WITHOUT reading the implementation?
+
+```go
+// GOOD - Clear, self-documenting
+func GetUserByEmail(ctx context.Context, db *sql.DB, email string) (*User, error) {
+	if !isValidEmail(email) {
+		return nil, fmt.Errorf("invalid email")
+	}
+	var u User
+	row := db.QueryRowContext(ctx, "SELECT id, email, created_at FROM users WHERE email = ?", email)
+	if err := row.Scan(&u.ID, &u.Email, &u.CreatedAt); err != nil {
+		return nil, fmt.Errorf("finding user: %w", err)
+	}
+	return &u, nil
+}
+```
+
+**Code readability:** self-documenting names, comments explain WHY not WHAT, single responsibility per function, short functions (~50 lines, extract if longer), early returns over deep nesting, `gofmt` always (never manual formatting).
+
+### File Organization
+
+| Rule | Description |
+|------|-------------|
+| **Focused files** | One cohesive concern per file (Go allows many files per package) |
+| **Meaningful names** | `user.go` not `u.go` |
+| **Group related code** | Keep related functions together |
+| **Separate concerns** | Don't mix handlers with business logic |
+
+## curl Command Standard (PROJECT-WIDE)
+
+**ALL curl commands in docs, examples, tests, and scripts MUST use this format:**
+
+```bash
+# standard GET
+curl -q -LSsf {url}
+# HEAD request
+curl -q -LSsfI {url}
+# output to file
+curl -q -LSsf -o {file} {url}
+# custom headers
+curl -q -LSsf -H "Authorization: Bearer TOKEN" {url}
+# POST with data
+curl -q -LSsf -X POST -d '{"key":"value"}' {url}
+```
+
+| Flag | Purpose |
+|------|---------|
+| `-q` | Quiet mode — don't read `.curlrc`, ensures consistent behavior |
+| `-L` | Follow redirects (301/302) |
+| `-S` | Show errors even in silent mode |
+| `-s` | Silent — no progress bar |
+| `-f` | Fail silently — return proper exit code on HTTP 4xx/5xx |
+
+**Exceptions:** interactive debugging may use `curl -v`; HTTP status-code testing uses `curl -q -LSs` (no `-f`) when capturing status with `-w "%{http_code}"`, since `-f` exits before returning the code.
+
+## Development Principles
+
+**EVERY principle below MUST be followed. No exceptions.**
+
+| Principle | Description |
+|-----------|-------------|
+| **Validate everything** | All input validated before processing |
+| **Only save valid** | Never persist invalid data to database/config |
+| **Never clear valid** | Don't destroy/overwrite valid data with invalid |
+| **Test Everything** | Comprehensive testing where applicable |
+| **Show Tooltips/Docs** | Help users understand the interface |
+| **Security First** | Security should never block usability |
+| **Mobile First** | Responsive design for all screen sizes (web frontend) |
+| **Sane Defaults** | Everything has sensible default values |
+| **No AI/ML** | Smart logic only, no machine learning |
+| **Concise Responses** | Short, descriptive, and helpful |
+| **Everything Configurable** | ALL settings MUST be configurable via `server.yml` |
+| **Live Reload** | Configuration changes apply immediately without restart (file-watch hot-reload); only listen address/port and database driver changes require restart, with a clear warning |
+| **Built-in Scheduler** | NEVER use cron, Task Scheduler, or external schedulers (PART 17) |
+| **File-Only Configuration** | `server.yml` is the sole source of truth — no admin web UI or API endpoints that mutate server configuration |
+
+### Sensitive Information Handling
+
+**NEVER expose sensitive information anywhere in the project** — credentials, connection strings, internal infrastructure details, or config internals — in `/server/healthz`, API responses, error messages, logs, or HTML/templates. Tokens/passwords are shown ONLY ONCE on generation (first run, password changes, token regeneration); never logged; never in error messages or stack traces; masked in the UI (`••••••••` or last 4 chars).
+
+## Handling Ambiguity
+
+When the specification is unclear: 1) check if it's clarified elsewhere in the spec; 2) look for similar patterns already handled; 3) ask the user — don't guess; 4) document the decision in AI.md for future reference.
+
+## Target Audience
+
+- Self-hosted users
+- SMB (Small/Medium Business)
+- Enterprise
+- **IMPORTANT: assume self-hosted and SMB users are NOT tech-savvy**
+
+---
 
 ---
 
@@ -607,6 +830,40 @@ Structure (PART 3) · Core app + server features (PART 2, 4, 8, 9, 10, 12–21 a
 | Any drift found | Fix immediately or log to `TODO.AI.md` — never leave undocumented |
 | Before every commit | Run the Self-Validation Loop (PART 0) for every changed surface |
 
+**Hook-enforced:** `spec-guard.sh` blocks Edit/Write on project files until `AI.md`/`SPEC.md` has been Read this session; the gate re-arms after every compaction.
+
+## Before / During / After Work
+
+**Before:** read the AI.md PART(s) relevant to the first task (not the whole file); check TODO.AI.md and TODO.md; verify understanding — ask first if anything is unclear; never assume.
+
+**During:** read the relevant spec PART(s) before each implementation; follow spec exactly, no unrequested "improvements"; check yourself every 3-5 changes; update TODO.AI.md/TODO.md as tasks complete; test changes before moving on; keep changes focused (one feature/fix per task); if uncertain, stop, re-read, or ask.
+
+**After:** update IDEA.md if features changed; never modify AI.md; update TODO.AI.md with newly discovered tasks; verify against the PART 30 checklists; update COMMIT_MESS only if files changed.
+
+## TODO.AI.md Completion
+
+**When ALL items in TODO.AI.md are completed:**
+
+**Subagents:** do not write COMMIT_MESS or call gitcommit — complete edits and report back to the parent instance to handle the commit.
+
+1. Remove each completed item from TODO.AI.md only after it is fully resolved and committed — never truncate the whole file at once
+2. Write COMMIT_MESS with title EXACTLY `all todo items have been completed`, and a body summarizing what was accomplished as bullet points
+
+```
+all todo items have been completed
+
+All tasks from TODO.AI.md have been completed.
+
+Implemented core application and server functionality.
+
+- Added mode module with production/development modes
+- Implemented SSL certificate handling
+- Created scheduler for background tasks
+- Wired operator token (`server.token`) authentication for protected endpoints
+```
+
+**This completion ritual applies ONLY to TODO.AI.md.** The human-owned `TODO.md` is never emptied or truncated by AI — AI may only mark individual items done in place.
+
 ## Self-Validation Loop
 
 See PART 0 § Self-Validation Loop — the same table and rules apply to all project-file and governance changes; not repeated here to avoid duplication.
@@ -707,6 +964,22 @@ Independently of which persona is active, the binary also has a **production/dev
 | Debug | `--debug` flag > `DEBUG` env > `MODE=debug` (defaults debug on) > default `false` |
 
 Six operational states result: production, production+debug, development, development+debug, debug (debug flag on by default), and debug with `DEBUG=false` (debug mode, debug endpoints off). In every state, operator/token authentication (`server.token`) is NEVER bypassed by debug mode — debug only ever adds observability (pprof endpoints, `/debug/*` API routes, verbose logging), never removes a security control. Development mode alone (without `--debug`) still keeps debug/pprof endpoints DISABLED. This mode/debug axis applies to the server persona; it has no meaning for a plain interactive GUI/TUI/CLI session.
+
+### Debug Endpoints (`--debug` / `DEBUG=true` Only)
+
+Debug endpoints are ONLY available when the debug flag is set; otherwise they return 404. They only ever add observability — operator/token authentication (`server.token`) still applies exactly as it does everywhere else.
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/debug/vars` | GET | Runtime variables (JSON) |
+| `/debug/config` | GET | Current configuration (sanitized) |
+| `/debug/routes` | GET | All registered routes |
+| `/debug/cache` | GET | Cache statistics |
+| `/debug/db` | GET | Database statistics |
+| `/debug/scheduler` | GET | Scheduler task status |
+| `/debug/memory` | GET | Memory usage statistics |
+| `/debug/tasks` | GET | Async task statistics |
+| `/debug/pprof/*` | GET | Go `net/http/pprof` profiling endpoints |
 
 ## Architectural Rule
 
@@ -1007,7 +1280,7 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 │   │   ├── middleware.go          # middleware chain (see Middleware Order below)
 │   │   ├── template/               # server-rendered HTML templates (web frontend — PART 15)
 │   │   └── static/                  # static assets: CSS, JS, images (web frontend — PART 15)
-│   └── client/                # client binary (REQUIRED — talks to the server over the API, see PART 8)
+│   └── client/                # optional dedicated CLI client for talking to a running server (PART 8)
 ├── assets/                 # BUILD-TIME ONLY: source tree embedded via //go:embed (fonts, icons, default themes, schemas, locales, default config)
 ├── deps/                   # OPTIONAL: committed, project-specific support files not part of build/release output (e.g. scripts or Dockerfiles for building a dependency) — never a cache or temp/output dir
 ├── scripts/                # Production/install scripts (if any); host-side Docker wrapper scripts MUST NOT contain application logic
@@ -1047,7 +1320,7 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 └── site.txt                # Official site URL (optional)
 ```
 
-**One binary, one `src/` tree:** the GUI/TUI/CLI entrypoints under `src/ui/` and the server package under `src/server/` are compiled into the SAME static binary — they are not separate build targets. `src/app/` holds logic shared by both capability sets (see PART 2 for the application/server model). `src/client/` is a separate, required binary that talks to `src/server/` over the API (see PART 8).
+**One binary, one `src/` tree:** the GUI/TUI/CLI entrypoints under `src/ui/` and the server package under `src/server/` are compiled into the SAME static binary — they are not separate build targets. `src/app/` holds logic shared by both capability sets (see PART 2 for the application/server model). `src/client/` (PART 8) is an optional, separate client binary that talks to `src/server/` over the API — present only when the project warrants a dedicated client build.
 
 **`assets/` (repo, build-time only):** holds source files — fonts, icons, default themes, schemas, locales, default config — embedded into the binary at compile time via `//go:embed`. This directory is **never** shipped or installed alongside the binary on a user's machine. Do not confuse it with `src/server/static/` (also embedded, but served over HTTP by the web frontend) or the runtime `{data_dir}`/`{config_dir}` (written at runtime, never committed).
 
@@ -1657,7 +1930,7 @@ require (
 # CHECKPOINT 2: PROJECT STRUCTURE VERIFICATION
 
 Before proceeding, confirm you understand:
-- [ ] Project directory structure
+- [ ] Project directory structure — native-app UI (`src/ui/{gui,tui,cli}`) and the server package (`src/server`) coexist under one `src/` tree
 - [ ] Variable syntax (`{}` = variable, no `{}` = literal)
 - [ ] All 4 OSes must be supported
 - [ ] Both AMD64 and ARM64 must be supported
@@ -1855,7 +2128,7 @@ Before proceeding, confirm you understand:
 - [ ] Each OS has specific paths for privileged and non-privileged users
 - [ ] Config file is ALWAYS `server.yml` (not .yaml)
 - [ ] Docker uses simplified paths (/config, /data)
-- [ ] All paths follow the {internal_org}/{internal_name} pattern
+- [ ] All non-Docker filesystem paths follow the {internal_org}/{internal_name} pattern (Docker uses `{project_name}` under `/config` and `/data`)
 
 ---
 
@@ -2034,12 +2307,14 @@ Prefer platform-standard user directories:
 
 | Purpose | Linux / BSD | macOS | Windows |
 |---------|-------------|-------|---------|
-| Config | `~/.config/{internal_org}/{internal_name}/` | `~/Library/Application Support/{internal_name}/config/` | `%AppData%\\{internal_org}\\{internal_name}\\config\\` |
-| Data | `~/.local/share/{internal_org}/{internal_name}/` | `~/Library/Application Support/{internal_name}/data/` | `%LocalAppData%\\{internal_org}\\{internal_name}\\data\\` |
-| Cache | `~/.cache/{internal_org}/{internal_name}/` | `~/Library/Caches/{internal_name}/` | `%LocalAppData%\\{internal_org}\\{internal_name}\\cache\\` |
-| Logs | `~/.local/state/{internal_org}/{internal_name}/logs/` | `~/Library/Logs/{internal_name}/` | `%LocalAppData%\\{internal_org}\\{internal_name}\\logs\\` |
+| Config | `~/.config/{internal_org}/{internal_name}/` | `~/Library/Application Support/{internal_org}/{internal_name}/` | `%AppData%\{internal_org}\{internal_name}\` |
+| Data | `~/.local/share/{internal_org}/{internal_name}/` | `~/Library/Application Support/{internal_org}/{internal_name}/` | `%LocalAppData%\{internal_org}\{internal_name}\` |
+| Cache | `~/.cache/{internal_org}/{internal_name}/` | `~/Library/Caches/{internal_org}/{internal_name}/` | `%LocalAppData%\{internal_org}\{internal_name}\cache\` |
+| Logs | `~/.local/log/{internal_org}/{internal_name}/` | `~/Library/Logs/{internal_org}/{internal_name}/` | `%LocalAppData%\{internal_org}\{internal_name}\logs\` |
 
 **Rule:** Both `{internal_name}` and `{internal_org}` anchor on-disk identifiers and stable OS-registered names (Bundle IDs, package IDs, dbus names, keychain entries, updater channels). A rename of `{project_name}` or `{project_org}` MUST NOT silently move user data or change those identifiers.
+
+**Full OS-specific privileged and user paths for server mode:** see the PART 3 per-OS path tables (Linux, macOS, BSD, Windows, Docker/Container).
 
 ---
 
@@ -2761,6 +3036,7 @@ PART 22 owns the service unit definitions; its units start the server persona as
 
 # PART 5: CONFIGURATION
 
+## YAML Comment Style
 
 **CRITICAL: ALL comments in YAML files MUST go ABOVE the setting, NEVER inline.**
 
@@ -4554,18 +4830,6 @@ web:
 
 ---
 
-# CHECKPOINT 4: CONFIGURATION VERIFICATION
-
-Before proceeding, confirm you understand:
-- [ ] Config file is `server.yml` (not .yaml)
-- [ ] Boolean handling uses `config.ParseBool()` - NEVER `strconv.ParseBool()`
-- [ ] All boolean inputs accept truthy/falsy values (yes, enable, oui, etc.)
-- [ ] Environment variables: some runtime, some init-only
-- [ ] Config auto-created on first run with sane defaults
-
----
-
-
 ## Runtime Detection, CLI Output & Non-Server-Mode Logging
 
 **The sections above cover the server's configuration model (`server.yml`, env vars, database-backed state). The rules below apply universally — to server mode AND to the binary's GUI/TUI/CLI modes (see PART 4) — for machine-fact detection, config layering, logging, and terminal output.**
@@ -4592,9 +4856,11 @@ All machine-dependent settings MUST be detected at runtime on the target machine
 - CLI override wins over env; env wins over config; config wins over defaults
 - Secrets must not be stored in world-readable files
 
+**In server mode, `server.yml` (see Configuration Storage above) is the sole source of truth for configuration; the same override order (CLI > env > config > defaults) applies to any flags server mode also accepts.**
+
 ### Logging & Log Rotation (Non-Server Modes)
 
-GUI/TUI/CLI modes write `app.log` and `error.log` to the platform log directory (see PART 3 → OS-Specific Paths). Rotation is built in — no external logrotate needed. **Server mode uses the same `rotate`/`keep` schema, writing `server.log` instead (see `logging:` under Configuration above) — the two share one rotation/retention implementation.**
+GUI/TUI/CLI modes write `app.log` and `error.log` to the platform log directory (see the PART 3 per-OS path tables). Rotation is built in — no external logrotate needed. **Server mode uses the same `rotate`/`keep` schema, writing `server.log` instead (see `logging:` under Configuration above) — the two share one rotation/retention implementation.**
 
 #### Rotation Options
 
@@ -4661,7 +4927,7 @@ logging:
 
 ### Standard CLI Flags
 
-#### Universal Flags (ALL Binaries)
+#### Universal Flags (ALL Binaries, Every Mode)
 
 | Flag | Short | Values | Description |
 |------|-------|--------|-------------|
@@ -4694,6 +4960,18 @@ When `NO_COLOR` is set and non-empty, disable ANSI color output. If the TUI depe
 | `TERM=dumb` | no auto-GUI | avoid | use CLI |
 | `NO_COLOR=1` | GUI unaffected unless project says otherwise | avoid color-dependent TUI | prefer CLI/plain |
 | stdout piped | avoid GUI | avoid TUI | use CLI |
+
+---
+
+# CHECKPOINT 4: CONFIGURATION VERIFICATION
+
+Before proceeding, confirm you understand:
+- [ ] Config file is `server.yml` (not .yaml)
+- [ ] Boolean handling uses `config.ParseBool()` - NEVER `strconv.ParseBool()`
+- [ ] All boolean inputs accept truthy/falsy values (yes, enable, oui, etc.)
+- [ ] Environment variables: some runtime, some init-only
+- [ ] Config auto-created on first run with sane defaults
+- [ ] Non-server modes (GUI/TUI/CLI) respect `NO_COLOR`, `TERM=dumb`, and layer CLI > env > config > defaults exactly like server mode
 
 ---
 
@@ -4809,6 +5087,10 @@ Bare `go …` invocations on the host are forbidden by PART 0 → "No Host Toolc
 - A static-binary self-check runs as part of CI (`ldd` on Linux artifacts must show "not a dynamic executable" or only kernel-vDSO; `otool -L` on macOS must show only Apple-provided frameworks; `dumpbin /dependents` on Windows must show no unexpected DLLs)
 - Project layout (`src/`, `assets/`, `docker/`, etc.) is defined in PART 3 — this PART does not repeat it
 
+## Project Layout
+
+See PART 3 for the full project layout (directory tree, module breakdown, and Docker asset placement).
+
 ## Naming Rules
 
 | Item | Rule | Example |
@@ -4822,6 +5104,8 @@ Bare `go …` invocations on the host are forbidden by PART 0 → "No Host Toolc
 | Go package name | lowercase, no underscores, no hyphens | `package myapp` |
 
 ## Binary Naming
+
+The project produces two possible binaries, both single static Go binaries built from the same module:
 
 **Pattern: `{project_name}[-type]-{os}-{arch}[.exe]`**
 
@@ -4837,7 +5121,7 @@ Bare `go …` invocations on the host are forbidden by PART 0 → "No Host Toolc
 | HYBRID | `jokes` | `jokes-linux-amd64` | `jokes-windows-amd64.exe` |
 | Client | `jokes-cli` | `jokes-cli-linux-amd64` | `jokes-cli-windows-amd64.exe` |
 
-### Directory Structure
+### Binary Output Directory Structure
 
 ```
 binaries/
@@ -5317,7 +5601,7 @@ make build
 - Each release MUST publish artifacts for at minimum: `{project_name}-linux-amd64`, `{project_name}-linux-arm64`, `{project_name}-darwin-amd64`, `{project_name}-darwin-arm64`, `{project_name}-windows-amd64.exe`, `{project_name}-windows-arm64.exe`, `{project_name}-freebsd-amd64`, `{project_name}-freebsd-arm64` (subset acceptable only when IDEA.md narrows platform scope); CLI client artifacts (`{project_name}-cli-*`) are published for the same platform matrix when `src/client/` exists
 - A static-linkage verification step is part of release: `ldd` / `otool -L` / `dumpbin /dependents` output is captured and checked against an allowlist (kernel vDSO, Apple system frameworks, Windows kernel32/user32 etc.) — anything outside the allowlist fails the release
 - No companion files (no `.so`, `.dylib`, `.dll`, no asset bundles, no font directories) ship next to the binary
-- Include two aggregate checksum files covering every release asset — `sha256.txt` (SHA-256) and `sha512.txt` (SHA-512), standard `{hash}  {filename}` format — uploaded as release assets; never per-artifact sidecar files
+- Include two aggregate checksum manifests covering every release asset — `sha256.txt` (SHA-256) and `sha512.txt` (SHA-512), standard `{hash}  {filename}` format — uploaded as release assets, never per-artifact sidecar files; computed LAST, after `version.txt`/source-archive/SBOM are added to the binaries directory, over the full and identical file list (`FILES="$(ls)"` captured once, reused for both manifests) so the two manifests always cover the same asset set and never hash each other
 - Include release notes that describe actual changes
 - Include an SBOM (always — generated via `cyclonedx-gomod`; see PART 24 for the invocation). Include provenance/attestation via `actions/attest-build-provenance` when the release platform supports it; always set `provenance: false` on `docker/build-push-action` steps
 - If GUI packaging exists (MSI, DMG, AppImage, deb, rpm, etc.), the package wraps the same single static binary plus desktop integration metadata; package metadata lives in `packaging/`
@@ -5353,7 +5637,15 @@ make build
 | File | Description | Example Content |
 |------|-------------|-----------------|
 | `version.txt` | Version string only | `1.2.3`, `20251218060432-beta`, `20251218060432` |
-| `{project_name}-{version}-source.tar.gz` | Source code archive | Excludes `.git`, `.github`, `binaries/`, `releases/` |
+| `{project_name}-{version}-source.tar.gz` | Source code archive | Excludes `.git`, `.github`, `.gitea`, `binaries/`, `releases/` |
+
+### version.txt Content
+
+| Release Type | version.txt Content |
+|--------------|---------------------|
+| Stable | `1.2.3` (semver without `v` prefix) |
+| Beta | `20251205143022-beta` (timestamp-beta) |
+| Daily | `a1b2c3d` (short commit id) |
 
 ## Release Types
 
@@ -5460,6 +5752,19 @@ format_version_tag() {
 }
 ```
 
+### Version Files
+
+| File | Purpose | When Updated |
+|------|---------|--------------|
+| `release.txt` | Source of truth for stable version | Manual |
+| `releases/version.txt` | Included in release archive | During release build |
+
+### Version Priority
+
+1. `VERSION` environment variable (if set)
+2. `release.txt` file (if exists)
+3. Create `release.txt` with `0.1.0` (first release)
+
 ### Release Summary
 
 | Type | Method | Version Example | Max Releases |
@@ -5483,6 +5788,7 @@ docker/
 ├── docker-compose.yml      # production compose — HUMAN USE ONLY
 ├── docker-compose.dev.yml  # development compose — HUMAN USE ONLY
 ├── docker-compose.test.yml # test compose — AI/AUTOMATED TESTING ONLY
+├── README.md               # how to build the image, run tests, run GUI with display forwarding
 └── rootfs/                 # build-time filesystem overlay copied into image at /   (project-specific)
     └── usr/local/bin/
         └── entrypoint.sh   # container entrypoint (REQUIRED)
@@ -5545,18 +5851,14 @@ CI workflows reference this image directly: `container: image: casjaysdev/go:lat
 | Internal port | **80** |
 | **ENV MODE** | **not set** — binary defaults to production; compose files set `MODE` explicitly (`production` / `development`) |
 
-### Dockerfile Rules
+### Container Runtime Rules
 
-| Rule | Description |
-|------|-------------|
-| **NEVER modify ENTRYPOINT** | Always use entrypoint.sh for customization |
-| **NEVER modify CMD** | Pass commands to entrypoint.sh instead |
-| **Privilege drop, not Dockerfile users** | NO `USER` directive and no user/group creation in the Dockerfile — the container starts as root and the binary creates its own user/group, creates its directories, sets permissions, then drops privileges after initialization (see "Privileged Port Binding (<1024)" for the run-mode and drop rules). Running permanently as root is the exception and MUST be documented in `IDEA.md`. |
-| **STOPSIGNAL** | Use `SIGRTMIN+3` for proper shutdown |
-| **ENTRYPOINT format** | `[ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]` |
-| **HEALTHCHECK timing** | Start: 10m, Interval: 5m, Timeout: 15s |
-| **Customization** | ALL customization via entrypoint.sh |
-| **entrypoint.sh tail** | Must end with `exec "$@"` (or `exec <binary> ... "$@"`) so the application replaces the shell as PID 1 and receives signals directly — without `exec`, tini/Docker signals are delivered to bash, not the app, and graceful shutdown breaks |
+Every production image MUST satisfy:
+
+- **Startup chain `tini → entrypoint.sh → app`** — `ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]`. Never override `ENTRYPOINT` or `CMD` to bypass `tini` or the entrypoint shim. All startup customization goes in `docker/rootfs/usr/local/bin/entrypoint.sh`, which MUST end with `exec "$@"` (or `exec <binary> ... "$@"`) so the application replaces the shell as PID 1 and receives signals directly — without `exec`, tini/Docker signals are delivered to bash, not the app, and graceful shutdown breaks.
+- **`STOPSIGNAL SIGRTMIN+3`** (systemd-compatible clean shutdown; works well with Docker, Podman, Kubernetes; allows entrypoint.sh to coordinate shutdown of all services; avoids race conditions before forced termination)
+- **`HEALTHCHECK`** — every production image declares a `HEALTHCHECK` that exits non-zero when the binary is unhealthy. Image default: start 10m, interval 5m, timeout 15s (conservative fallback for plain `docker run`); compose files override with tighter timings (start 90s, interval 10s, timeout 5s) — the compose values are authoritative for deployments
+- **Privilege drop, not Dockerfile users** — containers start as root with NO `USER` directive and no user/group creation in the Dockerfile. The binary itself creates its dedicated user/group, creates its directories, sets permissions, then drops privileges once initialization completes (see "Privileged Port Binding (<1024)" for the run-mode and drop rules). `entrypoint.sh` may export UID/GID env vars so the binary can match host ownership of mounted volumes. Running permanently as root (never dropping) is the exception and MUST be justified in `IDEA.md`.
 
 ### Dockerfile Example (Multi-Stage)
 
@@ -5760,6 +6062,46 @@ exec $APP_BIN $FLAGS "$@"
 
 **MODE vs DEBUG:** `MODE=production` (shortcut `prod` — the default) is strict: minimal logging, full output/log sanitization. `MODE=development` (shortcuts `dev` / `devel`) sits between production and debug: relaxed security, verbose logging, sanitization still fully enforced. `MODE=debug` is explicit opt-in only — NEVER implied or auto-enabled — with minimal sanitization (internals, dumps, stack traces may be exposed); credentials (keys, tokens, passwords, secrets) are ALWAYS redacted in every mode, no exceptions. `DEBUG=truthy` enables the debug endpoints (`/debug/*`) regardless of MODE; nothing else may auto-enable debug. Every mode uses the cache when one is configured — cache use is config-driven, not mode-driven. Boolean env vars accept all truthy/falsy values (see Boolean Values table in PART 5). Tor is auto-enabled if the `tor` binary is installed — no `ENABLE_TOR` flag needed; the Docker image always includes Tor.
 
+### Mandatory `docker run` Naming Convention
+
+Every `docker run` invocation in this project (CI, scripts, docs, examples) MUST use:
+
+```bash
+docker run --rm \
+  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  ...
+```
+
+- `--rm` — self-remove on exit (no orphaned containers)
+- `-it` — interactive-capable for log streaming and signal handling
+- `--name "${PROJECT_NAME}-XXXX"` — traceable name; `XXXX` is the 8-char lowercase-alphanumeric random suffix produced by `tr -dc 'a-z0-9' </dev/urandom | head -c8` (Makefile form: `$$(tr -dc 'a-z0-9' </dev/urandom | head -c8)`)
+
+There is no opt-out. Unnamed or persistent build/test containers are a spec violation.
+
+### Portability Rule
+
+No hardcoded org, project name, official site, or registry value may appear in any Dockerfile, workflow, or Makefile. Use build-time variables:
+
+| Context | Reference |
+|---------|-----------|
+| Dockerfile | `ARG PROJECT_ORG` / `ARG PROJECT_NAME` (passed via `--build-arg`) |
+| GitHub Actions | `${{ github.repository_owner }}` / `${{ github.event.repository.name }}` / `${{ github.event.repository.html_url }}` |
+| GitLab CI | `$CI_REGISTRY_IMAGE`, `$CI_PROJECT_NAMESPACE`, `$CI_PROJECT_NAME` |
+| Gitea / Forgejo | provider-supplied equivalents to the GitHub variables |
+| Jenkinsfile | `${env.JOB_NAME}`, `${env.GIT_URL}` (parse org/name) |
+| Makefile | `PROJECT_ORG ?= $(shell git remote get-url origin \| ...)` |
+
+This rule ensures every workflow, Dockerfile, and Makefile keeps working after a fork without editing values.
+
+### Build-Time vs Runtime Linkage of Display Libraries
+
+By default `casjaysdev/go:latest` carries no GUI-stack C dev libraries at link time, and `CGO_ENABLED=0` already guarantees the produced release binary has no **link-time** dependency on them. Whether the image ships them or not, that guarantee MUST hold: display-related C libraries reach the binary only via runtime loading, on demand, when a real GUI session is started.
+
+- **X11**: prefer pure-Go X11 protocol implementations (e.g., `jezek/xgb`) — no `libX11` involvement at any stage. Do not use cgo bindings that resolve libX11 symbols at link time.
+- **Wayland**: use a pure-Go Wayland client implementation, or a toolkit mode that loads `libwayland-client.so` lazily at runtime — never a link-time dependency.
+- **OpenGL / EGL / Vulkan**: when in scope, resolve symbols at runtime (e.g., via `purego` or the toolkit's runtime loader) so the binary stays portable across hosts with different GPU stacks.
+- After every release build, the static-linkage check (`ldd`, `otool -L`, `dumpbin /dependents`) MUST confirm there is no link-time dependency on `libX11` / `libwayland-client` / `libGL` / `libEGL` / `libVulkan`.
+
 ### X11 and Wayland Forwarding (Mandatory for GUI/Display Testing)
 
 GUI and display-aware test runs use the `gui` compose service (or equivalent `docker run` flags). Both X11 and Wayland forwarding MUST be supported; the spec does not pick one — the container detects what the host provides and forwards accordingly.
@@ -5791,6 +6133,8 @@ docker run --rm \
   --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
   -e WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
   -e XDG_RUNTIME_DIR=/tmp/xdg \
+  -e QT_QPA_PLATFORM=wayland \
+  -e GDK_BACKEND=wayland \
   -v "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY":"/tmp/xdg/$WAYLAND_DISPLAY" \
   --device /dev/dri \
   -v "$PWD":/work -w /work \
@@ -5848,6 +6192,8 @@ No `LABEL` blocks anywhere in `docker/Dockerfile*`. All metadata is passed at bu
     tags: ${{ steps.meta.outputs.tags }}
 ```
 
+`provenance: false` is REQUIRED on `docker/build-push-action` — it prevents a spurious `unknown/unknown` platform entry in the manifest list (use `actions/attest-build-provenance` for release binary attestation instead).
+
 See `dockerfile_conventions.md` → "OCI Annotations" for the complete list of required annotation keys.
 
 ### Container Paths
@@ -5895,6 +6241,21 @@ See `dockerfile_conventions.md` → "OCI Annotations" for the complete list of r
 | `/data/backups/{project_name}/` | Backup archives |
 | `/usr/local/bin/{project_name}` | Application binary |
 
+**Expected host directory structure (auto-created by binary on first run):**
+
+```text
+./volumes/
+├── config/
+│   └── {project_name}/        # App config
+└── data/
+    ├── {project_name}/        # App data
+    ├── db/
+    │   ├── sqlite/           # SQLite databases (server.db)
+    │   └── valkey/           # Valkey (if multi-service)
+    ├── log/
+    └── backups/
+```
+
 **Key principles:**
 - Binary owns Tor completely — Tor dirs are under `{project_name}/`, not separate
 - All SQLite databases in `/data/db/sqlite/` (not scattered)
@@ -5931,22 +6292,25 @@ See `dockerfile_conventions.md` → "OCI Annotations" for the complete list of r
 
 ## Docker Compose Requirements
 
-**Locations:** `docker/docker-compose.yml` (production) · `docker/docker-compose.dev.yml` (development) · `docker/docker-compose.test.yml` (automated testing)
+**Locations:** `docker/docker-compose.yml` (production) · `docker/docker-compose.dev.yml` (human development only — AI must never run it) · `docker/docker-compose.test.yml` (automated testing — AI's preferred interface is the project's `tests/` scripts, not invoking this file directly; direct invocation is only a fallback when no `tests/` script exists yet)
 
 | Requirement | Value |
 |-------------|-------|
-| `build:` | **NEVER include** |
+| `build:` | **NEVER include** — all three compose files pull registry images |
 | `image:` tag | `:latest` in `docker-compose.yml` (production) · `:devel` in `docker-compose.dev.yml` and `docker-compose.test.yml` |
 | `version:` | **NEVER include** |
-| `name:` | `{project_name}` (top-level) |
-| `container_name:` | `{project_name}-app` (main), `{project_name}-cache` (Valkey) |
-| Main service name | `{project_name}` (matches project name) |
-| `pull_policy:` | `always` |
-| `restart:` | `always` |
-| `x-logging:` | Anchor for consistent logging (see below) |
-| Network | Custom `{project_name}` with `external: false` |
+| `name:` | `{project_name}` (production) · `{project_name}-dev` (dev) · `{project_name}-test` (test) |
+| `container_name:` | `{project_name}-app` (production and dev main) · `{project_name}-test` (test main) · `{project_name}-cache` / `{project_name}-cache-test` (Valkey) |
+| Main service name | `{project_name}` (matches project name in every variant) |
+| `pull_policy:` | `always` on every service |
+| `restart:` | `always` (production/dev) · `"no"` (test — services are ephemeral) |
+| `x-logging:` | Anchor for consistent logging (see below); applied to every service via `logging: *default-logging` |
+| Network | Named to match the compose file's `name:` (`{project_name}`, `{project_name}-dev`, or `{project_name}-test`) — never a `-net` or other suffix; `external: false` |
 | Environment variables | **Hardcode with sane defaults** (NEVER use .env files); always YAML map style (`KEY: value`), never list style (`- KEY=value`) |
 | **environment: DEBUG/MODE** | `docker-compose.yml` sets **neither** `DEBUG` nor `MODE` (production defaults apply) · `docker-compose.dev.yml` and `docker-compose.test.yml` both set `DEBUG: true` and `MODE: development` |
+| Valkey cache service | Included in `docker-compose.yml` and `docker-compose.test.yml`; **never** in `docker-compose.dev.yml` |
+| `172.17.0.1:` bind | Used in `docker-compose.yml` and `docker-compose.test.yml`; **never** in `docker-compose.dev.yml`, which uses a plain `"{port}:80"` publish |
+| Layout order | `name:` → `x-logging` anchor → `services:` → environment map → `volumes:` → `ports:` → `healthcheck:` → `depends_on:` → `networks:` → top-level `networks:` block |
 
 ### Logging Anchor
 
@@ -6085,12 +6449,12 @@ services:
       DEBUG: true
       MODE: development
       TZ: America/New_York
-    ports:
-      # Development: accessible from all interfaces, no 172.17.0.1 bind
-      - "64580:80"
     volumes:
       - ./volumes/config:/config:z
       - ./volumes/data:/data:z
+    ports:
+      # Development: accessible from all interfaces, no 172.17.0.1 bind
+      - "64580:80"
     healthcheck:
       test: ["CMD", "/usr/local/bin/{project_name}", "--status"]
       interval: 10s
@@ -6199,11 +6563,11 @@ rm -rf "$TEMP_DIR"
 
 Three compose files ship in the `docker/` directory:
 
-| File | Image Tag | Cache | Purpose |
-|------|-----------|-------|---------|
-| `docker/docker-compose.yml` | `:latest` | Valkey, `{project_name}-cache` (persistent volume) | Production deployment |
-| `docker/docker-compose.dev.yml` | `:devel` | None | Local development (human use only) |
-| `docker/docker-compose.test.yml` | `:latest` | Valkey, `{project_name}-cache-test` (ephemeral `tmpfs`) | Automated testing |
+| File | Image Tag | Cache | `172.17.0.1:` bind | Who runs it |
+|------|-----------|-------|---------------------|--------------|
+| `docker/docker-compose.yml` | `:latest` | Valkey, `{project_name}-cache` (persistent volume) | Yes | Human — production deployment |
+| `docker/docker-compose.dev.yml` | `:devel` | None | No | Human only — AI never runs this |
+| `docker/docker-compose.test.yml` | `:devel` | Valkey, `{project_name}-cache-test` (ephemeral `tmpfs`) | Yes | AI/automated testing, preferably via `tests/` scripts |
 
 **Build Commands:**
 ```bash
@@ -6213,6 +6577,18 @@ docker build -t {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:late
 # Development image (context is project root)
 docker build -t {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:devel -f docker/Dockerfile.dev .
 ```
+
+**Service Naming Convention:**
+
+| Service Type | Service Name | Container Name |
+|--------------|---------------|------------------|
+| Main app (production) | `{project_name}` | `{project_name}-app` |
+| Main app (dev) | `{project_name}` | `{project_name}-app` |
+| Main app (test) | `{project_name}` | `{project_name}-test` |
+| Database | `{project_name}-db` | `{project_name}-db` |
+| Cache (Valkey, production) | `{project_name}-cache` | `{project_name}-cache` |
+| Cache (Valkey, test) | `{project_name}-cache-test` | `{project_name}-cache-test` |
+| Proxy (Nginx) | `{project_name}-proxy` | `{project_name}-proxy` |
 
 ### Build-Time `docker/rootfs/` vs Runtime `./volumes/` (CRITICAL — Understand This)
 
@@ -6242,7 +6618,7 @@ docker/
     ├── config/
     └── data/
 
-# Development (temp dir):
+# AI testing (temp dir):
 $TEMP_DIR/
 ├── docker-compose.yml   # copied from repo
 └── volumes/             # RUNTIME - created in temp
@@ -6280,39 +6656,37 @@ $TEMP_DIR/
 
 **Rules:**
 - Production volumes use `:z` suffix (SELinux shared label)
-- Development volumes omit `:z` (not needed in temp dir)
+- AI test-run volumes (temp dir) omit `:z` (not needed in temp dir)
 - `docker/rootfs/` is for container overlay (entrypoint.sh, service configs) — NOT for runtime volumes
 - NEVER commit runtime `volumes/` from local runs
 
-### Running Docker Compose
+### Running Docker Compose (AI / Automated Testing)
 
-**NEVER run docker compose in the project directory. Always use the temp directory workflow:**
-1. Create unique temp dir with the project org prefix
-2. Copy `docker/docker-compose.yml` to temp dir
+**AI must NEVER run `docker-compose.yml` or `docker-compose.dev.yml` — those are human-only.** AI's preferred interface for testing is the project's `tests/` directory scripts (`tests/docker.sh`, `tests/run_tests.sh`), which wrap the temp-dir copy/run/cleanup sequence below. Direct invocation of `docker-compose.test.yml` is only a fallback when no `tests/` script exists yet.
+
+**When a direct invocation is unavoidable, always use the temp directory workflow:**
+1. Create unique temp dir with `{project_org}` prefix
+2. Copy `docker/docker-compose.test.yml` to temp dir (as `docker-compose.yml`)
 3. Create `volumes/` structure in temp dir
 4. Run docker compose from temp dir
 5. Data lives in temp dir, isolated from project
 
 ```bash
-# Setup (uses OS temp dir: {ostempdir}/{project_org}/{internal_name}-XXXXXX/)
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 
-# Copy docker-compose.yml
-cp "$PROJECT_ROOT/docker/docker-compose.yml" "$TEMP_DIR/"
+cp "$PROJECT_ROOT/docker/docker-compose.test.yml" "$TEMP_DIR/docker-compose.yml"
 
-# Run from temp dir - ./volumes/ resolves to $TEMP_DIR/volumes/
-cd "$TEMP_DIR" && docker compose up -d
+cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
 
-# Stop and cleanup
 cd "$TEMP_DIR" && docker compose down
 rm -rf "$TEMP_DIR"
 ```
 
 **Example paths:**
-```
+```text
 /tmp/netutils/pastebin-aB3xY9/      # Example: pastebin project
 /tmp/apimgr/jokes-k9mN2p/           # Example: jokes project
 /tmp/casapps/linktree-Qw5rT1/       # Example: different org
@@ -6320,20 +6694,20 @@ rm -rf "$TEMP_DIR"
 
 **Why temp dir:** project directory stays clean; data isolated from source code; multiple instances possible; safe cleanup.
 
-**NEVER:** run docker compose in project directory · run docker compose with `--project-directory` pointing to project root · mount volumes to `{project_root}/volumes/`.
+**NEVER:** run `docker-compose.yml` or `docker-compose.dev.yml` as AI — those are human-only; run docker compose in the project directory; run docker compose with `--project-directory` pointing to project root; mount volumes to `{project_root}/volumes/`.
 
 ### Port Mapping
 
 | Mode | Format | Example |
 |------|--------|---------|
-| Development | `{randomport}:80` | `64580:80` |
-| Production | `172.17.0.1:{randomport}:80` | `172.17.0.1:64580:80` |
+| Development (human) | `{randomport}:80` | `64580:80` |
+| Production / Test | `172.17.0.1:{randomport}:80` | `172.17.0.1:64580:80` |
 
 **Rules:**
-- Internal port defaults to `80` (override with `PORT` env var)
+- Internal port is always `80` (`PORT: 80` in every compose file; override with `PORT` env var)
 - External port is random unused port in `64xxx` range
-- Production binds to Docker bridge IP (`172.17.0.1`) for security
-- Development binds to all interfaces for easier access
+- Production and test bind to Docker bridge IP (`172.17.0.1`) for security
+- Development binds to all interfaces for easier human access
 - If changing internal port, update docker-compose port mapping to match
 
 ### Environment Variables (Compose)
@@ -6346,6 +6720,7 @@ rm -rf "$TEMP_DIR"
 | **NEVER** | Create `.env`, `.env.example`, `.env.sample` files |
 | **ALWAYS** | Hardcode values directly in docker-compose.yml |
 | **ALWAYS** | Use sane, working defaults |
+| **ALWAYS** | YAML map style (`KEY: value`), never list style (`- KEY=value`) |
 
 **Why hardcoded defaults?** Works out of the box — no setup required; no confusion about required variables; no outdated `.env.example` files to maintain; users can override by editing docker-compose.yml directly.
 
@@ -9588,9 +9963,9 @@ In HYBRID projects the server binary is a self-contained deployable that can als
 
 ### Overview
 
-**client is REQUIRED for all projects.**
+**Every project MUST provide client access to the server — either the server binary acting as its own client or a dedicated client build (see the intro above); the dedicated `src/client/` build itself is OPTIONAL.**
 
-Every server MUST have a companion client. The client provides terminal-based access to all server functionality and is essential for:
+The client provides terminal-based access to all server functionality and is essential for:
 - Scripting and automation
 - Headless/SSH environments
 - CI/CD pipelines
@@ -9893,7 +10268,38 @@ func detectMode(args []string) string {
 
 ### Display Package (`package display`)
 
-**Defined here in PART 8; referenced throughout this document. `src/common/display/detect.go` holds the core detection logic, with platform-specific `detectPlatformDisplay()` implementations split across build-tagged files.**
+**ALL binaries (server, CLI) MUST detect the display environment and adapt output accordingly.** Defined here in PART 8; referenced throughout this document. These symbols (`DetectDisplayEnv`, `DisplayEnv`, `DisplayMode`, `SizeMode`, `TerminalSize`, `GetTerminalSize`) live in `src/common/display/` and `src/common/terminal/` and are shared across every binary and surface. `src/common/display/detect.go` holds the core detection logic, with platform-specific `detectPlatformDisplay()` implementations split across build-tagged files.
+
+#### Display Mode Hierarchy
+
+| Mode | When Used | Requirements |
+|------|-----------|--------------|
+| **GUI** | Native display available, CLI binary only | X11, Wayland, Windows, macOS |
+| **TUI** | Terminal available, interactive | TTY, SSH, mosh, screen, tmux |
+| **CLI** | Command provided or piped output | Any environment |
+| **Headless** | No display, no TTY | Daemon, service, cron |
+
+#### Platform Detection
+
+| Platform | Display Check | Notes |
+|----------|---------------|-------|
+| **Linux/BSD** | `WAYLAND_DISPLAY` or `DISPLAY` | Wayland preferred over X11 |
+| **macOS** | Always (unless SSH) | Native Cocoa display |
+| **Windows** | Always (unless service) | Native Win32 display |
+| **SSH/Mosh** | `SSH_CLIENT`, `SSH_TTY`, `MOSH` | No GUI, TUI or CLI only |
+
+#### Module Layout
+
+```text
+src/
+├── common/
+│   ├── display/                     # Display/terminal detection
+│   │   ├── detect.go                # Core detection logic (DetectDisplayEnv)
+│   │   ├── detect_unix.go           # Linux/BSD/macOS detection (build-tagged)
+│   │   └── detect_windows.go        # Windows detection (build-tagged)
+│   └── terminal/                    # Terminal utilities
+│       └── size.go                  # Terminal size and breakpoints (GetTerminalSize)
+```
 
 ```go
 // src/common/display/detect.go
@@ -10179,6 +10585,8 @@ func (s SizeMode) ShowBorders() bool     { return s >= SizeModeCompact }
 func (s SizeMode) ShowSidebar() bool     { return s >= SizeModeWide }
 func (s SizeMode) ShowIcons() bool       { return s >= SizeModeMinimal }
 ```
+
+**For `TERM=dumb` handling and disabling ANSI escapes, see PART 5 "NO_COLOR Support".**
 
 ### Display Environment Detection (CLI-Specific)
 
@@ -11877,7 +12285,7 @@ server:
 | `--config` | Multiple config profiles |
 | `--output` | Multiple output formats (json/table/plain) |
 
-**`--debug` is NOT optional — it is required on all binaries (see FINAL CHECKPOINT).**
+**`--debug` is NOT optional — it is required on all binaries (see the PART 30 checklists).**
 
 #### Flag Argument Syntax (ALL Binaries)
 
@@ -14068,7 +14476,7 @@ func isSerializationError(err error) bool {
 | SQL query (parameterized, parameters redacted) and EXPLAIN output | DB layer | Performance / bug hunting |
 | Cache hit/miss/eviction patterns | Cache layer | Tuning |
 | Internal IP / hostname of upstream services in error messages | Network layer | Diagnosing routing issues |
-| Goroutine dump, pprof profiles, expvar | `/api/{api_version}/debug/*` (PART 4) | Already debug-gated; reaffirmed |
+| Goroutine dump, pprof profiles, expvar | `/api/{api_version}/debug/*` (PART 2 → "Debug Endpoints") | Already debug-gated; reaffirmed |
 | Config file path reminder (after first install) | Startup banner | Helps the operator find and edit `server.yml` |
 
 **Debug mode response shape:**
@@ -21967,23 +22375,23 @@ document.addEventListener('click', function(e) {
 }
 ```
 
-### Node/URL Lists
+### Endpoint/URL Lists
 
-**For endpoint/URL lists (upstream services, mirrors, etc.):**
+**For endpoints, mirror URLs, listen addresses, etc.:**
 
 ```html
-<ul class="node-list">
+<ul class="endpoint-list">
   <li>
     <div class="code-block">
-      <code class="code-content">https://node1.example.com</code>
-      <button class="copy-btn" data-copy="https://node1.example.com">📋</button>
+      <code class="code-content">https://app.example.com</code>
+      <button class="copy-btn" data-copy="https://app.example.com">📋</button>
     </div>
     <span class="badge badge-primary">👑 Primary</span>
   </li>
   <li>
     <div class="code-block">
-      <code class="code-content">https://node2.example.com</code>
-      <button class="copy-btn" data-copy="https://node2.example.com">📋</button>
+      <code class="code-content">https://mirror.example.com</code>
+      <button class="copy-btn" data-copy="https://mirror.example.com">📋</button>
     </div>
     <span class="status status-ok">✅</span>
   </li>
@@ -21991,8 +22399,8 @@ document.addEventListener('click', function(e) {
 ```
 
 ```css
-/* Node list - mobile-first */
-.node-list {
+/* Endpoint list - mobile-first */
+.endpoint-list {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -22001,14 +22409,14 @@ document.addEventListener('click', function(e) {
   gap: 0.5rem;
 }
 
-.node-list li {
+.endpoint-list li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
 
-.node-list .code-block {
+.endpoint-list .code-block {
   flex: 1;
   min-width: 0;
 }
@@ -22080,7 +22488,7 @@ html.theme-light {
 
 ### Functions
 
-Before writing a new function, search for an existing one with the same or similar behavior — in the same package, in `helpers.go`/`helpers.rs`, in existing handlers/validators/middleware — and call or extend it instead of re-implementing the logic. Two near-identical functions that differ only in a hardcoded value are a sign the existing function should take that value as a parameter instead of being copy-pasted.
+Before writing a new function, search for an existing one with the same or similar behavior — in the same package, in `helpers.go`, in existing handlers/validators/middleware — and call or extend it instead of re-implementing the logic. Two near-identical functions that differ only in a hardcoded value are a sign the existing function should take that value as a parameter instead of being copy-pasted.
 
 ### Variables & Constants
 
@@ -22649,18 +23057,16 @@ func nextTheme(current string) string {
 
 No JS required — each button is a real form submit that sets the `theme` cookie server-side and redirects back (303 See Other), exactly like the authenticated theme toggle. External JS may intercept the submit to apply the theme class without a reload (progressive enhancement, not a requirement).
 
-### Profile Icon
+### User Menu
 
-**Session dropdown accessible via icon in header. Follows GitHub/GitLab patterns.**
+**Dropdown accessible via user icon in header — shown after `sys_` token login (core) and for the admin session (PART 28). Follows GitHub/GitLab patterns. Without a session the header shows the Guest Header above.**
 
-**(Shown only when a session exists — a per-system-user `sys_` token login (core), or the admin token login when the admin panel is enabled — PART 28. Without a session the header shows the Guest Header above.)**
-
-**Profile Icon Behavior:**
+**User Menu Behavior:**
 
 | Feature | Description |
 |---------|-------------|
 | **Position** | Header, right side, last item |
-| **Icon** | Default user icon |
+| **Icon** | Default user icon (no uploaded avatars — identity is the system user) |
 | **Size** | 32x32px, circular |
 | **Click** | Opens dropdown menu below icon |
 | **Keyboard** | Enter/Space opens dropdown, Escape closes |
@@ -22669,19 +23075,19 @@ No JS required — each button is a real form submit that sets the `theme` cooki
 
 | Item | Link | Description |
 |------|------|-------------|
-| **Username** | - | Display current system username (not clickable, header) |
+| **Username** | - | Display authenticated system username (not clickable, header) |
 | **Preferences** | `/server/preferences` | Theme, language, cookie/privacy preferences |
 | *(divider)* | - | - |
 | **Theme** | - | Theme toggle (Dark/Light/Auto) |
 | *(divider)* | - | - |
 | **Help** | `/server/help` | Help documentation |
-| **Sign out** | `/server/auth/logout` | Log out |
+| **Sign out** | `/server/auth/logout` | End the token session |
 
 **HTML Structure:**
 ```html
 <div class="profile-menu" aria-label="User menu">
   <button class="profile-button" aria-haspopup="true" aria-expanded="false">
-    <svg class="user-icon"><!-- user SVG --></svg>
+    <svg class="avatar" aria-hidden="true"><!-- default user icon --></svg>
     <svg class="dropdown-arrow"><!-- chevron --></svg>
   </button>
   <div class="profile-dropdown" role="menu" hidden>
@@ -22726,6 +23132,13 @@ No JS required — each button is a real form submit that sets the `theme` cooki
   gap: 0.25rem;
 }
 
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .profile-dropdown {
   position: absolute;
   top: 100%;
@@ -22746,7 +23159,7 @@ No JS required — each button is a real form submit that sets the `theme` cooki
 }
 
 .dropdown-item:hover {
-  background: var(--color-hover);
+  background: var(--color-bg-hover);
 }
 
 .dropdown-divider {
@@ -23581,7 +23994,7 @@ document.cookie = "lang=fr; path=/; max-age=31536000; SameSite=Lax";
 - Never store PII in cookies or localStorage
 - Always fall back to a safe default when a cookie is missing or invalid
 
-**Cross-device preference sync (export/import — stateless, no PART 34 required):**
+**Cross-device preference sync (export/import — stateless, no account system required):**
 
 Preferences aren't tied to identity — any two guests who set the same `theme`/`lang` produce the same code/URL, because the code/URL *is* the preference values, not a lookup key. This lets a preference be carried to a new browser/device without an account and without the server ever storing anything.
 
@@ -23591,7 +24004,7 @@ Preferences aren't tied to identity — any two guests who set the same `theme`/
   - **Full URL** — `https://{host}/server/preferences/import?theme=dark&lang=fr`: a plain query string, human-readable, and stable across schema changes (a link made before a new preference key existed just omits it on import).
   - **Short code** — `base64url(theme=dark&lang=fr)`: the query string alone, for manual retyping on a device without copy/paste; the import form strips a leading `https://.../server/preferences/import?` if pasted with it.
 - **Import** (`GET /server/preferences/import?theme=dark&lang=fr`, API-mirrored at `GET /api/{api_version}/server/preferences/import`, or a paste-a-code field feeding the same route): validates each parameter against its normal enum/BCP-47 allowlist — reject or drop anything unknown or malformed, an imported value is still untrusted input — sets the matching cookies, then `303 See Other` to `/` (or the referring page) so the code never lingers in the visible URL or browser history.
-- No account, no DB row, no PART 34 dependency — decode → validate → set cookie → redirect happens in the one request; nothing is written or looked up server-side.
+- No account, no DB row, no account-system dependency — decode → validate → set cookie → redirect happens in the one request; nothing is written or looked up server-side.
 
 ### Offline Behavior
 
@@ -25906,7 +26319,7 @@ When the admin panel is enabled (PART 28) these are also editable at `/server/{a
 
 | Source | Format | Example |
 |--------|--------|---------|
-| Local file | File path | Set `branding.logo_path` in config to an absolute file path (or upload via the admin panel — PART 28) |
+| Local file | File path | Set `server.branding.logo` in config to an absolute file path (or upload via the admin panel — PART 28) |
 | Remote URL | URL input | `https://example.com/logo.png` |
 | Embedded default | - | Built-in fallback |
 
@@ -27552,8 +27965,8 @@ curl -H "Accept: application/xml" https://jokes.example.com/api/v1/joke</code></
 
   <h4>Onion Address</h4>
   <div class="code-block">
-    <code class="code-content">{{ .TorAddress }}</code>
-    <button type="button" class="copy-btn" data-copy="{{ .TorAddress }}" aria-label="Copy to clipboard">
+    <code class="code-content">{{ .OnionAddress }}</code>
+    <button type="button" class="copy-btn" data-copy="{{ .OnionAddress }}" aria-label="Copy to clipboard">
       <span class="copy-icon">📋</span>
       <span class="copy-text" aria-live="polite">Copy</span>
     </button>
@@ -31849,6 +32262,25 @@ All gates execute inside the project Docker container (PART 6 → "Docker Rule")
 | GUI smoke (X11) | `go run . -- --ui gui` against an X11 socket | see PART 6 → "X11 and Wayland Forwarding" |
 | GUI smoke (Wayland) | `go run . -- --ui gui` against a Wayland socket | see PART 6 → "X11 and Wayland Forwarding" |
 
+## Coverage Gate
+
+`ci.yml` MUST enforce a minimum test coverage threshold. The threshold is declared in `IDEA.md ## Business logic` (free-form prose — e.g., "minimum test coverage: 75%"). If `IDEA.md` does not specify a value, the **default is 60%**.
+
+- Use `go test -coverprofile` + `go tool cover -func` — built into the Go toolchain in `casjaysdev/go:latest`, no extra tooling required
+- CI MUST fail when coverage drops below the threshold; a passing build with uncovered code is a silent regression
+- Coverage is computed against `go test ./...` output, run inside the toolchain image
+
+```bash
+# Example (Docker-wrapped) — fails if total coverage < threshold
+THRESHOLD="${COVERAGE_MIN:-60}"
+docker run --rm \
+  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  -v "$PWD":/work -w /work -e GOFLAGS=-buildvcs=false "$PROJECT_IMAGE" \
+  sh -c 'go test -coverprofile=/tmp/coverage.out ./... &&
+    COVERAGE=$(go tool cover -func=/tmp/coverage.out | grep total | awk "{print \$3}" | sed "s/%//") &&
+    awk -v c="$COVERAGE" -v t="$THRESHOLD" "BEGIN { exit (c+0 < t+0) }"'
+```
+
 ## Testing Rules
 
 - Core business logic must have unit tests
@@ -32123,7 +32555,7 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
 
 **⚠️ NEVER RUN BINARIES DIRECTLY ON THE LOCAL MACHINE. ALWAYS USE CONTAINERS. ⚠️**
 
-**See also: "Container-Only Development" in Critical Rules section.**
+**See also: PART 0 → "No Host Toolchain or Binary Execution".**
 
 **ALL builds, tests, and binary execution MUST use containers. The local machine is for orchestration only.**
 
@@ -33622,6 +34054,18 @@ Before running any `rm -rf`:
 
 > Merged from APPLICATION.md PART 10 (CI/CD rules, workflow permissions, action pinning, minimum workflows, post-push verification, suggested Docker-wrapped CI steps, release integrity) and SERVER.md (full per-provider workflow YAML: GitHub Actions, Gitea/Forgejo Actions, GitLab CI). Since this is one binary that is both the native application and the server, the merged pipeline builds and publishes BOTH the native-app artifacts (per-platform binaries, per APPLICATION.md) and the server-mode artifacts (server binary, CLI client, Docker image, per SERVER.md) from the SAME workflow run — there is no separate server-only CI pipeline versus application-only CI; every job below produces the one artifact set for the one binary.
 
+## Single Pipeline, Dual Artifact Class
+
+This binary is one deliverable with two consumption modes (PART 2 → "Application & Server Model"): a native per-platform application artifact (GUI/TUI/CLI) and a server artifact that runs the same binary in server mode. Both classes are produced, tested, and released from the **same** CI pipeline — there is no separate "server CI" and "app CI". Concretely:
+
+| Artifact class | Produced by | Where |
+|---|---|---|
+| Native per-platform binaries (8-target matrix: linux/darwin/windows/freebsd × amd64/arm64) | `go build` with `CGO_ENABLED=0` + `GOOS`/`GOARCH` (see "Suggested CI Steps" below) | `release.yml` / `beta.yml` / `daily.yml` build job |
+| Server-mode Docker image | `docker buildx build` against `docker/Dockerfile` | `docker.yml` |
+| Database migration check | Run migrations against a throwaway DB container before the image is tagged/pushed; fail the job on migration error (PART 10 → "Database") | `docker.yml` or a dedicated `migrate-check` job gating `build-standard` |
+
+The release job MUST NOT publish the Docker image (server-mode artifact) unless the corresponding platform binaries (native-app artifacts) from the same commit/tag have already passed `test` and `build`. A commit that breaks server-mode startup or migrations is exactly as release-blocking as one that breaks the CLI/GUI build — never gate one artifact class and skip the other.
+
 ## CI/CD Rules
 
 | Rule | Description |
@@ -33710,11 +34154,152 @@ Renovate covers `github-actions` SHA updates automatically via `pinDigests: true
 
 ## Minimum Public Repo Workflows
 
-- `ci.yml` — build, test, lint, coverage, and security jobs (push + PR + weekly schedule)
-- `release.yml` — tagged/manual release build and publish
-`ci.yml` and `release.yml` are mandatory. Go projects never have `build-toolchain.yml` — `casjaysdev/go:latest` is maintained externally and needs no per-project rebuild workflow.
+Every project ships workflow files for all five CI/CD providers. Same gates, different syntax — no vendor lock-in.
 
-Equivalent Gitea/Forgejo/GitLab/Jenkins pipelines must enforce the same gates, not a weaker subset.
+**Workflow creation order — not all workflows carry the same risk:**
+1. **Security-only workflows** (secret scan, SHA/digest policy, dependency audit) — no build dependency; safe to add anytime
+2. **`ci.yml` and `release.yml`** — add **last**, only after all code is complete, `make test` passes, and the lint gate is clean; these trigger a full build on push and will fail immediately if the code is not ready
+
+Go projects never have `build-toolchain.yml` — `casjaysdev/go:latest` is maintained externally and needs no per-project rebuild workflow.
+
+| Provider | Workflow location | Syntax |
+|----------|------------------|--------|
+| GitHub | `.github/workflows/ci.yml` / `release.yml` | GitHub Actions |
+| GitLab | `.gitlab-ci.yml` (stages: build, test, security, release) | GitLab CI |
+| Gitea | `.gitea/workflows/ci.yml` / `release.yml` | GitHub Actions (act runner) |
+| Forgejo | `.forgejo/workflows/ci.yml` / `release.yml` | GitHub Actions (act runner) |
+| Jenkins | `Jenkinsfile` (parallel stages: Build / Test / Security / Release) | Declarative Pipeline |
+
+**Workflow purposes:**
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `ci.yml` | push + pull_request + weekly schedule (security jobs only on schedule) | `gofmt -l`, `golangci-lint run`, `go vet`, `go test`, coverage gate, `go build`, truffleHog secret scan, workflow-policy SHA check, `govulncheck`, Trivy image scan |
+| `release.yml` | tag push (`v*`) + workflow_dispatch | Build statically linked artifacts for the supported target matrix, sign, upload to GitHub Releases, publish SBOM and checksums |
+
+In addition to the workflows, every repository ships:
+
+- `renovate.json` — single dependency-update config covering GitHub Actions SHAs, Docker digests, Go modules; works on all five providers (see PART 11 → "Dependency Governance")
+
+**`security` job conditionality (applies to all providers):**
+- Secret scan (truffleHog) — always runs; full git history required
+- Workflow policy (SHA/digest pinning check) — always runs
+- `vuln-scan` (govulncheck) — conditional on `go.mod` present
+- `image-scan` (Trivy) — conditional on Dockerfile present; runs after image build
+
+**GitHub Actions job ordering (`needs:`):**
+- `ci.yml`: `lint` and `test` run in parallel → `build` needs: test → `upload-artifacts` needs: build; security jobs (`secret-scan`, `workflow-policy`, `vuln-scan`, `image-scan`) run in parallel with each other
+- `release.yml`: `build` → `release` (needs: build); release job always re-runs its own build inline
+- Cross-workflow ordering via branch protection; never `workflow_run`
+
+**GitLab CI**: security jobs run in the `security` stage (parallel by default). Release stage triggered by `$CI_COMMIT_TAG`.
+
+**Jenkins**: `Security` stage uses `parallel {}`. `Release` stage uses `when { tag 'v*' }`.
+
+CI MUST fail on all providers when tests, coverage gates, secret scans, dependency checks, or release validation fail. Never accept a weaker gate on one provider than another.
+
+### Security Jobs in `ci.yml` Example (GitHub / Gitea / Forgejo)
+
+truffleHog is the mandatory secret scanner — **never** `gitleaks` (requires a commercial license for org repos). Trivy is the mandatory image scanner. Both pin to full commit SHAs. These jobs live in `ci.yml` and also run on the weekly schedule trigger.
+
+```yaml
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # weekly Monday 06:00 UTC
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          # required: truffleHog needs full history
+          fetch-depth: 0
+
+      # Empty base/head = full-history scan (schedule runs and new-branch pushes)
+      - name: Determine scan range
+        id: range
+        run: |
+          BASE=""; HEAD=""
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            BASE="${{ github.event.before }}"; HEAD="${{ github.sha }}"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"; HEAD="${{ github.event.pull_request.head.sha }}"
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+
+      - name: TruffleHog secret scan
+        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.95.9
+        with:
+          # NEVER use default_branch — it resolves to HEAD post-push and skips the scan
+          base: ${{ steps.range.outputs.base }}
+          head: ${{ steps.range.outputs.head }}
+          extra_args: --results=verified,unknown
+
+  workflow-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: Verify all third-party actions are pinned to a 40-char SHA
+        run: |
+          set -eo pipefail
+          bad=$(grep -RnE '^[[:space:]]*uses:' .github/ .gitea/ .forgejo/ 2>/dev/null | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)
+          if [[ -n "$bad" ]]; then
+            echo "::error::Unpinned actions found (must be 40-char SHAs):"
+            echo "$bad"
+            exit 1
+          fi
+
+  vuln-scan:
+    runs-on: ubuntu-latest
+    steps:
+      # hashFiles() is not valid in a job-level if — checkout first, then gate each step
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: govulncheck (inside casjaysdev/go:latest)
+        if: hashFiles('go.mod') != ''
+        run: |
+          docker run --rm -i \
+            --name "${{ github.event.repository.name }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+            -v "$PWD":/work -w /work -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false casjaysdev/go:latest govulncheck ./...
+
+  image-scan:
+    runs-on: ubuntu-latest
+    steps:
+      # hashFiles() is not valid in a job-level if — checkout first, then gate each step
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+        if: hashFiles('docker/Dockerfile') != ''
+      - name: Build local image for scanning
+        if: hashFiles('docker/Dockerfile') != ''
+        run: |
+          docker build -f docker/Dockerfile -t scan-target:ci .
+      - name: Trivy image scan
+        if: hashFiles('docker/Dockerfile') != ''
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: scan-target:ci
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+```
+
+**Per-provider notes:**
+
+- GitLab: `secret-scan` runs as a docker job using `image: trufflesecurity/trufflehog:latest` with `GIT_DEPTH: 0`; `image-scan` uses `image: aquasec/trivy:0.70.0`.
+- Jenkins: `Security` stage uses `parallel {}`; truffleHog and Trivy each run via `docker.image(...).inside { ... }`.
+- All providers: same gates, same severities, same exit conditions — no weaker subset on any provider.
 
 ## Post-Push CI Verification
 
@@ -33730,7 +34315,44 @@ Build failed → this is a bug, not a note for later; diagnose the root cause an
 
 ## Suggested CI Steps
 
-CI runs every Go step inside `casjaysdev/go:latest`. CI MUST NOT install a Go toolchain on the runner and call `go` directly — and MUST NOT run quality-gate commands inside the runtime image (`docker/Dockerfile`), which contains only the final binary. Use `casjaysdev/go:latest` for all build, test, lint, and vet steps.
+CI runs every Go step inside `casjaysdev/go:latest`. CI MUST NOT install a Go toolchain on the runner and call `go` directly — and MUST NOT run quality-gate commands inside the runtime image (`docker/Dockerfile`), which contains only the final binary. Never `go install` a tool in a workflow `run:` step — every tool is already in the image. No `ensure-build-image` pre-flight, no `build-toolchain.yml`.
+
+Canonical job pattern for `ci.yml` / `release.yml`:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - run: go build -buildvcs=false ./...
+```
+
+### Required Concurrency and Retention Headers
+
+Every push/PR workflow (`ci.yml`) MUST declare:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+```
+
+Release workflows (`release.yml`) MUST use `cancel-in-progress: true` with a per-tag-ref group (`group: release-${{ github.ref }}`) so a newer push of the *same* tag supersedes the in-flight release build, while a run for a different tag is never cancelled.
+
+Every `actions/upload-artifact` step MUST set a finite `retention-days`:
+
+```yaml
+- uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+  with:
+    name: {project_name}-${{ matrix.target }}
+    path: binaries/
+    # release-job artifacts may use up to 30; build-job CI artifacts use 7
+    retention-days: 7
+```
 
 ```bash
 # Prepare output directory for release artifacts (binaries, checksums, SBOM)
@@ -37538,7 +38160,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 
 Documentation uses MkDocs Material theme with dark/light/auto switching.
 
-**See PART 15: Themes for project-wide theme rules (colors, accessibility, switching behavior).**
+**See PART 15 → "Themes (NON-NEGOTIABLE - PROJECT-WIDE)" for project-wide theme rules (colors, accessibility, switching behavior).**
 
 | Attribute | Value |
 |-----------|-------|
@@ -40618,6 +41240,18 @@ The hidden service is declared in the generated torrc; Tor creates and persists 
 "github.com/pires/go-proxyproto"
 ```
 
+### Circuit-ID Export & PROXY-Protocol Backend Listener
+
+`HiddenServiceExportCircuitID haproxy` makes Tor prepend a HAProxy **PROXY-protocol v1 header** to *every* connection it forwards to the hidden-service target, encoding the 64-bit rendezvous-circuit ID in the source address (`fc00::/8` IPv6 range). This ID is the opaque per-session token the committed Tor logging/audit/rate-limit rules key on as `tor:{circuit_id}` — never an IP, never deanonymizing.
+
+Because the PROXY header is sent on every connection, the `HiddenServicePort` target MUST be a **dedicated loopback listener** the app binds specifically for Tor (`127.0.0.1:{tor_backend_port}`), **separate from the public clearnet listener** — clearnet connections carry no PROXY header and would fail to parse against a listener that requires one. The app:
+
+- binds the dedicated Tor backend listener and parses the PROXY-protocol header on its accept path (Go: `github.com/pires/go-proxyproto`),
+- reads the circuit ID from that header and uses it as the `tor:{circuit_id}` key for logs, audit trails, admin UI, and rate limiting,
+- points `HiddenServicePort {virtual_port} 127.0.0.1:{tor_backend_port}` at this listener (not the clearnet HTTP port).
+
+`VanguardsLiteEnabled 1` keeps Tor's built-in layer-2 vanguards on (guard-discovery-attack defense for the service); it is never disabled. Full layer-3 vanguards/bandguards/rendguard, if ever wanted, are control-protocol operations the app can drive itself — no external tool.
+
 ### Tor Process Lifecycle
 
 **The application MUST fully manage the Tor process lifecycle.**
@@ -41561,7 +42195,7 @@ HYBRID has no application-level Normal User account type (identity is the OS per
 /server/{admin_path}/config/security/auth      # Authentication config (sessions, MFA)
 /server/{admin_path}/config/security/tokens    # API token management
 /server/{admin_path}/config/security/firewall  # Firewall rules
-/server/{admin_path}/config/users/             # System users (read-only view of system_users)
+/server/{admin_path}/config/system-users       # System Users (read-only view of system_users)
 ```
 
 ### Route Hierarchy Rules
@@ -41587,7 +42221,7 @@ HYBRID has no application-level Normal User account type (identity is the OS per
 ```
 # WRONG - Server management at admin root level
 /server/{admin_path}/settings          # ✗ WRONG - use /server/{admin_path}/config/settings
-/server/{admin_path}/users             # ✗ WRONG - use /server/{admin_path}/config/users
+/server/{admin_path}/system-users      # ✗ WRONG - use /server/{admin_path}/config/system-users
 /server/{admin_path}/logs              # ✗ WRONG - use /server/{admin_path}/config/logs
 /server/{admin_path}/security          # ✗ WRONG - use /server/{admin_path}/config/security
 /server/{admin_path}/email             # ✗ WRONG - use /server/{admin_path}/config/email
@@ -41598,7 +42232,7 @@ HYBRID has no application-level Normal User account type (identity is the OS per
 /server/{admin_path}/{admin_username}/profile      # ✓ Admin's own profile
 /server/{admin_path}/{admin_username}/preferences  # ✓ Admin's own preferences
 /server/{admin_path}/config/settings   # ✓ Server settings
-/server/{admin_path}/config/users      # ✓ System users (read-only)
+/server/{admin_path}/config/system-users  # ✓ System Users (read-only)
 ```
 
 ### API Route Hierarchy (Same Pattern)
@@ -41611,7 +42245,7 @@ HYBRID has no application-level Normal User account type (identity is the OS per
 /api/{api_version}/server/{admin_path}/config/                  # Server management API
 /api/{api_version}/server/{admin_path}/config/setup             # Setup flow
 /api/{api_version}/server/{admin_path}/config/settings          # Server settings
-/api/{api_version}/server/{admin_path}/config/users             # System users (read-only)
+/api/{api_version}/server/{admin_path}/config/system-users      # System Users (read-only)
 ```
 
 ### Route Conflict Prevention
@@ -41949,19 +42583,20 @@ func RegisterAdminRoutes(r *mux.Router) {
 
 **There is exactly ONE server admin account — the main server admin. It is an ADMINISTRATIVE ACCOUNT for managing the application. It is NOT an application user account: application user accounts do not exist; identity is the operating system (PART 8), and system users authenticate with their per-system-user `sys_` tokens.**
 
-### Server Admin Account Facts
+### Server Admin vs System Users
 
-| Aspect | Server Admin |
-|--------|--------------|
-| **Purpose** | Manage server and configuration |
-| **Scope** | Server-wide administration |
-| **Storage** | `admins` table (profile, preferences, MFA) — the admin token itself lives in `server.yml` (PART 11), never in the database |
-| **Required** | **YES — whenever this PART is enabled** |
-| **Login** | `/server/auth/login` → `/server/{admin_path}/*` (admin token) |
-| **Access** | Admin panel (`/server/{admin_path}/*`) |
-| **Created by** | Setup wizard |
+| Aspect | Server Admin | System User (PART 8) |
+|--------|--------------|----------------------|
+| **Purpose** | Manage server and configuration | API access as an operating-system user |
+| **Scope** | Server-wide administration | Own `sys_` token and data only |
+| **Identity** | Main server admin (maps to `server.token`) | Operating-system account (`system_users` table) |
+| **Storage** | `admins` table (profile, preferences, MFA) — the admin token itself lives in `server.yml` (PART 11), never in the database | `system_users` table (PART 8) |
+| **Required** | **YES — whenever this PART is enabled** | Core (PART 8) |
+| **Login** | `/server/auth/login` → `/server/{admin_path}/*` (admin token) | No web login — `sys_` token API auth only |
+| **Access** | Admin panel (`/server/{admin_path}/*`) | API routes per PART 8 |
+| **Created by** | Setup wizard (first run) | Operating system (`useradd` etc.); token minted per PART 8 |
 
-**Important:** The Server Admin is a different kind of account from the system-user identities in the `system_users` table — it manages the server; it does not own application data.
+**Important:** The Server Admin and system users are completely separate identity types. The Server Admin is NOT a "privileged user" — it is a different kind of identity entirely, backed by `server.token`: it manages the server; it does not own application data.
 
 ### Server Admin Behavior
 
@@ -41971,6 +42606,8 @@ func RegisterAdminRoutes(r *mux.Router) {
 | `/server/auth/login` | Login page |
 | `/server/auth/logout` | Logout |
 | Public routes (`/`, `/server/*`, etc.) | Guest view (no admin-specific content) |
+
+**The admin token (`server.token`) lives in `server.yml` ONLY (PART 11), never in the database or config-managed secrets stores.**
 
 ## First Run & Setup Wizard
 
@@ -42103,26 +42740,34 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 
 **The main server admin account is provisioned through the SAME token-based setup wizard as the rest of the binary (PART 8).** The setup flow above is the server-persona face of that wizard: the one-time setup token gates it exactly as the token-gated first-run flow in PART 8 gates initial configuration. There is no second, admin-only onboarding mechanism.
 
-**The existing operator token (`server.token`, PART 11) maps to — authenticates as — the main server admin account.** It is NOT a separate credential: when server admin is enabled, a request authenticated with `server.token` IS the main server admin, with that account's identity in audit logs and that account's permissions. `server.token` (stored in `server.yml` only, per PART 11 — never in the database) is THE credential for the ONE main server admin account.
+**The existing operator token (`server.token`, PART 11) maps to — authenticates as — the main server admin account.** It is NOT a separate credential: when server admin is enabled, a request authenticated with `server.token` IS the main server admin, with that account's identity in audit logs and that account's permissions. `server.token` (stored in `server.yml` only, per PART 11 — never in the database) is the ONE credential for the ONE main server admin account — for both the web login form and `Authorization: Bearer` API access.
+
+## Single Server Admin
+
+**There is exactly one server admin account — the main server admin, backed by `server.token`.** There is no mechanism to add, invite, or sync additional admin accounts. If the token is lost, rotate it in `server.yml` or recover via `--maintenance setup`.
 
 ## Server Admin Security
 
-| Security Feature | Required/Recommended |
-|------------------|---------------------|
-| TOTP 2FA support | REQUIRED (usage recommended) |
-| Passkey/WebAuthn support | REQUIRED (usage recommended) |
-| Recovery keys (when MFA enabled) | REQUIRED |
-| Session timeout | REQUIRED |
-| API token security | REQUIRED |
-| Audit logging | REQUIRED |
-| Rate limiting | REQUIRED |
-| IP restrictions (if configured) | OPTIONAL |
+**These security settings apply to the Server Admin account.**
+
+| Security Feature | Applies To | Required/Recommended |
+|------------------|------------|---------------------|
+| Admin token security (`server.token`) | Server Admin | REQUIRED |
+| TOTP 2FA support | Server Admin | REQUIRED (usage recommended) |
+| Passkey/WebAuthn support | Server Admin | REQUIRED (usage recommended) |
+| Recovery keys (when MFA enabled) | Server Admin | REQUIRED |
+| Session timeout | Server Admin | REQUIRED |
+| Audit logging | Server Admin | REQUIRED |
+| Rate limiting | Server Admin | REQUIRED |
+| IP restrictions (if configured) | Server Admin | OPTIONAL |
 
 **MFA for the Server Admin:**
 - Every project MUST support TOTP and Passkeys for the Server Admin
 - MFA is optional but STRONGLY recommended - admin chooses to enable
 - This applies even to simple apps (e.g., `jokes`, `airports`)
 - Admin panel shows clear prompts encouraging MFA setup
+
+**No exceptions.**
 
 ### Admin Recovery
 
@@ -42288,6 +42933,17 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 
 **Note:** Admin theme preference is independent of the site-wide default theme. The site default is dark, but each admin can choose their own preference.
 
+## Server Admin Privacy
+
+**The single Server Admin account exposes only its own data.**
+
+| What Admin CAN See | Notes |
+|--------------------|-------|
+| Own account details | Username, email settings |
+| Own API token (regenerate) | Shown masked; regenerate at will |
+| Own 2FA status | TOTP/passkey enrollment |
+| Own session history | Active admin sessions |
+
 ### Login Page (`/server/{admin_path}`)
 
 ```
@@ -42387,7 +43043,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `/server/{admin_path}/config/scheduler` | Scheduler | View/edit scheduled tasks |
 | `/server/{admin_path}/config/email` | Email | SMTP settings, templates |
 | `/server/{admin_path}/config/logs` | Logs | View access, error, audit logs |
-| `/server/{admin_path}/config/security/auth` | Authentication | MFA, sessions |
+| `/server/{admin_path}/config/security/auth` | Authentication | Admin token, MFA, sessions |
 | `/server/{admin_path}/config/security/tokens` | API Tokens | Generate, revoke tokens |
 | `/server/{admin_path}/config/security/ratelimit` | Rate Limiting | Configure rate limits |
 | `/server/{admin_path}/config/security/firewall` | Firewall | IP allow/block lists |
@@ -42396,7 +43052,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `/server/{admin_path}/config/network/i2p` | I2P | Enable toggle, view .b32.i2p address, provider status (opt-in) |
 | `/server/{admin_path}/config/network/geoip` | GeoIP | Country blocking, database updates |
 | `/server/{admin_path}/config/network/blocklists` | Blocklists | IP/domain blocklists |
-| `/server/{admin_path}/config/users` | System Users | Read-only view of the `system_users` table |
+| `/server/{admin_path}/config/system-users` | System Users | Read-only view of `system_users` (username, uid, token status, last_used_at, rotated_at) |
 | `/server/{admin_path}/config/backup` | Backup | Create/restore backups |
 | `/server/{admin_path}/config/maintenance` | Maintenance | Maintenance mode |
 | `/server/{admin_path}/config/updates` | Updates | Check/apply updates |
@@ -42404,6 +43060,23 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `/server/{admin_path}/config/pages/help` | Help | Edit help page content (matches the `config/pages/help` API route below and the `/server/{admin_path}/config/pages` grouping used by About/Privacy/Contact/Terms) |
 
 **Auth and body format — these WEB routes are NOT the same handler as the API mirror below.** Every route in this table is session-cookie authenticated (admin login session, see "Authentication Methods by Route Family" above) and its mutations (`Save`, `Create`, `Delete`, etc.) are plain HTML `<form method="post" enctype="application/x-www-form-urlencoded">` submissions — never JSON-only (no `ShouldBindJSON`-only handler), per PART 16 "No-JS-first": the admin panel MUST be fully usable with JavaScript disabled. The separate `/api/{api_version}/server/{admin_path}/config/*` routes are the machine-readable mirror: JSON body, `Authorization: Bearer adm_*` token, no session cookie. Do not point a WEB form at the Bearer-only API route or reuse one handler for both — a browser form POST has no `Authorization` header and will 401 against a Bearer-only endpoint.
+
+### System Users Page (`/server/{admin_path}/config/system-users`)
+
+**Read-only view of the `system_users` table (PART 8 → Per-System-User Tokens). Accounts are operating-system accounts; the panel never creates, edits, or deletes them.**
+
+| Column | Source (`system_users`) | Description |
+|--------|-------------------------|-------------|
+| Username | `username` | Operating-system account name |
+| UID | `uid` | Operating-system user ID |
+| Token status | token columns | Active / revoked / never minted |
+| Last used | `last_used_at` | Last authenticated `sys_` token use |
+| Rotated | `rotated_at` | Last token rotation timestamp |
+
+**Rules:**
+- Strictly read-only — no create/edit/delete/invite actions of any kind
+- No token values are ever displayed (hashes only exist server-side)
+- Search/filter and sort are client-side conveniences over the same data
 
 ### Settings Page Layout
 
@@ -43197,18 +43870,6 @@ The admin panel MUST include a scheduler section with:
 - `monthly` - Once per month (configurable day/time)
 - `custom` - Cron expression
 
-### System Users (`/server/{admin_path}/config/users`)
-
-**Read-only view of the `system_users` table (PART 8).** System user accounts are managed by the operating system, and their per-system-user `sys_` tokens by the PART 8 token lifecycle — this page never creates, edits, or deletes anything.
-
-| Column | Description |
-|--------|-------------|
-| **Username** | System username (from `system_users`) |
-| **UID** | Numeric user id |
-| **Token Status** | `active` / `disabled` / `none` |
-| **Last Used** | `last_used_at` of the user's `sys_` token |
-| **Rotated** | `rotated_at` of the user's `sys_` token |
-
 ## /api/{api_version}/server/{admin_path} (REST API)
 
 ### Authentication
@@ -43235,16 +43896,16 @@ The admin panel MUST include a scheduler section with:
 | `/api/{api_version}/server/{admin_path}/config/stats` | GET | Statistics |
 | `/api/{api_version}/server/{admin_path}/config/restart` | POST | Restart server |
 
-### Admin - System Users (`/api/{api_version}/server/{admin_path}/config/users/`)
+### Admin - System Users (`/api/{api_version}/server/{admin_path}/config/system-users/`)
 
 **Read-only view of the `system_users` table (PART 8). System user accounts are managed by the operating system, and their per-system-user `sys_` tokens by the PART 8 token lifecycle — the admin panel never creates, edits, or deletes them.**
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/users` | GET | List system users (username, uid, token status, last_used_at, rotated_at) |
-| `/api/{api_version}/server/{admin_path}/config/users/{username}` | GET | Get one system user's token status details |
+| `/api/{api_version}/server/{admin_path}/config/system-users` | GET | List system users (username, uid, token status, last_used_at, rotated_at) |
+| `/api/{api_version}/server/{admin_path}/config/system-users/{username}` | GET | Get one system user's token status details |
 
-**No write endpoints exist under `/config/users` — the view is strictly read-only.**
+**No write endpoints exist under `/config/system-users` — the view is strictly read-only.**
 
 ### Admin - Profile (`/api/{api_version}/server/{admin_path}/{admin_username}/profile/`)
 
@@ -43376,11 +44037,11 @@ The admin panel MUST include a scheduler section with:
 
 # PART 29: CLIENT (companion to PART 8)
 
-**The client is REQUIRED for every project and is fully specified in PART 8 → "Client".** This PART is not optional; it adds ONLY the client-side companions to the per-system-user token system (PART 8 → "Per-System-User Tokens") that PART 8 does not restate — API token authentication, config-file permissions for tokens, token revocation handling, CLI auto-update, and flag-to-config save rules. These apply to any client build/mode.
+**Client access is REQUIRED for every project and is fully specified in PART 8 → "Client" (the dedicated client build itself is optional there).** This PART is not optional; it adds ONLY the client-side companions to the per-system-user token system (PART 8 → "Per-System-User Tokens") that PART 8 does not restate — API token authentication, config-file permissions for tokens, token revocation handling, CLI auto-update, and flag-to-config save rules. These apply to any client build/mode.
 
 ## Client
 
-The client itself is fully specified in **PART 8 → "Client"** and is NOT restated here. PART 8 covers: overview (client is REQUIRED for all projects), binary naming rules, CLI open API access, CLI config file permissions, CLI auto-update (including flag-to-config save rules), modes and automatic mode detection, display environment detection, CLI/TUI/GUI theming, responsive layout, professional UI/UX standards, configuration (`cli.yml`), standard flags, commands, authentication, HTTP client identity, URL encoding, output formats, project-specific commands, build integration, TUI requirements, error handling and exit codes, `--version` extended output, and whether the project warrants a dedicated client build.
+The client itself is fully specified in **PART 8 → "Client"** and is NOT restated here. PART 8 covers: overview (client access is REQUIRED for all projects; a dedicated client build is optional), binary naming rules, CLI open API access, CLI config file permissions, CLI auto-update (including flag-to-config save rules), modes and automatic mode detection, display environment detection, CLI/TUI/GUI theming, responsive layout, professional UI/UX standards, configuration (`cli.yml`), standard flags, commands, authentication, HTTP client identity, URL encoding, output formats, project-specific commands, build integration, TUI requirements, error handling and exit codes, `--version` extended output, and whether the project warrants a dedicated client build.
 
 The client subsections below add ONLY what PART 8 does not cover.
 
@@ -43676,10 +44337,12 @@ maintainer_email: {maintainer@example.com — or empty; used only if set}
 - {User type 2}
 
 **Surfaces (declare which apply — see PART 2 → "Application & Server Model"):**
-- GUI: {yes / no — and on which platforms}
+- GUI: {yes / no — and on which platforms; if yes, both X11 and Wayland are mandatory on Linux/BSD, see PART 0}
 - TUI: {yes / no}
 - CLI: {yes / no}
-- Server (web frontend + API): {yes / no}
+- Web frontend: {yes / no}
+- REST API: {yes / no}
+- GraphQL API: {yes / no}
 
 **Optional server features (both disabled by default — see PART 2 → "Optional Server Features (Disabled by Default)"; declare only when the server surface is in scope):**
 - Server admin (admin user + admin routes): {yes / no}
@@ -43728,7 +44391,7 @@ maintainer_email: {maintainer@example.com — or empty; used only if set}
 
 ## IDEA.md Examples
 
-The examples below are carried forward from both pre-merge templates: three application-flavored examples (GUI/TUI/CLI, no server surface) and three server-flavored examples (server: web frontend + API, no GUI/TUI). Both sets use the same unified template above — an example simply leaves the fields that don't apply to it out, or marks them "no" / "none".
+The six examples below are carried forward from the two source templates this HYBRID spec unifies: three application-flavored examples (GUI/TUI/CLI, no server surface) and three server-flavored examples (web frontend + API, no GUI/TUI). All six use the same unified template above — an example simply leaves the fields that don't apply to it out, or marks them "no" / "none". A real HYBRID project's IDEA.md typically lands somewhere between these, declaring whichever surfaces (web frontend, REST, GraphQL, CLI, TUI) it actually ships.
 
 ### Application-Flavored Examples
 
@@ -43762,7 +44425,9 @@ maintainer_email: jane@example.com
 - GUI: yes (Linux X11 + Wayland via Gio toolkit, macOS, Windows)
 - TUI: no
 - CLI: yes (`notes new`, `notes search`, `notes ls`)
-- Server: no
+- Web frontend: no
+- REST API: no
+- GraphQL API: no
 
 **Features:**
 - **Note management**: create, edit, archive, delete with markdown support
@@ -43828,7 +44493,9 @@ maintainer_email: jane@example.com
 - GUI: no
 - TUI: yes (primary)
 - CLI: yes (`feeds add`, `feeds sync`, `feeds export`)
-- Server: no
+- Web frontend: no
+- REST API: no
+- GraphQL API: no
 
 **Features:**
 - **Subscription**: add / remove / rename feeds; OPML import / export
@@ -43893,7 +44560,9 @@ maintainer_email: jane@example.com
 - GUI: no
 - TUI: no
 - CLI: yes (`dotctl link`, `dotctl unlink`, `dotctl status`, `dotctl diff`)
-- Server: no
+- Web frontend: no
+- REST API: no
+- GraphQL API: no
 
 **Features:**
 - **Link / unlink**: create or remove symlinks from a dotfiles repo into the user's home
@@ -43956,8 +44625,10 @@ maintainer_email: jane@example.com
 **Surfaces:**
 - GUI: no
 - TUI: no
-- CLI: yes (thin client for the server's API — see PART 8)
-- Server: yes (web frontend + REST API)
+- CLI: yes (thin `jokes-cli` client for the server's API — see PART 8; `jokes-cli get`, `jokes-cli search`)
+- Web frontend: yes
+- REST API: yes
+- GraphQL API: yes
 
 **Features:**
 - **Joke delivery**: random joke selection with rating-based weighting
@@ -44027,8 +44698,10 @@ maintainer_email: jane@example.com
 **Surfaces:**
 - GUI: no
 - TUI: no
-- CLI: yes (thin client for the server's API — see PART 8)
-- Server: yes (web frontend + REST API)
+- CLI: yes (thin `linkshort-cli` client for the server's API — see PART 8; `linkshort-cli create`, `linkshort-cli stats`)
+- Web frontend: yes
+- REST API: yes
+- GraphQL API: no
 
 **Features:**
 - **URL shortening**: generate 6-char short codes or custom slugs
@@ -44099,8 +44772,10 @@ maintainer_email: jane@example.com
 **Surfaces:**
 - GUI: no
 - TUI: no
-- CLI: yes (thin client for the server's API — see PART 8)
-- Server: yes (web frontend + REST API)
+- CLI: yes (thin `weather-cli` client for the server's API — see PART 8; `weather-cli current`, `weather-cli forecast`)
+- Web frontend: yes
+- REST API: yes
+- GraphQL API: yes
 
 **Features:**
 - **Current conditions**: temperature, humidity, wind, conditions by location

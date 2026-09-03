@@ -169,6 +169,18 @@ The Go toolchain and any compiled artifact from this project MUST NOT run on the
 
 This rule has no opt-out. There is no "just this once" exception for `go test` on the host.
 
+## ⚠️ CRITICAL: X11 AND Wayland Are Both Required
+
+If this project ships a GUI surface, it MUST support **both** X11 and Wayland as first-class display backends.
+
+- Wayland-only GUIs are not acceptable
+- X11-only GUIs are not acceptable
+- The chosen GUI stack/toolkit must be one that natively supports both, or the app must integrate both backends
+- Display detection at runtime must consider `WAYLAND_DISPLAY` AND `DISPLAY` and pick the appropriate backend
+- GUI smoke testing inside Docker MUST be runnable against both an X11 socket and a Wayland socket forwarded from the host (see PART 5 → "Docker Rule")
+- IDEA.md may declare GUI out of scope, but it may NOT declare "X11 only" or "Wayland only"
+- Reconciling X11/Wayland with the static-binary rule (see "Single Static Binary" below): use display packages that avoid **link-time** C dependencies. With `CGO_ENABLED=0` this is automatic — for X11, the preferred option is a pure-Go X11 client (`github.com/jezek/xgb`, talks to the X server's Unix socket directly with no `libX11` involvement); for Wayland, use a pure-Go Wayland client (`github.com/rajveermalviya/go-wayland`, speaks the wire protocol directly with no `libwayland-client` involvement). In all of these cases the binary has no link-time C dependency for display I/O — that is the rule. The pure-Go GUI toolkits (e.g., `gioui.org`, and toolkits built on it) follow this path natively; that path is compliant.
+
 ## ⚠️ CRITICAL: Go-Only Application
 
 This project's source code is **exclusively Go**.
@@ -176,7 +188,7 @@ This project's source code is **exclusively Go**.
 - All application code, library code, build automation, and test code in this repository is written in Go
 - No C, C++, Objective-C, Swift, Python, JavaScript, TypeScript, or shell-script source files contribute to the produced binary
 - `Makefile` and `scripts/` are used for build automation — they orchestrate Docker invocations but MUST NOT contain application logic
-- Small `docker/entrypoint.sh` and `docker/` shell helpers are tolerated because they orchestrate the container, not the application; they MUST NOT contain application logic
+- Small `docker/rootfs/usr/local/bin/entrypoint.sh` and `docker/` shell helpers are tolerated because they orchestrate the container, not the application; they MUST NOT contain application logic
 - `CGO_ENABLED=0` ALWAYS — pure Go, no C, no exceptions
 - Third-party packages that are pure Go are strongly preferred; packages that vendor C are allowed only when (a) no pure-Go equivalent is viable, (b) the C code is statically compiled into the final binary (c) it does NOT require a system C lib at runtime, and (d) the dependency is documented in `IDEA.md` and `LICENSE.md`
 - **Prefer pure-Go packages whenever a viable one exists.** Pure-Go packages are what make the single-static-binary rule and cross-platform GUI (Windows / macOS / Linux / BSD) achievable in practice — every C dependency dragged in becomes a portability and build-system tax. See PART 5 → "Pure-Go Library Stack" for the recommended package list
@@ -204,6 +216,7 @@ The deliverable for each supported target is **one statically linked binary** th
 - No third-party `.so` / `.dylib` / `.dll` shipped alongside the binary
 - No `LD_LIBRARY_PATH`, `DYLD_LIBRARY_PATH`, or wrapper-script tricks to find runtime libs
 - `go build` inside the Docker image MUST produce a binary that passes a "no unexpected dynamic deps" check (`ldd`, `otool -L`, `dumpbin /dependents`) appropriate to the target
+- X11 and Wayland are runtime-discovered display sockets, not link-time dependencies — see "X11 AND Wayland Are Both Required"
 - Plugin systems, `dlopen` of arbitrary user code, and runtime extension loading from disk are forbidden unless IDEA.md explicitly defines a hardened plugin contract
 
 ## ⚠️ CRITICAL: Self-Contained Assets
@@ -253,6 +266,9 @@ The single binary contains **everything the app needs to function**. The user is
 | **LICENSE.md** | Project + dependency licenses | Dependency set changes |
 | **release.txt** | Canonical release version when present | Release version changes |
 | **site.txt** | Optional official site/homepage URL | Official site changes |
+| **Makefile** | Build, test, run targets for local development. Convenience wrappers around the Docker-wrapped commands. **Never called from CI workflow `run:` steps** (PART 10 → "CI/CD Rules") | Local-dev targets change |
+| **.dockerignore** | Build-context exclusions; Go-specific entries: `binaries/`, `releases/`. See `dockerfile_conventions.md` → ".dockerignore" for the full standard entry set (version control, `.env`, build artifacts, `volumes/`, OS files, markdown/LICENSE). `docker/`, `src/`, `go.mod`, `go.sum`, `release.txt` are NEVER excluded. | Build-context surface changes |
+| **renovate.json** | Single Renovate config covering Go module versions, GitHub Actions SHAs, and Docker digests across all five providers. Dependabot forbidden (PART 9 → "Dependency Governance") | Update-policy changes |
 
 ## Mandatory Compliance Schedule
 
@@ -279,13 +295,13 @@ Getting code correct on the first try is much harder than iterating with feedbac
 | Behavior-preserving refactor | Diff outputs of old vs. new path on representative inputs (don't trust that the diff "looks right") |
 | CLI binary | Run the binary in the container; exercise relevant flags including `--help`/`--version`; check stdout, stderr, and exit code |
 | TUI binary | Run in the container; verify rendering, keyboard input, and screen redraw on resize/exit |
-| GUI binary | Run in the container; verify the rendered window under both X11 and Wayland forwarding; confirm input events reach the app |
+| GUI binary | Run in the container; verify the rendered window under BOTH X11 AND Wayland forwarding (per the X11/Wayland mandate); confirm input events reach the app |
 | Single static binary requirement | Confirm the artifact is a single self-contained file and that it runs on a clean container with no extra runtime install |
 | Asset embedding | Confirm assets are loaded from the binary itself (not from a host path); test on a container without the source tree mounted |
 | Performance change | Measure before AND after — don't assume parallelism, caching, or "cleaner" code is faster |
 | Bug fix | Reproduce the bug FIRST so you have a failing signal, then verify the fix makes it disappear; add a regression test where feasible |
 | Configuration / settings | Start the binary with the new config; verify defaults; verify validation rejects bad input with a useful error |
-| Docker / container build | Build the image; run the container; smoke-test the binary inside it; for GUI, verify display forwarding still works |
+| Docker / container build | Build and verify each image variant as appropriate to the change: `:devel` (debug binary) for logic changes, `:latest` (release binary) for release verification. Run the container; smoke-test the binary inside it; for GUI, verify display forwarding still works. |
 | CI/CD workflow | Run the workflow on a branch (or equivalent dry-run); verify each job's exit status, not just YAML validity |
 | Logging / error paths | Trigger the error path; verify the log line/structured event was emitted with expected fields |
 | Security-sensitive change (auth, crypto, input validation, plugin contracts) | Test both the success path AND attempted bypass paths; never assume a guard works without exercising it |
@@ -372,7 +388,7 @@ internal/
     └── cli/                # optional plain CLI commands/output
 ```
 
-(See PART 5 → "Project Layout" for the full repository tree, including `docker/`, `assets/`, `Makefile`, `scripts/`, etc.)
+(See PART 5 → "Project Layout" for the full repository tree, including `docker/`, `assets/`, `packaging/`, `Makefile`, `scripts/`, etc.)
 
 **Rules:**
 - Core behavior MUST live in shared packages, not be duplicated across GUI/TUI/CLI
@@ -461,15 +477,15 @@ Choose GUI when **all** are true:
 - explicit headless environment from config or flag
 
 **Treat these as positive GUI/display signals (platform-appropriate):**
-- `WAYLAND_DISPLAY` — Wayland session (supported by the app on Linux/BSD via the GUI toolkit)
-- `DISPLAY` — X11 / XWayland session (supported by the app on Linux/BSD via the GUI toolkit)
+- `WAYLAND_DISPLAY` — Wayland session (MUST be supported by the app on Linux/BSD via the GUI toolkit)
+- `DISPLAY` — X11 / XWayland session (MUST be supported by the app on Linux/BSD via the GUI toolkit)
 - a local Windows desktop session
 - a local macOS Aqua/session launch
 
 **Backend selection on Linux/BSD when both signals are present:**
 - Prefer Wayland when `WAYLAND_DISPLAY` is set; if connecting to that Wayland socket fails at runtime, fall back to X11 instead of erroring out
 - Fall back to X11 (`DISPLAY`) when `WAYLAND_DISPLAY` is unset or the user/config explicitly requests X11
-- Both backends MUST be exercised in tests
+- Both backends MUST be exercised in tests (PART 0 → "X11 AND Wayland Are Both Required")
 
 ### TUI
 
@@ -775,7 +791,8 @@ deps/                       # optional: committed, project-specific support
                              # files not part of build/release output (e.g.
                              # scripts or Dockerfiles for building a
                              # dependency) — never a cache or temp/output dir
-docker/                     # REQUIRED: Dockerfile, compose.yaml, entrypoint.sh, README.md
+docker/                     # REQUIRED: Dockerfile, docker-compose.yml, rootfs/usr/local/bin/entrypoint.sh, README.md
+packaging/                  # installer/manifests/bundle metadata
 Makefile                    # build targets: build, release, docker, test, dev, clean
 scripts/                    # optional host-side Docker wrapper scripts; MUST NOT contain application logic
 tests/                      # integration tests
@@ -819,10 +836,10 @@ docker/
 ├── Dockerfile              # production runtime image — two-stage (builder + minimal Alpine); tagged :latest
 ├── Dockerfile.dev          # devel image — same as release but binary runs in debug mode; tagged :devel   (project-specific)
 ├── rootfs/                 # build-time filesystem overlay copied into image at /   (project-specific)
+│   └── usr/local/bin/entrypoint.sh   # prepares cache dirs; user creation and privilege drop happen in the binary; called by tini → entrypoint.sh → app
 ├── docker-compose.yml      # production compose — HUMAN USE ONLY
 ├── docker-compose.dev.yml  # development compose — runs `:devel` image in debug mode; HUMAN USE ONLY
 ├── docker-compose.test.yml # automated test compose — AI prefers the tests/ scripts over running this directly
-├── entrypoint.sh           # prepares cache dirs; user creation and privilege drop happen in the binary
 └── README.md               # how to build the image, run tests, run GUI with display forwarding
 ```
 
@@ -853,13 +870,29 @@ docker/
 
 CI workflows reference this image directly: `container: image: casjaysdev/go:latest`. No `apk add`, no `go install`, no `ensure-build-image` job, no `build-toolchain.yml`.
 
-### OCI Annotations
+### OCI Annotations (No LABEL Policy)
 
-Image metadata is applied as OCI annotations on the manifest index — never as Dockerfile `LABEL` blocks. `LABEL` attaches only to the per-platform layer and is invisible on multiarch pulls; annotations attach to the index and are visible on every platform.
+All image metadata is applied as **OCI annotations at build time** — never as `LABEL` blocks in any Dockerfile. Labels attach to per-platform image layers; multiarch manifest indexes do not inherit labels, so they appear missing on multiarch pulls. Annotations attach to the manifest index and are visible across all platforms.
 
-- No `LABEL` blocks anywhere in `docker/Dockerfile*`.
-- All metadata is passed at build time via `--annotation` flags on `docker buildx build` (or via `docker/metadata-action` → `annotations:` output in GitHub Actions / Gitea / Forgejo).
-- See `dockerfile_conventions.md` → "OCI Annotations" for the full required annotation set (static + dynamic) and the canonical `docker/metadata-action` snippet.
+- No `LABEL` blocks in `docker/Dockerfile` or `docker/Dockerfile.dev`
+- GitHub Actions: use `docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0` with an `annotations:` input listing the required OCI keys
+- `docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0` MUST set `annotations: ${{ steps.meta.outputs.annotations }}`, `labels: ""` to suppress label output, AND `provenance: false` to prevent a spurious `unknown/unknown` platform entry in the manifest list (use `actions/attest-build-provenance` for release binary attestation instead)
+
+See `dockerfile_conventions.md` → "OCI Annotations" for the full required annotation set (`org.opencontainers.image.{title,description,url,source,documentation,vendor,authors,vcs-type,version,revision,created,licenses,...}`).
+
+### Build-Time Metadata Args
+
+`docker/Dockerfile` declares `ARG BUILD_EPOCH` in the builder stage and exports it as an environment variable for the `go build` step, so the `-ldflags` `-X 'main.BuildEpoch=…'` injection embeds it (PART 5 → "Build Metadata"). `ARG BUILD_DATE` is declared only where it feeds the `org.opencontainers.image.created` value — it is never passed to the go build. The caller captures `BUILD_EPOCH` once, derives `BUILD_DATE` from it, and passes both:
+
+```bash
+# Captured ONCE; BUILD_DATE is derived from it, never independently captured
+BUILD_EPOCH="$(date -u +%s)"
+BUILD_DATE="$(date -u -d "@${BUILD_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)"
+docker build -f docker/Dockerfile \
+  --build-arg BUILD_EPOCH="$BUILD_EPOCH" \
+  --build-arg BUILD_DATE="$BUILD_DATE" \
+  ...
+```
 
 ### Container Runtime Rules
 
@@ -930,7 +963,12 @@ jobs:
       options: "--user 0:0"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-      - run: go build -buildvcs=false -trimpath ./src
+      - name: Capture build epoch
+        run: |
+          # Captured ONCE per job - every other time value derives from this
+          BUILD_EPOCH=$(date -u +%s)
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+      - run: go build -buildvcs=false -trimpath -ldflags="-X 'main.BuildEpoch=${BUILD_EPOCH}'" ./src
 ```
 
 ### X11 and Wayland Forwarding (Mandatory for GUI/Display Testing)
@@ -1517,7 +1555,10 @@ Plugin downloads are an additional case and apply only when IDEA.md defines a ha
 
 - Keep dependencies minimal
 - Remove unused packages promptly
-- Public repos should automate dependency updates for Go modules, GitHub Actions, and Docker if used
+- **Renovate is the only supported dependency-update tool** — covers Go deps, GitHub Actions SHAs, and Docker image digests from a single `renovate.json` at the repo root. Works on GitHub, GitLab, Gitea, Forgejo, and Jenkins.
+- **Dependabot is forbidden** — GitHub-only, duplicates Renovate's work on GitHub, and cannot serve the other four providers. Never enable both.
+- Public repos MUST ship `renovate.json` so Go / Actions / Docker updates land as PRs automatically; Renovate uses `pinDigests: true` to keep all `uses:` lines pinned to immutable SHAs
+- Renovate only updates the SHA; the **runtime-still-supported** verification (e.g., node24 vs deprecated runtimes) remains a manual check on every SHA bump (PART 10 → "Third-party Action Pinning")
 - Security advisories are blockers until triaged
 - Run `govulncheck ./...` as part of CI to catch known vulnerabilities
 
@@ -1539,7 +1580,8 @@ No hidden telemetry. Any analytics, crash reporting, or update pings must be doc
 | No unsafe fork secrets | Fork PRs do not receive secrets or publish permissions |
 | Version precedence | `release.txt` wins when present |
 | Site precedence | `site.txt` wins when present |
-| Verifiable outputs | Releases publish checksums and an SBOM (always); provenance/attestation when the platform supports it |
+| Verifiable outputs | Releases publish aggregate `sha256.txt` / `sha512.txt` checksum files and an SBOM (always); provenance/attestation when the platform supports it |
+| Single build time source | Every build job — on every provider (GitHub Actions, Gitea/Forgejo, GitLab CI, Jenkins) — captures `BUILD_EPOCH="$(date -u +%s)"` exactly once and exports it to the build environment so the `go build` `-ldflags` `-X 'main.BuildEpoch=…'` injection embeds it (PART 6). `BUILD_DATE` is never independently captured; where a Docker build needs the OCI `image.created` label, derive it (`date -u -d "@${BUILD_EPOCH}" +%Y-%m-%dT%H:%M:%SZ`) and pass both via `--build-arg BUILD_EPOCH=` / `--build-arg BUILD_DATE=` |
 | No Makefile in CI | Workflow `run:` steps invoke explicit commands with all environment variables inlined — never `make {target}`. The Makefile is for local developer convenience only. CI MUST NOT depend on Makefile targets that could drift silently. |
 | Portability | No hardcoded org, project name, official site, or registry value anywhere in workflows. Use `${{ github.repository_owner }}` / `${{ github.event.repository.name }}` (and provider equivalents). Workflows must keep working after a fork without editing values. |
 | Renovate only | `renovate.json` at repo root is the only supported dependency-update tool — it covers GitHub Actions SHAs, Docker image digests, Go module versions, and works across all five providers from a single config. Dependabot is **forbidden** (GitHub-only; duplicates Renovate on GitHub; cannot serve the other four providers). |
@@ -2175,7 +2217,8 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] `.claude/memory/` directory exists (with an empty `MEMORY.md` index if no entries yet) and is committed, not gitignored
 - [ ] `release.txt` exists if the project is using explicit release versioning
 - [ ] `site.txt` exists only if there is a real official site URL
-- [ ] `docker/Dockerfile`, `docker/docker-compose.yml`, `docker/docker-compose.dev.yml`, `docker/docker-compose.test.yml`, and `docker/entrypoint.sh` exist; `Dockerfile` is the runtime image
+- [ ] `docker/Dockerfile`, `docker/docker-compose.yml`, `docker/docker-compose.dev.yml`, `docker/docker-compose.test.yml`, and `docker/rootfs/usr/local/bin/entrypoint.sh` exist; `Dockerfile` is the runtime image
+- [ ] `.dockerignore` exists and excludes `binaries/`, `releases/`, and other build noise — but never `docker/`, `src/`, `go.mod`, `go.sum`, or `release.txt`
 - [ ] `docker/Dockerfile.build` does not exist — Go projects always use `casjaysdev/go:latest` directly; no custom toolchain image is ever needed
 - [ ] `CGO_ENABLED=0` is set as default in the Docker image environment
 - [ ] X11 forwarding sample command is documented and works against a real Xorg/XWayland session
