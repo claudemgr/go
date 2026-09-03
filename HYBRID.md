@@ -6655,8 +6655,7 @@ $TEMP_DIR/
 | `/data/{internal_name}/` | External service data (nginx, apache, etc.) |
 
 **Rules:**
-- Production volumes use `:z` suffix (SELinux shared label)
-- AI test-run volumes (temp dir) omit `:z` (not needed in temp dir)
+- ALL bind-mount volumes use the `:z` suffix (SELinux shared label) — production, dev, and AI test runs alike; it is a no-op on non-SELinux hosts, so there is no harm in always setting it
 - `docker/rootfs/` is for container overlay (entrypoint.sh, service configs) — NOT for runtime volumes
 - NEVER commit runtime `volumes/` from local runs
 
