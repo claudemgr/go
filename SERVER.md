@@ -34175,6 +34175,19 @@ server:
 | **Cluster Aware** | Only one node runs each task in cluster mode |
 | **No External Dependencies** | Built-in, no cron or external scheduler needed |
 
+### Task Execution Panic Safety (MUST)
+
+**A single scheduled task MUST NEVER be able to crash the scheduler or the server process.**
+
+Every task run MUST execute inside its own panic/`recover` boundary, isolated from the scheduler's own control loop and from every other task:
+
+| Requirement | Description |
+|-------------|-------------|
+| **Per-task recover** | Each task invocation runs behind a `defer`+`recover` (or equivalent isolation) that catches any panic raised by that task's code |
+| **Scheduler loop survives** | A panicking task MUST be logged and marked `failed` for that run — the scheduler loop itself MUST keep running and MUST still fire the task's next scheduled occurrence |
+| **No cross-task impact** | A panic in one task MUST NOT skip, delay, or corrupt the state of any other task |
+| **Same guarantee as HTTP handlers** | This is the same non-negotiable guarantee as the per-request panic/`recover` requirement in "Error Pages (MUST Match Theme)" — a background job is not exempt just because no browser is watching it |
+
 ## NEVER Use External Schedulers
 
 **The built-in scheduler handles ALL scheduled tasks. NEVER use external schedulers.**
