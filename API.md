@@ -4460,7 +4460,7 @@ Content-Type: application/json
 
 {
   "ok": false,
-  "error": "SERVICE_ERROR",
+  "error": "MAINTENANCE",
   "message": "Service temporarily unavailable"
 }
 ```
@@ -11783,7 +11783,7 @@ INSERT INTO config (key, value, type) VALUES
     ('ssl.min_version', '"TLS1.2"', 'string'),
     ('cors.allowed_origins', '["https://example.com","https://api.example.com"]', 'array'),
     -- per minute per IP (see server.rate_limit.*)
-    ('rate_limit.read.requests', '120', 'number'),
+    ('server.rate_limit.read.requests', '120', 'number'),
     ('branding.site_name', '"My App"', 'string');
 -- NOTE: server.token is NEVER stored here — it lives in server.yml only,
 -- and only its SHA-256 hash is cached in memory (see API Token Model below)
@@ -13574,6 +13574,7 @@ func NewDB(cfg *config.Database) (*sql.DB, error) {
 | Simple SELECT | 5 seconds | Fast reads |
 | Complex SELECT (JOIN) | 15 seconds | More processing |
 | INSERT/UPDATE/DELETE | 10 seconds | Write operations |
+| Transactions (multi-statement) | 30 seconds | Bounds the whole `BeginTx`...`Commit`/`Rollback` span, not per-statement |
 | Bulk operations | 60 seconds | Large data sets |
 | Migrations | 5 minutes | Schema changes |
 | Reports | 2 minutes | Aggregations |

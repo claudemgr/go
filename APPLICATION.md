@@ -1506,6 +1506,28 @@ docker run --rm \
 - Panic behavior must be intentional and documented (`recover` used deliberately, not to swallow all errors)
 - GUI/TUI debug tooling must not leak into normal production UX by default
 
+**Standard exit codes (MUST):** `0` success · `1` general/runtime error (includes a recovered panic) · `2` usage error (bad flags/args — matches Go's own `flag` package behavior). `--help`/`--version` always exit `0` (see "Standard CLI Flags"). Never invent additional exit codes without documenting them in `--help` output.
+
+**Top-level panic recovery (MUST, `main()`):** every binary's `main()` MUST install a top-level `recover` so an unhandled panic prints a clean, user-facing error on stderr and exits `1` instead of dumping a raw Go stack trace to a normal user — the stack trace is only for `--debug`/development mode (see above).
+
+```go
+func main() {
+    defer func() {
+        if r := recover(); r != nil {
+            if debugMode {
+                fmt.Fprintf(os.Stderr, "panic: %v\n\n%s\n", r, debug.Stack())
+            } else {
+                fmt.Fprintf(os.Stderr, "error: %v\n", r)
+            }
+            os.Exit(1)
+        }
+    }()
+    run()
+}
+```
+
+**Signal handling outside daemon mode (MUST):** a plain CLI/GUI/TUI binary (i.e., not running in PART 14's RFC daemon mode) MUST still install `signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)` around its main operation so `Ctrl+C`/`SIGTERM` during a long-running command (a download, a build, an IPC session) cancels the context, lets in-flight cleanup (temp files, open IPC sockets/handles, partial output) run, and then exits `1` — never leave the process to die mid-write via Go's default signal behavior. Daemon mode's own richer signal contract (SIGHUP reload, graceful drain) is defined separately in PART 14 and takes precedence when that mode is active.
+
 ## Directory Naming
 
 **Singular** — Go source directories match package names, and Go package names are singular by convention (`internal/handler/`, `internal/model/`, `internal/middleware/`) — not `handlers/`, `models/`. Tooling dirs are always plural regardless of language (`scripts/`, `tests/`, `completions/`).

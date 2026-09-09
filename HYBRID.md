@@ -15637,13 +15637,13 @@ Successful health-check requests are excluded from `access.log` by default — a
 
 **Text Log Format:**
 ```
-2024-10-10T13:55:36-04:00 [INFO] Server started on :8080
+2024-10-10T13:55:36-04:00 [INFO] Server started on :{port}
 2024-10-10T13:55:40-04:00 [ERROR] Database connection failed: timeout
 ```
 
 **JSON Log Format:**
 ```json
-{"time":"2024-10-10T13:55:36Z","level":"INFO","msg":"Server started on :8080"}
+{"time":"2024-10-10T13:55:36Z","level":"INFO","msg":"Server started on :{port}"}
 {"time":"2024-10-10T13:55:40Z","level":"ERROR","msg":"Database connection failed","error":"timeout"}
 ```
 
@@ -21276,7 +21276,7 @@ at the appropriate level — a healthy server prints nothing.
 
 **Log format is ALWAYS plain text:**
 ```
-2025-01-15 09:00:00 INFO  Server started on :8080
+2025-01-15 09:00:00 INFO  Server started on :{port}
 2025-01-15 09:00:01 INFO  Database connected
 2025-01-15 09:00:05 WARN  High memory usage: 85%
 2025-01-15 09:00:10 ERROR Connection timeout to upstream
