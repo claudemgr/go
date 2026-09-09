@@ -27054,6 +27054,42 @@ src/server/template/
 - NO generic browser error pages - always render themed template
 - **Every request MUST terminate in a rendered response — the error path itself must never fail the request.** A panic/`recover` middleware and a template-render failure MUST both fall back to a minimal, hardcoded error response (correct status code, short body, honoring content negotiation — HTML for browsers, JSON for API clients) instead of a blank body, a dropped connection, or a leaked stack trace. The failure handler must never be the thing that breaks the site — the backend mirror of the service-worker guaranteed-`Response` rule.
 
+**Panic-safety implementation (recover middleware):**
+
+```go
+// RecoverMiddleware guarantees every request terminates in a response, even
+// when a handler panics. Wrap the router with this as the outermost
+// middleware, before routing, logging, or any other layer that could itself
+// panic.
+func RecoverMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("panic recovered: %v\n%s", rec, debug.Stack())
+				renderFallbackError(w, r, http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// renderFallbackError is the last-resort error response used when the
+// themed error.tmpl itself fails to render, or a panic is recovered here.
+// It MUST NOT depend on the template engine, theme system, or any state
+// that could itself panic or fail — plain strings only.
+func renderFallbackError(w http.ResponseWriter, r *http.Request, status int) {
+	if strings.Contains(r.Header.Get("Accept"), "application/json") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		fmt.Fprintf(w, `{"error":%q,"status":%d}`, http.StatusText(status), status)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	fmt.Fprintf(w, "<html><body><h1>%d %s</h1></body></html>", status, http.StatusText(status))
+}
+```
+
 **Error page structure:**
 ```html
 {{template "public.tmpl" .}}
