@@ -4216,9 +4216,7 @@ User preferences like theme, language, and UI settings can be stored client-side
 | Cookies | Theme, language, UI preferences, consent flags | Configurable expiry; server-readable, so pages render correctly without JS |
 | `localStorage` | Client-only state the server never needs (e.g. draft form text) | Until cleared |
 
-These work for anonymous visitors and don't require user accounts. Server-side user preferences (stored in `user_preferences` table) require PART 34.
-
-**Cross-device preference sync (export/import — stateless, no PART 34 required):** only `theme` and `lang` are portable across browsers/devices — never `cookie_consent`/`ccpa_opt_out` (per-browser legal acknowledgments) or the build-stamp cookie. Since preferences aren't tied to identity, the same values always produce the same code/URL — the code/URL *is* the state, not a lookup key, so nothing is ever stored server-side. Guest preferences live at `/server/preferences` (distinct from the authenticated `/server/{admin_path}/{admin_username}/preferences` and PART-34 `/users/settings/preferences` routes), API-mirrored at `/api/{api_version}/server/preferences` — the export/import actions are sub-routes of it, never the standalone `/prefs/*` path, nor bare `/preferences` without the `/server` prefix — and `preferences` MUST be added to the `{admin_path}` reserved-word list (see "Route Conflict Detection") so an operator can never set `admin_path=preferences` and collide with it. If an old/non-canonical route (e.g. a bare `/preferences` or `/prefs/*`) exists in already-written code, delete it outright and update all callers to `/server/preferences` — never keep it as a redirect or alias "for backward compatibility" (see "Canonical Terms Only"). `GET /server/preferences/export` returns both a full import URL (`https://{host}/server/preferences/import?theme=dark&lang=fr`, plain query string, stable across schema changes) and a short code (`base64url` of the same query string, for manual retyping without paste). `GET /server/preferences/import?theme=dark&lang=fr` validates each value against its normal enum/BCP-47 allowlist — an imported value is still untrusted input — sets the matching cookies, and `303 See Other`s to a clean URL so the code never lingers in the address bar or history.
+These work for anonymous visitors and don't require user accounts. Server-side user preferences (stored in `user_preferences` table) require PART 34. Cross-device sync (export/import, stateless, no PART 34 required) is also available for the guest `theme`/`lang` cookies — see "Client-Side Preferences (cookies)" in PART 16 for the full cookie table, JS write snippet, and export/import route mechanics.
 
 ## AI Implementation Process
 
@@ -26145,6 +26143,43 @@ async function clearClientData() {
   window.location.href = '/login';
 }
 ```
+
+### Client-Side Preferences (cookies)
+
+**Guest/UI preferences are stored in cookies — the server reads them to render pages (theme class, language) with zero server persistence and zero user account needed. localStorage holds only optional JS convenience copies; nothing stored there is load-bearing.**
+
+| Cookie | Values | Default |
+|--------|--------|---------|
+| `theme` | `dark` \| `light` \| `auto` | `dark` |
+| `lang` | BCP 47 tag: `en`, `es`, `fr`, … | `Accept-Language` header |
+| `cookie_consent` | JSON: granular categories + timestamp | unset (banner shown) |
+| `ccpa_opt_out` | `true` | unset |
+| `{project_name}_build` | running build stamp `{project_version}-{short_commit}` | set on first HTML response — drives the PART 9 version-change purge |
+
+**Preference writes (JS enhancement — the server sets the same cookies on its POST endpoints):**
+```javascript
+// Write - the server reads these on the next request
+document.cookie = "theme=light; path=/; max-age=31536000; SameSite=Lax";
+document.cookie = "lang=fr; path=/; max-age=31536000; SameSite=Lax";
+```
+
+**Rules:**
+- Preferences survive logout and session expiry — they are UI state, not account data
+- Never persist guest preferences server-side — the server reads the cookie per request; PART 34's `user_preferences` table (if implemented) is for authenticated per-account settings, never for the guest cookie state described here
+- Never store PII in cookies or localStorage
+- Always fall back to a safe default when a cookie is missing or invalid
+
+**Cross-device preference sync (export/import — stateless, no PART 34 required):**
+
+Preferences aren't tied to identity — any two guests who set the same `theme`/`lang` produce the same code/URL, because the code/URL *is* the preference values, not a lookup key. This lets a preference be carried to a new browser/device without an account and without the server ever storing anything.
+
+- Only `theme` and `lang` are exportable. `cookie_consent` and `ccpa_opt_out` are NEVER included — consent is a per-browser legal acknowledgment that must be re-affirmed on each device, not a portable preference. `{project_name}_build` is NEVER included — it is a device-local cache-purge stamp.
+- Guest preferences live at `/server/preferences` (distinct from the authenticated `/server/{admin_path}/{admin_username}/preferences` and PART-34 `/users/settings/preferences` routes), API-mirrored at `/api/{api_version}/server/preferences` — the export/import actions are sub-routes of it, never the standalone `/prefs/*` path, nor bare `/preferences` without the `/server` prefix. `preferences` MUST be added to the `{admin_path}` reserved-word list (see "Route Conflict Detection") so an operator can never set `admin_path=preferences` and collide with it. If an old/non-canonical route (e.g. a bare `/preferences` or `/prefs/*`) exists in already-written code, delete it outright and update all callers to `/server/preferences` — never keep it as a redirect or alias "for backward compatibility" (see "Canonical Terms Only").
+- **Export** (`GET /server/preferences/export`, API-mirrored at `GET /api/{api_version}/server/preferences/export`, or a "Copy preferences" UI action): reads the current `theme`/`lang` cookies and returns two forms of the same state:
+  - **Full URL** — `https://{host}/server/preferences/import?theme=dark&lang=fr`: a plain query string, human-readable, and stable across schema changes (a link made before a new preference key existed just omits it on import).
+  - **Short code** — `base64url(theme=dark&lang=fr)`: the query string alone, for manual retyping on a device without copy/paste; the import form strips a leading `https://.../server/preferences/import?` if pasted with it.
+- **Import** (`GET /server/preferences/import?theme=dark&lang=fr`, API-mirrored at `GET /api/{api_version}/server/preferences/import`, or a paste-a-code field feeding the same route): validates each parameter against its normal enum/BCP-47 allowlist — reject or drop anything unknown or malformed, an imported value is still untrusted input — sets the matching cookies, then `303 See Other` to `/` (or the referring page) so the code never lingers in the visible URL or browser history.
+- No account, no DB row, no user-preferences table required for this guest flow — decode → validate → set cookie → redirect happens in the one request; nothing is written or looked up server-side.
 
 ### Offline Behavior
 
