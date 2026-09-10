@@ -26156,6 +26156,8 @@ async function clearClientData() {
 | `ccpa_opt_out` | `true` | unset |
 | `{project_name}_build` | running build stamp `{project_version}-{short_commit}` | set on first HTML response — drives the PART 9 version-change purge |
 
+**This page must be editable, not read-only:** every cookie above needs a control on `/server/preferences` that the visitor can act on directly — a theme selector, a language selector, cookie-consent category toggles (reachable here, not only from the first-visit banner), a CCPA opt-out toggle, and a control for every app-specific `{project_name}_pref_*` setting below. Rendering the current values as plain text with no way to change them turns a preferences page into a status page — the entire point of this page is letting the guest change these settings in place.
+
 **App-specific guest preferences:** the table above is the base set every project needs — add project-specific guest-scoped preferences to it too: settings a visitor can adjust without an account (default view mode, results-per-page, sort order, syntax-highlighting theme, unit system, etc.). Name them `{project_name}_pref_{key}`, document each one in this project's own AI.md preferences table, and hold them to the same rules as `theme`/`lang`: cookie-only, read per request, never persisted server-side. They belong in this guest-scoped cookie set precisely because no login is involved — once a setting must be tied to an identity (available cross-device without an export code, or gated per-user), it belongs in PART 34's `user_preferences` table instead, never here.
 
 **Preference writes (JS enhancement — the server sets the same cookies on its POST endpoints):**
