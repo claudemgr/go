@@ -788,6 +788,63 @@ If migration would require breaking a released public contract (flag, route, con
 
 A HYBRID project implements every PART of this document that applies given `IDEA.md`'s declared scope (app-only surfaces may be skipped only if `IDEA.md` explicitly scopes the project as app-only — but then it is not a HYBRID project; a true HYBRID project implements both the application surfaces of PART 2/4/8 and the server surfaces of PART 10–21).
 
+| PART | Section | Required |
+|------|---------|----------|
+| 0 | Critical Rules — Read First | ✅ Follow always |
+| 1 | Project Files, Governance & License | ✅ Implement fully |
+| 2 | Application & Server Model | ✅ Implement fully |
+| 3 | Project Structure & OS-Specific Paths | ✅ Implement fully |
+| 4 | Runtime Mode Selection & Privilege Escalation | ✅ Implement fully |
+| 5 | Configuration | ✅ Implement fully |
+| 6 | Toolchain, Build & Packaging | ✅ Implement fully |
+| 7 | Version, Site & Build Metadata | ✅ Implement fully |
+| 8 | Server Binary CLI & Client | ✅ Implement fully |
+| 9 | Error Handling & Caching | ✅ Implement fully |
+| 10 | Database | ✅ Implement fully |
+| 11 | Security, Logging & Privacy | ✅ Implement fully |
+| 12 | Server Configuration, Health & Versioning | ✅ Implement fully |
+| 13 | API Structure | ✅ Implement fully |
+| 14 | SSL/TLS & Let's Encrypt | ✅ Implement fully |
+| 15 | Web Frontend | ✅ Implement fully |
+| 16 | Email & Notifications | ✅ Implement fully |
+| 17 | Scheduler | ✅ Implement fully |
+| 18 | GeoIP | ✅ Implement fully |
+| 19 | Metrics | ✅ Implement fully |
+| 20 | Backup & Restore | ✅ Implement fully |
+| 21 | Update Command | ✅ Implement fully |
+| 22 | Service Support | ✅ Implement fully |
+| 23 | Testing, Quality & Debugging | ✅ Implement fully |
+| 24 | CI/CD, Releases & Automation | ✅ Implement fully |
+| 25 | Documentation, License & ReadTheDocs | ✅ Implement fully |
+| 26 | I18N & A11Y | ✅ Implement fully |
+| 27 | Overlay Networks (Tor & I2P) | ✅ Implement fully (27.1 Tor auto; 27.2 I2P opt-in) |
+| 29 | Client (companion to PART 8) | ✅ Implement fully |
+| 30 | Checklists | ✅ Verify all items |
+| 31 | IDEA.md Reference | ✅ Reference-only (do NOT modify) |
+
+### OPTIONAL Sections (Become NON-NEGOTIABLE When Implemented)
+
+**IMPORTANT:** Optional sections are a per-project decision, controlled by `IDEA.md`'s `## Business logic`. However, once a project enables an optional feature, that entire PART becomes NON-NEGOTIABLE and must be followed exactly.
+
+| PART | Section | When to Include |
+|------|---------|-----------------|
+| 28 | Admin Panel | If the project needs an operator/administration surface beyond CLI/`server.yml` — enable via `IDEA.md`'s `## Business logic` |
+
+### Optional Section Decision Guide
+
+**PART 28: Admin Panel**
+
+| Include | Skip | Reason |
+|---------|------|--------|
+| Projects needing web-based administration, moderation, or configuration UI | Simple single-purpose apps managed entirely via CLI/`server.yml` | Admin panel is a full isolated surface (PART 28) — only build it when the project genuinely needs one |
+| Multi-operator setups needing MFA-gated web access | Solo-operator projects content with CLI/config-file management | Web admin adds attack surface; skip it when unneeded |
+
+**Once implemented, the optional PART becomes NON-NEGOTIABLE** — the admin routes and admin account become required exactly as PART 28 specifies (see "Admin Panel Isolation" there).
+
+### CRITICAL: Unused Optional Features Must Not Exist in Code
+
+**If a project does NOT enable PART 28, the admin panel must be completely absent from the codebase** — no `/server/{admin_path}/**` routes, no admin account creation, no admin-only tables, no disabled/hidden admin UI. See PART 28's own inert-when-disabled rule for the full requirement.
+
 ### Implementation Discipline
 
 Work through PARTs in dependency order (see Task Dependency Ordering in global rules), not in whatever order feels interesting. "Jumping around" — half-implementing the frontend before the server's data layer exists — is a failure mode, not a valid working style. If stuck on a PART, re-read it fully, check `IDEA.md`, then ask; don't skip ahead and leave a gap.
