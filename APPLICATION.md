@@ -1407,7 +1407,7 @@ var TerminalPaletteLight = TerminalPalette{
 
 GUI never consumes `TerminalPalette` or any literal hex palette. It
 detects light/dark only (`github.com/adrg/xdg` / OS theme APIs — see
-"Theme detection" above) and lets the native toolkit (GTK/Cocoa/Win32)
+"Theme detection" above) and lets the toolkit (Gio/Fyne)
 apply its own light/dark widget theme.
 
 ---
