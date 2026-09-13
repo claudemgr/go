@@ -179,7 +179,7 @@ If this project ships a GUI surface, it MUST support **both** X11 and Wayland as
 - Display detection at runtime must consider `WAYLAND_DISPLAY` AND `DISPLAY` and pick the appropriate backend
 - GUI smoke testing inside Docker MUST be runnable against both an X11 socket and a Wayland socket forwarded from the host (see PART 5 → "Docker Rule")
 - IDEA.md may declare GUI out of scope, but it may NOT declare "X11 only" or "Wayland only"
-- Reconciling X11/Wayland with the static-binary rule (see "Single Static Binary" below): use display packages that avoid **link-time** C dependencies. With `CGO_ENABLED=0` this is automatic — for X11, the preferred option is a pure-Go X11 client (`github.com/jezek/xgb`, talks to the X server's Unix socket directly with no `libX11` involvement); for Wayland, use a pure-Go Wayland client (`github.com/rajveermalviya/go-wayland`, speaks the wire protocol directly with no `libwayland-client` involvement). In all of these cases the binary has no link-time C dependency for display I/O — that is the rule. The pure-Go GUI toolkits (e.g., `gioui.org`, and toolkits built on it) follow this path natively; that path is compliant.
+- Reconciling X11/Wayland with the static-binary rule (see "Single Static Binary" below): use display packages that avoid **link-time** C dependencies. With `CGO_ENABLED=0` this is automatic — for a bare display client, use a pure-Go X11 client (`github.com/jezek/xgb`, talks to the X server's Unix socket directly with no `libX11` involvement) or a pure-Go Wayland client (`github.com/rajveermalviya/go-wayland`, speaks the wire protocol directly with no `libwayland-client` involvement). For a full GUI toolkit, use `github.com/gogpu/ui` (+ `github.com/gogpu/gogpu` for windowing) — see "Pure-Go Library Stack" below. **`gioui.org` (Gio) and `fyne.io/fyne/v2` are NOT compliant and MUST NOT be used**: Gio's own install docs require `gcc` plus `libX11`/`libwayland`/`libEGL`/`libGLES`/Vulkan dev headers on Linux (real link-time cgo), and Fyne is built on `go-gl`/`glfw`, which likewise requires cgo — both directly violate `CGO_ENABLED=0 ALWAYS, no exceptions`. `gogpu/ui`'s windowing layer (`gogpu/gogpu`) instead uses `goffi`, a purego-style `dlopen`/`dlsym` FFI, to reach `libX11`/`libwayland-client`/Vulkan/Metal/DX12 at runtime only — the same "no link-time C dependency, load lazily instead" pattern the Rust template already uses via `x11-dl` / `wayland-client`'s `dlopen` feature. That path is compliant.
 
 ## ⚠️ CRITICAL: Go-Only Application
 
@@ -477,15 +477,17 @@ Choose GUI when **all** are true:
 - explicit headless environment from config or flag
 
 **Treat these as positive GUI/display signals (platform-appropriate):**
-- `WAYLAND_DISPLAY` — Wayland session (MUST be supported by the app on Linux/BSD via the GUI toolkit)
-- `DISPLAY` — X11 / XWayland session (MUST be supported by the app on Linux/BSD via the GUI toolkit)
+- `WAYLAND_DISPLAY` — Wayland session (MUST be supported by the app on Linux via the GUI toolkit)
+- `DISPLAY` — X11 / XWayland session (MUST be supported by the app on Linux via the GUI toolkit)
 - a local Windows desktop session
 - a local macOS Aqua/session launch
 
-**Backend selection on Linux/BSD when both signals are present:**
+**Backend selection on Linux when both signals are present:**
 - Prefer Wayland when `WAYLAND_DISPLAY` is set; if connecting to that Wayland socket fails at runtime, fall back to X11 instead of erroring out
 - Fall back to X11 (`DISPLAY`) when `WAYLAND_DISPLAY` is unset or the user/config explicitly requests X11
 - Both backends MUST be exercised in tests (PART 0 → "X11 AND Wayland Are Both Required")
+
+**BSD has no GUI backend today** — `gogpu/gogpu`'s windowing layer does not yet implement BSD (its own build tags stub out BSD support pending upstream work). Compile GUI support out on `freebsd`/`netbsd`/`openbsd` targets (`caps.GUISupported == false` for those `GOOS` values) rather than shipping a broken build tag. No new fallback logic is needed for this — `caps.GUISupported == false` already routes `DetectUIMode` straight to the existing TUI check, and TUI (per its own Smart Detect Rules below) already falls through to CLI when no TTY is attached. Revisit once BSD windowing lands upstream.
 
 ### TUI
 
@@ -642,7 +644,7 @@ This is the recommended starting point for satisfying common application needs w
 | Error handling | `fmt.Errorf` + `%w` wrapping; `errors.Is` / `errors.As` (stdlib) |
 | Date / time | `time` (standard library) |
 | Config files | `github.com/spf13/viper`; or plain TOML/YAML |
-| GUI (cross-platform) | `gioui.org` (Gio — pure Go, X11+Wayland+macOS+Windows); `fyne.io/fyne/v2` |
+| GUI (cross-platform) | `github.com/gogpu/ui` + `github.com/gogpu/gogpu` (pure Go, zero CGO via `goffi` dlopen — Linux X11+Wayland, macOS, Windows; BSD not yet supported) |
 | TUI | `github.com/charmbracelet/bubbletea` + `github.com/charmbracelet/lipgloss` |
 | Font rendering | handled by GUI toolkit |
 | Image decoding | `image/*` (standard library) |
@@ -662,6 +664,100 @@ This list is not exhaustive; treat it as the starting point. When introducing a 
 1. Search pkg.go.dev for a pure-Go option first
 2. Check for any transitive C dependency (`go mod graph`, review each package's source)
 3. If the only viable option has a C dependency, document the exception in `IDEA.md`, confirm it can be statically compiled into the final binary with `CGO_ENABLED=0`, and add attribution to `LICENSE.md`
+
+### GUI Toolkit — `gogpu/ui` Minimal Example
+
+`gogpu/ui` builds three parts: a `gogpu.App` (windowing + GPU context via `goffi`, no cgo), a `ui.App` (widget tree), and a draw callback bridging `gg` rendering into it:
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/gogpu/gg"
+    _ "github.com/gogpu/gg/gpu"
+    "github.com/gogpu/gg/integration/ggcanvas"
+    "github.com/gogpu/gogpu"
+    "github.com/gogpu/ui/app"
+    "github.com/gogpu/ui/core/button"
+    "github.com/gogpu/ui/primitives"
+    "github.com/gogpu/ui/render"
+    "github.com/gogpu/ui/theme/material3"
+    "github.com/gogpu/ui/widget"
+)
+
+func main() {
+    gogpuApp := gogpu.NewApp(gogpu.DefaultConfig().
+        WithTitle("{PROJECT_NAME}").
+        WithSize(800, 600))
+
+    m3 := material3.New(widget.Hex(0x6750A4))
+
+    uiApp := app.New(
+        app.WithWindowProvider(gogpuApp),
+        app.WithPlatformProvider(gogpuApp),
+        app.WithEventSource(gogpuApp.EventSource()),
+    )
+    uiApp.SetRoot(
+        primitives.Box(
+            primitives.Text("{PROJECT_NAME}").FontSize(24).Bold(),
+            button.New(
+                button.TextOpt("Quit"),
+                button.OnClick(func() { gogpuApp.RequestClose() }),
+                button.PainterOpt(material3.ButtonPainter{Theme: m3}),
+            ),
+        ).Padding(24).Gap(12),
+    )
+
+    var canvas *ggcanvas.Canvas
+    gogpuApp.OnDraw(func(dc *gogpu.Context) {
+        w, h := dc.Width(), dc.Height()
+        if w <= 0 || h <= 0 {
+            return
+        }
+        if canvas == nil {
+            provider := gogpuApp.GPUContextProvider()
+            if provider == nil {
+                return
+            }
+            var err error
+            canvas, err = ggcanvas.New(provider, w, h)
+            if err != nil {
+                log.Printf("ggcanvas: %v", err)
+                return
+            }
+        }
+        uiApp.Frame()
+        cw, ch := canvas.Size()
+        if cw != w || ch != h {
+            if err := canvas.Resize(w, h); err != nil {
+                log.Printf("resize: %v", err)
+            }
+            cw, ch = w, h
+        }
+        sv := dc.SurfaceView()
+        sw, sh := dc.SurfaceSize()
+        canvas.Draw(func(cc *gg.Context) {
+            cc.SetRGBA(0.94, 0.94, 0.94, 1)
+            cc.DrawRectangle(0, 0, float64(cw), float64(ch))
+            cc.Fill()
+            uiApp.Window().DrawTo(render.NewCanvas(cc, cw, ch))
+        })
+        if err := canvas.RenderDirect(sv, sw, sh); err != nil {
+            log.Printf("render: %v", err)
+        }
+    })
+    gogpuApp.OnClose(func() { gg.CloseAccelerator() })
+
+    if err := gogpuApp.Run(); err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+No `gcc`, no C headers, no `//go:build cgo` — `go build` with `CGO_ENABLED=0` (the project default) produces the same binary on Linux, macOS, and Windows. `WithTitle`/`WithSize` and Material 3 theming (`material3.New(widget.Hex(...))`) plug directly into "Theme detection" above for OS light/dark — never hardcode the accent color; resolve it from the detected theme instead of the literal `0x6750A4` shown here.
 
 ## Go Commands
 
@@ -1193,7 +1289,7 @@ All machine-dependent settings MUST be detected at runtime on the target machine
 | Locale | `LANG`, platform locale APIs | assume English-only unless documented |
 | Theme preference | OS theme APIs / config | assume dark/light universally |
 | Terminal capability | TTY + TERM + negotiated features | assume ANSI/alt-screen support |
-| Display stack | X11 (`DISPLAY`) and Wayland (`WAYLAND_DISPLAY`) detection — both backends supported, runtime-selected by GUI toolkit | assume GUI exists; ship X11-only or Wayland-only |
+| Display stack | X11 (`DISPLAY`) and Wayland (`WAYLAND_DISPLAY`) detection on Linux — both backends supported, runtime-selected by GUI toolkit; no GUI backend on BSD (falls to TUI/CLI) | assume GUI exists; ship X11-only or Wayland-only |
 | CPU / memory | `runtime.NumCPU()`, runtime detection if needed | tune only for dev hardware |
 
 ## Configuration Rules
@@ -1407,8 +1503,9 @@ var TerminalPaletteLight = TerminalPalette{
 
 GUI never consumes `TerminalPalette` or any literal hex palette. It
 detects light/dark only (`github.com/adrg/xdg` / OS theme APIs — see
-"Theme detection" above) and lets the toolkit (Gio/Fyne)
-apply its own light/dark widget theme.
+"Theme detection" above) and lets the toolkit (`gogpu/ui`'s Material 3 /
+Fluent / Cupertino theme, per "GUI Toolkit — `gogpu/ui` Minimal Example"
+above) apply its own light/dark widget theme.
 
 ---
 
@@ -1433,7 +1530,7 @@ Before building a new TUI view, GUI widget, or CLI output helper, check for an e
 **This is a single native binary — there is no Web CSS to reuse.** Styling reuse instead means: never invent a second color palette, a second set of semantic role names, or a second theme-detection mechanism alongside the ones already defined above.
 
 - **TUI/CLI:** always style through the existing `TerminalPalette` struct and its semantic roles (`Foreground`, `Muted`, `Primary`, `Success`, `Warning`, `Error`, `Info`, `Border`) and the existing `TerminalPaletteDark`/`TerminalPaletteLight` instances — never a new hardcoded ANSI index or a second palette struct. New TUI/CLI output reuses existing `lipgloss` styles built from the palette; a genuinely new style still derives from a `TerminalPalette` role, never a literal color value.
-- **GUI:** never invent a custom color palette or literal hex values. Reuse the existing native-toolkit theming path (`gioui.org` / `fyne.io/fyne/v2`, OS light/dark detection) so widgets automatically match the user's OS theme — the same "no literal hex, detect and defer to the platform" rule already established in Color Palette (TUI/CLI/GUI) above.
+- **GUI:** never invent a custom color palette or literal hex values. Reuse the existing native-toolkit theming path (`gogpu/ui`'s design-system theme + OS light/dark detection) so widgets automatically match the user's OS theme — the same "no literal hex, detect and defer to the platform" rule already established in Color Palette (TUI/CLI/GUI) above.
 
 ```go
 // CORRECT — new TUI element styled from the existing palette, no new
@@ -2342,7 +2439,7 @@ A compliant Go project following this specification:
 - ships exclusively Go source code (small Docker shell helpers excepted)
 - produces one statically linked binary per target with all assets embedded
 - runs end-to-end from the binary alone on an air-gapped machine
-- supports both X11 and Wayland on Linux/BSD when GUI is in scope (via the chosen pure-Go GUI toolkit)
+- supports both X11 and Wayland on Linux when GUI is in scope (via `gogpu/ui`; BSD has no GUI backend yet and falls back to TUI/CLI)
 - builds, tests, and runs only inside the project's Docker image — never on the host
 - auto-selects GUI, then TUI, then CLI using environment-aware detection
 - uses optional explicit privilege escalation only when requested
@@ -2474,7 +2571,7 @@ maintainer_email: jane@example.com
 - Power users scripting note creation / search via shell
 
 **Surfaces:**
-- GUI: yes (Linux X11 + Wayland via Gio toolkit, macOS, Windows)
+- GUI: yes (Linux X11 + Wayland via `gogpu/ui`, macOS, Windows)
 - TUI: no
 - CLI: yes (`notes new`, `notes search`, `notes ls`)
 
@@ -2497,7 +2594,7 @@ maintainer_email: jane@example.com
 - Title can be empty; body cannot
 
 **Platform constraints:**
-- GUI requires X11 or Wayland on Linux/BSD (handled by Gio toolkit — supports both)
+- GUI requires X11 or Wayland on Linux (handled by `gogpu/ui` — native dlopen-based backend for both, zero CGO); BSD has no GUI backend yet and falls back to TUI/CLI automatically (PART 3 → Smart Detect Rules)
 - No internet access required; works fully offline (PART 0 → "Self-Contained Assets")
 
 **Trust boundaries & abuse cases:**

@@ -7,7 +7,7 @@ Template specifications for CasjaysDev Go projects. Each file is a master templa
 | File | App type | When to use |
 |------|----------|-------------|
 | `API.md` | REST / JSON API server | HTTP services that expose a structured API; may include a companion CLI client |
-| `APPLICATION.md` | Native GUI / TUI / CLI application | Single-binary desktop or terminal applications (Gio, Bubble Tea, Cobra) with no web frontend/API of their own; may optionally be an RFC protocol daemon (HTTP, FTP, SMTP, IMAP, DNS, proxy — PART 14) |
+| `APPLICATION.md` | Native GUI / TUI / CLI application | Single-binary desktop or terminal applications (`gogpu/ui`, Bubble Tea, Cobra) with no web frontend/API of their own; may optionally be an RFC protocol daemon (HTTP, FTP, SMTP, IMAP, DNS, proxy — PART 14) |
 | `SERVER.md` | Full-stack web server | Server-side rendered HTML with optional REST endpoints; similar to API but ships a frontend |
 | `HYBRID.md` | Native application + full server | Single-binary GUI/TUI/CLI application that also embeds a full server (frontend + backend, never called an "API server") for desktop-class products whose accounts are the system users (VS Code + code-server as one app); merges `APPLICATION.md` and `SERVER.md` |
 
