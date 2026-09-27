@@ -248,7 +248,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-30; PART 3
 3. Normalize discovered variables into lower_snake_case `key: value` entries
 4. If `internal_name` / `internal_org` cannot be proven from the existing project state, initialize them to `project_name` / `project_org` on first migration and treat them as frozen after that
 5. If statements from `CLAUDE.md` or `.claude/CLAUDE.md` conflict with `AI.md`, `AI.md` wins; either fix the migrated text or ask the user if the intent is unclear
-6. After migration, keep root `CLAUDE.md` and/or `.claude/CLAUDE.md` only as short efficient loaders and keep the real project plan/spec in `IDEA.md`
+6. After migration, keep root `CLAUDE.md` and/or `.claude/CLAUDE.md` only as short efficient loaders and keep the real project plan/spec in `IDEA.md`, and mirror the final root `CLAUDE.md` content into `AGENTS.md` as a real file copy (never a symlink)
 7. Never silently discard meaningful project-specific content; migrate it, trim it, or ask the user where it belongs
 
 ---
@@ -935,6 +935,8 @@ See PART 0 § Self-Validation Loop — the same table and rules apply to all pro
 
 Loader files point at `AI.md` as the actual specification; they do not duplicate its content.
 
+**AGENTS.md (REQUIRED, root):** Many non-Claude coding agents/tools read `AGENTS.md` at the project root instead of `CLAUDE.md`. Generate/reconcile `AGENTS.md` as an exact copy of root `CLAUDE.md`'s final content — same loader text, kept in sync whenever `CLAUDE.md` changes. Always a real file copy, never a symlink (symlinks are not portable across all platforms/filesystems).
+
 ## License & Attribution
 
 ### Project License
@@ -1262,6 +1264,7 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 │       ├── daily.yml       # Daily builds
 │       └── docker.yml      # Docker images
 ├── CLAUDE.md               # Project memory - critical rules (REQUIRED, primary location)
+├── AGENTS.md               # identical copy of CLAUDE.md, for non-Claude agents
 ├── CLAUDE.local.md         # Personal project preferences (gitignored)
 ├── .claude/                # Claude Code configuration
 │   ├── CLAUDE.md           # Project memory (alternate location)
@@ -44160,6 +44163,7 @@ See **PART 8 → "Flag-to-Config Save Rules"** — flags only update `cli.yml` w
 - [ ] `project_name`, `project_org`, `internal_name`, and `internal_org` exist
 - [ ] If pre-template `CLAUDE.md` or `.claude/CLAUDE.md` existed, project-specific content was migrated into IDEA.md
 - [ ] `CLAUDE.md` / `.claude/CLAUDE.md` are short loaders, not duplicate specs
+- [ ] `AGENTS.md` exists at project root as an exact copy of `CLAUDE.md` (real file, not a symlink)
 - [ ] `release.txt` exists if the project is using explicit release versioning
 - [ ] `site.txt` exists only if there is a real official site URL
 - [ ] `docker/Dockerfile`, `docker/docker-compose.yml`, `docker/docker-compose.dev.yml`, `docker/docker-compose.test.yml`, and `docker/entrypoint.sh` exist; `Dockerfile` is the runtime image

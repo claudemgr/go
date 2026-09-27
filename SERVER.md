@@ -240,7 +240,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-36; PART 3
 3. Normalize discovered variables into lower_snake_case `key: value` entries
 4. If `internal_name` cannot be proven from the existing project state, initialize it to `project_name` on first migration and treat it as frozen after that
 5. If statements from `CLAUDE.md` or `.claude/CLAUDE.md` conflict with `AI.md`, `AI.md` wins; either fix the migrated text or ask the user if the intent is unclear
-6. After migration, keep root `CLAUDE.md` and/or `.claude/CLAUDE.md` only as short efficient loaders and keep the real project plan/spec in `IDEA.md`
+6. After migration, keep root `CLAUDE.md` and/or `.claude/CLAUDE.md` only as short efficient loaders and keep the real project plan/spec in `IDEA.md`, and mirror the final root `CLAUDE.md` content into `AGENTS.md` as a real file copy (never a symlink)
 7. Never silently discard meaningful project-specific content; migrate it, trim it, or ask the user where it belongs
 
 ---
@@ -1535,7 +1535,9 @@ Each AI tool directory MUST have a project memory file containing critical rules
 
 **Claude Code Note:** Claude prefers `CLAUDE.md` at project root (discovered recursively). `.claude/CLAUDE.md` is an alternate location. Personal preferences go in `CLAUDE.local.md` (auto-gitignored).
 
-**Role of `CLAUDE.md`:** root `CLAUDE.md` and `.claude/CLAUDE.md` are **efficient loaders**, not the full spec. They MUST stay short and point back to `AI.md`, which remains the source of truth.
+**AGENTS.md (REQUIRED, root):** Many non-Claude coding agents/tools read `AGENTS.md` at the project root instead of `CLAUDE.md`. Generate/reconcile `AGENTS.md` as an exact copy of root `CLAUDE.md`'s final content — same loader text, kept in sync whenever `CLAUDE.md` changes. Always a real file copy, never a symlink (symlinks are not portable across all platforms/filesystems).
+
+**Role of `CLAUDE.md`:** root `CLAUDE.md` and `.claude/CLAUDE.md` are **efficient loaders**, not the full spec. They MUST stay short and point back to `AI.md`, which remains the source of truth. The same loader content is also mirrored into `AGENTS.md` at the project root as a real file copy — never a symlink.
 
 **If `CLAUDE.md` or `.claude/CLAUDE.md` already exists:**
 - **READ both first** - NEVER overwrite blindly
@@ -1547,6 +1549,7 @@ Each AI tool directory MUST have a project memory file containing critical rules
 - Move long-form implementation/spec content into `AI.md` or `.claude/rules/*.md` as appropriate, then leave root `CLAUDE.md` / `.claude/CLAUDE.md` as short loaders
 - If existing root `CLAUDE.md` or `.claude/CLAUDE.md` conflicts with `AI.md`, then `AI.md` wins; update the loader file to reference the canonical rule instead of duplicating stale text
 - Loader files must end up short and efficient, but valid existing guidance must be migrated, not discarded
+- After finalizing root `CLAUDE.md`, copy its exact content into `AGENTS.md` at the project root (create or overwrite it) — real file, never a symlink
 
 **Required Content Structure (~50-100 lines max):**
 
@@ -6226,6 +6229,7 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 │       ├── daily.yml       # Daily builds
 │       └── docker.yml      # Docker images
 ├── CLAUDE.md               # Project memory - critical rules (REQUIRED, primary location)
+├── AGENTS.md               # identical copy of CLAUDE.md, for non-Claude agents
 ├── CLAUDE.local.md         # Personal project preferences (gitignored)
 ├── .claude/                # Claude Code configuration
 │   ├── CLAUDE.md           # Project memory (alternate location)
@@ -64230,6 +64234,7 @@ make docker
 - [ ] IDEA.md exists and contains project-specific business logic
 - [ ] If pre-template `CLAUDE.md` or `.claude/CLAUDE.md` existed, its project-specific content was migrated into IDEA.md
 - [ ] Claude loader files are now short loaders only and no longer hold the primary business spec
+- [ ] `AGENTS.md` exists at project root as an exact copy of `CLAUDE.md` (real file, not a symlink)
 - [ ] MIT License in LICENSE.md
 - [ ] All embedded library licenses listed
 - [ ] No proprietary dependencies

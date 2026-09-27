@@ -98,7 +98,7 @@ security assumptions, and any exceptions.)
 3. Normalize discovered variables into lower_snake_case `key: value` entries
 4. If `internal_name` cannot be proven, initialize it to `project_name` on first migration and treat it as frozen after that. Do the same for `internal_org` ← `project_org`.
 5. If statements from `CLAUDE.md` or `.claude/CLAUDE.md` conflict with `AI.md`, `AI.md` wins
-6. After migration, keep root `CLAUDE.md` and/or `.claude/CLAUDE.md` only as short efficient loaders and keep the real plan/spec in `IDEA.md`
+6. After migration, keep root `CLAUDE.md` and/or `.claude/CLAUDE.md` only as short efficient loaders and keep the real plan/spec in `IDEA.md`, and mirror the final root `CLAUDE.md` content into `AGENTS.md` as a real file copy (never a symlink)
 7. Never silently discard meaningful project-specific content; migrate it, trim it, or explicitly ask where it belongs
 
 ---
@@ -323,6 +323,8 @@ Getting code correct on the first try is much harder than iterating with feedbac
 | Claude Code | `CLAUDE.md` | `.claude/CLAUDE.md` | `CLAUDE.local.md` |
 
 **Loader rule:** loader files stay short. Long-form product content belongs in `IDEA.md`; long-form implementation policy belongs in `AI.md`.
+
+**AGENTS.md (REQUIRED, root):** Many non-Claude coding agents/tools read `AGENTS.md` at the project root instead of `CLAUDE.md`. Generate/reconcile `AGENTS.md` as an exact copy of root `CLAUDE.md`'s final content — same loader text, kept in sync whenever `CLAUDE.md` changes. Always a real file copy, never a symlink (symlinks are not portable across all platforms/filesystems).
 
 ---
 
@@ -2334,6 +2336,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] `project_name`, `project_org`, `internal_name`, and `internal_org` exist
 - [ ] If a pre-existing `CLAUDE.md` or `.claude/CLAUDE.md` existed, project-specific content was migrated into IDEA.md
 - [ ] `CLAUDE.md` / `.claude/CLAUDE.md` are short loaders, not duplicate specs
+- [ ] `AGENTS.md` exists at project root as an exact copy of `CLAUDE.md` (real file, not a symlink)
 - [ ] `.claude/memory/` directory exists (with an empty `MEMORY.md` index if no entries yet) and is committed, not gitignored
 - [ ] `release.txt` exists if the project is using explicit release versioning
 - [ ] `site.txt` exists only if there is a real official site URL
