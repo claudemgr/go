@@ -901,7 +901,7 @@ Structure (PART 3) · Core app + server features (PART 2, 4, 8, 9, 10, 12–21 a
 
 **When ALL items in TODO.AI.md are completed:**
 
-**Subagents:** do not write COMMIT_MESS or call gitcommit — complete edits and report back to the parent instance to handle the commit.
+**Subagents:** do not write COMMIT_MESS or call gitcommit — complete edits and report back to the parent instance to handle the commit. Subagents also never run `make`, tests, lint, or any build/test gate — the parent runs them once after reviewing the full diff.
 
 1. Remove each completed item from TODO.AI.md only after it is fully resolved and committed — never truncate the whole file at once
 2. Write COMMIT_MESS with title EXACTLY `all todo items have been completed`, and a body summarizing what was accomplished as bullet points
