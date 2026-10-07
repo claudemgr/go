@@ -973,8 +973,8 @@ CI workflows reference this image directly: `container: image: casjaysdev/go:lat
 All image metadata is applied as **OCI annotations at build time** — never as `LABEL` blocks in any Dockerfile. Labels attach to per-platform image layers; multiarch manifest indexes do not inherit labels, so they appear missing on multiarch pulls. Annotations attach to the manifest index and are visible across all platforms.
 
 - No `LABEL` blocks in `docker/Dockerfile` or `docker/Dockerfile.dev`
-- GitHub Actions: use `docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0` with an `annotations:` input listing the required OCI keys
-- `docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0` MUST set `annotations: ${{ steps.meta.outputs.annotations }}`, `labels: ""` to suppress label output, AND `provenance: false` to prevent a spurious `unknown/unknown` platform entry in the manifest list (use `actions/attest-build-provenance` for release binary attestation instead)
+- GitHub Actions: use `docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0` with an `annotations:` input listing the required OCI keys
+- `docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0` MUST set `annotations: ${{ steps.meta.outputs.annotations }}`, `labels: ""` to suppress label output, AND `provenance: false` to prevent a spurious `unknown/unknown` platform entry in the manifest list (use `actions/attest-build-provenance` for release binary attestation instead)
 
 See `dockerfile_conventions.md` → "OCI Annotations" for the full required annotation set (`org.opencontainers.image.{title,description,url,source,documentation,vendor,authors,vcs-type,version,revision,created,licenses,...}`).
 
@@ -1060,7 +1060,7 @@ jobs:
       image: casjaysdev/go:latest
       options: "--user 0:0"
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Capture build epoch
         run: |
           # Captured ONCE per job - every other time value derives from this
@@ -1758,7 +1758,7 @@ Every external action (`uses: owner/action@...`) MUST be pinned to a full commit
 - uses: actions/checkout@v4
 
 # Correct — SHA is immutable
-- uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 ```
 
 **When updating a pinned SHA**, verify three things:
@@ -1859,7 +1859,7 @@ jobs:
   secret-scan:
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # required: truffleHog needs full history
           fetch-depth: 0
@@ -1878,7 +1878,7 @@ jobs:
           echo "head=$HEAD" >> "$GITHUB_OUTPUT"
 
       - name: TruffleHog secret scan
-        uses: trufflesecurity/trufflehog@27b0417c16317ca9a472a9a8092acce143b49c55  # v3.95.9
+        uses: trufflesecurity/trufflehog@b2b0a92070f206ab7b5a1105d82a7f2f48d92341  # v3.99.0
         with:
           # NEVER use default_branch — it resolves to HEAD post-push and skips the scan
           base: ${{ steps.range.outputs.base }}
@@ -1888,7 +1888,7 @@ jobs:
   workflow-policy:
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Verify all third-party actions are pinned to a 40-char SHA
         run: |
           set -eo pipefail
@@ -1902,7 +1902,7 @@ jobs:
   vuln-scan:
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       # step-level gate: hashFiles() is not valid in a job-level if
       - name: govulncheck (inside casjaysdev/go:latest)
         if: hashFiles('go.sum') != ''
@@ -1916,9 +1916,9 @@ jobs:
   image-scan:
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       # step-level gates: hashFiles() is not valid in a job-level if
-      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
         if: hashFiles('docker/Dockerfile') != ''
       - name: Build local image for scanning
         if: hashFiles('docker/Dockerfile') != ''
@@ -2070,7 +2070,7 @@ The GitHub Releases API returns HTTP 422 `"tag_name is not a valid tag"` when th
 The `release` job already has `contents: write` to push assets — this covers tag push as well.
 
 ```yaml
-- uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
   with:
     # required: full history needed to inspect and push tags
     fetch-depth: 0
