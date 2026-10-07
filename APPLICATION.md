@@ -48,9 +48,9 @@ Example:
 
     project_name:  notes
     project_org:   casjay
-    # FROZEN — set once at first-time setup, never edit
+    # STABLE — set at first-time setup; change only on an explicit rename or fork reset
     internal_name: notes
-    # FROZEN — set once at first-time setup, never edit
+    # STABLE — set at first-time setup; change only on an explicit rename or fork reset
     internal_org:  casjay
     app_name:      Notes
     module_path:   github.com/casjay/notes
@@ -96,7 +96,7 @@ security assumptions, and any exceptions.)
 1. Read existing `CLAUDE.md` and `.claude/CLAUDE.md` first - never overwrite blindly
 2. Extract valid project-specific content and reorganize it into the required `IDEA.md` layout
 3. Normalize discovered variables into lower_snake_case `key: value` entries
-4. If `internal_name` cannot be proven, initialize it to `project_name` on first migration and treat it as frozen after that. Do the same for `internal_org` ← `project_org`.
+4. If `internal_name` cannot be proven, initialize it to `project_name` on first migration and treat it as stable after that. Do the same for `internal_org` ← `project_org`.
 5. If statements from `CLAUDE.md` or `.claude/CLAUDE.md` conflict with `AI.md`, `AI.md` wins
 6. After migration, keep root `CLAUDE.md` and/or `.claude/CLAUDE.md` only as short efficient loaders and keep the real plan/spec in `IDEA.md`, and mirror the final root `CLAUDE.md` content into `AGENTS.md` as a real file copy (never a symlink)
 7. Never silently discard meaningful project-specific content; migrate it, trim it, or explicitly ask where it belongs
@@ -598,7 +598,7 @@ Default to **user scope**:
 
 Prefer platform-standard user directories:
 
-**On-disk paths use the frozen pair `{internal_org}` and `{internal_name}` only — never the mutable `{project_org}` / `{project_name}`. This is the rule that protects user data across project/org renames.**
+**On-disk paths use the stable pair `{internal_org}` and `{internal_name}` only — never the mutable `{project_org}` / `{project_name}`. This is the rule that protects user data across project/org renames.**
 
 | Purpose | Linux / BSD | macOS | Windows |
 |---------|-------------|-------|---------|
@@ -2467,7 +2467,7 @@ Every IDEA.md has exactly three top-level sections, in this order:
 2. `## Project variables` — `key: value` lines that provide the canonical values AI.md resolves for `project_name`, `project_org`, `internal_name`, `internal_org`, etc.
 3. `## Business logic` — features, data models, user flows, trust boundaries, abuse cases, platform constraints, security assumptions (WHAT, not HOW)
 
-See "IDEA.md Required Layout" at the top of this file for the authoritative rules: variable-key naming, the immutable `internal_name` / `internal_org` rule, the missing-value setup flow, and the migration procedure for legacy `CLAUDE.md` files.
+See "IDEA.md Required Layout" at the top of this file for the authoritative rules: variable-key naming, the stable `internal_name` / `internal_org` rule, the missing-value setup flow, and the migration procedure for legacy `CLAUDE.md` files.
 
 ---
 
@@ -2483,9 +2483,9 @@ solves. Free-form prose, 1–3 paragraphs.}
 
 project_name:     {project_name}
 project_org:      {project_org}
-# FROZEN — equals project_name on first install, never changes
+# STABLE — equals project_name on first install; change only on an explicit rename or fork reset
 internal_name:    {project_name}
-# FROZEN — equals project_org on first install, never changes
+# STABLE — equals project_org on first install; change only on an explicit rename or fork reset
 internal_org:     {project_org}
 app_name:         {App Display Name}
 module_path:      github.com/{project_org}/{project_name}
@@ -2541,7 +2541,7 @@ maintainer_email: {maintainer@example.com — or empty; used only if set}
 - No implementation details — describe behavior, not algorithms or libraries. AI.md PARTs 0–11 define HOW; PART 12 verifies compliance.
 - This specification targets GUI / TUI / CLI applications (PART 0 → "One Coherent Product").
 - Cross-reference AI.md PARTs by number for any pattern that already exists there (Docker → PART 5, security → PART 9, license exceptions → PART 11, etc.).
-- `internal_name` and `internal_org` are immutable after first set (see "IDEA.md Required Layout" → Project variables rules).
+- `internal_name` and `internal_org` are stable after first set and reset only on an explicit rename or at a fork's first setup (see "IDEA.md Required Layout" → Project variables rules).
 
 ---
 

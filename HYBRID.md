@@ -32,8 +32,8 @@ have_internal=$(grep -cE '^internal_name:[[:space:]]*.+$' IDEA.md 2>/dev/null ||
 |-------|----------------|----------|
 | `{project_name}` | IDEA.md `## Project variables` | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then `basename "$PWD"` |
 | `{project_org}` | IDEA.md `## Project variables` | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then `basename "$(dirname "$PWD")"` |
-| `{internal_name}` | IDEA.md `## Project variables` (always — set once at first run, never edited after) | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then first-time setup: copy from `{project_name}` |
-| `{internal_org}` | IDEA.md `## Project variables` (always — set once at first run, never edited after) | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then first-time setup: copy from `{project_org}` |
+| `{internal_name}` | IDEA.md `## Project variables` (always — set at first run; reset only on an explicit rename or fork) | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then first-time setup: copy from `{project_name}` |
+| `{internal_org}` | IDEA.md `## Project variables` (always — set at first run; reset only on an explicit rename or fork) | Existing long-form `CLAUDE.md` / `.claude/CLAUDE.md` project details, then first-time setup: copy from `{project_org}` |
 | `{plist_name}` | **Derived (not stored)**: `io.github.{project_org}.{internal_name}` | — |
 
 **Detection commands (use commands — never guess):**
@@ -44,10 +44,10 @@ project_name=$(basename "$PWD")
 # Project org: parent directory name (assumes ~/org/project structure)
 project_org=$(basename "$(dirname "$PWD")")
 
-# Internal name: same as project_name on first run, frozen forever after
+# Internal name: same as project_name on first run, stable after
 internal_name="$project_name"
 
-# Internal org: same as project_org on first run, frozen forever after
+# Internal org: same as project_org on first run, stable after
 internal_org="$project_org"
 
 # Plist name: derived from project_org and internal_name (macOS Bundle ID convention)
@@ -61,9 +61,9 @@ plist_name="io.github.${project_org}.${internal_name}"
 #   plist_name    = io.github.myorg.myproject  (always derived)
 ```
 
-**Why a separate `{internal_name}`:** if a project renames itself later (`{project_name}` changes from `myproject` to `myproject2`), the new name applies to user-visible places (binary command, docs, repo). But `{internal_name}` stays `myproject` forever, keeping `{config_dir}`, `{data_dir}`, `{log_dir}`, `{cache_dir}`, the systemd service unit, the macOS Bundle ID, and every other on-disk identifier stable. No data migration, no orphaned plists, no broken systemd dependencies.
+**Why a separate `{internal_name}`:** if a project renames itself later (`{project_name}` changes from `myproject` to `myproject2`), the new name applies to user-visible places (binary command, docs, repo). But `{internal_name}` stays `myproject` across ordinary renames, keeping `{config_dir}`, `{data_dir}`, `{log_dir}`, `{cache_dir}`, the systemd service unit, the macOS Bundle ID, and every other on-disk identifier stable. No data migration, no orphaned plists, no broken systemd dependencies.
 
-**Rule:** `{internal_name}` is set ONCE at first-time setup and is immutable for the life of the project. Editing it after the project is in production is a bug — the only sanctioned way to change it is a coordinated migration of every directory, service, and plist on every host.
+**Rule:** `{internal_name}` is set once at first-time setup and stays stable across ordinary project renames. It is reset only on an explicit user-directed org/repo rename (update IDEA.md, grep every consumer, and migrate every directory, service, and plist on every host) or at a fork's first setup (reset to the fork's own `{project_name}` so it never shares paths, units, or identifiers with the upstream). Any other edit after the project is in production is a bug.
 
 ## First-Time Setup Flow
 
@@ -83,13 +83,13 @@ AI reads AI.md for the first time
 │   │   ├─► 3. Create IDEA.md if it doesn't exist
 │   │   │   - If a long-form/project-specific `CLAUDE.md` or `.claude/CLAUDE.md` already exists, MIGRATE its valid project description, project variables, and business logic into IDEA.md first
 │   │   │   - Do NOT copy loader-only instructions, duplicated AI.md rules, or stale implementation text into IDEA.md
-│   │   │   - On creation, write `internal_name: <project_name>` and `internal_org: <project_org>` to `## Project variables` and warn the user both are frozen forever
+│   │   │   - On creation, write `internal_name: <project_name>` and `internal_org: <project_org>` to `## Project variables` and warn the user both are stable
 │   │   │
 │   │   └─► 4. Create or update IDEA.md `## Project variables`:
 │   │       - project_name  → actual project name (lowercase)
 │   │       - project_org   → actual org name (lowercase)
-│   │       - internal_name → on first run = project_name; afterwards read from IDEA.md, IMMUTABLE
-│   │       - internal_org  → on first run = project_org; afterwards read from IDEA.md, IMMUTABLE
+│   │       - internal_name → on first run = project_name; afterwards read from IDEA.md, STABLE (reset only on an explicit rename or fork)
+│   │       - internal_org  → on first run = project_org; afterwards read from IDEA.md, STABLE (reset only on an explicit rename or fork)
 │   │       - Derived UPPERCASE placeholders are computed from these values when referenced
 │   │       - {plist_name} is derived as io.github.{project_org}.{internal_name} and is NOT stored
 │   │
@@ -107,13 +107,13 @@ AI reads AI.md for the first time
 | `{PROJECT_NAME}` | UPPERCASE | Mutable | `MYAPP` |
 | `{project_org}` | lowercase | Mutable | `myorg` |
 | `{PROJECT_ORG}` | UPPERCASE | Mutable | `MYORG` |
-| `{internal_name}` | lowercase | **Frozen** at first-time setup | `myapp` |
-| `{INTERNAL_NAME}` | UPPERCASE | **Frozen** | `MYAPP` |
-| `{internal_org}` | lowercase | **Frozen** at first-time setup | `myorg` |
-| `{INTERNAL_ORG}` | UPPERCASE | **Frozen** | `MYORG` |
+| `{internal_name}` | lowercase | **Stable** at first-time setup | `myapp` |
+| `{INTERNAL_NAME}` | UPPERCASE | **Stable** | `MYAPP` |
+| `{internal_org}` | lowercase | **Stable** at first-time setup | `myorg` |
+| `{INTERNAL_ORG}` | UPPERCASE | **Stable** | `MYORG` |
 | `{plist_name}` | derived | Derived from `{project_org}` + `{internal_name}` | `io.github.myorg.myapp` |
 
-**`{internal_name}` rule:** set ONCE on first run (initial value = `{project_name}`), then immutable for the project's lifetime. Used for every on-disk identifier (`{config_dir}`, `{data_dir}`, `{log_dir}`, `{cache_dir}`, systemd unit, `{plist_name}`) so a project rename does not orphan paths or services.
+**`{internal_name}` rule:** set ONCE on first run (initial value = `{project_name}`), then stable across ordinary renames (reset only on an explicit org/repo rename with path migration, or at a fork's first setup). Used for every on-disk identifier (`{config_dir}`, `{data_dir}`, `{log_dir}`, `{cache_dir}`, systemd unit, `{plist_name}`) so a project rename does not orphan paths or services.
 
 **After setup, this section remains reference-only. The placeholders above are resolved from `IDEA.md ## Project variables`; `AI.md` itself stays read-only.**
 
@@ -161,9 +161,9 @@ Example:
 
     project_name:  jokes
     project_org:   casjay
-    # FROZEN — set once at first-time setup, never edit
+    # STABLE — set at first-time setup; change only on an explicit rename or fork reset
     internal_name: jokes
-    # FROZEN — set once at first-time setup, never edit
+    # STABLE — set at first-time setup; change only on an explicit rename or fork reset
     internal_org:  casjay
     app_name:      jokes
     official_site: jokes.example.com
@@ -176,11 +176,11 @@ Example:
 - Required.
 - On first-time setup, initial value MUST equal `project_name`.
 - Once a project ships (any host has touched a `{config_dir}`, `{data_dir}`, systemd
-  unit, or plist named after `internal_name`), the value is frozen forever. Editing
-  it later is a bug — there is no migration path short of a coordinated rename of
-  every directory, service, and plist on every host.
+  unit, or plist named after `internal_name`), the value is stable across ordinary renames. Changing
+  it is allowed only on an explicit org/repo rename (with a coordinated migration of
+  every directory, service, and plist on every host) or at a fork's first setup.
 - A project rename changes `project_name` only. `internal_name` stays.
-- `internal_org` follows the same freeze rule: initial value MUST equal `project_org`, frozen once the project ships, and an org rename changes `project_org` only.
+- `internal_org` follows the same freeze rule: initial value MUST equal `project_org`, stable once the project ships, and an org rename changes `project_org` only.
 
 ## Business logic
 
@@ -246,7 +246,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-30; PART 3
    - `## Project variables`
    - `## Business logic`
 3. Normalize discovered variables into lower_snake_case `key: value` entries
-4. If `internal_name` / `internal_org` cannot be proven from the existing project state, initialize them to `project_name` / `project_org` on first migration and treat them as frozen after that
+4. If `internal_name` / `internal_org` cannot be proven from the existing project state, initialize them to `project_name` / `project_org` on first migration and treat them as stable after that
 5. If statements from `CLAUDE.md` or `.claude/CLAUDE.md` conflict with `AI.md`, `AI.md` wins; either fix the migrated text or ask the user if the intent is unclear
 6. After migration, keep root `CLAUDE.md` and/or `.claude/CLAUDE.md` only as short efficient loaders and keep the real project plan/spec in `IDEA.md`, and mirror the final root `CLAUDE.md` content into `AGENTS.md` as a real file copy (never a symlink)
 7. Never silently discard meaningful project-specific content; migrate it, trim it, or ask the user where it belongs
@@ -507,7 +507,7 @@ fi
 2. **Backup** — `cp IDEA.md IDEA.md.preMigration.bak`; tell the user the backup path
 3. **Read the whole file** before proposing anything — do NOT skim
 4. **Map old content to the new sections** — pitch/overview → `## Project description`; variables/config keys → `## Project variables`; features/data models/endpoints/business rules → `## Business logic`
-5. **Inject required variables** if missing — `project_name` from `basename "$PWD"` (confirm with user); `project_org` from `basename "$(dirname "$PWD")"` (confirm with user); `internal_name` initial value MUST equal `project_name` (frozen forever after this)
+5. **Inject required variables** if missing — `project_name` from `basename "$PWD"` (confirm with user); `project_org` from `basename "$(dirname "$PWD")"` (confirm with user); `internal_name` initial value MUST equal `project_name` (stable after this)
 6. **Show the user the proposed rewrite** as a diff or full preview — wait for explicit approval before writing
 7. **Write the migrated file** only after approval; keep `.preMigration.bak` until the user confirms
 
@@ -1180,13 +1180,13 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 | `{PROJECT_NAME}` | UPPERCASE | env vars, Makefile vars | `PROJECT_NAME=jokes` |
 | `{project_org}` | lowercase | filenames, paths, owners | `casjay`, `~/Projects/github/casjay/` |
 | `{PROJECT_ORG}` | UPPERCASE | env vars, Makefile vars | `PROJECT_ORG=casjay` |
-| `{internal_name}` | lowercase, **frozen** | every on-disk identifier: `{config_dir}`, `{data_dir}`, `{log_dir}`, `{cache_dir}`, `{pid_file}`, systemd unit name, `{plist_name}` | `jokes` (even after a project rename) |
-| `{INTERNAL_NAME}` | UPPERCASE, **frozen** | env vars referring to the stable identity | `INTERNAL_NAME=jokes` |
+| `{internal_name}` | lowercase, **stable** | every on-disk identifier: `{config_dir}`, `{data_dir}`, `{log_dir}`, `{cache_dir}`, `{pid_file}`, systemd unit name, `{plist_name}` | `jokes` (even after a project rename) |
+| `{INTERNAL_NAME}` | UPPERCASE, **stable** | env vars referring to the stable identity | `INTERNAL_NAME=jokes` |
 | `{plist_name}` | derived | macOS LaunchAgent/LaunchDaemon Bundle ID — always `io.github.{project_org}.{internal_name}` | `io.github.casjay.jokes` |
 
 **Note:** camelCase (Go variables) and PascalCase (Go types) are NOT template placeholders. Write them directly in code using the actual project name (e.g., `jokesServer`, `type JokesServer struct`).
 
-**Mutability rule:** `{project_name}` may change (project rename); `{internal_name}` may NOT. Initial value of `{internal_name}` equals `{project_name}` and is frozen forever after first-time setup.
+**Mutability rule:** `{project_name}` may change (project rename); `{internal_name}` does not follow an ordinary rename. Initial value of `{internal_name}` equals `{project_name}` and is stable after first-time setup. It resets only on an explicit user-directed org/repo rename (update IDEA.md, grep every consumer, migrate on-disk paths and units) or at a fork's first setup (reset to the fork's own `{project_name}`).
 
 **Examples (assuming no git remote, inferred from path):**
 
@@ -2363,7 +2363,7 @@ Default to **user scope**:
 
 Prefer platform-standard user directories:
 
-**On-disk paths use the frozen pair `{internal_org}` and `{internal_name}` only — never the mutable `{project_org}` / `{project_name}`. This is the rule that protects user data across project/org renames.**
+**On-disk paths use the stable pair `{internal_org}` and `{internal_name}` only — never the mutable `{project_org}` / `{project_name}`. This is the rule that protects user data across project/org renames.**
 
 | Purpose | Linux / BSD | macOS | Windows |
 |---------|-------------|-------|---------|
@@ -44311,13 +44311,13 @@ Every IDEA.md has exactly three top-level sections, in this order:
 2. `## Project variables` — `key: value` lines that provide the canonical values AI.md resolves for `project_name`, `project_org`, `internal_name`, `internal_org`, etc.
 3. `## Business logic` — features, data models, user flows, endpoints, platform constraints, security assumptions (WHAT, not HOW)
 
-See "IDEA.md Required Layout" at the top of this file for the authoritative rules: variable-key naming, the immutable `internal_name` / `internal_org` rule, the missing-value setup flow, and the migration procedure for legacy `CLAUDE.md` files.
+See "IDEA.md Required Layout" at the top of this file for the authoritative rules: variable-key naming, the stable `internal_name` / `internal_org` rule, the missing-value setup flow, and the migration procedure for legacy `CLAUDE.md` files.
 
 ---
 
 ## IDEA.md Template
 
-**Reconciliation note:** the pre-merge application template (`app_name`, `module_path`, `internal_org` as a separate frozen key) was more complete than the pre-merge server template (which omitted `internal_org` and `module_path`). The unified template below keeps the app template's full variable set — it is a strict superset — and adds the server template's `Endpoints` and `Data sources` business-logic fields alongside the app template's `Surfaces`, `Platform constraints`, `Outbound network use`, and `Stored data location` fields, since a hybrid project may expose GUI/TUI/CLI surfaces, a server, or both at once.
+**Reconciliation note:** the pre-merge application template (`app_name`, `module_path`, `internal_org` as a separate stable key) was more complete than the pre-merge server template (which omitted `internal_org` and `module_path`). The unified template below keeps the app template's full variable set — it is a strict superset — and adds the server template's `Endpoints` and `Data sources` business-logic fields alongside the app template's `Surfaces`, `Platform constraints`, `Outbound network use`, and `Stored data location` fields, since a hybrid project may expose GUI/TUI/CLI surfaces, a server, or both at once.
 
 ```markdown
 ## Project description
@@ -44329,9 +44329,9 @@ solves. Free-form prose, 1–3 paragraphs.}
 
 project_name:     {project_name}
 project_org:      {project_org}
-# FROZEN — equals project_name on first install, never changes
+# STABLE — equals project_name on first install; change only on an explicit rename or fork reset
 internal_name:    {project_name}
-# FROZEN — equals project_org on first install, never changes
+# STABLE — equals project_org on first install; change only on an explicit rename or fork reset
 internal_org:     {project_org}
 app_name:         {App Display Name}
 module_path:      github.com/{project_org}/{project_name}
@@ -44394,7 +44394,7 @@ maintainer_email: {maintainer@example.com — or empty; used only if set}
 - No implementation details — describe behavior, not algorithms or libraries. AI.md PARTs 0–29 define HOW; PART 30 verifies compliance.
 - This specification covers the full range of the hybrid model: GUI / TUI / CLI applications, a full server (web frontend + API), or any combination declared under `Surfaces` (PART 2 → "One Coherent Product").
 - Cross-reference AI.md PARTs by number for any pattern that already exists there (Docker → PART 6, security → PART 11, database → PART 10, scheduler → PART 17, license exceptions → PART 25, etc.).
-- `internal_name` and `internal_org` are immutable after first set (see "IDEA.md Required Layout" → Project variables rules).
+- `internal_name` and `internal_org` are stable after first set and reset only on an explicit rename or at a fork's first setup (see "IDEA.md Required Layout" → Project variables rules).
 
 ---
 
