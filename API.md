@@ -1728,7 +1728,6 @@ Both files use the same structure. Settings are merged: `settings.local.json` ov
 
 ```json
 {
-  "model": "",
   "thinking": "off",
   "permissions": {
     "allow": [],
@@ -1750,7 +1749,6 @@ Both files use the same structure. Settings are merged: `settings.local.json` ov
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `model` | string | Model override (empty = default, e.g., `"claude-sonnet-4-20250514"`) |
 | `thinking` | string | Extended thinking: `"off"`, `"on"`, or token limit (e.g., `"10000"`) |
 | `permissions` | object | Tool permission rules (allow/deny/ask arrays) |
 | `preferences` | object | Behavior preferences |
@@ -1761,7 +1759,6 @@ Both files use the same structure. Settings are merged: `settings.local.json` ov
 
 ```json
 {
-  "model": "",
   "thinking": "off",
   "permissions": {
     "allow": [
