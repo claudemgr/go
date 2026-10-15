@@ -31733,6 +31733,7 @@ Admin Panel Header:
 | `update.auto_install` | Toggle | Off | No | Run the full `--update yes` flow from the `update_check` task for eligible releases. Off = notify only; never touches the binary |
 | `update.defer_days` | Number | `0` | No | 0-365. A release is eligible for the scheduled task only once it is this many days old; manual `--update check` / `--update yes` ignore it. See Defer Semantics for per-channel behavior |
 | `update.cli_min_version` | Text | (empty) | No | Minimum CLI version the server accepts. Returned verbatim as `cli_min_version` by `/api/autodiscover`; empty means no minimum is enforced. Never derived from the server version |
+| `update.agent_min_version` | Text | (empty) | No | Minimum agent version the server accepts. Returned verbatim as `agent_min_version` by `/api/autodiscover`; empty means no minimum is enforced. Never derived from the server version |
 
 #### Email/SMTP Section (`/server/{admin_path}/config/email`)
 
@@ -53348,7 +53349,7 @@ The CLI never adds URLs that weren't in the autodiscover response — operators 
 
 ## CLI Auto-Update (Same Pattern as Server Self-Update + Agent)
 
-**The CLI follows the same flow as the server's self-update (PART 23) and the agent's auto-update (later in PART 33): check version via autodiscover, download from the server, verify SHA-256, atomic replace, restart.**
+**The CLI follows the same flow as the server's self-update (PART 23) and the agent's auto-update ("Agent Auto-Update" in this PART): check version via autodiscover, download from the server, verify SHA-256, atomic replace, restart.**
 
 | Step | Action |
 |------|--------|
@@ -53375,8 +53376,9 @@ update:
 
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
-| `/api/autodiscover` | GET | None or bearer | Returns `cli_versions` (each entry has `version` + `sha256`) and `cli_min_version` (from `update.cli_min_version`) alongside agent and server info |
+| `/api/autodiscover` | GET | None or bearer | Returns `cli_versions` and `agent_versions` (each entry has `version` + `sha256`), plus `cli_min_version` (from `update.cli_min_version`) and `agent_min_version` (from `update.agent_min_version`), alongside server info |
 | `{base}/cli/binaries/{project_name}-cli-{os}-{arch}` | GET | None (public — CLIs are user-distributed) OR bearer if `cli.binary_download.require_auth: true` is set | Streams the binary |
+| `{base}/agent/binaries/{project_name}-agent-{os}-{arch}` | GET | Bearer (agent token) | Streams the agent binary |
 
 **Why CLI download default is unauthenticated:** the CLI is the entry point for new users. Forcing auth on the download means they need a token before they can install the tool that obtains the token. Operators who run a private deployment can flip `cli.binary_download.require_auth` to `true`.
 
@@ -57305,6 +57307,14 @@ health:
   # Health check interval
   interval: 30s
 
+# Self-update (same flow as the CLI, see "Agent Auto-Update")
+update:
+  # default false: the agent installs nothing and reports update_available in its health payload.
+  # true: it installs eligible releases itself (flush buffer, replace binary, exit for the service manager).
+  auto: false
+  # How often to check /api/autodiscover for a newer agent_versions entry (also checked on every reconnect)
+  check_interval: 6h
+
 # Debug
 # Enable debug mode (same as --debug)
 debug: false
@@ -57332,6 +57342,32 @@ mode: ""
 {PROJECT_NAME}_AGENT_COLLECTION_INTERVAL=30
 {PROJECT_NAME}_DEBUG=true
 ```
+
+### Agent Auto-Update
+
+**The agent follows the same flow as the CLI ("CLI Auto-Update") and the server's self-update (PART 23), adapted for a long-running daemon: it never prompts, installs nothing unless `update.auto` is true, and restarts through its service manager.**
+
+| Step | Action |
+|------|--------|
+| 1. Discover | `/api/autodiscover` returns `agent_versions: { "linux-amd64": {"version": "1.2.3", "sha256": "..."}, ... }` and `agent_min_version` (the value of `update.agent_min_version`; empty means no minimum). The agent checks on every (re)connect and every `update.check_interval` (default `6h`). |
+| 2. Decide | If `current_version < agent_versions[os-arch].version`: with `update.auto: false` (default) the agent installs nothing and reports `update_available: {version}` in its next health payload so the server shows it to admins; with `update.auto: true` it continues. If `current_version < agent_min_version`: the agent stops collecting (the offline buffer is kept), keeps health reporting, reports `update_required`, and waits; it installs only when `update.auto: true` or `--update yes` is run. |
+| 3. Download | Fetch `{base}/agent/binaries/{project_name}-agent-{os}-{arch}` over HTTPS with the agent token (always authenticated). Save to a tmp path (`/tmp/{project_org}/{internal_name}-XXXXXX/agent.update.tmp` per the spec's tmp-dir rules). |
+| 4. Verify SHA-256 | Same `verifyChecksum()` from PART 23 — match against the `sha256` from autodiscover. Mismatch → delete temp, emit `agent.update_checksum_invalid`, keep running the current version. |
+| 5. Flush | Flush the offline buffer to the server, bounded by `server.timeout`, so no collected items are lost to the restart. |
+| 6. Atomic swap | Same platform-specific `replaceBinary()` from PART 23. If the agent lacks write permission to its install path, emit `agent.update_failed` with the path and keep running. |
+| 7. Restart | Exit with code `75` (sysexits `EX_TEMPFAIL`). The service unit's restart policy (`Restart=on-failure` on systemd, `KeepAlive` on launchd, recovery actions on Windows) starts the new binary. The agent never re-execs itself. |
+
+**Configuration (`agent.yml`):** the `update:` block above (`auto`, `check_interval`). The minimum version is server-side only: `update.agent_min_version` in the admin Update section.
+
+**Audit events:**
+
+| Event | Description |
+|-------|-------------|
+| `agent.update_started` | Agent began downloading an update |
+| `agent.update_completed` | Agent restarted on the new version |
+| `agent.update_checksum_invalid` | SHA-256 didn't match the published checksum |
+| `agent.update_forced` | Agent below `agent_min_version`; collection paused until updated |
+| `agent.update_failed` | Agent could not replace its binary |
 
 ### Agent Cluster Failover
 
