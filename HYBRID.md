@@ -6359,13 +6359,13 @@ See `dockerfile_conventions.md` → "OCI Annotations" for the complete list of r
 | `build:` | **NEVER include** — all three compose files pull registry images |
 | `image:` tag | `:latest` in `docker-compose.yml` (production) · `:devel` in `docker-compose.dev.yml` and `docker-compose.test.yml` |
 | `version:` | **NEVER include** |
-| `name:` | `{project_name}` (production) · `{project_name}-dev` (dev) · `{project_name}-test` (test) |
+| `name:` | `{project_name}` (production, dev, and test) |
 | `container_name:` | **Always set**, one fixed name per service, the same in production, dev, and test: `{project_name}-app`, `{project_name}-db`, `{project_name}-cache` (only the services that file includes). Dev and test never run on a production host, so a clash fails `docker compose up` instead of replacing production; their compose `name:` and network keep the `-dev` / `-test` suffix so it fails rather than adopting production's project |
 | Main service name | `{project_name}` (matches project name in every variant) |
 | `pull_policy:` | `always` on every service |
 | `restart:` | `always` (production/dev) · `"no"` (test — services are ephemeral) |
 | `x-logging:` | Anchor for consistent logging (see below); applied to every service via `logging: *default-logging` |
-| Network | Named to match the compose file's `name:` (`{project_name}`, `{project_name}-dev`, or `{project_name}-test`) — never a `-net` or other suffix; `external: false` |
+| Network | Named `{project_name}` in every file — never a `-net`, `-dev`, `-test` or other suffix; `external: false` |
 | Environment variables | **Hardcode with sane defaults** (NEVER use .env files); always YAML map style (`KEY: value`), never list style (`- KEY=value`) |
 | **environment: DEBUG/MODE** | `docker-compose.yml` sets **neither** `DEBUG` nor `MODE` (production defaults apply) · `docker-compose.dev.yml` and `docker-compose.test.yml` both set `DEBUG: true` and `MODE: development` |
 | Valkey cache service | Included in `docker-compose.yml` and `docker-compose.test.yml`; **never** in `docker-compose.dev.yml` |
@@ -6488,7 +6488,7 @@ cd "$TEMP_DIR" && docker compose up -d
 # nginx proxy address - http://172.17.0.1:{port}
 # {project_name} - development
 
-name: {project_name}-dev
+name: {project_name}
 
 x-logging: &default-logging
   options:
@@ -6522,11 +6522,11 @@ services:
       retries: 3
       start_period: 90s
     networks:
-      - {project_name}-dev
+      - {project_name}
 
 networks:
-  {project_name}-dev:
-    name: {project_name}-dev
+  {project_name}:
+    name: {project_name}
     external: false
 ```
 
@@ -6544,7 +6544,7 @@ cd "$TEMP_DIR" && docker compose up -d
 **FOR AUTOMATED TESTING.** AI's preferred interface is the project's `tests/` directory scripts (`tests/run_tests.sh`, `tests/docker.sh`) — NOT invoking this file directly. Direct invocation (copy to a temp dir, `./volumes` resolves there) is only a fallback when no `tests/` script exists yet. Debug enabled for test visibility. Includes an ephemeral Valkey cache service (`tmpfs`, no persistent volume). **MUST be copied to temp directory before direct use — NEVER run from project directory.**
 
 ```yaml
-name: {project_name}-test
+name: {project_name}
 
 x-logging: &default-logging
   options:
@@ -6583,7 +6583,7 @@ services:
       {project_name}-cache:
         condition: service_healthy
     networks:
-      - {project_name}-test
+      - {project_name}
 
   {project_name}-cache:
     image: valkey/valkey:alpine
@@ -6600,11 +6600,11 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - {project_name}-test
+      - {project_name}
 
 networks:
-  {project_name}-test:
-    name: {project_name}-test
+  {project_name}:
+    name: {project_name}
     external: false
 ```
 

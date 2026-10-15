@@ -41108,7 +41108,7 @@ rm -rf "$TEMP_DIR"
 Development mode with debug on. Humans run this manually for local development. No `172.17.0.1:` bind (plain port, all interfaces), no valkey/cache service.
 
 ```yaml
-name: {project_name}-dev
+name: {project_name}
 
 x-logging: &default-logging
   driver: json-file
@@ -41142,11 +41142,11 @@ services:
       retries: 3
       start_period: 90s
     networks:
-      - {project_name}-dev
+      - {project_name}
 
 networks:
-  {project_name}-dev:
-    name: {project_name}-dev
+  {project_name}:
+    name: {project_name}
     external: false
 ```
 
@@ -41250,7 +41250,7 @@ cd "$TEMP_DIR" && docker compose up -d
 **✅ FOR AI AND AUTOMATED TESTING.** `:devel` image, `DEBUG: true`/`MODE: development`, `172.17.0.1:` bind, valkey cache included with ephemeral `tmpfs` storage (no persistent volume). **The project's `tests/` scripts are AI's preferred interface** — prefer `tests/run_tests.sh` / `tests/docker.sh` over invoking this file directly. Direct invocation (copy to temp dir, run from there) is only a fallback when no `tests/` script exists yet.
 
 ```yaml
-name: {project_name}-test
+name: {project_name}
 
 x-logging: &default-logging
   driver: json-file
@@ -41289,7 +41289,7 @@ services:
       {project_name}-cache:
         condition: service_healthy
     networks:
-      - {project_name}-test
+      - {project_name}
 
   {project_name}-cache:
     image: valkey/valkey:alpine
@@ -41306,13 +41306,13 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - {project_name}-test
+      - {project_name}
 
 networks:
-  {project_name}-test:
+  {project_name}:
     driver: bridge
     # explicit name for reliable cleanup
-    name: {project_name}-test
+    name: {project_name}
 ```
 
 **AI/Automated Testing Workflow — prefer `tests/` scripts:**

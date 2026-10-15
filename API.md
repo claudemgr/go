@@ -33720,8 +33720,8 @@ networks:
 | Field | Value | Description |
 |-------|-------|-------------|
 | `name:` (production, `docker-compose.yml`) | `{project_name}` | Top-level compose project name — no suffix |
-| `name:` (development, `docker-compose.dev.yml`) | `{project_name}-dev` | Suffixed so dev keeps its own project name: sharing production's would let `docker compose up` adopt and replace production's containers, whereas a shared container name only fails loudly |
-| `name:` (test, `docker-compose.test.yml`) | `{project_name}-test` | Suffixed so test keeps its own project name: sharing production's would let `docker compose up` adopt and replace production's containers, whereas a shared container name only fails loudly |
+| `name:` (development, `docker-compose.dev.yml`) | `{project_name}` | Same as production; dev differs by environment variables only |
+| `name:` (test, `docker-compose.test.yml`) | `{project_name}` | Same as production; test differs by environment variables only |
 | `container_name:` | `{project_name}-app`, `{project_name}-db`, `{project_name}-cache` in every file (production, dev, test) | e.g., `jokes-app`, `jokes-db`, `jokes-cache`; dev and test reuse production's names on purpose, so running them on a production host fails loudly |
 | Main service | `{project_name}` | Service name matches project name |
 | Database service | `{project_name}-db` | Database service name |
@@ -33729,7 +33729,7 @@ networks:
 | `restart:` | `always` | Always restart on failure |
 | `pull_policy:` | `always` | Always pull latest image |
 | `logging:` | `*default-logging` | Use the logging anchor |
-| `networks:` | `{project_name}` (prod) / `{project_name}-dev` (dev) / `{project_name}-test` (test) | Isolated network per project, suffixed to match the compose `name:` for that mode |
+| `networks:` | `{project_name}` | Isolated network per project, the same name in production, dev, and test |
 
 ### Logging Anchor
 
@@ -33763,7 +33763,7 @@ Single-service, in-process memory cache, debug mode enabled. Uses the `:devel` i
 # nginx proxy address - http://172.17.0.1:{port}
 # {project_name} - development
 
-name: {project_name}-dev
+name: {project_name}
 
 x-logging: &default-logging
   options:
@@ -33797,11 +33797,11 @@ services:
       retries: 3
       start_period: 90s
     networks:
-      - {project_name}-dev
+      - {project_name}
 
 networks:
-  {project_name}-dev:
-    name: {project_name}-dev
+  {project_name}:
+    name: {project_name}
     external: false
 ```
 
@@ -33995,7 +33995,7 @@ rm -rf "$TEMP_DIR"
 Debug enabled for test visibility. Includes an ephemeral Valkey cache service (`tmpfs`, no persistent volume). **MUST be copied to temp directory before direct use - NEVER run from project directory.**
 
 ```yaml
-name: {project_name}-test
+name: {project_name}
 
 x-logging: &default-logging
   options:
@@ -34035,7 +34035,7 @@ services:
       {project_name}-cache:
         condition: service_healthy
     networks:
-      - {project_name}-test
+      - {project_name}
 
   {project_name}-cache:
     image: valkey/valkey:alpine
@@ -34052,11 +34052,11 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - {project_name}-test
+      - {project_name}
 
 networks:
-  {project_name}-test:
-    name: {project_name}-test
+  {project_name}:
+    name: {project_name}
     external: false
 ```
 
