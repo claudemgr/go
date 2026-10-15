@@ -12329,8 +12329,9 @@ export BACKUP_DIR="/data/backups/${APP_NAME}"
 
 ```yaml
 services:
-  app:
+  {project_name}:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
+    container_name: {project_name}-app
     command:
       - --config=/config
       - --data=/data
@@ -12355,8 +12356,9 @@ services:
 
 ```yaml
 services:
-  app:
+  {project_name}:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
+    container_name: {project_name}-app
     volumes:
       - {project_name}-data:/data
     ports:
@@ -33631,24 +33633,14 @@ exec $APP_BIN $FLAGS "$@"
 | `image:` tag | `:latest` in `docker-compose.yml` (production) · `:devel` in `docker-compose.dev.yml` and `docker-compose.test.yml` |
 | `version:` | **NEVER include** |
 | `name:` | `{project_name}` (top-level) |
-| `container_name:` | **NEVER set** — compose generates `{project_name}-{service}-{N}` from the top-level `name:` |
-| Main service name | `app` |
+| `container_name:` | **Always set**, one fixed name per compose file: production `{project_name}-app`, `{project_name}-db`, `{project_name}-cache` (only the services that file includes) · dev `{project_name}-dev` · test `{project_name}-test`, `{project_name}-cache-test` |
+| Main service name | `{project_name}` (matches project name) |
 | `pull_policy:` | `always` |
 | `restart:` | `always` |
 | `x-logging:` | Anchor for consistent logging (see below) |
 | Network | Custom `{project_name}` with `external: false` |
 | Environment variables | **Hardcode with sane defaults** (NEVER use .env files); always YAML map style (`KEY: value`), never list style (`- KEY=value`) |
 | **environment: DEBUG/MODE** | `docker-compose.yml` sets **neither** `DEBUG` nor `MODE` (production defaults apply) · `docker-compose.dev.yml` and `docker-compose.test.yml` both set `DEBUG: true` and `MODE: development` |
-
-### Container Naming
-
-Compose generates every container name as `{project_name}-{service}-{N}` from the top-level `name:` and the service key, so **`container_name:` is never set**. That is the project-scoped `{project_name}-...` prefix the global container rules require, and it keeps the stack scalable and cleanable by compose project.
-
-- **Service keys are the role only** (`app`, `db`, `cache`, `search`, `queue`, `proxy`), never prefixed with the project name. Services reach each other by key (`db`, `cache`).
-- **Production** (`docker-compose.yml`) uses `name: {project_name}`, so containers are `{project_name}-app-1`, `{project_name}-db-1`, `{project_name}-cache-1`.
-- **Automated and AI test runs** pass a random project name, `-p "{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"`, so containers are `{project_name}-XXXXXXXX-app-1` and cleanup is by that project name: `docker compose -p "{project_name}-XXXXXXXX" down -v`.
-- **`docker run`** keeps `--rm --name "{project_name}-XXXXXXXX"` with a random 8-character lowercase suffix.
-
 
 ### Production Compose (`docker/docker-compose.yml`)
 
@@ -33669,8 +33661,9 @@ x-logging: &default-logging
   driver: json-file
 
 services:
-  app:
+  {project_name}:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
+    container_name: {project_name}-app
     hostname: {project_name}
     restart: always
     pull_policy: always
@@ -33678,7 +33671,7 @@ services:
     environment:
       PORT: 80
       TZ: ${TZ:-America/New_York}
-      CACHE_URL: valkey://cache:6379
+      CACHE_URL: valkey://{project_name}-cache:6379
       # For remote libsql/Turso: set DATABASE_DRIVER=libsql and DATABASE_URL
       # DATABASE_DRIVER: libsql
       # DATABASE_URL: libsql://your-db.turso.io?authToken=${TURSO_AUTH_TOKEN}
@@ -33694,14 +33687,15 @@ services:
       retries: 3
       start_period: 90s
     depends_on:
-      cache:
+      {project_name}-cache:
         condition: service_healthy
     networks:
       - {project_name}
 
-  cache:
+  {project_name}-cache:
     image: valkey/valkey:alpine
     pull_policy: always
+    container_name: {project_name}-cache
     restart: always
     logging: *default-logging
     volumes:
@@ -33728,9 +33722,9 @@ networks:
 | `name:` (production, `docker-compose.yml`) | `{project_name}` | Top-level compose project name — no suffix |
 | `name:` (development, `docker-compose.dev.yml`) | `{project_name}-dev` | Suffixed so the dev stack can run alongside prod |
 | `name:` (test, `docker-compose.test.yml`) | `{project_name}-test` | Suffixed so the test stack can run alongside prod/dev |
-| `container_name:` | **NEVER set** | Compose generates `{project_name}-{service}-{N}` from the top-level `name:` |
-| Main service | `app` | Service name matches project name |
-| Database service | `db` | Database service key |
+| `container_name:` | production `{project_name}-app`, `{project_name}-db`, `{project_name}-cache` · dev `{project_name}-dev` · test `{project_name}-test`, `{project_name}-cache-test` | e.g., `jokes-app`, `jokes-db`, `jokes-cache`, `jokes-dev`, `jokes-test`; the dev and test names keep those stacks from colliding with production |
+| Main service | `{project_name}` | Service name matches project name |
+| Database service | `{project_name}-db` | Database service name |
 | `hostname:` | `{project_name}` | Hardcoded container hostname — same across all three modes |
 | `restart:` | `always` | Always restart on failure |
 | `pull_policy:` | `always` | Always pull latest image |
@@ -33755,7 +33749,7 @@ x-logging: &default-logging
 **Every service MUST use the anchor:**
 ```yaml
 services:
-  app:
+  {project_name}:
     logging: *default-logging
 ```
 
@@ -33778,8 +33772,9 @@ x-logging: &default-logging
   driver: json-file
 
 services:
-  app:
+  {project_name}:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:devel
+    container_name: {project_name}-app
     hostname: {project_name}
     restart: always
     pull_policy: always
@@ -33812,12 +33807,12 @@ networks:
 
 ### Service Naming Convention
 
-| Service Type | Service Key | Generated Container Name |
+| Service Type | Service Name | Container Name |
 |--------------|--------------|----------------|
-| Main application | `app` | `{project_name}-app-1` |
-| Database | `db` | `{project_name}-db-1` |
-| Cache (Valkey) | `cache` | `{project_name}-cache-1` |
-| Proxy (Nginx) | `proxy` | `{project_name}-proxy-1` |
+| Main application | `{project_name}` | `{project_name}-app` |
+| Database | `{project_name}-db` | `{project_name}-db` |
+| Cache (Valkey) | `{project_name}-cache` | `{project_name}-cache` |
+| Proxy (Nginx) | `{project_name}-proxy` | `{project_name}-proxy` |
 
 ### Compose Variants
 
@@ -33825,9 +33820,9 @@ Three compose files ship in the `docker/` directory:
 
 | File | Image Tag | Cache | Purpose |
 |------|-----------|-------|---------|
-| `docker/docker-compose.yml` | `:latest` | Valkey, `cache` (persistent volume) | Production deployment |
+| `docker/docker-compose.yml` | `:latest` | Valkey, `{project_name}-cache` (persistent volume) | Production deployment |
 | `docker/docker-compose.dev.yml` | `:devel` | None | Local development (human use only) |
-| `docker/docker-compose.test.yml` | `:devel` | Valkey, `cache` (ephemeral `tmpfs`) | Automated testing |
+| `docker/docker-compose.test.yml` | `:devel` | Valkey, `{project_name}-cache-test` (ephemeral `tmpfs`) | Automated testing |
 
 **Build Commands:**
 
@@ -33928,17 +33923,16 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 # Or use absolute path: PROJECT_ROOT="/path/to/your/project"
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
-COMPOSE_PROJECT="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 
 # Copy docker-compose.test.yml
 cp "$PROJECT_ROOT/docker/docker-compose.test.yml" "$TEMP_DIR/docker-compose.yml"
 
 # Run from temp dir - ./volumes/ resolves to $TEMP_DIR/volumes/
-cd "$TEMP_DIR" && docker compose -p "$COMPOSE_PROJECT" up --abort-on-container-exit
+cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
 
 # Stop and cleanup
-cd "$TEMP_DIR" && docker compose -p "$COMPOSE_PROJECT" down -v
+cd "$TEMP_DIR" && docker compose down
 rm -rf "$TEMP_DIR"
 ```
 
@@ -34010,9 +34004,10 @@ x-logging: &default-logging
   driver: json-file
 
 services:
-  app:
+  {project_name}:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:devel
     pull_policy: always
+    container_name: {project_name}-test
     hostname: {project_name}
     restart: "no"
     logging: *default-logging
@@ -34021,7 +34016,7 @@ services:
       DEBUG: true
       MODE: development
       TZ: ${TZ:-America/New_York}
-      CACHE_URL: valkey://cache:6379
+      CACHE_URL: valkey://{project_name}-cache-test:6379
     volumes:
       # CRITICAL: ./volumes/ must resolve to $TEMP_DIR/volumes/, NOT project directory
       # This file MUST be copied to a temp directory before running
@@ -34037,14 +34032,15 @@ services:
       retries: 3
       start_period: 90s
     depends_on:
-      cache:
+      {project_name}-cache-test:
         condition: service_healthy
     networks:
       - {project_name}-test
 
-  cache:
+  {project_name}-cache-test:
     image: valkey/valkey:alpine
     pull_policy: always
+    container_name: {project_name}-cache-test
     restart: "no"
     logging: *default-logging
     tmpfs:
@@ -34068,10 +34064,9 @@ networks:
 ```bash
 mkdir -p "${TMPDIR:-/tmp}/{project_org}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{project_org}/{internal_name}-XXXXXX")
-COMPOSE_PROJECT="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
-cd "$TEMP_DIR" && docker compose -p "$COMPOSE_PROJECT" up --abort-on-container-exit
+cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
 # Cleanup after tests
 rm -rf "$TEMP_DIR"
 ```
@@ -37591,19 +37586,18 @@ When a test or debug step requires `reboot`, `systemctl`, `iptables`, `mount`, p
 # 1. Create temp directory (REQUIRED)
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
-COMPOSE_PROJECT="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 
 # 2. Copy ONLY docker-compose.test.yml to temp dir
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 
 # 3. Run from temp dir (./volumes resolves to $TEMP_DIR/volumes)
-cd "$TEMP_DIR" && docker compose -p "$COMPOSE_PROJECT" up -d
+cd "$TEMP_DIR" && docker compose up -d
 
 # 4. Run tests...
 
 # 5. Cleanup
-cd - && docker compose -p "$COMPOSE_PROJECT" -f "$TEMP_DIR/docker-compose.yml" down -v
+cd - && docker compose -f "$TEMP_DIR/docker-compose.yml" down
 rm -rf "$TEMP_DIR"
 ```
 
@@ -47204,10 +47198,9 @@ maintainer_email: jane@example.com
 # Temp dir workflow
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
-COMPOSE_PROJECT="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
-cd "$TEMP_DIR" && docker compose -p "$COMPOSE_PROJECT" up -d
+cd "$TEMP_DIR" && docker compose up -d
 ```
 
 **Project Directory Rules:**
