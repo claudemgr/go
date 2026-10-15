@@ -10114,7 +10114,8 @@ userAgent := fmt.Sprintf("%s-cli/%s", projectName, version)
 
 ```yaml
 update:
-  # default false for CLI (interactive prompt unless explicitly opted in). Server default true.
+  # default false: the CLI prompts unless this is true AND the run is non-interactive AND --update yes was passed.
+  # The server's equivalent is server.update.auto_install (default false).
   auto: false
   # CLI is short-lived; checks once per command. No background poll.
   check_interval: per_invocation
@@ -43294,6 +43295,9 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
+| `update.branch` | Dropdown | `stable` | No | Release channel: `stable` / `beta` / `daily`. Channels are cumulative; also set by `--update branch {name}` (config is the single source of truth) |
+| `update.auto_install` | Toggle | Off | No | Run the full `--update yes` flow from the `update_check` task for eligible releases. Off = notify only; never touches the binary |
+| `update.defer_days` | Number | `0` | No | 0-365. A release is eligible for the scheduled task only once it is this many days old; manual `--update check` / `--update yes` ignore it. See Defer Semantics for per-channel behavior |
 | `update.cli_min_version` | Text | (empty) | No | Minimum CLI version the server accepts. Returned verbatim as `cli_min_version` by `/api/autodiscover`; empty means no minimum is enforced. Never derived from the server version |
 
 #### Email/SMTP Section (`/server/{admin_path}/config/email`)
