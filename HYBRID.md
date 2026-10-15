@@ -6360,7 +6360,7 @@ See `dockerfile_conventions.md` → "OCI Annotations" for the complete list of r
 | `image:` tag | `:latest` in `docker-compose.yml` (production) · `:devel` in `docker-compose.dev.yml` and `docker-compose.test.yml` |
 | `version:` | **NEVER include** |
 | `name:` | `{project_name}` (production) · `{project_name}-dev` (dev) · `{project_name}-test` (test) |
-| `container_name:` | `{project_name}-app` (production and dev main) · `{project_name}-test` (test main) · `{project_name}-cache` / `{project_name}-cache-test` (Valkey) |
+| `container_name:` | **NEVER set** — compose generates `{project_name}-{service}-{N}` from the top-level `name:` |
 | Main service name | `{project_name}` (matches project name in every variant) |
 | `pull_policy:` | `always` on every service |
 | `restart:` | `always` (production/dev) · `"no"` (test — services are ephemeral) |
@@ -6387,9 +6387,19 @@ x-logging: &default-logging
   driver: json-file
 
 services:
-  {project_name}:
+  app:
     logging: *default-logging
 ```
+
+### Container Naming
+
+Compose generates every container name as `{project_name}-{service}-{N}` from the top-level `name:` and the service key, so **`container_name:` is never set**. That is the project-scoped `{project_name}-...` prefix the global container rules require, and it keeps the stack scalable and cleanable by compose project.
+
+- **Service keys are the role only** (`app`, `db`, `cache`, `search`, `queue`, `proxy`), never prefixed with the project name. Services reach each other by key (`db`, `cache`).
+- **Production** (`docker-compose.yml`) uses `name: {project_name}`, so containers are `{project_name}-app-1`, `{project_name}-db-1`, `{project_name}-cache-1`.
+- **Automated and AI test runs** pass a random project name, `-p "{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"`, so containers are `{project_name}-XXXXXXXX-app-1` and cleanup is by that project name: `docker compose -p "{project_name}-XXXXXXXX" down -v`.
+- **`docker run`** keeps `--rm --name "{project_name}-XXXXXXXX"` with a random 8-character lowercase suffix.
+
 
 ### Production Compose (`docker/docker-compose.yml`)
 
@@ -6408,9 +6418,8 @@ x-logging: &default-logging
   driver: json-file
 
 services:
-  {project_name}:
+  app:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
-    container_name: {project_name}-app
     hostname: {project_name}
     restart: always
     pull_policy: always
@@ -6420,7 +6429,7 @@ services:
       # NO DEBUG/MODE - debug must be explicitly set via CLI if needed
       PORT: 80
       TZ: America/New_York
-      CACHE_URL: valkey://{project_name}-cache:6379
+      CACHE_URL: valkey://cache:6379
       # DOMAIN (optional - auto-detects from reverse proxy headers)
       # DOMAIN: myapp.com,www.myapp.com
       # SMTP (optional - autodetects if not set)
@@ -6443,15 +6452,14 @@ services:
       retries: 3
       start_period: 90s
     depends_on:
-      {project_name}-cache:
+      cache:
         condition: service_healthy
     networks:
       - {project_name}
 
-  {project_name}-cache:
+  cache:
     image: valkey/valkey:alpine
     pull_policy: always
-    container_name: {project_name}-cache
     restart: always
     logging: *default-logging
     volumes:
@@ -6475,9 +6483,10 @@ networks:
 ```bash
 mkdir -p "${TMPDIR:-/tmp}/{project_org}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{project_org}/{internal_name}-XXXXXX")
+COMPOSE_PROJECT="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 cp docker/docker-compose.yml "$TEMP_DIR/"
-cd "$TEMP_DIR" && docker compose up -d
+cd "$TEMP_DIR" && docker compose -p "$COMPOSE_PROJECT" up -d
 ```
 
 ### Development Compose (`docker/docker-compose.dev.yml`)
@@ -6497,10 +6506,9 @@ x-logging: &default-logging
   driver: json-file
 
 services:
-  {project_name}:
+  app:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:devel
     pull_policy: always
-    container_name: {project_name}-app
     hostname: {project_name}
     restart: always
     logging: *default-logging
@@ -6534,9 +6542,10 @@ networks:
 ```bash
 mkdir -p "${TMPDIR:-/tmp}/{project_org}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{project_org}/{internal_name}-XXXXXX")
+COMPOSE_PROJECT="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 cp docker/docker-compose.dev.yml "$TEMP_DIR/docker-compose.yml"
-cd "$TEMP_DIR" && docker compose up -d
+cd "$TEMP_DIR" && docker compose -p "$COMPOSE_PROJECT" up -d
 ```
 
 ### Test Compose (`docker/docker-compose.test.yml`)
@@ -6553,10 +6562,9 @@ x-logging: &default-logging
   driver: json-file
 
 services:
-  {project_name}:
+  app:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:devel
     pull_policy: always
-    container_name: {project_name}-test
     restart: "no"
     logging: *default-logging
     environment:
@@ -6564,7 +6572,7 @@ services:
       DEBUG: true
       MODE: development
       TZ: America/New_York
-      CACHE_URL: valkey://{project_name}-cache-test:6379
+      CACHE_URL: valkey://cache:6379
     volumes:
       # CRITICAL: ./volumes/ must resolve to $TEMP_DIR/volumes/, NOT project directory
       # This file MUST be copied to a temp directory before running
@@ -6580,15 +6588,14 @@ services:
       retries: 3
       start_period: 90s
     depends_on:
-      {project_name}-cache-test:
+      cache:
         condition: service_healthy
     networks:
       - {project_name}-test
 
-  {project_name}-cache-test:
+  cache:
     image: valkey/valkey:alpine
     pull_policy: always
-    container_name: {project_name}-cache-test
     restart: "no"
     logging: *default-logging
     tmpfs:
@@ -6612,9 +6619,10 @@ networks:
 ```bash
 mkdir -p "${TMPDIR:-/tmp}/{project_org}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{project_org}/{internal_name}-XXXXXX")
+COMPOSE_PROJECT="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
-cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
+cd "$TEMP_DIR" && docker compose -p "$COMPOSE_PROJECT" up --abort-on-container-exit
 # Cleanup after tests
 rm -rf "$TEMP_DIR"
 ```
@@ -6625,9 +6633,9 @@ Three compose files ship in the `docker/` directory:
 
 | File | Image Tag | Cache | `172.17.0.1:` bind | Who runs it |
 |------|-----------|-------|---------------------|--------------|
-| `docker/docker-compose.yml` | `:latest` | Valkey, `{project_name}-cache` (persistent volume) | Yes | Human — production deployment |
+| `docker/docker-compose.yml` | `:latest` | Valkey, `cache` (persistent volume) | Yes | Human — production deployment |
 | `docker/docker-compose.dev.yml` | `:devel` | None | No | Human only — AI never runs this |
-| `docker/docker-compose.test.yml` | `:devel` | Valkey, `{project_name}-cache-test` (ephemeral `tmpfs`) | Yes | AI/automated testing, preferably via `tests/` scripts |
+| `docker/docker-compose.test.yml` | `:devel` | Valkey, `cache` (ephemeral `tmpfs`) | Yes | AI/automated testing, preferably via `tests/` scripts |
 
 **Build Commands:**
 ```bash
@@ -6640,15 +6648,15 @@ docker build -t {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:deve
 
 **Service Naming Convention:**
 
-| Service Type | Service Name | Container Name |
+| Service Type | Service Key | Generated Container Name |
 |--------------|---------------|------------------|
-| Main app (production) | `{project_name}` | `{project_name}-app` |
-| Main app (dev) | `{project_name}` | `{project_name}-app` |
-| Main app (test) | `{project_name}` | `{project_name}-test` |
-| Database | `{project_name}-db` | `{project_name}-db` |
-| Cache (Valkey, production) | `{project_name}-cache` | `{project_name}-cache` |
-| Cache (Valkey, test) | `{project_name}-cache-test` | `{project_name}-cache-test` |
-| Proxy (Nginx) | `{project_name}-proxy` | `{project_name}-proxy` |
+| Main app (production) | `app` | `{project_name}-app-1` |
+| Main app (dev) | `app` | `{project_name}-dev-app-1` |
+| Main app (test) | `app` | `{project_name}-test-app-1` |
+| Database | `db` | `{project_name}-db-1` |
+| Cache (Valkey, production) | `cache` | `{project_name}-cache-1` |
+| Cache (Valkey, test) | `cache` | `{project_name}-test-cache-1` |
+| Proxy (Nginx) | `proxy` | `{project_name}-proxy-1` |
 
 ### Build-Time `docker/rootfs/` vs Runtime `./volumes/` (CRITICAL — Understand This)
 
@@ -6734,13 +6742,14 @@ $TEMP_DIR/
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
+COMPOSE_PROJECT="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 
 cp "$PROJECT_ROOT/docker/docker-compose.test.yml" "$TEMP_DIR/docker-compose.yml"
 
-cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
+cd "$TEMP_DIR" && docker compose -p "$COMPOSE_PROJECT" up --abort-on-container-exit
 
-cd "$TEMP_DIR" && docker compose down
+cd "$TEMP_DIR" && docker compose -p "$COMPOSE_PROJECT" down -v
 rm -rf "$TEMP_DIR"
 ```
 
@@ -9392,9 +9401,8 @@ export BACKUP_DIR="/data/backups/${APP_NAME}"
 
 ```yaml
 services:
-  {project_name}:
+  app:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
-    container_name: {project_name}-app
     command:
       - --config=/config
       - --data=/data
@@ -9419,9 +9427,8 @@ services:
 
 ```yaml
 services:
-  {project_name}:
+  app:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
-    container_name: {project_name}-app
     volumes:
       - {project_name}-data:/data
     ports:
@@ -10096,7 +10103,7 @@ userAgent := fmt.Sprintf("%s-cli/%s", projectName, version)
 
 | Step | Action |
 |------|--------|
-| 1. Discover | CLI's `/api/autodiscover` response includes `cli_versions: { "linux-amd64": {"version": "1.2.3", "sha256": "..."}, ... }` and `cli_min_version`. CLI checks on every start (it's short-lived; no separate poll loop needed) and additionally on `{project_name}-cli --update check`. |
+| 1. Discover | CLI's `/api/autodiscover` response includes `cli_versions: { "linux-amd64": {"version": "1.2.3", "sha256": "..."}, ... }` and `cli_min_version` (the value of `update.cli_min_version`; omitted or empty means no minimum is enforced). CLI checks on every start (it's short-lived; no separate poll loop needed) and additionally on `{project_name}-cli --update check`. |
 | 2. Decide | If `current_version < cli_versions[os-arch].version`: prompt the user (interactive) OR auto-update silently (when `update.auto: true` AND non-interactive AND `--update yes` was passed earlier). If `current_version < cli_min_version`: refuse to make further requests until updated; print "this CLI is too old; the server requires {min_version} — run '{project_name}-cli --update yes' to upgrade." |
 | 3. Download | Fetch `{base}/cli/binaries/{project_name}-cli-{os}-{arch}` over HTTPS. Save to a tmp path (`/tmp/{project_org}/{internal_name}-XXXXXX/cli.update.tmp` per the spec's tmp-dir rules). |
 | 4. Verify SHA-256 | Same `verifyChecksum()` from PART 21 — match against the `sha256` from autodiscover. Mismatch → delete temp, abort with stderr error. |
@@ -10118,7 +10125,7 @@ update:
 
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
-| `/api/autodiscover` | GET | None or bearer | Returns `cli_versions` (each entry has `version` + `sha256`) and `cli_min_version` alongside server info |
+| `/api/autodiscover` | GET | None or bearer | Returns `cli_versions` (each entry has `version` + `sha256`) and `cli_min_version` (from `update.cli_min_version`) alongside server info |
 | `{base}/cli/binaries/{project_name}-cli-{os}-{arch}` | GET | None (public — CLIs are user-distributed) OR bearer if `cli.binary_download.require_auth: true` is set | Streams the binary |
 
 **Why CLI download default is unauthenticated:** the CLI is the entry point for new users. Forcing auth on the download means they need a token before they can install the tool that obtains the token. Operators who run a private deployment can flip `cli.binary_download.require_auth` to `true`.
@@ -14476,8 +14483,8 @@ When `DEBUG=true` is active and an error occurs, the canonical error body (PART 
 |------|-------------|
 | Path confinement | Reject absolute paths, `..`, empty names, drive-letter paths, and any extracted path that escapes the target directory |
 | Symlinks / special files | Reject symlinks, hard links, device files, named pipes, sockets, and setuid/setgid bits |
-| Size limits | Enforce max archive size, max total uncompressed size, max file count, and max single-file size |
-| Compression bombs | Stop extraction when compression ratio or expanded size exceeds configured thresholds |
+| Size limits | Enforce all four before extracting and again while streaming. Defaults, all configurable under `restore.*`: max archive size `1G` (`restore.max_archive_size`), max total expanded size `4G` (`restore.max_expanded_size`), max file count `10000` (`restore.max_files`), max single file `512M` (`restore.max_file_size`) |
+| Compression bombs | Abort and delete the partial output when the expanded-to-compressed ratio exceeds `100:1` (`restore.max_ratio`) or any size limit above is exceeded; count bytes and files while streaming, never trust archive headers |
 | Permissions | Normalize extracted file modes to safe defaults; never preserve executable bits unless the feature explicitly needs them |
 | Overwrite policy | Do not overwrite existing files outside an explicit replace flow |
 
@@ -32284,7 +32291,7 @@ When a test or debug step requires `reboot`, `systemctl`, `iptables`, `mount`, p
 |-----------|--------------|
 | Run or test the compiled binary | `docker run --rm -v "$BUILD_DIR:/app" alpine:latest /app/{project_name}` or `./tests/docker.sh` / `./tests/incus.sh` |
 | Test systemd service install/start/stop | `incus exec test-{project_name} -- systemctl ...` |
-| Test firewall integration | `docker run --rm --name "{project_name}-test" --cap-add=NET_ADMIN ...` |
+| Test firewall integration | `docker run --rm --name "{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" --cap-add=NET_ADMIN ...` |
 | Test network interface behavior | `ip netns exec {ns} ...` or inside Incus |
 | Test package install / dependency setup | Inside the build container or test container |
 | Test reboot / service restart behavior | `incus restart test-{project_name}` |
@@ -32335,18 +32342,19 @@ When a test or debug step requires `reboot`, `systemctl`, `iptables`, `mount`, p
 # 1. Create temp directory (REQUIRED)
 mkdir -p "${TMPDIR:-/tmp}/${PROJECT_ORG}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
+COMPOSE_PROJECT="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
 mkdir -p "$TEMP_DIR/volumes/config" "$TEMP_DIR/volumes/data"
 
 # 2. Copy ONLY docker-compose.test.yml to temp dir
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 
 # 3. Run from temp dir (./volumes resolves to $TEMP_DIR/volumes)
-cd "$TEMP_DIR" && docker compose up -d
+cd "$TEMP_DIR" && docker compose -p "$COMPOSE_PROJECT" up -d
 
 # 4. Run tests...
 
 # 5. Cleanup
-cd - && docker compose -f "$TEMP_DIR/docker-compose.yml" down
+cd - && docker compose -p "$COMPOSE_PROJECT" -f "$TEMP_DIR/docker-compose.yml" down -v
 rm -rf "$TEMP_DIR"
 ```
 
@@ -43276,6 +43284,17 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `backup.retention.max_total_size` | Text | `"10%"` | No | Hard size cap (e.g. `"10%"`, `"50G"`); `0` = disabled; overrides count limits |
 | `backup.encryption.enabled` | Toggle | Off | No | Encrypt backups |
 | `backup.encryption.password` | Secret | (none) | No | Encryption passphrase for backups (not an account credential) |
+| `restore.max_archive_size` | Text | `"1G"` | No | Max archive size accepted for restore/import |
+| `restore.max_expanded_size` | Text | `"4G"` | No | Max total expanded size; extraction aborts above it |
+| `restore.max_files` | Number | `10000` | No | Max files in an archive |
+| `restore.max_file_size` | Text | `"512M"` | No | Max size of any single extracted file |
+| `restore.max_ratio` | Number | `100` | No | Max expanded-to-compressed ratio (`100` = `100:1`); extraction aborts above it |
+
+#### Update Section (`/server/{admin_path}/config/update`)
+
+| Setting | Control | Default | Restart | Description |
+|---------|---------|---------|---------|-------------|
+| `update.cli_min_version` | Text | (empty) | No | Minimum CLI version the server accepts. Returned verbatim as `cli_min_version` by `/api/autodiscover`; empty means no minimum is enforced. Never derived from the server version |
 
 #### Email/SMTP Section (`/server/{admin_path}/config/email`)
 
