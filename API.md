@@ -30900,9 +30900,11 @@ server:
 |---------|-----------|-----------|
 | `stable` (default) | Full releases only (`v*`, `*.*.*`) | Newest stable |
 | `beta` | Beta pre-releases (`*-beta`) + all stable releases | Newest of both — beta users are never stuck behind a stable release |
-| `daily` | Rolling `daily` pre-release (rebuilt nightly) + beta + stable | Newest overall |
+| `daily` | Rolling `daily` release (rebuilt nightly) + beta + stable | Newest overall — a newer nightly is detected by comparing the release's `published_at` against the running binary's embedded `BUILD_EPOCH` |
 
 ### Defer Semantics (`defer_days`)
+
+**Applies to the `stable` and `beta` channels only. `defer_days` is a no-op on the `daily` channel — see below.**
 
 **A release is eligible only once `now - published_at >= defer_days` (GitHub Releases `published_at`, UTC).**
 
@@ -30910,8 +30912,8 @@ server:
 |------|----------|
 | Gates the scheduled task only | `update_check` skips ineligible releases for BOTH notification and auto-install; manual `--update check` / `--update yes` always see and install the true latest — an explicit operator action overrides the defer window |
 | Eligibility is per-release | The task selects the NEWEST eligible release that is newer than the running version. A brand-new release does not reset the clock for older, already-eligible releases |
-| Rolling delay, never deadlock | Rapid release cadence (e.g. `daily` channel + `defer_days: 30`) still converges: each run adopts the newest release that has aged past the window |
-| Example | Running v1.2.2; v1.2.3 published 40 days ago, v1.2.4 published 5 days ago, `defer_days: 30` → task notifies/installs v1.2.3; v1.2.4 becomes eligible 25 days later |
+| Daily channel ignores `defer_days` | The rolling `daily` release is deleted and recreated nightly, so its `published_at` is always fresh — an age-based gate could never pass and would permanently block the daily channel. Daily selection instead compares the release's `published_at` against the running binary's embedded `BUILD_EPOCH` (see Channel Semantics above), with no deferral window applied |
+| Example (stable/beta) | Running v1.2.2; v1.2.3 published 40 days ago, v1.2.4 published 5 days ago, `defer_days: 30` → task notifies/installs v1.2.3; v1.2.4 becomes eligible 25 days later |
 
 ### Scheduled Check (update_check Task)
 
