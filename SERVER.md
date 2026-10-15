@@ -16459,6 +16459,7 @@ llms.txt tells AI agents (Claude, GPT, etc.) what the application does, what API
 Base URL: {app_url}/api/{api_version}
 Authentication: Bearer token (create via POST /api/{api_version}/users/tokens)
 Rate limit: {rate_limit} requests/minute
+MCP: {app_url}/mcp (Streamable HTTP; same Bearer token as the API)
 
 ## Endpoints
 - GET /server/healthz - Health check (no auth)
@@ -16506,6 +16507,7 @@ web:
 | Admin routes (`/server/{admin_path}/**`) | No | Not for external agents |
 | Internal routes (`/internal/**`) | No | Server-to-server only |
 | Health (`/server/healthz`) | Yes | Useful for monitoring agents |
+| MCP (`/api/{api_version}/server/mcp`) | Yes | Same auth as the API; listed so agents can connect |
 | Metrics (`/server/metrics`) | No | Operational/internal endpoint; never advertised |
 
 **Well-Known Support Matrix Update:**
@@ -16514,6 +16516,59 @@ web:
 |------|---------|---------------|--------|--------------|
 | `/.well-known/llms.txt` | Enabled | All projects | Generated from config + routes | `text/plain; charset=utf-8` |
 | `/llms.txt` | Enabled | All projects | Alias to `/.well-known/llms.txt` | `text/plain; charset=utf-8` |
+
+### MCP Endpoint (Model Context Protocol)
+
+**Every project exposes an MCP endpoint so AI clients (Claude, IDE agents, other MCP clients) can use the API as tools. It is a second front door onto the existing API — it adds no new authentication, no new token type, and no new permissions.**
+
+| Aspect | Rule |
+|--------|------|
+| Default | **On** (`server.mcp.enabled: true`); the admin panel toggle in "Web" settings disables it. When disabled every route below returns `404` |
+| Transport | **Streamable HTTP, remote only** — one endpoint, JSON-RPC 2.0 over HTTP `POST`. No stdio build, no local-process mode, no separate MCP binary or port |
+| Specification | Follow the current MCP specification (https://modelcontextprotocol.io/specification) — the revision, header and error rules come from it, not from this file. Negotiate the version the client asks for; unsupported version → `400` with the spec's `UnsupportedProtocolVersionError` listing the supported versions |
+| Canonical route | `/api/{api_version}/server/mcp` |
+| Aliases | `/api/mcp` and `/mcp` — direct aliases for the current `{api_version}`; the SAME handler mounted at all three paths, never a redirect (see "Unversioned API aliases") |
+| Reserved name | `mcp` is in `reservedNames` so no user, org, or project slug can claim `/mcp` |
+| Methods | `POST` only. `GET` and `DELETE` → `405 Method Not Allowed` (the server keeps no sessions and opens no standalone stream) |
+| Responses | A single `application/json` object per request; an SSE stream only when a tool needs to stream progress. Server-initiated requests are never sent |
+| Sessions | None. An `Mcp-Session-Id` header, if sent by an older client, is ignored — never minted, never echoed |
+| `Origin` | If an `Origin` header is present it MUST be validated against the request's own origin / configured public origins (PART 8 → "Resolution Order"); invalid → `403` (DNS-rebinding protection required by the spec) |
+| Header checks | `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` MUST match the JSON-RPC body; mismatch → `400` with the spec's `HeaderMismatch` error |
+
+#### Authentication — reuse, never new
+
+| Rule | Detail |
+|------|--------|
+| Credential | The existing `Authorization: Bearer ...` header, exactly as for every other API route. **There is no MCP token, no MCP scope, and no MCP-specific setting that grants access** |
+| Validation | Run through the SAME token validation function and middleware as the API — one code path, not a copy |
+| Cookies | Ignored. Like every `/api/...` route, the MCP endpoint accepts the `Authorization` header only — no ambient authority |
+| No token | Anonymous: only what an unauthenticated API call may do (public endpoints, default rate limits). An operation that needs auth returns the API's normal `401` JSON-RPC error |
+| Authorization | Per tool call, with the caller's token, by the same checks as the matching API endpoint. A token that cannot call an endpoint over REST cannot call its tool |
+| Rate limiting, audit | The same limiters and audit events as the API; the audit `source` is `mcp` so MCP traffic is distinguishable |
+| Operator-only endpoints | Exposed as tools only to a caller whose token is already operator/admin-scoped; for any other caller they are absent from `tools/list` AND rejected on `tools/call` |
+
+#### Tools
+
+- **One tool per public API operation** (`{api_version}` routes), generated from the same route definitions that feed Swagger and `llms.txt` — never a hand-maintained second list.
+- Tool `name` = the OpenAPI `operationId`; `description` and `inputSchema` come from the OpenAPI definition; `tools/list` returns only the tools the caller's token may use.
+- A tool call dispatches **in-process into the existing handler** with the caller's `Authorization` header — no second implementation, no loopback HTTP request, no bypass of middleware (validation, rate limits, audit, the project's ownership checks).
+- Handler errors map to the MCP tool result with `isError: true` and the API's normal error body (`ok: false`, `error`, `message`); secrets are never included in a tool result any more than in an API response.
+- Resources and prompts are not exposed unless the project's `IDEA.md` defines them.
+
+#### Config and Admin Panel
+
+```yaml
+server:
+  mcp:
+    # Serve the MCP endpoint (default: true)
+    enabled: true
+```
+
+| Element | Type | Description |
+|---------|------|-------------|
+| MCP endpoint | Toggle | Enables `server.mcp.enabled`; takes effect without restart |
+| Endpoint URL | Read-only | The resolved `/api/{api_version}/server/mcp` URL (per request via the URL-resolution rules) |
+| Auth note | Read-only help text | MCP uses the same Bearer tokens as the API; there is no separate MCP token |
 
 ### Admin Panel (/server/{admin_path}/config/web)
 
@@ -16549,6 +16604,8 @@ web:
 |---------|------|-------------|
 | Root `/healthz` alias | Toggle | Enables `server.healthz.root.enabled` |
 | Behavior note | Read-only help text | `/healthz` maps directly to `/server/healthz` using the same handler; never redirects |
+
+**MCP Settings:** see "MCP Endpoint" (`server.mcp.enabled`).
 
 ## Security Reports — Coordinated Disclosure Pipeline
 
@@ -22323,10 +22380,13 @@ Need additional compatible endpoints?"
 | `/api/autodiscover` | GET | None | Server settings, config schema, and options for CLI/agent (non-versioned) |
 | `/api/swagger` | GET | None | OpenAPI JSON spec — direct alias for current `{api_version}` |
 | `/api/graphql` | POST | None | GraphQL queries — direct alias for current `{api_version}` |
+| `/api/mcp` | POST | Bearer (optional) | MCP endpoint — direct alias for current `{api_version}`; same auth as the API |
+| `/mcp` | POST | Bearer (optional) | MCP endpoint — root alias for current `{api_version}`; same handler, never a redirect |
 | `/api/healthz` | GET | None | Health check JSON — direct alias for current `{api_version}` |
 | `/api/metrics[/{service}]` | GET | Bearer token (per-service) | Metrics — unversioned machine-friendly alias for current `{api_version}` |
 | `/api/{api_version}/server/swagger` | GET | None | OpenAPI JSON spec (versioned) |
 | `/api/{api_version}/server/graphql` | POST | None | GraphQL queries (versioned; schema may differ across versions) |
+| `/api/{api_version}/server/mcp` | POST | Bearer (optional) | MCP endpoint (versioned; Streamable HTTP, same tokens as the API) |
 | `/api/{api_version}/server/healthz` | GET | None | Health check (JSON default; text via API rules) |
 | `/api/{api_version}/server/metrics[/{service}]` | GET | Bearer token (per-service) | Metrics (versioned; same handlers) |
 | `/api/{api_version}/server/{admin_path}/*` | ALL | Bearer | Admin API |
@@ -23557,7 +23617,7 @@ var reservedNames = []string{
     "about", "contact", "terms", "privacy", "legal", "security",
 
     // Technical
-    "graphql", "swagger", "rest", "rpc", "ws", "websocket",
+    "graphql", "mcp", "swagger", "rest", "rpc", "ws", "websocket",
     "cdn", "media", "uploads", "files", "images",
     ".well-known", "robots.txt", "sitemap.xml", "favicon.ico",
 
@@ -30334,6 +30394,7 @@ server:
 | `/api/{api_version}/server/healthz` | GET | Health check (JSON default; text via API rules) |
 | `/api/{api_version}/server/swagger` | GET | OpenAPI JSON spec |
 | `/api/{api_version}/server/graphql` | POST | GraphQL endpoint |
+| `/api/{api_version}/server/mcp` | POST | MCP endpoint (Streamable HTTP) |
 
 **Direct alias endpoints (same handler, no redirect):**
 
@@ -30341,6 +30402,8 @@ server:
 |-------|-----------------|
 | `/api/swagger` | `/api/{api_version}/server/swagger` |
 | `/api/graphql` | `/api/{api_version}/server/graphql` |
+| `/api/mcp` | `/api/{api_version}/server/mcp` |
+| `/mcp` | `/api/{api_version}/server/mcp` |
 | `/api/healthz` | `/api/{api_version}/server/healthz` |
 
 ### /server/ Frontend Routes
@@ -60175,6 +60238,7 @@ PATCH /api/{api_version}/users/settings
 | `/server/docs/swagger`, `/server/docs/graphql` | GET | None | Public API docs (HTML) |
 | `/api/swagger`, `/api/{api_version}/server/swagger` | GET | None | Public OpenAPI JSON spec |
 | `/api/graphql`, `/api/{api_version}/server/graphql` | POST | None for introspection; per-operation otherwise | GraphQL — see PART 14 GraphQL section for resolver-level auth |
+| `/api/mcp`, `/mcp`, `/api/{api_version}/server/mcp` | POST | Same as the API (Bearer optional; per-operation) | MCP endpoint — see "MCP Endpoint"; authentication and authorization are the API's |
 | `/api/autodiscover` | GET | None | Public client/agent auto-config |
 | `/api/{api_version}/server/healthz` | GET | None | Public JSON health |
 | `/api/{api_version}/server/reports/*` | POST | None | Public reports sink (CSP, NEL, deprecation, intervention, crash, error, default). See PART 34 → "Public Reports Scope". Browsers cannot present credentials when emitting these reports. Rate-limited per-IP. |
@@ -60606,9 +60670,12 @@ Organizations - only for projects with multi-user collaboration.
 | `/api/{api_version}/server/healthz` | GET | Health check |
 | `/api/{api_version}/server/swagger` | GET | OpenAPI JSON spec (versioned) |
 | `/api/{api_version}/server/graphql` | POST | GraphQL queries (versioned) |
+| `/api/{api_version}/server/mcp` | POST | MCP endpoint (versioned) |
 | `/api/healthz` | GET | Health check — direct alias for current `{api_version}` |
 | `/api/swagger` | GET | OpenAPI JSON spec — direct alias for current `{api_version}` |
 | `/api/graphql` | POST | GraphQL queries — direct alias for current `{api_version}` |
+| `/api/mcp` | POST | MCP endpoint — direct alias for current `{api_version}` |
+| `/mcp` | POST | MCP endpoint — root alias for current `{api_version}` |
 
 **Note:** Swagger, GraphQL, and health endpoints follow the same `/api/{api_version}/...` versioning rule as the rest of the API. The unversioned `/api/swagger`, `/api/graphql`, and `/api/healthz` paths are direct aliases that resolve to the current `{api_version}` without redirects. The interactive UIs live under `/server/docs/swagger` and `/server/docs/graphql` (see PART 16).
 
