@@ -33633,7 +33633,7 @@ exec $APP_BIN $FLAGS "$@"
 | `image:` tag | `:latest` in `docker-compose.yml` (production) · `:devel` in `docker-compose.dev.yml` and `docker-compose.test.yml` |
 | `version:` | **NEVER include** |
 | `name:` | `{project_name}` (top-level) |
-| `container_name:` | **Always set**, one fixed name per compose file: production `{project_name}-app`, `{project_name}-db`, `{project_name}-cache` (only the services that file includes) · dev `{project_name}-dev` · test `{project_name}-test`, `{project_name}-cache-test` |
+| `container_name:` | **Always set**, one fixed name per service, the same in production, dev, and test: `{project_name}-app`, `{project_name}-db`, `{project_name}-cache` (only the services that file includes). Dev and test never run on a production host, so a clash fails `docker compose up` instead of replacing production; their compose `name:` and network keep the `-dev` / `-test` suffix so it fails rather than adopting production's project |
 | Main service name | `{project_name}` (matches project name) |
 | `pull_policy:` | `always` |
 | `restart:` | `always` |
@@ -33720,16 +33720,16 @@ networks:
 | Field | Value | Description |
 |-------|-------|-------------|
 | `name:` (production, `docker-compose.yml`) | `{project_name}` | Top-level compose project name — no suffix |
-| `name:` (development, `docker-compose.dev.yml`) | `{project_name}-dev` | Suffixed so the dev stack can run alongside prod |
-| `name:` (test, `docker-compose.test.yml`) | `{project_name}-test` | Suffixed so the test stack can run alongside prod/dev |
-| `container_name:` | production `{project_name}-app`, `{project_name}-db`, `{project_name}-cache` · dev `{project_name}-dev` · test `{project_name}-test`, `{project_name}-cache-test` | e.g., `jokes-app`, `jokes-db`, `jokes-cache`, `jokes-dev`, `jokes-test`; the dev and test names keep those stacks from colliding with production |
+| `name:` (development, `docker-compose.dev.yml`) | `{project_name}-dev` | Suffixed so dev keeps its own project name: sharing production's would let `docker compose up` adopt and replace production's containers, whereas a shared container name only fails loudly |
+| `name:` (test, `docker-compose.test.yml`) | `{project_name}-test` | Suffixed so test keeps its own project name: sharing production's would let `docker compose up` adopt and replace production's containers, whereas a shared container name only fails loudly |
+| `container_name:` | `{project_name}-app`, `{project_name}-db`, `{project_name}-cache` in every file (production, dev, test) | e.g., `jokes-app`, `jokes-db`, `jokes-cache`; dev and test reuse production's names on purpose, so running them on a production host fails loudly |
 | Main service | `{project_name}` | Service name matches project name |
 | Database service | `{project_name}-db` | Database service name |
 | `hostname:` | `{project_name}` | Hardcoded container hostname — same across all three modes |
 | `restart:` | `always` | Always restart on failure |
 | `pull_policy:` | `always` | Always pull latest image |
 | `logging:` | `*default-logging` | Use the logging anchor |
-| `networks:` | `{project_name}` (prod) / `{project_name}-dev` (dev) / `{project_name}-test` (test) | Isolated network per project, suffixed to match the compose `name:` for that mode so stacks can coexist |
+| `networks:` | `{project_name}` (prod) / `{project_name}-dev` (dev) / `{project_name}-test` (test) | Isolated network per project, suffixed to match the compose `name:` for that mode |
 
 ### Logging Anchor
 
@@ -33822,7 +33822,7 @@ Three compose files ship in the `docker/` directory:
 |------|-----------|-------|---------|
 | `docker/docker-compose.yml` | `:latest` | Valkey, `{project_name}-cache` (persistent volume) | Production deployment |
 | `docker/docker-compose.dev.yml` | `:devel` | None | Local development (human use only) |
-| `docker/docker-compose.test.yml` | `:devel` | Valkey, `{project_name}-cache-test` (ephemeral `tmpfs`) | Automated testing |
+| `docker/docker-compose.test.yml` | `:devel` | Valkey, `{project_name}-cache` (ephemeral `tmpfs`) | Automated testing |
 
 **Build Commands:**
 
@@ -34007,7 +34007,7 @@ services:
   {project_name}:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:devel
     pull_policy: always
-    container_name: {project_name}-test
+    container_name: {project_name}-app
     hostname: {project_name}
     restart: "no"
     logging: *default-logging
@@ -34016,7 +34016,7 @@ services:
       DEBUG: true
       MODE: development
       TZ: ${TZ:-America/New_York}
-      CACHE_URL: valkey://{project_name}-cache-test:6379
+      CACHE_URL: valkey://{project_name}-cache:6379
     volumes:
       # CRITICAL: ./volumes/ must resolve to $TEMP_DIR/volumes/, NOT project directory
       # This file MUST be copied to a temp directory before running
@@ -34032,15 +34032,15 @@ services:
       retries: 3
       start_period: 90s
     depends_on:
-      {project_name}-cache-test:
+      {project_name}-cache:
         condition: service_healthy
     networks:
       - {project_name}-test
 
-  {project_name}-cache-test:
+  {project_name}-cache:
     image: valkey/valkey:alpine
     pull_policy: always
-    container_name: {project_name}-cache-test
+    container_name: {project_name}-cache
     restart: "no"
     logging: *default-logging
     tmpfs:

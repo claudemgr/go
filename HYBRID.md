@@ -6360,7 +6360,7 @@ See `dockerfile_conventions.md` → "OCI Annotations" for the complete list of r
 | `image:` tag | `:latest` in `docker-compose.yml` (production) · `:devel` in `docker-compose.dev.yml` and `docker-compose.test.yml` |
 | `version:` | **NEVER include** |
 | `name:` | `{project_name}` (production) · `{project_name}-dev` (dev) · `{project_name}-test` (test) |
-| `container_name:` | **Always set**, one fixed name per compose file: production `{project_name}-app`, `{project_name}-db`, `{project_name}-cache` (only the services that file includes) · dev `{project_name}-dev` · test `{project_name}-test`, `{project_name}-cache-test` |
+| `container_name:` | **Always set**, one fixed name per service, the same in production, dev, and test: `{project_name}-app`, `{project_name}-db`, `{project_name}-cache` (only the services that file includes). Dev and test never run on a production host, so a clash fails `docker compose up` instead of replacing production; their compose `name:` and network keep the `-dev` / `-test` suffix so it fails rather than adopting production's project |
 | Main service name | `{project_name}` (matches project name in every variant) |
 | `pull_policy:` | `always` on every service |
 | `restart:` | `always` (production/dev) · `"no"` (test — services are ephemeral) |
@@ -6556,7 +6556,7 @@ services:
   {project_name}:
     image: {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:devel
     pull_policy: always
-    container_name: {project_name}-test
+    container_name: {project_name}-app
     restart: "no"
     logging: *default-logging
     environment:
@@ -6564,7 +6564,7 @@ services:
       DEBUG: true
       MODE: development
       TZ: America/New_York
-      CACHE_URL: valkey://{project_name}-cache-test:6379
+      CACHE_URL: valkey://{project_name}-cache:6379
     volumes:
       # CRITICAL: ./volumes/ must resolve to $TEMP_DIR/volumes/, NOT project directory
       # This file MUST be copied to a temp directory before running
@@ -6580,15 +6580,15 @@ services:
       retries: 3
       start_period: 90s
     depends_on:
-      {project_name}-cache-test:
+      {project_name}-cache:
         condition: service_healthy
     networks:
       - {project_name}-test
 
-  {project_name}-cache-test:
+  {project_name}-cache:
     image: valkey/valkey:alpine
     pull_policy: always
-    container_name: {project_name}-cache-test
+    container_name: {project_name}-cache
     restart: "no"
     logging: *default-logging
     tmpfs:
@@ -6627,7 +6627,7 @@ Three compose files ship in the `docker/` directory:
 |------|-----------|-------|---------------------|--------------|
 | `docker/docker-compose.yml` | `:latest` | Valkey, `{project_name}-cache` (persistent volume) | Yes | Human — production deployment |
 | `docker/docker-compose.dev.yml` | `:devel` | None | No | Human only — AI never runs this |
-| `docker/docker-compose.test.yml` | `:devel` | Valkey, `{project_name}-cache-test` (ephemeral `tmpfs`) | Yes | AI/automated testing, preferably via `tests/` scripts |
+| `docker/docker-compose.test.yml` | `:devel` | Valkey, `{project_name}-cache` (ephemeral `tmpfs`) | Yes | AI/automated testing, preferably via `tests/` scripts |
 
 **Build Commands:**
 ```bash
@@ -6643,11 +6643,11 @@ docker build -t {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:deve
 | Service Type | Service Name | Container Name |
 |--------------|---------------|------------------|
 | Main app (production) | `{project_name}` | `{project_name}-app` |
-| Main app (dev) | `{project_name}` | `{project_name}-dev` |
-| Main app (test) | `{project_name}` | `{project_name}-test` |
+| Main app (dev) | `{project_name}` | `{project_name}-app` |
+| Main app (test) | `{project_name}` | `{project_name}-app` |
 | Database | `{project_name}-db` | `{project_name}-db` |
 | Cache (Valkey, production) | `{project_name}-cache` | `{project_name}-cache` |
-| Cache (Valkey, test) | `{project_name}-cache-test` | `{project_name}-cache-test` |
+| Cache (Valkey, test) | `{project_name}-cache` | `{project_name}-cache` |
 | Proxy (Nginx) | `{project_name}-proxy` | `{project_name}-proxy` |
 
 ### Build-Time `docker/rootfs/` vs Runtime `./volumes/` (CRITICAL — Understand This)
