@@ -3418,14 +3418,14 @@ func setupMiddleware(handler http.Handler) http.Handler {
 
 ## Configuration Storage
 
-**Configuration can be stored in `server.yml` OR database, depending on mode.**
+**Configuration is stored in `server.yml` only; the database never holds operator-editable configuration.**
 
 ### Terminology
 
 | Term | Meaning |
 |------|---------|
 | **server.yml** | YAML configuration file on disk |
-| **Configuration** | Settings (stored in server.yml OR database) |
+| **Configuration** | Settings (stored in `server.yml` only) |
 | **Database** | SQLite (local) or libsql/Turso (remote) |
 | **Server Address** | The bind address for the server (e.g., `[::]`, `0.0.0.0`, `127.0.0.1`) |
 | **FQDN** | Fully Qualified Domain Name (e.g., `api.example.com`) |
@@ -17163,8 +17163,16 @@ server:
 
 ### Tracking Script Generation
 
+#### Tracking and CSP (required)
+
+**Tracking MUST NOT weaken the CSP (`script-src 'self'`, no `'unsafe-inline'`).** The snippets below are shown in HTML form for readability, but they are never written inline into pages:
+
+- Every inline `<script>` body is served as same-origin JavaScript from `GET /server/tracking.js`, generated from the `server.tracking` config. It sends `Cache-Control: no-cache` and returns `404` when tracking is disabled or consent has not been given.
+- The page includes only external tags: the provider's `<script async src="...">` line and `<script async src="/server/tracking.js"></script>`, and only when tracking is configured AND consent is given.
+- The CSP builder adds only the configured provider's host to `script-src` and `connect-src` (for example `https://www.googletagmanager.com`, `https://www.google-analytics.com`, or the Matomo, Piwik or OWA host). No `'unsafe-inline'`, nonce or hash is ever added for tracking.
+
 ```go
-// TrackingScript returns the appropriate tracking code based on config
+// TrackingScript returns the tracker markup. Inline script bodies are not emitted into pages: they are served from /server/tracking.js (see "Tracking and CSP")
 func TrackingScript() template.HTML {
     cfg := config.Get().Server.Tracking
     if cfg.Type == "" || cfg.Type == "none" {

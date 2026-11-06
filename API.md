@@ -4755,7 +4755,7 @@ IDEA.md (project spec - update as needed)
 7. **Configuration** - Key configuration options
 8. **API** - API endpoints summary with full URLs if `{official_site}` is set
 9. **Other** - Additional info (troubleshooting, FAQ, etc.)
-10. **Development** - Development setup (ALWAYS LAST - for contributors only)
+10. **Development** - Development setup (last content section, for contributors only; the closing Disclaimer and License sections follow it)
 11. **Disclaimer** - Clear, readable disclaimer (see template below)
 12. **License** - License info
 
@@ -4897,7 +4897,7 @@ site_url: https://{custom_rtd_address}
 
 #### Disclaimer Section
 
-**Every README.md MUST include a Disclaimer section (typically before or after License).**
+**Every README.md MUST include a Disclaimer section, placed immediately before License.**
 
 **Good Disclaimer - Clear, professional, covers key points:**
 
@@ -4926,7 +4926,7 @@ By using this software, you acknowledge that you have read and understood this d
 | Disclaimer hidden in LICENSE file only | Users don't read LICENSE, README is primary |
 
 **Disclaimer placement:**
-- Add as a section in README.md (after "Other" or before "License")
+- Add as a section in README.md between Development and License (section 11 in the order above)
 - Keep it readable (bullet points, not a wall of text)
 - Optionally also include in LICENSE.md, but README is primary
 
@@ -7194,14 +7194,14 @@ func setupMiddleware(handler http.Handler) http.Handler {
 
 ## Configuration Storage
 
-**Configuration can be stored in `server.yml` OR database, depending on mode.**
+**Configuration is stored in `server.yml` only; the database never holds operator-editable configuration.**
 
 ### Terminology
 
 | Term | Meaning |
 |------|---------|
 | **server.yml** | YAML configuration file on disk |
-| **Configuration** | Settings (stored in server.yml OR database) |
+| **Configuration** | Settings (stored in `server.yml` only) |
 | **Database** | SQLite (local) or libsql/Turso (remote) |
 | **Server Address** | The bind address for the server (e.g., `[::]`, `0.0.0.0`, `127.0.0.1`) |
 | **FQDN** | Fully Qualified Domain Name (e.g., `api.example.com`) |
@@ -16671,8 +16671,16 @@ server:
 
 ### Tracking Script Generation
 
+#### Tracking and CSP (required)
+
+**Tracking MUST NOT weaken the CSP (`script-src 'self'`, no `'unsafe-inline'`).** The snippets below are shown in HTML form for readability, but they are never written inline into pages:
+
+- Every inline `<script>` body is served as same-origin JavaScript from `GET /server/tracking.js`, generated from the `server.tracking` config. It sends `Cache-Control: no-cache` and returns `404` when tracking is disabled or consent has not been given.
+- The page includes only external tags: the provider's `<script async src="...">` line and `<script async src="/server/tracking.js"></script>`, and only when tracking is configured AND consent is given.
+- The CSP builder adds only the configured provider's host to `script-src` and `connect-src` (for example `https://www.googletagmanager.com`, `https://www.google-analytics.com`, or the Matomo, Piwik or OWA host). No `'unsafe-inline'`, nonce or hash is ever added for tracking.
+
 ```go
-// TrackingScript returns the appropriate tracking code based on config
+// TrackingScript returns the tracker markup. Inline script bodies are not emitted into pages: they are served from /server/tracking.js (see "Tracking and CSP")
 func TrackingScript() template.HTML {
     cfg := config.Get().Server.Tracking
     if cfg.Type == "" || cfg.Type == "none" {
