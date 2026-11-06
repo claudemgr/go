@@ -3672,7 +3672,7 @@ When the specification is unclear:
 | **CLI commands** | `serve`, `migrate`, `--maintenance` - same interface everywhere |
 | **Flag formats** | Short/long flag patterns, output formats |
 | **Makefile structure** | Targets, variables, Docker commands |
-| **Makefile targets** | `build`, `release`, `docker`, `test`, `dev`, `clean` |
+| **Makefile targets** | `dev`, `local`, `build`, `test`, `release`, `docker` (plus the `clean` helper) |
 | **CI/CD workflows** | GitHub/Gitea/Jenkins pipeline structure |
 | **Directory layout** | `src/`, `docker/`, `binaries/`, etc. |
 | **Config file format** | YAML structure, standard keys |
@@ -25289,6 +25289,7 @@ Toasts require JavaScript. For standard (non-AJAX) form POSTs, the server MUST u
 ```html
 <div class="header-actions">
   <form action="/server/preferences" method="POST" class="theme-toggle-inline">
+    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
     <button type="submit" name="theme" value="dark" aria-label="Dark theme">🌙</button>
     <button type="submit" name="theme" value="light" aria-label="Light theme">☀️</button>
     <button type="submit" name="theme" value="auto" aria-label="Auto theme">🔄</button>
@@ -25347,6 +25348,7 @@ No JS required — each button is a real form submit that sets the `theme` cooki
     <a href="/server/preferences" class="dropdown-item" role="menuitem">Preferences</a>
     <div class="dropdown-divider" role="separator"></div>
     <form action="/server/preferences" method="POST" class="dropdown-item theme-toggle">
+      <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
       Theme:
       <button type="submit" name="theme" value="dark">Dark</button> |
       <button type="submit" name="theme" value="light">Light</button> |
@@ -26291,7 +26293,7 @@ Preferences aren't tied to identity — any two guests who set the same `theme`/
 | 14 | **Import field** | An always-visible field named `code` (textarea or text input, accepts a pasted full URL, query string or short code) inside the single preferences form (rule 15) — no separate Import form or button. On save, a non-empty `code` is resolved per rule 5 and its valid values override the form's submitted values key by key (the visitor pasted it on purpose); an empty `code` is ignored. `GET /server/preferences/import` stays for shared links and API parity (rule 5 unchanged). JS may enhance (clipboard paste) but never changes the request |
 | 15 | **Page layout and buttons** | `/server/preferences` is ONE `<form method="POST" action="/server/preferences">` carrying the CSRF token and every section: appearance (`theme`), language (`lang`), cookie-consent and CCPA controls, every `{project_name}_pref_{key}` control, and a Data Management section (export block, rule 13; import field, rule 14) — all sections always visible, none collapsed or revealed by a button. The form has exactly three action buttons (the header theme toggle is a separate mini-form on other pages and is not part of this page's form): **Save** (submit; applies every changed field plus `code`, then `303` per rules 9–10), **Cancel** (a link to the rule 10 redirect target; discards unsaved edits, sends no write) and **Reset** (a `type="button"` with `popovertarget` that opens a native HTML `popover` — no JS; the popover holds the warning, an **Erase everything** submit with `action=reset`, and a dismiss control using `popovertargetaction="hide"`; those two belong to Reset, not to the page's button set; forgets the visitor completely: every cookie this app set — `theme`, `lang`, `{project_name}_pref_*`, `cookie_consent`, `ccpa_opt_out`, `{project_name}_build` — is deleted (`Max-Age=0`, same `Path`/attributes as rule 8), and the `303` carries `Clear-Site-Data: "storage"` to wipe localStorage/sessionStorage/IndexedDB without JS. Defaults apply and the consent banner returns on the next page. Never deletes session, CSRF or other credential cookies — signing out is a separate action. The popover warning states exactly what is erased. Only Reset confirms — Save and Cancel never ask for confirmation. The popover is styled with CSS, and a direct `POST action=reset` behaves identically on the server). No per-section save buttons, no "Sync", "Export", "Import" or "Show" buttons; Copy controls (rule 13) are the only other controls |
 | 16 | **Web save never `400`** | `400 VALIDATION_FAILED` (rule 11) is API-only. A web `POST /server/preferences` always answers `303` (rule 9) — including empty submits, unchecked checkboxes (absent fields), invalid values (dropped) and a bad `code`. The only `4xx` is a missing/invalid CSRF token (`403`), so the page form MUST always render the token and post only to the canonical route, never to the `/api/{api_version}/…` mirror |
-| 17 | **Consent and CCPA controls** | The page form's cookie-consent toggles (`consent_preferences`, `consent_analytics`; `essential` is always on and not a field) and CCPA opt-out toggle (`ccpa_opt_out`) are web-form-only controls handled by `POST /server/preferences`, with a hidden `consent_form=1` marker rendered inside the form. They are applied only when `consent_form=1` is present — an unchecked checkbox then means off, while a POST without the marker (the header theme toggle) never touches consent or CCPA. Applying writes `cookie_consent` (JSON per PART 16 consent state, with a fresh timestamp) and `ccpa_opt_out` with the rule 8 attributes. Import and the API mirror never write them, Reset deletes them (rule 15), and they are never exported (rule 1) |
+| 17 | **Consent and CCPA controls** | The page form's cookie-consent toggles (`consent_preferences`, `consent_analytics`; `essential` is always on and not a field) and CCPA opt-out toggle (`ccpa_opt_out`) are web-form-only controls handled by `POST /server/preferences`, with a hidden `consent_form=1` marker rendered inside the form. They are applied only when `consent_form=1` is present — an unchecked checkbox then means off, while a POST without the marker (the header theme toggle) never touches consent or CCPA. Applying writes `cookie_consent` (JSON per PART 16 consent state, with a fresh timestamp in Unix seconds) and `ccpa_opt_out` with the rule 8 attributes. Import and the API mirror never write them, Reset deletes them (rule 15), and they are never exported (rule 1) |
 
 **Page layout (`/server/preferences`) — one form, one Save, always visible:**
 ```
@@ -27851,6 +27853,7 @@ Mobile:
          single resolved value (cookie for guests, DB preference for
          logged-in users - see "Theme preference source" above). -->
     <form action="/server/preferences" method="POST" class="theme-toggle-form">
+      <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
       <input type="hidden" name="theme" value="{{ nextTheme .Theme }}">
       <button type="submit" class="theme-button" aria-label="Switch theme (currently {{ .Theme }})" title="Switch theme">
         <svg class="icon-theme"><!-- reflects .Theme: moon/sun/circle-half --></svg>
