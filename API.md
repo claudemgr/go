@@ -13051,7 +13051,8 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 |------|--------|
 | Native routes | `/api/{api_version}/**`, the MCP endpoint, and web management actions that accept a bearer credential: `Authorization: Bearer {token}` is the ONLY accepted form |
 | Other headers | `X-API-Key`, `API-Key`, `X-Auth-Token`, `X-Access-Token`, `X-Token`, `Token`, Basic and Digest are NOT credentials on native routes — they are ignored, so the request is anonymous |
-| Query string | A `?token=` parameter is never read: tokens in URLs leak through server logs, browser history and `Referer`. It is ignored and never logged |
+| Query string | A `?token=` parameter is never read as a credential: tokens in URLs leak through server logs, browser history and `Referer`. It is ignored and never logged (the one exception is the one-shot link token in the next row) |
+| One-shot link tokens | The one exception to the rule above: a one-shot token carried in an emailed link (security-report status, password reset, email verification, invite, and similar flows the project defines) is not a credential. It identifies one resource or action and cannot call the API. It is single-use or time-limited, stored only as `SHA-256(token)`, compared in constant time, and never accepted in `Authorization`. Pages reached by such a link send `Referrer-Policy: no-referrer` and `Cache-Control: no-store`, and the token value is redacted (`[redacted]`) from access and application logs. A project adds no other token in a URL |
 | Compatibility-layer routes | Accept exactly the credential form the emulated protocol defines (for example an API-key header), on that layer's routes only |
 | Priority | There is no priority list: no `Authorization` header means anonymous |
 | `401` | A missing, invalid, expired or revoked token returns `401` with `WWW-Authenticate: Bearer realm="{project_name}"` (RFC 6750 §3); an invalid, expired or revoked token adds `error="invalid_token"` |
@@ -16918,7 +16919,7 @@ server:
     # ============================================================
     retention:
       # How long user data is kept (shown on privacy page)
-      period: "Account data is retained while your account is active. Upon account deletion, all personal data is permanently deleted within 30 days. Anonymized analytics data may be retained for up to 12 months."
+      period: "Resources you create are kept until they expire or you delete them with your owner token. Preferences are stored only in cookies in your browser. Operational logs are kept for up to 30 days. Anonymized analytics data may be retained for up to 12 months."
       # Can users export their data?
       export_available: true
       # Can users delete their account?
@@ -17024,7 +17025,7 @@ server:
 
         - **Provide the service:** Authentication, core functionality
         - **Improve the experience:** Performance optimization, bug fixes, feature improvements
-        - **Ensure security:** Prevent abuse, detect fraud, protect your account
+        - **Ensure security:** Prevent abuse, detect fraud, protect the service
         - **Communicate:** Service updates, security alerts, and (with consent) product news
 
         **Your data is NEVER:**
@@ -17038,13 +17039,13 @@ server:
 
         - **Provide the service:** Authentication, core functionality
         - **Improve the experience:** Performance optimization, bug fixes, feature improvements
-        - **Ensure security:** Prevent abuse, detect fraud, protect your account
+        - **Ensure security:** Prevent abuse, detect fraud, protect the service
         - **Communicate:** Service updates, security alerts, and (with consent) product news
         - **Third-party sharing:** Your data may be shared with or sold to third parties for analytics, advertising, or other purposes as described below
 
         **Your rights:**
-        - You can opt out of data sales via your account privacy settings
-        - You can request deletion of your data at any time
+        - You can opt out of data sales with the CCPA opt-out on the preferences page (`/server/preferences`)
+        - You can delete the resources you created at any time with your owner token, and request deletion of other data through the contact page
         - See "Your Rights" section below for details
 
       # --- Data Security Section ---
@@ -26384,7 +26385,7 @@ server:
 
 **Never `*` here:** the Fetch spec's `Access-Control-Allow-Headers: *` wildcard does NOT cover `Authorization`, and wildcards are invalid when credentials are allowed. Every header a browser client may send is listed by name — keep in sync with PART 8 → "Auth Token Presentation".
 
-**No query-param auth:** tokens are never accepted in a URL (they leak into logs, history and `Referer`); a `?token=` parameter is ignored.
+**No query-param auth:** credentials are never accepted in a URL (they leak into logs, history and `Referer`); a `?token=` parameter is ignored. One-shot link tokens (PART 8 → "Auth Token Presentation") are not credentials and are exempt.
 
 ### Behavior
 
@@ -27545,7 +27546,7 @@ func trackingScript(r *http.Request) template.HTML {
       "type_name": ""
     },
     "retention": {
-      "period": "Account data is retained while your account is active. Upon account deletion, all personal data is permanently deleted within 30 days.",
+      "period": "Resources you create are kept until they expire or you delete them with your owner token. Preferences are stored only in cookies in your browser. Operational logs are kept for up to 30 days.",
       "export_available": true,
       "deletion_available": true
     },
