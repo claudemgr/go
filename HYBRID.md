@@ -528,6 +528,18 @@ Every piece of user-facing text (UI labels, error messages shown to users, email
 
 `AI.md` is read-only in every project session and is never hand-edited. A project records deviations in `SPEC.md` and project values in `IDEA.md ## Project variables`; spec changes are made only in the template source repository and re-copied.
 
+## Where Findings Are Tracked
+
+**Every finding lives in exactly one place. Never duplicate it, and never leave it only in conversation.**
+
+| Kind of item | Owner | Rule |
+|--------------|-------|------|
+| Planned implementation backlog (3+ tasks) | `TODO.AI.md` | AI-owned; remove each item once it is resolved and committed |
+| Human-owned tasks | `TODO.md` | Never emptied or deleted by AI; mark items done in place |
+| Defects found while doing other work, including the exploratory pass | Fixed immediately, otherwise `TODO.AI.md` | Never left only in conversation |
+| Findings from an explicit audit (the user said "audit") with more than 5 issues | Temporary `AUDIT.AI.md` | Not `TODO.AI.md`; deleted when every issue is resolved. Five or fewer are fixed directly with no tracking file |
+| Defects or contradictions in `AI.md` itself | `SPEC.md` (the project's tie-break override) plus a report to the template maintainers | `AI.md` is read-only: never edit it, and never log its defects in `TODO.AI.md` |
+
 ## Check Files Process vs. Audit
 
 "Check files" (discovery only — report drift, do not fix) is distinct from "Audit" (explicit-command-only, fixes issues directly, tracks >5 findings in `AUDIT.AI.md`). Never run a full audit workflow when only a discovery check was requested, and vice versa.
@@ -34014,7 +34026,7 @@ The table is illustrative — the rule is universal: enumerate IDEA.md's feature
 
 In addition to the committed suite, AI-driven exploratory testing with a real browser (e.g. Claude driving the Playwright MCP server) is the defined workflow for finding what the scripted suite misses: walk every page, try hostile input, resize, toggle themes, read console/network errors.
 
-- Every finding is either fixed immediately or logged in `TODO.AI.md` — never left only in conversation
+- Every exploratory-pass finding is either fixed immediately or logged in `TODO.AI.md` (explicit-audit findings follow "Where Findings Are Tracked") — never left only in conversation
 - Every confirmed finding is converted into a committed deterministic chromedp test so it can never regress silently
 - Agent runs are not reproducible: they are NEVER a gate of any kind — the committed deterministic suite is the repeatable record of frontend correctness, run on demand alongside this pass
 
