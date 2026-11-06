@@ -2955,12 +2955,12 @@ Exceptions (do NOT translate):
 3. Ask for explicit permission to deviate
 4. Document deviation if approved
 
-### Editing AI.md
+### Reading AI.md (it is read-only)
 
 1. Search first: `grep -n "keyword" AI.md`
 2. Read the PART completely
-3. Update existing content (don't duplicate)
-4. Update PART index line numbers after edits
+3. **Never edit `AI.md` in a project** — it is a read-only copy of the template. Project values go in `IDEA.md ## Project variables`; deviations go in `SPEC.md`
+4. Changes to the spec itself are made only in the template source repository, then re-copied into projects
 
 **See Critical Rules: "Files & Directories Master Rules" for allowed files/directories - nothing else.**
 
@@ -4482,7 +4482,7 @@ When working on this project, the following roles are assumed based on the task:
 2. **When in doubt, check the spec** - the spec is the source of truth
 3. **Never assume or guess** - ask questions if unclear
 4. **Every NON-NEGOTIABLE section MUST be implemented exactly as specified**
-5. **Keep AI.md in sync with the project** - always update after changes
+5. **Never modify AI.md** - it is read-only; keep IDEA.md in sync with the project (project values and business logic) and record deviations in SPEC.md
 6. **NEVER install Go on local machine** - ALL builds use Docker, testing uses Docker or Incus
 
 ### Container-Only Development
@@ -5725,7 +5725,7 @@ Not every project needs admin UI extensions - it depends on the project's nature
 
 Before proceeding, confirm you understand:
 - [ ] All NON-NEGOTIABLE sections must be implemented exactly
-- [ ] AI.md must be kept in sync with project state
+- [ ] AI.md is read-only; IDEA.md is kept in sync with project state
 - [ ] TODO.AI.md required for 3+ tasks
 - [ ] Sensitive data handling rules
 - [ ] Target audience includes non-tech-savvy users

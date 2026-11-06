@@ -524,9 +524,9 @@ Every piece of user-facing text (UI labels, error messages shown to users, email
 3. If still contradictory or silent, ask the user with the Question Format above.
 4. Never silently pick an interpretation and proceed on a security-sensitive or irreversible decision.
 
-## Editing AI.md
+## AI.md Is Read-Only
 
-`AI.md` is normally read-only for a project session. A project records deviations in `SPEC.md`, not by hand-editing `AI.md`.
+`AI.md` is read-only in every project session and is never hand-edited. A project records deviations in `SPEC.md` and project values in `IDEA.md ## Project variables`; spec changes are made only in the template source repository and re-copied.
 
 ## Check Files Process vs. Audit
 
