@@ -15197,6 +15197,8 @@ web:
     contact: "security@{fqdn}"
     # Auto-calculated 1 year from generation
     expires: "{1year}"
+    # Disclosure policy page body (Markdown); empty uses the built-in default safe-harbor text
+    policy: ""
   well_known:
     # Unknown entries never redirect
     unsupported_behavior: 404
@@ -15436,7 +15438,7 @@ Repo-level (source-code) vulnerabilities are reported primarily via GitHub priva
 | `/.well-known/security.txt` | GET | None | RFC 9116 file — see above |
 | `/.well-known/pgp-key.asc` | GET | None | Project's PGP public key (ASCII-armored). 404 if no keypair generated yet. |
 | `/server/security` | GET | None | Security overview page (HTML). Human-readable rendering of everything in `/.well-known/security.txt` — contact channels in RFC 9116 preference order (GitHub private vulnerability reporting, `/server/contact?security_id={id}`, `mailto:` CC address), `Expires`, and the `Encryption` key when a keypair exists — plus plain-language instructions for reporting a vulnerability. Links to `/server/security/policy`, `/server/security/thanks`, `/.well-known/pgp-key.asc`, and the machine-readable `/.well-known/security.txt`. Rendered from live config — nothing to edit. |
-| `/server/security/policy` | GET | None | Disclosure policy page (HTML). Default content provided; editable via API. Lists the coordinated-disclosure window, in-scope domains, out-of-scope behaviors, safe-harbor language. |
+| `/server/security/policy` | GET | None | Disclosure policy page (HTML). Default content provided; customizable via the `web.security.policy` config key (Markdown, config file only — no mutation API). Lists the coordinated-disclosure window, in-scope domains, out-of-scope behaviors, safe-harbor language. |
 | `/server/security/thanks` | GET | None | Acknowledgments page. Lists researchers who opted in (real name, handle, or anonymized "Anonymous Researcher #n") with the year and short credit. |
 | `/server/security/report/{tracking_id}` | GET | One-shot token in URL | Researcher status page — shows triage state (Received / Triaged / Confirmed / Patching / Disclosed / Won't Fix), maintainer comments visible to researcher, expected disclosure date. Token is single-use-per-day; expires after the report is closed for 30 days. |
 
@@ -15451,6 +15453,7 @@ Repo-level (source-code) vulnerabilities are reported primarily via GitHub priva
 | **Disclosure feature** — coordinated-disclosure pipeline (reports, policy page, hall of fame, GPG keypair) | Configured via config file; security reports accessible via public `/server/security/*` routes |
 | **Runtime defense** — IP blocks, allow-lists, token revocation | Configured via config file; see PART 11 → "IP Block Management" |
 | **`security.txt` content** — `Expires`, languages, keyservers list | Configured via `web.security.*` config keys |
+| **Disclosure policy page** — `/server/security/policy` body | Configured via `web.security.policy` (Markdown) |
 
 ### GPG Keypair Management (`--maintenance pgp` / `server.token`)
 
