@@ -166,7 +166,7 @@ Example:
     # STABLE — set at first-time setup; change only on an explicit rename or fork reset
     internal_org:  casjay
     app_name:      jokes
-    official_site: jokes.example.com
+    official_site: https://jokes.example.com
 
 **`{plist_name}` is NOT stored** — it is derived at substitution time as
 `io.github.{project_org}.{internal_name}`.
@@ -23930,7 +23930,7 @@ async function clearClientData() {
 
 **This page must be editable, not read-only:** every cookie above except `{project_name}_build` needs a control on `/server/preferences` that the visitor can act on directly — a theme selector, a language selector, cookie-consent category toggles (reachable here, not only from the first-visit banner), a CCPA opt-out toggle, and a control for every app-specific `{project_name}_pref_*` setting below. Rendering the current values as plain text with no way to change them turns a preferences page into a status page — the entire point of this page is letting the guest change these settings in place. The page layout, buttons and save behavior are fixed by rules 13–17 of the sync contract below. `{project_name}_build` is the one exemption from the control requirement: it is an automatic, device-local cache-purge stamp set by the server on the first HTML response — it has no control, is never exported or imported, and is removed only by Reset.
 
-**App-specific guest preferences:** the table above is the base set every project needs; a project adds its own guest-scoped preferences as further cookies of the same kind, recorded in IDEA.md and never as new rows in this `AI.md` table (a project whose table lacks its `{project_name}_pref_*` cookies is correct, not incomplete): settings a visitor can adjust without an account (default view mode, results-per-page, sort order, syntax-highlighting theme, unit system, etc.). Name them `{project_name}_pref_{key}`, document each one (exact name, allowed values, default, export/import behavior) in IDEA.md `## Business logic` → `### Product scope & non-goals` — `AI.md` is read-only, so the base table above is never edited, and hold them to the same rules as `theme`/`lang`: cookie-only, read per request, never persisted server-side. They belong in this guest-scoped cookie set precisely because no login is involved — once a setting must be tied to an identity (available cross-device without an export code, or gated per-user), it belongs in the authenticated per-account preferences table instead (PART 34's `user_preferences`, if implemented), never here.
+**App-specific guest preferences:** the table above is the base set every project needs; a project adds its own guest-scoped preferences as further cookies of the same kind, recorded in IDEA.md `## Business logic` → `### Product scope & non-goals` and never as new rows in this `AI.md` table (a project whose table lacks its `{project_name}_pref_*` cookies is correct, not incomplete): settings a visitor can adjust without an account (default view mode, results-per-page, sort order, syntax-highlighting theme, unit system, etc.). Name them `{project_name}_pref_{key}`, document each one (exact name, allowed values, default, export/import behavior) in IDEA.md `## Business logic` → `### Product scope & non-goals` — `AI.md` is read-only, so the base table above is never edited, and hold them to the same rules as `theme`/`lang`: cookie-only, read per request, never persisted server-side. They belong in this guest-scoped cookie set precisely because no login is involved — once a setting must be tied to an identity (available cross-device without an export code, or gated per-user), it belongs in the authenticated per-account preferences table instead (PART 34's `user_preferences`, if implemented), never here.
 
 **Preference writes (JS enhancement — the server sets the same cookies on its POST endpoints):**
 ```javascript
@@ -27514,7 +27514,7 @@ func trackingScript(r *http.Request) template.HTML {
 | Application name | `IDEA.md` → Project Name | "JokeAPI" |
 | Tagline | `IDEA.md` → Tagline | "A free API for random jokes" |
 | Description | `IDEA.md` → Description section | Actual project description |
-| Features | `IDEA.md` → Features section | List actual features from IDEA.md |
+| Features | `IDEA.md ## Business logic` (features and user flows) | List actual features from IDEA.md |
 | Links | `IDEA.md` → Links/URLs or infer from projectorg/projectname | GitHub, docs URLs |
 
 **DO NOT use:**
@@ -27944,7 +27944,7 @@ When the admin panel is enabled (PART 28) these are editable at `/server/{admin_
 | Section | Source | What to include |
 |---------|--------|-----------------|
 | Getting started | `IDEA.md` + actual endpoints | Real curl examples using actual API endpoints |
-| Features | `IDEA.md` → Features | How to USE each feature (not just list them) |
+| Features | `IDEA.md ## Business logic` (features and user flows) | How to USE each feature (not just list them) |
 | FAQ | Common questions for THIS project type | Real questions users would ask |
 | Troubleshooting | Actual error scenarios | Real errors and solutions |
 
@@ -28110,7 +28110,7 @@ When `server.mcp.enabled` is `false`, both routes return `404` and no link to th
 | `#limits` | Behavior and limits | `POST` only; no sessions; the same rate limits and audit as the API; `Origin` validated; the supported MCP protocol versions |
 | `#troubleshooting` | Troubleshooting | A table of `400` (protocol-version or header mismatch), `401` (missing, invalid or expired token — `WWW-Authenticate: Bearer`), `403` (bad `Origin` or insufficient scope), `404` (MCP disabled), `405` (GET or DELETE; the endpoint is POST-only) with the fix for each |
 
-**Project expansion (required content):** the project appends its own section, `#project`, after the base sections. The text comes from IDEA.md and is stored as Markdown in `pages.help.mcp` (editable in the admin panel's Pages → Help editor where an admin panel exists). It MUST use the project's real tool names and real data — example prompts a user can paste into an assistant, per-tool tips and limits, and documentation of any MCP resources or prompts the project exposes. It never repeats or contradicts the base sections, and generic placeholder text is forbidden (same rule as `/server/help`).
+**Project expansion (required content):** the project appends its own section, `#project`, after the base sections. The text comes from IDEA.md `## Business logic` and is stored as Markdown in `pages.help.mcp` (editable in the admin panel's Pages → Help editor where an admin panel exists). It MUST use the project's real tool names and real data — example prompts a user can paste into an assistant, per-tool tips and limits, and documentation of any MCP resources or prompts the project exposes. It never repeats or contradicts the base sections, and generic placeholder text is forbidden (same rule as `/server/help`).
 
 **JSON body (`GET /api/{api_version}/server/help/mcp`, envelope `{ "ok": true, "data": ... }`; field names are fixed):**
 ```json
@@ -38284,7 +38284,7 @@ Compound SPDX expressions like `MIT OR Apache-2.0` are accepted automatically wh
 
 A project MAY use a denylisted module only if **all** of:
 
-1. `IDEA.md` adds a `## License exceptions` subsection naming the module, the upstream license, and the rationale
+1. `IDEA.md` adds a License exceptions entry under `### Security decisions & exceptions` naming the module, the upstream license, and the rationale
 2. The exception explicitly accepts the consequence — e.g., "this binary is distributed under GPL-3.0; the project's MIT claim applies only to the source we author, not the published binary" — and `IDEA.md ## Project variables` adds (or updates) the variable `distribution_license` accordingly. `distribution_license` is an exception-only variable: it is not part of the required-keys list and is present only in projects that have taken a license exception
 3. README, `LICENSE.md`, and any user-visible "About" surface are updated to reflect the actual distribution license, not just the source license
 4. Any tooling configuration (e.g., `golangci-lint` import ban config) is updated with a scoped allow entry for the specific module + version, not a blanket category unblock
@@ -44479,7 +44479,7 @@ See **PART 8 → "Flag-to-Config Save Rules"** — flags only update `cli.yml` w
 - [ ] Web frontend assets are embedded via `go:embed` and verified present (not 404) when running the built release binary standalone, with no separate asset directory alongside it
 - [ ] Dependencies are pure Go where a viable pure-Go package exists (PART 6 → "Pure-Go Library Stack"); each C-dependent package is justified in IDEA.md
 - [ ] `go mod graph` was reviewed — no surprise transitive C or CGO dependencies
-- [ ] No GPL / AGPL / LGPL / SSPL / BUSL / source-available dep was added without an IDEA.md `## License exceptions` entry and an updated `distribution_license` (PART 25 → "License Compliance")
+- [ ] No GPL / AGPL / LGPL / SSPL / BUSL / source-available dep was added without an IDEA.md `### Security decisions & exceptions` license entry and an updated `distribution_license` (PART 25 → "License Compliance")
 - [ ] User-visible licenses surface exists: CLI `--licenses`, TUI "Licenses" entry, GUI "About → Open Source Licenses", and the server's `/about` or health page — all reading the same embedded `LICENSE.md`
 - [ ] App/server runs end-to-end from the binary alone on an air-gapped machine — no first-run downloads
 - [ ] No plugin or runtime extension loading from disk unless IDEA.md defines a hardened plugin contract

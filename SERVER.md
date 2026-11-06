@@ -149,7 +149,7 @@ Free-form prose. This is the human-readable elevator pitch.)
 
 (All project variables in `key: value` form. Values are the canonical source used to
 resolve placeholders referenced in AI.md. Required keys at minimum: `project_name`, `project_org`,
-`internal_name`. Add more as the project needs — `app_name`, `official_site`,
+`internal_name`, `internal_org`. Add more as the project needs — `app_name`, `official_site`,
 `maintainer_name`, `maintainer_email`, etc. Use lower_snake_case for keys.)
 
 Example:
@@ -158,8 +158,10 @@ Example:
     project_org:   casjay
     # STABLE — set at first-time setup; change only on an explicit rename or fork reset
     internal_name: jokes
+    # STABLE — set at first-time setup; change only on an explicit rename or fork reset
+    internal_org:  casjay
     app_name:      jokes
-    official_site: jokes.example.com
+    official_site: https://jokes.example.com
 
 **`{plist_name}` is NOT stored** — it is derived at substitution time as
 `io.github.{project_org}.{internal_name}`.
@@ -173,6 +175,7 @@ Example:
   it is allowed only on an explicit org/repo rename (with a coordinated migration of
   every directory, service, and plist on every host) or at a fork's first setup.
 - A project rename changes `project_name` only. `internal_name` stays.
+- `internal_org` follows the same freeze rule: initial value MUST equal `project_org`, stable once the project ships, and an org rename changes `project_org` only.
 
 ## Business logic
 
@@ -3120,7 +3123,7 @@ Getting code correct on the first try is much harder than iterating with feedbac
 | Configuration / settings | Start the binary with the new config; verify defaults; verify validation rejects bad input with a useful error |
 | Docker / container build | Build the image; run the container; smoke-test at least one endpoint or command to confirm the image actually starts and serves |
 | CI/CD workflow | Run the workflow on a branch (or via `act`/equivalent dry-run); verify each job's exit status, not just YAML validity |
-| Health / observability | Hit `/healthz`, `/readyz`, `/server/metrics`; verify scrape format and that new metrics actually appear |
+| Health / observability | Hit `/server/healthz` (and `/healthz` when `server.healthz.root.enabled` is true), `/server/metrics`; verify scrape format and that new metrics actually appear |
 | Logging / error paths | Trigger the error path; verify the log line/structured event was emitted with expected fields |
 | i18n / translation | Switch each supported locale; verify text renders correctly and no placeholders leak |
 | Security-sensitive change (auth, crypto, input validation) | Test both the success path AND attempted bypass paths; never assume a guard works without exercising it |
@@ -4623,7 +4626,7 @@ db.Query("SELECT * FROM users WHERE email = '" + email + "'")
 |----------------|---------------|--------|-------|
 | **Read (GET, HEAD)** | **120 req/min** | 60s | Per IP (anonymous) or per token (authenticated), sliding window |
 | **Write (POST, PUT, PATCH, DELETE)** | **10 req/min** | 60s | Per IP (anonymous) or per token (authenticated), sliding window |
-| **Health / status** | **120 req/min** | 60s | `/healthz`, `/readyz`, `/livez` |
+| **Health / status** | **120 req/min** | 60s | `/server/healthz` (and the optional `/healthz` root alias) |
 | **Global burst** | **240 req/min** | 60s | Absolute ceiling across all types |
 
 **Auth endpoint defaults (stricter — applied regardless of general limits above):**
@@ -18712,7 +18715,7 @@ server:
 |----------------|---------------|--------|-------|
 | Read (GET, HEAD) | 120 req/min | 60s | Per IP (anonymous) or per token (authenticated), sliding window |
 | Write (POST, PUT, PATCH, DELETE) | 10 req/min | 60s | Per IP (anonymous) or per token (authenticated), sliding window |
-| Health / status | 120 req/min | 60s | `/healthz`, `/readyz`, `/livez` |
+| Health / status | 120 req/min | 60s | `/server/healthz` (and the optional `/healthz` root alias) |
 | Global burst | 240 req/min | 60s | Absolute ceiling across all types |
 | Login | 5 req / 15 min | 900s | Per IP + per identifier |
 | Password reset | 3 req / 1 hr | 3600s | Per IP, no email hint on exceed |
@@ -26209,7 +26212,7 @@ async function clearClientData() {
 
 **This page must be editable, not read-only:** every cookie above except `{project_name}_build` needs a control on `/server/preferences` that the visitor can act on directly — a theme selector, a language selector, cookie-consent category toggles (reachable here, not only from the first-visit banner), a CCPA opt-out toggle, and a control for every app-specific `{project_name}_pref_*` setting below. Rendering the current values as plain text with no way to change them turns a preferences page into a status page — the entire point of this page is letting the guest change these settings in place. The page layout, buttons and save behavior are fixed by rules 13–17 of the sync contract below. `{project_name}_build` is the one exemption from the control requirement: it is an automatic, device-local cache-purge stamp set by the server on the first HTML response — it has no control, is never exported or imported, and is removed only by Reset.
 
-**App-specific guest preferences:** the table above is the base set every project needs; a project adds its own guest-scoped preferences as further cookies of the same kind, recorded in IDEA.md and never as new rows in this `AI.md` table (a project whose table lacks its `{project_name}_pref_*` cookies is correct, not incomplete): settings a visitor can adjust without an account (default view mode, results-per-page, sort order, syntax-highlighting theme, unit system, etc.). Name them `{project_name}_pref_{key}`, document each one (exact name, allowed values, default, export/import behavior) in IDEA.md `## Business logic` → `### Product scope & non-goals` — `AI.md` is read-only, so the base table above is never edited, and hold them to the same rules as `theme`/`lang`: cookie-only, read per request, never persisted server-side. They belong in this guest-scoped cookie set precisely because no login is involved — once a setting must be tied to an identity (available cross-device without an export code, or gated per-user), it belongs in PART 34's `user_preferences` table instead, never here.
+**App-specific guest preferences:** the table above is the base set every project needs; a project adds its own guest-scoped preferences as further cookies of the same kind, recorded in IDEA.md `## Business logic` → `### Product scope & non-goals` and never as new rows in this `AI.md` table (a project whose table lacks its `{project_name}_pref_*` cookies is correct, not incomplete): settings a visitor can adjust without an account (default view mode, results-per-page, sort order, syntax-highlighting theme, unit system, etc.). Name them `{project_name}_pref_{key}`, document each one (exact name, allowed values, default, export/import behavior) in IDEA.md `## Business logic` → `### Product scope & non-goals` — `AI.md` is read-only, so the base table above is never edited, and hold them to the same rules as `theme`/`lang`: cookie-only, read per request, never persisted server-side. They belong in this guest-scoped cookie set precisely because no login is involved — once a setting must be tied to an identity (available cross-device without an export code, or gated per-user), it belongs in PART 34's `user_preferences` table instead, never here.
 
 **Preference writes (JS enhancement — the server sets the same cookies on its POST endpoints):**
 ```javascript
@@ -29809,7 +29812,7 @@ func trackingScript(r *http.Request) template.HTML {
 | Application name | `IDEA.md` → Project Name | "JokeAPI" |
 | Tagline | `IDEA.md` → Tagline | "A free API for random jokes" |
 | Description | `IDEA.md` → Description section | Actual project description |
-| Features | `IDEA.md` → Features section | List actual features from IDEA.md |
+| Features | `IDEA.md ## Business logic` (features and user flows) | List actual features from IDEA.md |
 | Links | `IDEA.md` → Links/URLs or infer from projectorg/projectname | GitHub, docs URLs |
 
 **DO NOT use:**
@@ -30243,7 +30246,7 @@ func trackingScript(r *http.Request) template.HTML {
 | Section | Source | What to include |
 |---------|--------|-----------------|
 | Getting started | `IDEA.md` + actual endpoints | Real curl examples using actual API endpoints |
-| Features | `IDEA.md` → Features | How to USE each feature (not just list them) |
+| Features | `IDEA.md ## Business logic` (features and user flows) | How to USE each feature (not just list them) |
 | FAQ | Common questions for THIS project type | Real questions users would ask |
 | Troubleshooting | Actual error scenarios | Real errors and solutions |
 
@@ -30409,7 +30412,7 @@ When `server.mcp.enabled` is `false`, both routes return `404` and no link to th
 | `#limits` | Behavior and limits | `POST` only; no sessions; the same rate limits and audit as the API; `Origin` validated; the supported MCP protocol versions |
 | `#troubleshooting` | Troubleshooting | A table of `400` (protocol-version or header mismatch), `401` (missing, invalid or expired token — `WWW-Authenticate: Bearer`), `403` (bad `Origin` or insufficient scope), `404` (MCP disabled), `405` (GET or DELETE; the endpoint is POST-only) with the fix for each |
 
-**Project expansion (required content):** the project appends its own section, `#project`, after the base sections. The text comes from IDEA.md and is stored as Markdown in `pages.help.mcp` (editable in the admin panel's Pages → Help editor where an admin panel exists). It MUST use the project's real tool names and real data — example prompts a user can paste into an assistant, per-tool tips and limits, and documentation of any MCP resources or prompts the project exposes. It never repeats or contradicts the base sections, and generic placeholder text is forbidden (same rule as `/server/help`).
+**Project expansion (required content):** the project appends its own section, `#project`, after the base sections. The text comes from IDEA.md `## Business logic` and is stored as Markdown in `pages.help.mcp` (editable in the admin panel's Pages → Help editor where an admin panel exists). It MUST use the project's real tool names and real data — example prompts a user can paste into an assistant, per-tool tips and limits, and documentation of any MCP resources or prompts the project exposes. It never repeats or contradicts the base sections, and generic placeholder text is forbidden (same rule as `/server/help`).
 
 **JSON body (`GET /api/{api_version}/server/help/mcp`, envelope `{ "ok": true, "data": ... }`; field names are fixed):**
 ```json
@@ -64149,7 +64152,7 @@ project_org:     {project_org}
 # STABLE — equals project_name on first install; change only on an explicit rename or fork reset
 internal_name:   {project_name}
 app_name:        {project_name}
-official_site:   {fqdn}
+official_site:   https://{fqdn}
 # Defaults to project_org if unset
 maintainer_name: {maintainer_name}
 # Optional — used only if set
@@ -64201,7 +64204,7 @@ project_name:    jokes-api
 project_org:     casjay
 internal_name:   jokes-api
 app_name:        Jokes API
-official_site:   jokes.example.com
+official_site:   https://jokes.example.com
 maintainer_name: Jane Doe
 maintainer_email: jane@example.com
 
@@ -64253,7 +64256,7 @@ project_name:    linkshort
 project_org:     casjay
 internal_name:   linkshort
 app_name:        LinkShort
-official_site:   short.example.com
+official_site:   https://short.example.com
 maintainer_name: Jane Doe
 maintainer_email: jane@example.com
 
@@ -64305,7 +64308,7 @@ project_name:    weather-api
 project_org:     casjay
 internal_name:   weather-api
 app_name:        Weather API
-official_site:   weather.example.com
+official_site:   https://weather.example.com
 maintainer_name: Jane Doe
 maintainer_email: jane@example.com
 
