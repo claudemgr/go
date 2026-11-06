@@ -16609,8 +16609,8 @@ Repo-level (source-code) vulnerabilities are reported primarily via GitHub priva
 | Algorithm | `HMAC-SHA256(installation_secret, floor(unix_seconds / 172800))` → hex-encode → first 16 chars |
 | Rotation | Every 48 hours (172800 seconds) |
 | Validation window | Server accepts the **current** AND **previous** 48h window's id — prevents boundary failures for researchers who load the security.txt at second 47:59:59 |
-| Where it appears | Only in `/.well-known/security.txt` `Contact:` line. NEVER logged, NEVER returned in any other response. |
-| Failure mode | Invalid / expired id → form silently falls back to normal contact mode. Log to `security.log` as `security.security_id_invalid` (IP, user-agent, supplied id) — useful for catching scrape attempts. |
+| Where it appears | In the `/.well-known/security.txt` `Contact:` line and its human-readable rendering on `/server/security`, and echoed back only to a requester who supplied a currently valid id (the hidden form field of `/server/contact?security_id={id}`, needed to re-validate the POST). The raw id is NEVER logged and NEVER appears in any other response, error, notification or API body. |
+| Failure mode | Invalid / expired id → form silently falls back to normal contact mode. Log to `security.log` as `security.security_id_invalid` (IP, user-agent, and the first 8 hex chars of `SHA-256(supplied id)` — never the supplied value itself) — useful for catching scrape attempts. |
 | Why HMAC, not random | Determinism — each replica of the cluster computes the same id without coordinating state. The `installation_secret` (cluster-wide, persisted) is the only secret required. |
 
 ### `/server/contact?security_id={id}` — Mode Switch
@@ -17132,7 +17132,7 @@ server:
 | `security.ip_allowlisted` | IP/CIDR added to allowlist | CIDR, description, added_by |
 | `security.ip_allowlist_removed` | IP/CIDR removed from allowlist | CIDR, removed_by |
 | `security.csp_violation` | CSP violation report received | IP, blocked-uri, violated-directive |
-| `security.security_id_invalid` | Invalid/expired security.txt id used | IP, user-agent, supplied id |
+| `security.security_id_invalid` | Invalid/expired security.txt id used | IP, user-agent, SHA-256 prefix of the supplied id (never the raw id) |
 | `security.report_received` | Security vulnerability report received | tracking_id, severity, sanitized affected-component |
 | `security.private_key_exported` | PGP private key exported | Admin, IP, reason |
 
@@ -54015,8 +54015,8 @@ display:
 
 | Config Value | Behavior |
 |--------------|----------|
-| `auto` (default) | Detect: GUI if display, TUI if terminal, error if neither |
-| `gui` | Force GUI mode (error if no display available) |
+| `auto` (default) | Detect in priority order: GUI if a display is available (and GUI support is built in), else TUI if an interactive terminal, else error |
+| `gui` | Force GUI mode (reports `gui_unavailable` and exits if no display is available — never degrades to TUI) |
 | `tui` | Force TUI mode (error if no terminal available) |
 
 **Why config override exists:**
@@ -54025,14 +54025,16 @@ display:
 - Accessibility requirements
 - Testing specific modes
 
-**Auto-detection remains default.** Config override is for users who explicitly want to force a mode.
+**Auto-detection remains default.** Config override is for users who explicitly want to force a mode. When both a display and an interactive terminal exist, the GUI wins; the TUI is only the fallback when no display is available. A command argument always beats every display mode.
 
 | Condition | Result |
 |-----------|--------|
 | `-h`, `--help` | Print help, exit (CLI only, never TUI) |
 | `-v`, `--version` | Print version, exit (CLI only, never TUI) |
-| Interactive terminal + no command | TUI mode |
-| Interactive terminal + config flags only | TUI mode |
+| Display available + no command (`display.mode: auto`, GUI built in) | GUI mode |
+| Display available + config flags only (`display.mode: auto`, GUI built in) | GUI mode |
+| Interactive terminal + no command, no display (or GUI not built in) | TUI mode |
+| Interactive terminal + config flags only, no display (or GUI not built in) | TUI mode |
 | Interactive terminal + command/args | CLI mode |
 | Piped/redirected output | Plain output (no TUI) |
 | Non-interactive (cron, scripts) | Plain output |
