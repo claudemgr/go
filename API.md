@@ -28535,6 +28535,18 @@ Templates are stored as files on disk. Override any built-in template by placing
 | GeoIP database outdated | WARN | ✗ | Update needed |
 | Tor address ready | INFO | ✗ | Onion address generated |
 
+### Lifecycle Notifications (startup and shutdown)
+
+| Event | Fires when | Not fired for |
+|-------|-----------|---------------|
+| `startup` | Once per process start, after migrations, listener binding and the privilege drop have completed (the same moment as the "ready" log line) | Config hot-reloads, which are the separate "Config reloaded" event |
+| `shutdown` | Once when a graceful shutdown (`SIGTERM`, `SIGINT`, `--service stop`, or the restart after an update) has finished draining connections | Crashes and `SIGKILL`, because nothing can send mail then |
+
+- **Defaults:** both switches default to off (`server.notifications.email.events.startup` and `shutdown`). Every occurrence is always logged at INFO whatever the switches say.
+- **Templates:** the built-in `server_started` and `server_stopped` templates use `{app_name}`, `{fqdn}`, `{hostname}`, `{version}`, `{mode}` and `{timestamp}`; `server_stopped` adds `{reason}` (`signal`, `service stop` or `update restart`).
+- **Delivery:** the recipient is the admin role (PART 12 → "Contact Configuration"). The shutdown email is best effort with a 5-second send timeout and never delays process exit beyond that.
+- **Language:** operator email, so `server.i18n.default_language` applies (see "Email Language Selection", priority 3).
+
 ### Disk Space Low (notification trigger)
 
 | Aspect | Rule |
