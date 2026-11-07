@@ -50942,11 +50942,11 @@ server:
     # Seconds to wait for Tor to publish its control_port file at startup (10-300)
     startup_timeout: 60
 
-    # Circuit timeout (how long before giving up)
-    circuit_timeout: 60s
+    # Circuit timeout in seconds (how long before giving up)
+    circuit_timeout: 60
 
-    # Bootstrap timeout (wait for Tor network connection)
-    bootstrap_timeout: 3m
+    # Bootstrap timeout in seconds (wait for Tor network connection)
+    bootstrap_timeout: 180
 
     # --- Security Settings ---
     # Scrub sensitive info from Tor logs
@@ -52940,8 +52940,8 @@ server:
     # SAM/destination signature type (7 = EdDSA-SHA512-Ed25519, modern default)
     signature_type: 7
 
-    # Bootstrap timeout (wait for the destination + tunnels to become ready)
-    bootstrap_timeout: 5m
+    # Bootstrap timeout in seconds, 30-600 (wait for the destination + tunnels to become ready)
+    bootstrap_timeout: 300
 ```
 
 **Notes:**

@@ -42442,8 +42442,8 @@ server:
     # SAM/destination signature type (7 = EdDSA-SHA512-Ed25519, modern default)
     signature_type: 7
 
-    # Bootstrap timeout (wait for the destination + tunnels to become ready)
-    bootstrap_timeout: 5m
+    # Bootstrap timeout in seconds, 30-600 (wait for the destination + tunnels to become ready)
+    bootstrap_timeout: 300
 ```
 
 **Notes:**
