@@ -17249,101 +17249,113 @@ server:
 - **Tor and I2P:** tracking is never rendered for requests served through the onion or I2P address — provider scripts are clearnet endpoints and calling them leaks the request off Tor — and `/server/tracking.js` returns `404` there.
 
 ```go
-// TrackingScript returns the tracker markup. Inline script bodies are not emitted into pages: they are served from /server/tracking.js (see "Tracking and CSP")
-func TrackingScript() template.HTML {
-    cfg := config.Get().Server.Tracking
-    if cfg.Type == "" || cfg.Type == "none" {
-        return ""
-    }
+// tracker is what one provider contributes: external tags for the page and an
+// optional JavaScript body that is served from /server/tracking.js - a body is
+// NEVER written inline into HTML (see "Tracking and CSP").
+type tracker struct {
+    tags string
+    body string
+}
 
+// jsString quotes a config value as a JavaScript string literal; config text is
+// never concatenated raw into JavaScript.
+func jsString(v string) string {
+    b, _ := json.Marshal(v)
+    return string(b)
+}
+
+// trackerFor maps the server.tracking config to its tags and script body.
+func trackerFor(cfg TrackingConfig) (tracker, bool) {
+    id := html.EscapeString(cfg.ID)
+    base := strings.TrimSuffix(cfg.URL, "/")
     switch cfg.Type {
     case "google":
         if strings.HasPrefix(cfg.ID, "G-") {
             // GA4
-            return template.HTML(fmt.Sprintf(`
-<script async src="https://www.googletagmanager.com/gtag/js?id=%s"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', '%s');
-</script>`, cfg.ID, cfg.ID))
+            return tracker{
+                tags: `<script async src="https://www.googletagmanager.com/gtag/js?id=` + url.QueryEscape(cfg.ID) + `"></script>`,
+                body: "window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}" +
+                    "gtag('js',new Date());gtag('config'," + jsString(cfg.ID) + ");",
+            }, true
         }
         // Universal Analytics (legacy)
-        return template.HTML(fmt.Sprintf(`
-<script async src="https://www.google-analytics.com/analytics.js"></script>
-<script>
-  window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
-  ga('create', '%s', 'auto');
-  ga('send', 'pageview');
-</script>`, cfg.ID))
+        return tracker{
+            tags: `<script async src="https://www.google-analytics.com/analytics.js"></script>`,
+            body: "window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;" +
+                "ga('create'," + jsString(cfg.ID) + ",'auto');ga('send','pageview');",
+        }, true
 
     case "matomo", "piwik":
-        return template.HTML(fmt.Sprintf(`
-<script>
-  var _paq = window._paq = window._paq || [];
-  _paq.push(['trackPageView']);
-  _paq.push(['enableLinkTracking']);
-  (function() {
-    var u="%s/";
-    _paq.push(['setTrackerUrl', u+'matomo.php']);
-    _paq.push(['setSiteId', '%s']);
-    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
-    g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
-  })();
-</script>`, strings.TrimSuffix(cfg.URL, "/"), cfg.ID))
+        return tracker{body: "var _paq=window._paq=window._paq||[];_paq.push(['trackPageView']);" +
+            "_paq.push(['enableLinkTracking']);_paq.push(['setTrackerUrl'," + jsString(base+"/matomo.php") + "]);" +
+            "_paq.push(['setSiteId'," + jsString(cfg.ID) + "]);var g=document.createElement('script');" +
+            "g.async=true;g.src=" + jsString(base+"/matomo.js") + ";document.head.appendChild(g);"}, true
 
     case "owa":
-        return template.HTML(fmt.Sprintf(`
-<script>
-  var owa_baseUrl = '%s/';
-  var owa_cmds = owa_cmds || [];
-  owa_cmds.push(['setSiteId', '%s']);
-  owa_cmds.push(['trackPageView']);
-  owa_cmds.push(['trackClicks']);
-  (function() {
-    var _owa = document.createElement('script'); _owa.type = 'text/javascript'; _owa.async = true;
-    _owa.src = owa_baseUrl + 'modules/base/js/owa.tracker-combined-min.js';
-    var _owa_s = document.getElementsByTagName('script')[0]; _owa_s.parentNode.insertBefore(_owa, _owa_s);
-  })();
-</script>`, strings.TrimSuffix(cfg.URL, "/"), cfg.ID))
+        return tracker{body: "var owa_baseUrl=" + jsString(base+"/") + ";var owa_cmds=window.owa_cmds=window.owa_cmds||[];" +
+            "owa_cmds.push(['setSiteId'," + jsString(cfg.ID) + "]);owa_cmds.push(['trackPageView']);owa_cmds.push(['trackClicks']);" +
+            "var o=document.createElement('script');o.async=true;" +
+            "o.src=owa_baseUrl+'modules/base/js/owa.tracker-combined-min.js';document.head.appendChild(o);"}, true
 
     case "fathom":
-        scriptURL := "https://cdn.usefathom.com/script.js"
+        src := "https://cdn.usefathom.com/script.js"
         if cfg.URL != "" {
             // Self-hosted Fathom Lite
-            scriptURL = strings.TrimSuffix(cfg.URL, "/") + "/tracker.js"
+            src = base + "/tracker.js"
         }
-        return template.HTML(fmt.Sprintf(`
-<script src="%s" data-site="%s" defer></script>`, scriptURL, cfg.ID))
+        return tracker{tags: `<script src="` + html.EscapeString(src) + `" data-site="` + id + `" defer></script>`}, true
 
     case "plausible":
-        domain := cfg.ID
-        scriptURL := "https://plausible.io/js/script.js"
+        src := "https://plausible.io/js/script.js"
         if cfg.URL != "" {
-            scriptURL = strings.TrimSuffix(cfg.URL, "/") + "/js/script.js"
+            src = base + "/js/script.js"
         }
-        return template.HTML(fmt.Sprintf(`
-<script defer data-domain="%s" src="%s"></script>`, domain, scriptURL))
+        return tracker{tags: `<script defer data-domain="` + id + `" src="` + html.EscapeString(src) + `"></script>`}, true
 
     case "umami":
-        return template.HTML(fmt.Sprintf(`
-<script defer src="%s/script.js" data-website-id="%s"></script>`,
-            strings.TrimSuffix(cfg.URL, "/"), cfg.ID))
+        return tracker{tags: `<script defer src="` + html.EscapeString(base) + `/script.js" data-website-id="` + id + `"></script>`}, true
 
     case "simple":
-        return template.HTML(`
-<script async defer src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
-<noscript><img src="https://queue.simpleanalyticscdn.com/noscript.gif" alt="" referrerpolicy="no-referrer-when-downgrade" /></noscript>`)
+        // Needs scripts.simpleanalyticscdn.com in script-src and queue.simpleanalyticscdn.com in img-src
+        return tracker{tags: `<script async defer src="https://scripts.simpleanalyticscdn.com/latest.js"></script>` +
+            `<noscript><img src="https://queue.simpleanalyticscdn.com/noscript.gif" alt="" referrerpolicy="no-referrer-when-downgrade" /></noscript>`}, true
 
     case "cloudflare":
-        return template.HTML(fmt.Sprintf(`
-<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "%s"}'></script>`, cfg.ID))
+        return tracker{tags: `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "` + id + `"}'></script>`}, true
 
+    case "", "none":
+        return tracker{}, false
     default:
         log.Warnf("unknown tracking type: %s", cfg.Type)
+        return tracker{}, false
+    }
+}
+
+// TrackingScript returns the page markup: external tags only, plus the
+// same-origin /server/tracking.js tag when the provider has a script body.
+// The caller renders it only when tracking is configured AND consent is given.
+func TrackingScript() template.HTML {
+    t, ok := trackerFor(config.Get().Server.Tracking)
+    if !ok {
         return ""
     }
+    out := t.tags
+    if t.body != "" {
+        out += `<script async src="/server/tracking.js"></script>`
+    }
+    return template.HTML(out)
+}
+
+// TrackingScriptBody is what GET /server/tracking.js serves (Content-Type
+// application/javascript, Cache-Control: no-cache). The handler answers 404 when
+// this is empty, tracking is disabled, consent is missing, or the request came
+// through the onion or I2P address.
+func TrackingScriptBody() string {
+    t, ok := trackerFor(config.Get().Server.Tracking)
+    if !ok {
+        return ""
+    }
+    return t.body
 }
 ```
 
@@ -27572,7 +27584,7 @@ func trackingScript(r *http.Request) template.HTML {
         // Return nothing - no tracking
         return ""
     }
-    return generateTrackingScript()
+    return TrackingScript()
 }
 ```
 
