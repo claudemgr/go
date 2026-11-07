@@ -21926,6 +21926,37 @@ footer p {
 }
 ```
 
+### Layout Integrity & Polish Contract (REQUIRED)
+
+**Every page must look finished — polished, professional, intuitive — on phones, tablets and desktops, in both themes and both text directions. "It renders" is not the bar.**
+
+| Rule | Detail |
+|------|--------|
+| **No horizontal overflow, ever** | At every viewport from 320 px up, `document.documentElement.scrollWidth <= window.innerWidth` with NO `overflow-x` backstop applied. A page wider than the screen makes mobile browsers shrink the whole layout (content at ~60% width with a dead strip beside it). Typical causes, all banned: negative-offset off-canvas boxes, fixed pixel widths, `100vw` widths (use `100%`), images without `max-width: 100%`, tables outside a scroll wrapper, unwrapped long strings (see "Long Strings"). `body { overflow-x: clip }` may exist as a last-resort backstop only |
+| **Content fills the viewport width correctly** | The `.container` rules above apply on every page: phones use the full width minus `1rem` padding; a content column is centered, never stuck left with dead space on the right |
+| **Fixed/overlay containment** | See "Drawer containment" in the header / navigation section ("Mobile Menu Behavior"). Overlays are direct children of `<body>`; no `transform`, `filter`, `backdrop-filter`, `contain` or `will-change` on an ancestor of a `position: fixed` element |
+| **Dynamic viewport** | `100dvh` / `min-height: 100dvh`, never bare `100vh` (mobile browser bars); `env(safe-area-inset-*)` padding on anything touching a screen edge (drawer, toast, banner, bottom actions) |
+| **Spacing scale** | Only `--space-*` tokens (4, 8, 12, 16, 24, 32, 48 px). Label to control `--space-1`, control to control `--space-4`, card to card `--space-6`. A page is never a bare stream of headings, text and controls: group content in `.section-card` blocks |
+| **Page header pattern** | Exactly one `<h1>` per page (the page title); an optional back link above it written `← {parent title}` (arrow icon + one full translated string); one `<h2>` per card. A heading is never repeated at a lower level (an "Owner tokens" `<h1>` followed by an "Owner tokens" `<h2>` is a defect) |
+| **No UI string concatenation** | Every visible label is ONE translation key holding the whole phrase (`nav.back_to_preferences` = "Back to Preferences"). Never join fragments ("Back" + "Preferences" rendered "Back Preferences"; this also breaks RTL and other languages) |
+| **No empty or unlabeled controls** | A `<select>` always has options and a visible selected default; an input always has a visible `<label>`; a button always has visible text or an `aria-label` plus tooltip. Two controls never share a label (a duplicated "Expiry" with a blank select is a defect) |
+| **Readable measure** | Prose max `72ch`; single-purpose form and card columns max `40rem` on desktop, centered |
+| **Typography** | Base 16 px, line-height 1.5, a heading scale via CSS variables, `0.875rem` monospace for tokens and code, `font-size >= 16px` on inputs (iOS zoom) |
+| **Contrast and focus** | Text 4.5:1 and UI parts 3:1 in BOTH themes; visible `:focus-visible` ring; `prefers-reduced-motion` honored |
+| **Opaque surfaces** | Modals, drawers, dropdowns and popovers have solid backgrounds; page content never shows through |
+
+**Review matrix (REQUIRED for every new or changed page, and automated where possible):**
+
+| Axis | Values |
+|------|--------|
+| **Viewports (CSS px)** | 320x640, 375x812, 390x844, 768x1024 (tablet portrait), 820x1180, 1024x768 (tablet landscape), 1280x800, 1440x900, 1920x1080 |
+| **Themes / direction** | dark, light, auto; LTR and RTL (Arabic) |
+| **Stress content** | 200% text zoom, the longest realistic values (62-char `.onion`, 64-char token, 64-char name, long translations), 0 / 1 / 25 list items |
+| **States** | empty, loading, error, success flash, disabled, JavaScript off |
+| **Pass criteria** | No horizontal scroll; nothing clipped or overlapping; every target >= 44x44 px; no empty or unlabeled control; no heading repeated; screenshot looks intentional at every viewport |
+
+Automated layout tests (headless browser at the viewports above) assert: `scrollWidth <= innerWidth`; no element's bounding box extends past the viewport; every `<select>` has options; every form control has a label; the open nav drawer covers the full viewport height and lists every nav link.
+
 ---
 
 ## Semantic HTML Elements
@@ -22680,6 +22711,21 @@ fetch('/api/save', { method: 'POST', body: data })
   });
 ```
 
+### Form Layout & Action Rows
+
+**Forms are laid out the same way everywhere, so every screen feels familiar and none feels cramped.**
+
+| Rule | Detail |
+|------|--------|
+| **One field, one label, one control** | The `<label>` sits ABOVE its control, always visible (a placeholder is never the label). Help text goes below in muted style; an error goes below with an icon and `aria-describedby` |
+| **Phone layout** | Single column; every control `width: 100%`, `min-height: 2.75rem`, `font-size >= 16px` |
+| **Tablet and desktop** | Short related fields pair on one row (Name + Expiry) using `grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr))`; never more than two columns inside a card; long fields (text areas, tokens) span the full row |
+| **Optional extras** | A rarely used extra (for example a custom date) is a second, clearly labeled input revealed in a `<details>` or via `:has()` — never a second `<select>` and never a blank control |
+| **Action row** | `.actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }`. Phones: the primary button is full width on top, secondary actions full width below. >= 768 px: inline, in `inline-end` order Cancel (secondary) then the primary button last |
+| **Hierarchy** | Exactly ONE primary button per form or card. Secondary is outlined; ghost for low emphasis; destructive actions use `.btn-danger`, are separated from other buttons by at least `--space-4` (own row, a "Danger zone" block, or the item's own footer), and confirm through a native popover |
+| **Per-item actions** | A list item's actions live in the card footer toolbar: at most three visible buttons with text labels, any more inside a `<details class="menu">`. Icon-only is allowed only for universally understood icons (copy, close) and always has an `aria-label` and tooltip |
+| **Feedback** | Success and failure use the toast/flash patterns below; after a POST the redirect lands on the same card (`#anchor`) so the page does not jump to the top |
+
 ### Toggle Switches
 
 **CSS-only toggle using hidden checkbox:**
@@ -22896,7 +22942,7 @@ function renameItem(itemId) {
   position: fixed;
   top: 1rem;
   right: 1rem;
-  z-index: 9999;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -25597,12 +25643,13 @@ Mobile:
 ```
 
 ```html
+<!-- Menu state checkbox, drawer panel and scrim are children of <body>, NOT of <header>
+     (a fixed panel inside a header with transform/backdrop-filter is clipped to the header). -->
+<input type="checkbox" id="nav-toggle" class="nav-checkbox" hidden>
+
 <!-- Header bar: single row — brand | centered links | profile/preferences | theme toggle -->
 <header class="header">
   <a href="/" class="site-brand">{project_name}</a>
-
-  <!-- Hidden checkbox controls mobile menu state - NO JavaScript -->
-  <input type="checkbox" id="nav-toggle" class="nav-checkbox" hidden>
 
   <!-- Desktop: inline links, centered | Mobile: hamburger only -->
   <nav class="nav-links">
@@ -25612,14 +25659,6 @@ Mobile:
 
   <!-- Mobile: hamburger toggle (checkbox label) -->
   <label for="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">☰</label>
-
-  <!-- Slide-in panel for mobile (links only — actions below stay in header) -->
-  <div class="nav-panel">
-    <label for="nav-toggle" class="nav-close" aria-label="Close menu">✕</label>
-    <a href="/">Home</a>
-    <!-- App-specific sections (project-defined) -->
-  </div>
-  <label for="nav-toggle" class="nav-overlay"></label>
 
   <!-- Actions: profile/preferences zone, then theme toggle (always visible, far right) -->
   <div class="header-actions">
@@ -25659,6 +25698,14 @@ Mobile:
     </form>
   </div>
 </header>
+
+<!-- Slide-in panel for mobile: SAME links as .nav-links, solid background, after </header> -->
+<div class="nav-panel" id="nav-panel">
+  <label for="nav-toggle" class="nav-close" aria-label="Close menu">✕</label>
+  <a href="/" aria-current="page">Home</a>
+  <!-- App-specific sections (project-defined) -->
+</div>
+<label for="nav-toggle" class="nav-overlay"></label>
 ```
 
 ```css
@@ -25688,9 +25735,8 @@ Mobile:
 ```
 
 **Mobile Menu Behavior:**
-- Menu slides in from RIGHT edge
-- Slides LEFT to open (right-to-left)
-- Slides RIGHT to close (left-to-right)
+- Menu slides in from the inline-end edge (right in LTR, left in RTL)
+- Slides in to open, back out to close
 - Overlay dims background, click to close
 - Profile/preferences and theme toggle stay in header (NOT in menu) - keeps menu clean
 
@@ -25709,15 +25755,21 @@ Mobile:
 /* Slide-in panel (mobile) */
 .nav-panel {
   position: fixed;
-  top: 0;
-  /* Hidden off-screen right */
-  right: -280px;
-  width: 280px;
-  height: 100vh;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: min(280px, 85vw);
+  height: 100dvh;
+  overflow-y: auto;
+  padding-bottom: env(safe-area-inset-bottom);
+  /* Opaque - page content must never show through */
   background: var(--color-bg);
-  transition: right 0.3s ease;
-  z-index: 1001;
+  /* Hidden with transform + visibility, NEVER a negative offset (it widens the page) */
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 0.3s ease, visibility 0s linear 0.3s;
+  z-index: var(--z-drawer);
 }
+[dir="rtl"] .nav-panel { transform: translateX(-100%); }
 
 /* Overlay (hidden by default) */
 .nav-overlay {
@@ -25725,14 +25777,15 @@ Mobile:
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 1000;
+  z-index: var(--z-overlay);
   cursor: pointer;
 }
 
 /* When checkbox is checked: show menu and overlay */
 .nav-checkbox:checked ~ .nav-panel {
-  /* Slide in from right */
-  right: 0;
+  transform: none;
+  visibility: visible;
+  transition: transform 0.3s ease;
 }
 
 .nav-checkbox:checked ~ .nav-overlay {
@@ -25746,10 +25799,23 @@ Mobile:
 }
 ```
 
+**Drawer containment (NON-NEGOTIABLE — a phone screenshot of a shipped site showed every one of these failures):**
+
+| Rule | Why / how |
+|------|-----------|
+| **Never hide off-canvas with a negative offset** (`right: -280px`, `left: -100%`) | The box still extends the scrollable width, so the page becomes wider than the screen and mobile browsers shrink the whole layout (content at ~60% width, dead space on the right). Hide with `transform: translateX(100%)` + `visibility: hidden` (and `inert` when JS is present), never with a negative position |
+| **The drawer and its scrim are children of `<body>`**, siblings after `<main>`, not descendants of `<header>` | A `position: fixed` element inside an ancestor that has `transform`, `filter`, `backdrop-filter`, `perspective`, `contain` or `will-change` is positioned against that ancestor, not the viewport: the drawer collapses to header size, clips ("Cairnb…") and renders under page content. The header MUST NOT use those properties on any ancestor of the panel; apply a frosted-glass effect to a `::before` pseudo-element of the header instead |
+| **Opaque panel** | The drawer background is a solid theme color. Hero text or pills showing through the menu is a bug |
+| **Every link, in order** | The panel lists the same links as the desktop nav (the screenshot showed one link). Active page marked with `aria-current="page"` |
+| **Stacking** | Define the z-index tokens once in `:root` and use only them: `--z-raised` 10 (header), `--z-dropdown` 100, `--z-overlay` 300 (scrim), `--z-drawer` 350, `--z-modal` 400, `--z-banner` 450, `--z-toast` 500; no magic numbers such as `9999`. Scrim and drawer must sit above `<main>` and the hero in the same stacking context |
+| **Dimensions** | `height: 100dvh`, `width: min(280px, 85vw)`, `overflow-y: auto`, `padding-bottom: env(safe-area-inset-bottom)`. RTL: slides from the left (`[dir="rtl"]`) |
+| **While open** | Page behind does not scroll (`body:has(.nav-checkbox:checked) { overflow: hidden }`); the scrim dims the whole viewport; Esc and a scrim tap close it |
+| **Fixed elements** | The drawer, scrim, modal, toast, banner and popover are the ONLY `position: fixed` elements; header, nav and footer scroll with the page |
+
 **Mobile Responsive Rules:**
 - Single header row: hamburger replaces inline links, actions stay put
 - Profile/preferences zone and theme toggle ALWAYS in header (never in menu)
-- Menu slides from right edge
+- Menu slides from the inline-end edge (right in LTR, left in RTL)
 - Touch-friendly: minimum 44x44px tap targets
 - Overlay closes menu on tap (CSS label toggles checkbox - no JS)
 
