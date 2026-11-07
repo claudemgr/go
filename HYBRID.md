@@ -17449,9 +17449,8 @@ server:
       # Show banner on ALL frontend pages until user acknowledges
       show_until_acknowledged: true
 
-      # Default state: cookies/tracking ENABLED (opt-out model)
-      # User must click Decline to disable non-essential cookies
-      default_enabled: true
+      # Non-essential cookies and tracking are OPT-IN: nothing non-essential runs until the visitor accepts
+      # (there is no opt-out mode and no setting to change that)
 
       # Banner message when data.sold = false (DEFAULT)
       message: "In accordance with the EU GDPR law this message is being displayed. We use cookies for essential site functionality and, with your consent, for preferences and analytics. Your data is stored on our servers and is never sold."
@@ -17622,7 +17621,6 @@ type SharingCondition struct {
 // ConsentConfig for cookie consent banner
 type ConsentConfig struct {
     ShowUntilAcknowledged bool   `yaml:"show_until_acknowledged"`
-    DefaultEnabled        bool   `yaml:"default_enabled"`
     // Used when data.sold = false
     Message               string `yaml:"message"`
     // Used when data.sold = true
