@@ -7467,13 +7467,29 @@ func (c *Config) SetAdminPath(input string) error {
 }
 ```
 
-**CLI flags:**
+**CLI flags (filesystem directory overrides: `--config`, `--data`, `--cache`, `--log`, `--backup`):** these are real filesystem paths, so `SafePath` (URL and route normalization) is NOT used. It strips the leading slash and enforces the URL segment charset, which would turn `--data /var/lib/app` into the relative path `var/lib/app`. Use `SafeDirPath`: it preserves absolute paths, rejects NUL and control characters and any `..` segment in the raw input, and returns the cleaned path. Relative inputs are accepted and resolved against the working directory at startup.
 ```go
+// SafeDirPath validates a filesystem directory override and preserves absolute paths
+func SafeDirPath(input string) (string, error) {
+    if input == "" {
+        return "", errors.New("empty path")
+    }
+    if strings.ContainsAny(input, "\x00\r\n") {
+        return "", errors.New("invalid characters")
+    }
+    for _, seg := range strings.Split(filepath.ToSlash(input), "/") {
+        if seg == ".." {
+            return "", errors.New("path traversal")
+        }
+    }
+    return filepath.Clean(input), nil
+}
+
 func parseFlags() error {
     dataDir := flag.String("data", "/var/lib/app", "Data directory")
     flag.Parse()
 
-    safe, err := SafePath(*dataDir)
+    safe, err := SafeDirPath(*dataDir)
     if err != nil {
         return fmt.Errorf("invalid --data path: %w", err)
     }
@@ -9317,7 +9333,8 @@ Before proceeding, confirm you understand:
 **Mode:**
 1. `--mode` CLI flag (highest priority)
 2. `MODE` environment variable
-3. Default: `production`
+3. `server.mode` in `server.yml` (a supported source, read only when neither of the above is set)
+4. Default: `production`
 
 **Debug:**
 1. `--debug` CLI flag (highest priority)
