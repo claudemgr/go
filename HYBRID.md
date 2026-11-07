@@ -17097,7 +17097,8 @@ server:
     # Tracking/Site ID (format depends on type)
     id: ""
     # Self-hosted URL (required for: matomo, piwik, owa, umami)
-    # Not used for: google, fathom, plausible, simple, cloudflare
+    # Optional for: fathom (Fathom Lite), plausible (self-hosted)
+    # Not used for: google, simple, cloudflare
     url: ""
 ```
 
@@ -17317,8 +17318,8 @@ func trackerFor(cfg TrackingConfig) (tracker, bool) {
 
     case "simple":
         // Needs scripts.simpleanalyticscdn.com in script-src and queue.simpleanalyticscdn.com in img-src
-        return tracker{tags: `<script async defer src="https://scripts.simpleanalyticscdn.com/latest.js"></script>` +
-            `<noscript><img src="https://queue.simpleanalyticscdn.com/noscript.gif" alt="" referrerpolicy="no-referrer-when-downgrade" /></noscript>`}, true
+        // (the <noscript> pixel is TrackingNoscript(), rendered in <body>)
+        return tracker{tags: `<script async defer src="https://scripts.simpleanalyticscdn.com/latest.js"></script>`}, true
 
     case "cloudflare":
         return tracker{tags: `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "` + id + `"}'></script>`}, true
@@ -17357,6 +17358,17 @@ func TrackingScriptBody() string {
     }
     return t.body
 }
+
+// TrackingNoscript returns the <noscript> pixel for providers that have one
+// (only "simple"). It is NOT valid <head> content: render it as the first child
+// of <body>, under the same consent / non-overlay conditions as TrackingScript().
+func TrackingNoscript() template.HTML {
+    cfg := config.Get().Server.Tracking
+    if cfg.Type != "simple" {
+        return ""
+    }
+    return template.HTML(`<noscript><img src="https://queue.simpleanalyticscdn.com/noscript.gif" alt="" referrerpolicy="no-referrer-when-downgrade" /></noscript>`)
+}
 ```
 
 ### Template Usage
@@ -17364,6 +17376,9 @@ func TrackingScriptBody() string {
 ```html
 <!-- In base template <head> section -->
 {{ trackingScript }}
+
+<!-- First child of <body> (the simple provider's <noscript> pixel is invalid in <head>) -->
+{{ trackingNoscript }}
 ```
 
 ### Analytics Tracking Configuration (config file)
