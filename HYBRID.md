@@ -3970,6 +3970,7 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 | `TERM` | Terminal type; `TERM=dumb` disables ALL ANSI escapes and forces CLI mode (see PART 4) |
 | `DOMAIN` | FQDN override (highest priority for hostname resolution) |
 | `MODE` | `production` (default; shortcut `prod`) · `development` (shortcuts `dev`, `devel`) · `debug` (explicit opt-in only — see MODE vs DEBUG in PART 6) |
+| `DEBUG` | Truthy value turns the debug flag on (`--debug` wins; precedence and the `/debug/*` endpoints are defined in PART 6 → Debug Flag). Independent of `MODE`: `MODE=debug` only defaults the flag on |
 | `DATABASE_DRIVER` | `sqlite` (+ `sqlite2`, `sqlite3`), `libsql` (+ `turso`) |
 | `DATABASE_URL` | Database connection string |
 | `SMTP_HOST` | SMTP server hostname (if set, skips autodetect) |
@@ -16309,7 +16310,7 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | `/server/privacy` | GET | Privacy policy |
 | `/server/dpo` | GET | Data Protection Officer contact (GDPR) |
 
-**DPO contact source:** `server.contact.dpo.email` (with optional `server.contact.dpo.name`), part of the Contact Configuration tree (PART 12). When `dpo.email` is empty the page shows `server.contact.general.email`; when that is empty too it renders only a link to the contact form (`/server/contact`). It never invents an address and never shows the admin address. The JSON mirror is `GET /api/{api_version}/server/dpo` (`name`, `email`, `privacy_url`).
+**DPO contact source:** `server.contact.dpo.email` (with optional `server.contact.dpo.name`), part of the Contact Configuration tree (PART 12). When `dpo.email` is empty the page shows `server.contact.general.email`; when that is empty too it renders only a link to the contact form (`/server/contact`). It never invents an address and never shows the admin address. The JSON mirror is `GET /api/{api_version}/server/dpo` (`name`, `email`, `privacy_url`) and follows the same fallback chain for `email`; when no address resolves it still answers `200` with `email` = `""` (and `name` = `""` when unset), never `404`; `privacy_url` is always `/server/privacy`. The HTML page shows the DPO name when set, the address as a `mailto:` link when one resolves, and always links to `/server/privacy` and `/server/contact`.
 
 **Compliance is configured entirely in `server.yml`. Consent state is stored client-side (cookies, so the server can read it per-request) — there is no server-side user consent table. Operators run `{project_name} --maintenance compliance report` for a compliance summary.**
 
@@ -28239,7 +28240,7 @@ When `server.mcp.enabled` is `false`, both routes return `404` and no link to th
 | `#limits` | Behavior and limits | `POST` only; no sessions; the same rate limits and audit as the API; `Origin` validated; the supported MCP protocol versions |
 | `#troubleshooting` | Troubleshooting | A table of `400` (protocol-version or header mismatch), `401` (missing, invalid or expired token — `WWW-Authenticate: Bearer`), `403` (bad `Origin` or insufficient scope), `404` (MCP disabled), `405` (GET or DELETE; the endpoint is POST-only) with the fix for each |
 
-**Project expansion (required content):** the project appends its own section, `#project`, after the base sections. The text comes from IDEA.md `## Business logic` and is stored as Markdown in `pages.help.mcp` (editable in the admin panel's Pages → Help editor where an admin panel exists). It MUST use the project's real tool names and real data — example prompts a user can paste into an assistant, per-tool tips and limits, and documentation of any MCP resources or prompts the project exposes. It never repeats or contradicts the base sections, and generic placeholder text is forbidden (same rule as `/server/help`).
+**Project expansion (required content):** the project appends its own section, `#project`, after the base sections. The text comes from IDEA.md `## Business logic` and is stored as Markdown in `pages.help.mcp` (canonical storage is `server.yml` `pages.help.mcp`, edited there by the operator and applied on config reload; a project that has an admin panel also exposes it in Pages → Help. API projects have no admin panel or web editor, so `server.yml` is the only editing path). It MUST use the project's real tool names and real data — example prompts a user can paste into an assistant, per-tool tips and limits, and documentation of any MCP resources or prompts the project exposes. It never repeats or contradicts the base sections, and generic placeholder text is forbidden (same rule as `/server/help`).
 
 **JSON body (`GET /api/{api_version}/server/help/mcp`, envelope `{ "ok": true, "data": ... }`; field names are fixed):**
 ```json
