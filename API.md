@@ -40699,6 +40699,16 @@ make test
 | `de` | German | `ltr` | one, other |
 | `ja` | Japanese | `ltr` | other (no plural forms) |
 
+**The table above is the REQUIRED MINIMUM, not the exhaustive list.** A project may support more languages; it never supports fewer. Rules for any language beyond the table:
+
+| Rule | Detail |
+|------|--------|
+| **Supported = has a complete locale file** | A language is supported if and only if a locale file with exactly the keys of `en.json` is embedded in the binary (the build-time key check applies to it). No locale file = not supported, anywhere |
+| **One registry** | The supported set comes from ONE registry (code, native name, direction, CLDR plural categories) that is checked at build time against the embedded locale files: registry entries, locale files and the runtime default list MUST be the same set. No separate hardcoded language list in config defaults, the language selector, `Accept-Language` matching or `isSupported` |
+| **Defaults** | The runtime default enabled languages are every embedded locale (the minimum seven plus any extra); an operator may narrow the list but never below the seven |
+| **Documentation** | README, `--help` and the language selector list only supported languages, derived from or verified against the registry; the stated count MUST equal the number of locale files. Claiming a language with no locale file (for example a README listing Korean without `ko.json`) is a defect |
+| **Adding a language** | Add the locale file, the registry entry (direction + plural categories) and the table row above in the project's docs in one change; the build fails if any of the three is missing |
+
 ### Language Selection via Query Parameter
 
 **`?lang=` sets the language and persists it via cookie.** No URL path prefixes (avoids route conflicts).
