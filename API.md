@@ -12325,6 +12325,7 @@ $ kill -TERM $(cat /var/run/myapp.pid)
 | `--port` | `PORT` | Listen port |
 | `--address` | `LISTEN` | Listen address |
 | `--mode` | `MODE` | Application mode (production/development/debug) |
+| `--i2p` | `I2P_ENABLED` | Enable the opt-in I2P eepsite (config key: `server.i2p.enabled`) |
 | (none) | `DATABASE_DIR` | SQLite database directory (Docker: `/data/db/sqlite`, Native: `{data_dir}/db/`) |
 | (none) | `BACKUP_DIR` | Backup directory (defaults to `/mnt/Backups/{internal_org}/{internal_name}` when writable, else `{data_dir}/backup/`; changeable) |
 
@@ -15873,14 +15874,21 @@ server:
     abuse_detection:
       # Request flood: too many requests from same IP
       request_flood:
-        # 10x rate limit triggers flood detection
+        # 10x the class rate limit triggers flood detection
         multiplier: 10
+        # Counting window for the burst (same as the rate-limit window)
+        window: 60s
         block_duration: 1h
 
       # Auto-actions (all enabled by default)
       auto_block_ip: true
       auto_alert: true
 ```
+
+**Request-flood semantics:**
+- **Counted:** every request received from the IP, including those answered `429`, in a sliding `window` (default `60s`, the rate-limit window).
+- **"10x" means the class limit:** a flood is detected when the count in one endpoint class (read, write, health) exceeds `multiplier` × that class's per-window limit, or when the total across all classes exceeds `multiplier` × `server.rate_limit.global_burst`.
+- **Action:** an automatic temporary block of `block_duration`, an `abuse.request_flood` audit event and (with `auto_alert`) an email. Allowlisted IPs are never counted or blocked.
 
 ### IP Block Management
 
@@ -15896,6 +15904,8 @@ server:
 Temporary blocks are automatically released when:
 1. Block duration expires (checked every minute by scheduler)
 2. IP is added to allowlist
+
+**Persistence:** automatic temporary blocks are stored in `server.db` (table `ip_blocks`, with `expires_at`), so they survive restarts; expired rows are dropped on load. Permanent blocks are never stored in the database — they exist only as `server.security.blocked_ips` config entries.
 
 **IP Block Data Model:**
 
@@ -15920,6 +15930,21 @@ type IPBlock struct {
 ```
 
 **IP blocks and allowlists are managed via config file (`server.security.blocked_ips`, `server.security.allowlist`).**
+
+**`server.security.blocked_ips` schema** (same shape as the allowlist; each entry becomes a permanent `IPBlock` with `CIDR` set and `AutoBlocked: false`):
+
+```yaml
+server:
+  security:
+    blocked_ips:
+      # IPv4 or IPv6 CIDR; a bare address is treated as /32 or /128
+      - cidr: 198.51.100.0/24
+        reason: "Scraper network"
+      - cidr: "2001:db8::/32"
+        reason: "Abusive range"
+```
+
+**Validation:** every entry needs a valid `cidr` (and `reason` is optional text). An invalid entry fails config validation at startup, naming the entry index and field; on hot reload the invalid file is rejected and the previous configuration stays active. When a blocked entry overlaps an allowlist entry, the allowlist wins.
 
 **Allowlist (Trusted IPs):**
 
@@ -43447,7 +43472,7 @@ Tor Hidden Service: Connected
 
 ### Configuration
 
-**I2P is opt-in.** No provider is contacted and no port is allocated unless `enabled: true`. The canonical config path is `server.i2p.enabled` (env `I2P_ENABLED`, flag `--i2p`), grouped under `server` like `server.tor`; `features.i2p.*` names the same state only as response fields in health output and is never a config key.
+**I2P is opt-in.** No provider is contacted and no port is allocated unless `enabled: true`. The canonical config path is `server.i2p.enabled` (env `I2P_ENABLED`, flag `--i2p`), grouped under `server` like `server.tor`; `features.i2p.*` names the same state only as response fields in health output and is never a config key. Precedence follows PART 8: `--i2p` flag, then `I2P_ENABLED`, then `server.i2p.enabled`.
 
 ```yaml
 server:
