@@ -42071,7 +42071,7 @@ server:
     # Maximum circuits Tor builds concurrently — rendered into torrc as MaxClientCircuitsPending (Tor default 32; higher = faster setup under load, more memory)
     max_circuits: 32
 
-    # Seconds to wait for Tor to publish its control-port file at startup (10-300)
+    # Seconds to wait for Tor to publish its control_port file at startup (10-300)
     startup_timeout: 60
 
     # Circuit timeout in seconds (how long before giving up)
@@ -42399,27 +42399,35 @@ import (
     "context"
     "fmt"
     "log"
+    "net"
     "net/http"
     "os"
+    "os/exec"
     "path/filepath"
+    "regexp"
     "strings"
     "sync"
+    "syscall"
     "time"
 
-    "github.com/cretz/bine/tor"
+    "github.com/cretz/bine/control"
     "github.com/pires/go-proxyproto"
+    "golang.org/x/net/proxy"
 )
 
 // TorService manages the Tor hidden service and outbound connections.
 // Server binary fully owns and controls the Tor process lifecycle.
 type TorService struct {
-    tor        *tor.Tor
+    // Tor child process (spawned by this server, never by bine's tor.Start)
+    cmd        *exec.Cmd
+    // Authenticated control connection (bine control package)
+    ctrl       *control.Conn
     // Full .onion address (with suffix), read from {HiddenServiceDir}/hostname
     onionAddress string
     // Dedicated PROXY-protocol loopback port the hidden service forwards to
     torBackendPort int
     // For outbound Tor connections (nil if disabled)
-    dialer     *tor.Dialer
+    dialer     proxy.ContextDialer
 }
 
 // TorConfig holds Tor-related configuration from server config
@@ -42564,65 +42572,68 @@ func startDedicatedTor(ctx context.Context, cfg *TorConfig) (*TorService, error)
     }
     log.Printf("Regenerated torrc at %s (backend port %d)", torrcPath, torBackendPort)
 
-    // Build platform-specific StartConf
-    conf := &tor.StartConf{
-        // Use our custom torrc from config directory
-        TorrcFile: torrcPath,
-
-        // Runtime data directory - isolated from system Tor
-        DataDir: torDataDir,
-
-        // Let torrc control SocksPort (auto if outbound enabled, 0 if not)
-        NoAutoSocksPort: true,
-
-        // Debug output (development only)
-        // DebugWriter: os.Stderr,
-    }
-
-    // Use the tor binary resolved above (honors the cfg.Binary override).
-    conf.ExePath = torBinary
-
-    // Start OUR OWN Tor process - completely separate from system Tor
-    // Server starts → Tor starts; Server stops → Tor stops
-    t, err := tor.Start(ctx, conf)
+    // Spawn OUR OWN Tor process (never bine's tor.Start: its control-port-file
+    // wait is ~2 s, which fails on slow disks / cold starts). See "Control Port
+    // & Startup Sequence" below for the full contract.
+    cmd, err := spawnTor(ctx, torBinary, torrcPath, torDataDir)
     if err != nil {
         return nil, fmt.Errorf("failed to start dedicated tor: %w", err)
     }
 
-    // Wait for Tor to bootstrap (connect to network)
-    // Use bootstrap timeout from config (default 180 seconds = 3 minutes)
+    // 1. Wait for a COMPLETE "PORT=127.0.0.1:{port}" line in the control_port file
+    startupTimeout := time.Duration(cfg.StartupTimeout) * time.Second
+    controlAddr, err := waitControlPort(ctx, cmd, filepath.Join(torDataDir, "control_port"), startupTimeout)
+    if err != nil {
+        stopTor(cmd, nil)
+        return nil, fmt.Errorf("tor control port: %w", err)
+    }
+
+    // 2. Connect + authenticate (cookie / SAFECOOKIE, handled by Authenticate)
+    ctrl, err := dialControl(ctx, controlAddr)
+    if err != nil {
+        stopTor(cmd, nil)
+        return nil, fmt.Errorf("tor control auth: %w", err)
+    }
+
+    // 3. Subscribe BEFORE enabling the network so no event is missed, then bootstrap
     bootstrapTimeout := time.Duration(cfg.BootstrapTimeout) * time.Second
     dialCtx, cancel := context.WithTimeout(ctx, bootstrapTimeout)
     defer cancel()
-    if err := t.EnableNetwork(dialCtx, true); err != nil {
-        t.Close()
-        return nil, fmt.Errorf("failed to enable tor network: %w", err)
+    if err := bootstrapTor(dialCtx, ctrl); err != nil {
+        stopTor(cmd, ctrl)
+        return nil, fmt.Errorf("tor bootstrap: %w", err)
     }
 
-    // The hidden service is already declared in the torrc (HiddenServiceDir block).
-    // During bootstrap Tor generated (or loaded) the v3 ed25519 key and wrote the
-    // .onion into {hsDir}/hostname - no ADD_ONION, no manual key handling here.
-    onionBytes, err := os.ReadFile(hostnamePath)
+    // 4. The hidden service is declared in torrc (HiddenServiceDir block). Tor writes
+    // {hsDir}/hostname during startup; wait for it instead of reading once.
+    onionAddress, err := waitHostname(dialCtx, hostnamePath)
     if err != nil {
-        t.Close()
-        return nil, fmt.Errorf("failed to read onion hostname: %w", err)
+        stopTor(cmd, ctrl)
+        return nil, fmt.Errorf("tor hostname: %w", err)
     }
-    onionAddress := strings.TrimSpace(string(onionBytes))
 
     svc := &TorService{
-        tor:            t,
+        cmd:            cmd,
+        ctrl:           ctrl,
         onionAddress:   onionAddress,
         torBackendPort: torBackendPort,
     }
 
     // Initialize outbound dialer if enabled (server-wide setting)
     if cfg.UseNetwork {
-        dialer, err := t.Dialer(ctx, nil)
-        if err != nil {
+        // GETINFO net/listeners/socks returns the runtime SocksPort ("127.0.0.1:{port}")
+        socksAddr, err := socksListener(ctrl)
+        if err == nil {
+            var d proxy.Dialer
+            d, err = proxy.SOCKS5("tcp", socksAddr, nil, proxy.Direct)
+            if cd, ok := d.(proxy.ContextDialer); ok && err == nil {
+                svc.dialer = cd
+            }
+        }
+        if svc.dialer == nil {
             log.Printf("Warning: failed to create Tor dialer: %v", err)
             // Continue without outbound - hidden service still works
         } else {
-            svc.dialer = dialer
             log.Printf("Tor outbound connections enabled")
         }
     }
@@ -42661,17 +42672,127 @@ func (s *TorService) GetHTTPClient(useTor bool) *http.Client {
     }
 }
 
-// Close shuts down the Tor process
+// Close shuts down the Tor process: SIGNAL SHUTDOWN over the control connection,
+// then WAIT for the process to exit (up to 10 s) before killing it.
 func (s *TorService) Close() error {
-    if s.tor != nil {
-        return s.tor.Close()
-    }
-    return nil
+    return stopTor(s.cmd, s.ctrl)
 }
 
 // The onion key and hostname are generated and persisted by Tor itself under
 // HiddenServiceDir ({data_dir}/tor/site) - the app never writes the key.
 ```
+
+### Control Port & Startup Sequence
+
+**The server spawns `tor` itself and talks to it over the control port. It never relies on bine's `tor.Start` (fixed ~2 s control-port-file wait, aborts on the first read error) and never uses default ports.**
+
+**torrc lines REQUIRED for this sequence** (all in the generated torrc):
+
+| Line | Why |
+|------|-----|
+| `DataDirectory {data_dir}/tor` | Isolated from system Tor; dir pre-created `0700`, owned by the server user |
+| `ControlPort 127.0.0.1:auto` | Runtime-selected loopback port, never saved |
+| `ControlPortWriteToFile {data_dir}/tor/control_port` | Tor writes `PORT=127.0.0.1:{port}` here once the listener is open |
+| `CookieAuthentication 1` | Cookie file `{data_dir}/tor/control_auth_cookie` (32 bytes); no password stored anywhere |
+| `DisableNetwork 1` | Start offline so the app can subscribe to events before bootstrap begins |
+| `__OwningControllerProcess {server_pid}` | Tor exits by itself if the server dies (crash, SIGKILL) |
+| `SocksPort auto` / `SocksPort 0` | Per `server.tor.use_network` |
+| `HiddenServiceDir` block | Per existing torrc generation |
+
+**Sequence (each step bounded; any failure = WARN + Tor disabled, server keeps running):**
+
+| # | Step | Bound | Rule |
+|---|------|-------|------|
+| 1 | Remove stale `control_port` file; spawn `tor -f {torrc}` as a child (stdout/stderr captured for debug) | - | A leftover file from a previous run MUST NOT be trusted |
+| 2 | Poll `control_port` every 250 ms | `server.tor.startup_timeout` | Missing, empty, or partial file = keep polling. Accept ONLY a complete line matching `^PORT=127\.0\.0\.1:([0-9]+)\n$` with port 1-65535. Abort immediately if the child exits (include its captured stderr) |
+| 3 | Connect to the control address, call `Authenticate("")` | 10 s | Cookie / SAFECOOKIE is negotiated from PROTOCOLINFO; do NOT hand-roll the hash |
+| 4 | `SETEVENTS STATUS_CLIENT HS_DESC` (bine `AddEventListener`) | - | Subscribe BEFORE step 5 |
+| 5 | `SETCONF DisableNetwork=0` | - | Bootstrap begins now |
+| 6 | Wait for `STATUS_CLIENT ... BOOTSTRAP PROGRESS=100` | `server.tor.bootstrap_timeout` | Also check `GETINFO status/bootstrap-phase` once after subscribing (event may already have fired). A `WARN`/`ERR` severity with a `REASON` is logged at debug and kept waiting; only the timeout is fatal |
+| 7 | Wait for `{hsDir}/hostname` to exist and hold a valid `*.onion` line | remaining bootstrap budget | Poll every 250 ms; never read the file once without a wait |
+| 8 | Wait for first `HS_DESC UPLOADED` (best effort) | 60 s | Timeout = WARN only; the address is already valid and published asynchronously |
+
+**Reference implementation of the two helpers that carry the timing rules** (`spawnTor`, `dialControl`, `bootstrapTor`, `waitHostname`, `socksListener` follow the table above):
+
+```go
+var controlPortRe = regexp.MustCompile(`^PORT=(127\.0\.0\.1:[0-9]{1,5})\n$`)
+
+// waitControlPort polls the control_port file until a COMPLETE valid line
+// appears, the timeout elapses, or the tor child exits.
+func waitControlPort(ctx context.Context, cmd *exec.Cmd, file string, timeout time.Duration) (string, error) {
+    deadline := time.NewTimer(timeout)
+    defer deadline.Stop()
+    tick := time.NewTicker(250 * time.Millisecond)
+    defer tick.Stop()
+    for {
+        if cmd.ProcessState != nil {
+            return "", fmt.Errorf("tor exited before opening the control port: %s", cmd.ProcessState)
+        }
+        // Missing, empty, or partial file is NOT an error: keep polling
+        if b, err := os.ReadFile(file); err == nil {
+            if m := controlPortRe.FindSubmatch(b); m != nil {
+                if _, port, _ := net.SplitHostPort(string(m[1])); port != "0" {
+                    return string(m[1]), nil
+                }
+            }
+        }
+        select {
+        case <-ctx.Done():
+            return "", ctx.Err()
+        case <-deadline.C:
+            return "", fmt.Errorf("control_port file not ready after %s", timeout)
+        case <-tick.C:
+        }
+    }
+}
+
+// stopTor asks Tor to shut down, then WAITS for exit before escalating.
+func stopTor(cmd *exec.Cmd, ctrl *control.Conn) error {
+    if ctrl != nil {
+        // Best effort: SIGNAL SHUTDOWN, then close the control connection
+        _ = ctrl.Signal("SHUTDOWN")
+        _ = ctrl.Close()
+    }
+    if cmd == nil || cmd.Process == nil {
+        return nil
+    }
+    done := make(chan struct{})
+    go func() { _ = cmd.Wait(); close(done) }()
+    select {
+    case <-done:
+        return nil
+    case <-time.After(10 * time.Second):
+    }
+    _ = cmd.Process.Signal(syscall.SIGTERM)
+    select {
+    case <-done:
+        return nil
+    case <-time.After(5 * time.Second):
+    }
+    _ = cmd.Process.Kill()
+    <-done
+    return nil
+}
+```
+
+**Error handling:**
+
+| Failure | Detection | Action |
+|---------|-----------|--------|
+| `control_port` file never appears | Step 2 timeout | Kill child, WARN with last stderr lines; check `DataDirectory` permissions and for a stale process holding the lock |
+| File present but empty/partial | Parse fails | Keep polling (Tor writes it non-atomically); never treat as fatal before the timeout |
+| Port is 0 or not loopback | Parse check | Reject, keep polling until timeout |
+| Child exits before port file | `cmd.Wait` channel | Fail immediately with exit status + stderr (bad torrc, port in use, `DataDirectory` locked) |
+| `515 Authentication failed` | Step 3 error | Cookie unreadable or stale: kill child, delete `control_auth_cookie`, restart once; second failure = WARN |
+| `DataDirectory` lock held | stderr "Could not bind"/"already running" | Another Tor uses this dir: kill only the PID recorded in `{data_dir}/tor/tor.pid` if it is a `tor` process we started, then restart once |
+| Bootstrap timeout | Step 6 timeout | Kill child, WARN `Tor bootstrap timeout, hidden service unavailable`, retry per Restart rules |
+| `hostname` missing after bootstrap | Step 7 timeout | Kill child, WARN; check `HiddenServiceDir` mode `0700` and ownership |
+| `HS_DESC FAILED` | Event | WARN with `REASON`; Tor retries itself, no restart |
+| Control connection drops at runtime | Read error on events | WARN `Tor control connection lost, restarting` (existing Restart rules) |
+
+**Shutdown:** send `SIGNAL SHUTDOWN` on the control connection, close it, then wait for the process to exit up to 10 s (bine's own `Close` waits only 300 ms); on timeout send SIGTERM, then SIGKILL after 5 s more. `__OwningControllerProcess` is the backstop if the server dies without running shutdown.
+
+**Test checklist (REQUIRED):** control_port file written late (delay 5 s) still succeeds; partial/empty file tolerated; stale file ignored; wrong cookie recovers via one restart; child killed during startup fails fast; bootstrap-timeout path leaves no `tor` process behind; server SIGKILL leaves no `tor` process behind.
 
 ### Port Allocation
 
@@ -42747,7 +42868,10 @@ func (s *TorService) Close() error {
 func getTorConfig(cfg *TorConfig, hsDir string, torBackendPort int) string {
     // All OSes use the same localhost auto-port control connection.
     // "auto" = Tor picks an available high port at runtime (never saved)
-    controlConfig := "ControlPort 127.0.0.1:auto"
+    // Every line below is REQUIRED by the startup sequence (Control Port & Startup Sequence).
+    torDir := filepath.Join(paths.GetDataDir(), "tor")
+    controlConfig := fmt.Sprintf("DataDirectory %s\nControlPort 127.0.0.1:auto\nControlPortWriteToFile %s\nCookieAuthentication 1\nDisableNetwork 1\n__OwningControllerProcess %d",
+        torDir, filepath.Join(torDir, "control_port"), os.Getpid())
 
     // SocksPort: enabled for outbound connections, disabled for hidden service only
     // "auto" = Tor picks available high port at runtime (never saved)
@@ -42780,8 +42904,7 @@ AccountingMax %s`, cfg.MaxMonthlyBandwidth)
     return fmt.Sprintf(`
 # ============================================================
 # Tor Configuration - Generated by server binary
-# This file is PERSISTENT - it is not regenerated on normal startup
-# Manual edits may be overwritten when config is saved via operator
+# This file is regenerated on EVERY startup - manual edits are overwritten
 # ============================================================
 
 # SOCKS port for outbound connections (0 = disabled, auto = runtime port)
@@ -42853,7 +42976,7 @@ HiddenServiceExportCircuitID haproxy
 - Ports are NEVER hardcoded or saved - always detected at runtime
 - `SocksPort auto` → Tor picks available high port, bine reads it after startup
 - `ControlPort 127.0.0.1:auto` → Tor picks available high port on localhost
-- **Control-port file wait:** Tor writes the chosen control port to a control-port file. bine v0.2.0 polls that file for only about two seconds, and a slower Tor start (first run, cold disk, slow consensus) fails with an empty or invalid port file. The app MUST NOT rely on bine's built-in wait: it polls the file itself every 250 ms for up to `server.tor.startup_timeout` seconds (default 60) until it holds a valid `PORT=127.0.0.1:{port}` line, and only then connects. On timeout it stops the Tor process, logs the error with the torrc path, marks Tor unavailable (clearnet keeps serving) and retries on the next Tor restart attempt
+- **Control-port file wait:** Tor writes the chosen control port to a control_port file. bine v0.2.0 polls that file for only about two seconds, and a slower Tor start (first run, cold disk, slow consensus) fails with an empty or invalid port file. The app MUST NOT rely on bine's built-in wait: it polls the file itself every 250 ms for up to `server.tor.startup_timeout` seconds (default 60) until it holds a valid `PORT=127.0.0.1:{port}` line, and only then connects. On timeout it stops the Tor process, logs the error with the torrc path, marks Tor unavailable (clearnet keeps serving) and retries on the next Tor restart attempt
 
 **Hidden Service Settings (via torrc `HiddenServiceDir`, not ADD_ONION):**
 
