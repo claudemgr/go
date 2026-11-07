@@ -40527,7 +40527,7 @@ LANG=es_ES.UTF-8 {project_name}-cli --help
 **The supported-language table is a MINIMUM. Translators are expected to add languages over time — adding one needs no code beyond the steps below.**
 
 1. Copy `src/common/i18n/locales/en.json` to `src/common/i18n/locales/{lang}.json` (`{lang}` = the BCP 47 language code, lowercase, e.g. `pt`, `pt-br`, `ko`)
-2. Translate ALL keys (no key may be omitted) and fill the `meta` block: `language` (code), `name` (English name), `native_name`, `direction` (`ltr` or `rtl`), `version`; optional `translators` (names or handles) and `review_needed` (keys awaiting native review, empty when none)
+2. Translate ALL keys (no key may be omitted) and fill the `meta` block: `language` (code), `name` (English name), `native_name`, `direction` (`ltr` or `rtl`), `version`; optional `translators` (names or handles)
 3. Register the language: add it to the language registry (code, native name, direction, CLDR plural categories) and to `config.server.i18n.available_languages`
 4. Language automatically appears in the language selector (WebUI) and `--lang` flag (CLI)
 5. Run `make test` (or the raw Docker command below) to verify all keys are present
@@ -40552,7 +40552,7 @@ LANG=es_ES.UTF-8 {project_name}-cli --help
 | **Layout check** | Translations are often longer than English (up to about 40%). The translator or reviewer opens the app in that language at 320, 768 and 1280 px (see the review matrix) and confirms nothing is clipped, wrapped badly or overflowing; right-to-left languages are also checked mirrored |
 | **Scripts needing fonts** | A language whose script the system font stack may not cover (for example CJK, Devanagari, Thai) is added together with a font-stack entry in `--font-family` and a check that long text wraps without spaces (`overflow-wrap: anywhere`) |
 | **Review and merge** | A maintainer (or a second native speaker) checks: tests pass, placeholders and plurals intact, glossary respected, layout check done, README count and `docs/translating.md` credits updated. Reviewer sign-off is noted in the PR |
-| **Keeping translations current** | **Sync is part of every change that touches strings (best effort, same change, never deferred): whenever an English string is added, changed or removed in `en.json`, the author makes the SAME change in EVERY other locale file in that commit.** Add: a best-effort translation (the author's own, or a careful machine draft) in every language, and list the key in each non-English file's `meta.review_needed` so a native speaker knows to check it. Change: update the translation, or re-list the key in `meta.review_needed` if unsure. Rename or remove: apply it to every file, no orphan keys left behind. A native translator later reviews the flagged keys and clears them from `meta.review_needed`. The build stays strict (identical key sets, same placeholders, no empty values) so mismatched files can never ship; at runtime a missing key still falls back to English. A language is dropped from the build only if its maintainer asks to retire it |
+| **Keeping translations current** | AI assistants keep every locale file in sync with each English string change (add, change, remove) using best-effort translations in the same change — the AI rule in PART 0 → "Translation Rule" — so key sets never drift. Translators refine or correct those translations at any time through the normal contribution flow; no marker or flag is needed. A language is dropped from the build only if its maintainer asks to retire it |
 | **Credit** | Translators are credited in `docs/translating.md` and in the locale file's `meta.translators` (their choice of name or handle) |
 
 
@@ -40572,7 +40572,6 @@ $GO_DOCKER casjaysdev/go:latest go test -run "TestKeyConsistency|TestLocalesFS" 
 # - All interpolation variables ({var}) match across languages
 # - All plural categories required by the language are present
 # - No orphaned keys (keys in other languages not in en.json)
-# - Every key listed in meta.review_needed exists in en.json
 ```
 
 `make test` already runs the full `./...` suite, including this package — no
