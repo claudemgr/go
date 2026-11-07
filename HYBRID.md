@@ -25744,10 +25744,29 @@ Mobile:
 **Smart Menu :**
 - If all nav links fit on screen → show inline links, NO hamburger
 - If nav links overflow → show hamburger menu
-- Detect dynamically on load and resize
+- Detection is the `app.js` enhancement described below; the CSS baseline uses the 768px breakpoint and works without JavaScript
 - Don't show hamburger if not needed
 
-**CSS-Only Mobile Menu (NO JavaScript) - Mobile-First:**
+**No-JS first; a small script is an enhancement only:** the CSS below is the complete baseline and MUST work with JavaScript disabled — hamburger below 768px, inline links from 768px, open and close through the checkbox, the scrim label and the ✕ label. A small script in `app.js` MAY enhance it, and nothing may depend on it:
+
+| Enhancement | Behavior |
+|-------------|----------|
+| **Overflow detection ("Smart Menu")** | On load and resize, if the inline `.nav-links` do not fit at >= 768px, add `nav-collapsed` to `<html>` so the hamburger is used instead. Without the script the 768px breakpoint decides |
+| **Keyboard** | Esc unchecks the checkbox; focus moves into the panel on open, stays inside while open and returns to the toggle on close |
+
+```css
+/* Overflow fallback: only when app.js added .nav-collapsed on a wide viewport */
+@media (min-width: 768px) {
+  .nav-collapsed .nav-toggle { display: block; }
+  .nav-collapsed .nav-links { display: none; }
+  .nav-collapsed .nav-panel { display: block; }
+  .nav-collapsed .nav-checkbox:checked ~ .nav-overlay { display: block; }
+}
+```
+
+Without the script: Esc and overflow detection are unavailable, but the scrim, the ✕ and the toggle still open and close the menu.
+
+**CSS-Only Baseline (works with NO JavaScript) - Mobile-First:**
 ```css
 /* Base: Mobile styles (no media query) */
 .nav-toggle { display: block; cursor: pointer; }
@@ -25810,7 +25829,7 @@ Mobile:
 | **Every link, in order** | The panel lists the same links as the desktop nav (the screenshot showed one link). Active page marked with `aria-current="page"` |
 | **Stacking** | Define the z-index tokens once in `:root` and use only them: `--z-raised` 10 (header), `--z-dropdown` 100, `--z-overlay` 300 (scrim), `--z-drawer` 350, `--z-modal` 400, `--z-banner` 450, `--z-toast` 500; no magic numbers such as `9999`. Scrim and drawer must sit above `<main>` and the hero in the same stacking context |
 | **Dimensions** | `height: 100dvh`, `width: min(280px, 85vw)`, `overflow-y: auto`, `padding-bottom: env(safe-area-inset-bottom)`. RTL: slides from the left (`[dir="rtl"]`) |
-| **While open** | Page behind does not scroll (`body:has(.nav-checkbox:checked) { overflow: hidden }`); the scrim dims the whole viewport; Esc and a scrim tap close it |
+| **While open** | Page behind does not scroll (`body:has(.nav-checkbox:checked) { overflow: hidden }`); the scrim dims the whole viewport; a scrim tap closes it (no JavaScript needed) and Esc closes it when the `app.js` enhancement is present |
 | **Fixed elements** | The drawer, scrim, modal, toast, banner and popover are the ONLY `position: fixed` elements; header, nav and footer scroll with the page |
 
 **Mobile Responsive Rules:**
