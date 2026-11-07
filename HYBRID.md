@@ -28029,7 +28029,7 @@ When the admin panel is enabled (PART 28) these are editable at `/server/{admin_
 | Email | Email | Yes | Sender's email (for reply) |
 | Subject | Text | Yes | Message subject |
 | Message | Textarea | Yes | Message body |
-| Captcha | Captcha | Yes | Spam prevention |
+| Captcha | Captcha | Yes | Spam prevention - rendered on the initial form and required on EVERY submission (anonymous form: no failed-attempt state exists). Single-use; a new challenge is issued after each submit, failed or not |
 
 **Submission sends to `server.contact.general.email` (or falls back to `server.contact.admin.email` if general is empty).**
 

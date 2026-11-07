@@ -4725,7 +4725,7 @@ Content-Type: application/json
 | Strong passwords | Prevent weak passwords | Show strength meter, suggest improvements |
 | Session timeout | Limit exposure | Warn before timeout, extend on activity |
 | Rate limiting | Prevent abuse | Clear error message with retry time |
-| CAPTCHA | Prevent bots | Only after failed attempts, not first try |
+| CAPTCHA | Prevent bots | Login and other authenticated forms: only after failed attempts, not first try. Anonymous public submit forms (`/server/contact`, security report): on every submission - there is no failed attempt to wait for and the form is the spam target |
 | 2FA | Account security | Remember device option (30 days) |
 
 **Rule:** solve usability problems by improving workflow, defaults, messaging, and automation - not by weakening protections that guard an internet-facing server.
@@ -30304,7 +30304,7 @@ func trackingScript(r *http.Request) template.HTML {
 | Email | Email | Yes | Sender's email (for reply) |
 | Subject | Text | Yes | Message subject |
 | Message | Textarea | Yes | Message body |
-| Captcha | Captcha | Yes | Spam prevention |
+| Captcha | Captcha | Yes | Spam prevention - rendered on the initial form and required on EVERY submission (anonymous form: no failed-attempt state exists). Single-use; a new challenge is issued after each submit, failed or not |
 
 **Submission sends to `server.contact.general.email` (or falls back to `server.contact.admin.email` if general is empty).**
 
