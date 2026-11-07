@@ -7140,7 +7140,7 @@ Before proceeding, confirm you understand:
 | Cache | `~/.cache/{internal_org}/{internal_name}/` |
 | Logs | `~/.local/log/{internal_org}/{internal_name}/` |
 | Log File | `~/.local/log/{internal_org}/{internal_name}/server.log` |
-| Backup | `~/.local/share/Backups/{internal_org}/{internal_name}/` |
+| Backup | System backup dir when writable (PART 8 → `GetBackupDir`), else `~/.local/share/Backups/{internal_org}/{internal_name}/` |
 | PID File | `~/.local/share/{internal_org}/{internal_name}/{internal_name}.pid` |
 | SSL | `~/.config/{internal_org}/{internal_name}/ssl/` (letsencrypt/, local/) |
 | Security | `~/.local/share/{internal_org}/{internal_name}/security/` (geoip/, blocklists/, cve/, trivy/) |
@@ -7179,7 +7179,7 @@ Before proceeding, confirm you understand:
 | Cache | `~/Library/Caches/{internal_org}/{internal_name}/` |
 | Logs | `~/Library/Logs/{internal_org}/{internal_name}/` |
 | Log File | `~/Library/Logs/{internal_org}/{internal_name}/server.log` |
-| Backup | `~/Library/Backups/{internal_org}/{internal_name}/` |
+| Backup | System backup dir when writable (PART 8 → `GetBackupDir`), else `~/Library/Backups/{internal_org}/{internal_name}/` |
 | PID File | `~/Library/Application Support/{internal_org}/{internal_name}/{internal_name}.pid` |
 | SSL | `~/Library/Application Support/{internal_org}/{internal_name}/ssl/` (letsencrypt/, local/) |
 | Security | `~/Library/Application Support/{internal_org}/{internal_name}/data/security/` (geoip/, blocklists/, cve/, trivy/) |
@@ -7219,7 +7219,7 @@ Before proceeding, confirm you understand:
 | Cache | `~/.cache/{internal_org}/{internal_name}/` |
 | Logs | `~/.local/log/{internal_org}/{internal_name}/` |
 | Log File | `~/.local/log/{internal_org}/{internal_name}/server.log` |
-| Backup | `~/.local/share/Backups/{internal_org}/{internal_name}/` |
+| Backup | System backup dir when writable (PART 8 → `GetBackupDir`), else `~/.local/share/Backups/{internal_org}/{internal_name}/` |
 | PID File | `~/.local/share/{internal_org}/{internal_name}/{internal_name}.pid` |
 | SSL | `~/.config/{internal_org}/{internal_name}/ssl/` (letsencrypt/, local/) |
 | Security | `~/.local/share/{internal_org}/{internal_name}/security/` (geoip/, blocklists/, cve/, trivy/) |
@@ -10917,7 +10917,7 @@ Run '{project_name} <command> help' for detailed help on any command.
 | `--data` | Directory | `/var/lib/{internal_org}/{internal_name}/` | `~/.local/share/{internal_org}/{internal_name}/` |
 | `--cache` | Directory | `/var/cache/{internal_org}/{internal_name}/` | `~/.cache/{internal_org}/{internal_name}/` |
 | `--log` | Directory | `/var/log/{internal_org}/{internal_name}/` | `~/.local/log/{internal_org}/{internal_name}/` |
-| `--backup` | Directory | `/mnt/Backups/{internal_org}/{internal_name}/` (if writable, else `{data_dir}/backup/`) | `~/.local/share/Backups/{internal_org}/{internal_name}/` |
+| `--backup` | Directory | `/mnt/Backups/{internal_org}/{internal_name}/` (if writable, else `{data_dir}/backup/`) | `/mnt/Backups/{internal_org}/{internal_name}/` if writable, else `~/.local/share/Backups/{internal_org}/{internal_name}/` |
 | `--pid` | File | `/var/run/{internal_org}/{internal_name}.pid` | `~/.local/share/{internal_org}/{internal_name}/{internal_name}.pid` |
 
 **Note:** `--backup` prefers the system backup dir if writable. Fallback is mode-aware: system mode (started as root) falls back to `{data_dir}/backup/` — never a `$HOME`-derived path; user mode falls back to the user dir. See `GetBackupDir()` in PART 8.
@@ -11251,7 +11251,7 @@ PHASE 5: Server startup (actual server start)
    ├─ Create {data_dir} (~/.local/share/{internal_org}/{internal_name}/)
    ├─ Create {cache_dir} (~/.cache/{internal_org}/{internal_name}/)
    ├─ Create {log_dir} (~/.local/log/{internal_org}/{internal_name}/)
-   ├─ Create {backup_dir} (~/.local/share/Backups/{internal_org}/{internal_name}/)
+   ├─ Create {backup_dir} (system backup dir if writable, else ~/.local/share/Backups/{internal_org}/{internal_name}/ — PART 8 GetBackupDir)
    ├─ Set permissions: 0700 on all dirs (user-only access)
    └─ Note: port must be >1024 (user mode cannot bind privileged ports)
 
@@ -19078,6 +19078,7 @@ server:
 - Every inline `<script>` body is served as same-origin JavaScript from `GET /server/tracking.js`, generated from the `server.tracking` config. It sends `Cache-Control: no-cache` and returns `404` when tracking is disabled or consent has not been given.
 - The page includes only external tags: the provider's `<script async src="...">` line and `<script async src="/server/tracking.js"></script>`, and only when tracking is configured AND consent is given.
 - The CSP builder adds only the configured provider's host to `script-src` and `connect-src` (for example `https://www.googletagmanager.com`, `https://www.google-analytics.com`, or the Matomo, Piwik or OWA host). No `'unsafe-inline'`, nonce or hash is ever added for tracking.
+- **Tor and I2P:** tracking is never rendered for requests served through the onion or I2P address — provider scripts are clearnet endpoints and calling them leaks the request off Tor — and `/server/tracking.js` returns `404` there.
 
 ```go
 // TrackingScript returns the tracker markup. Inline script bodies are not emitted into pages: they are served from /server/tracking.js (see "Tracking and CSP")
@@ -30247,6 +30248,19 @@ func trackingScript(r *http.Request) template.HTML {
 | Security Issues | "To report a security vulnerability, consult our security policy at `/server/security`." — rendered as a link to `/server/security`. Never point users at the raw `/.well-known/security.txt` file from this page. |
 | Abuse Reports | "To report abusive content or policy violations, use this contact form." — append " or email {abuse_email}" where `{abuse_email}` resolves to `server.contact.abuse.email` if set, else `server.contact.general.email` if set; omit the email clause entirely when neither is set. NEVER render `server.contact.admin.email` here (it is never public). |
 
+#### Captcha providers (`pages.contact.captcha`)
+
+| Value | Behavior |
+|-------|----------|
+| `simple` (default) | Built-in, self-hosted challenge: no third party, no keys, works over Tor and with JavaScript disabled. The server generates a question and stores only the hashed answer; each challenge is single-use, expires after 10 minutes and is rate-limited |
+| `recaptcha` | Google reCAPTCHA v2 checkbox. Needs `pages.contact.captcha_site_key` (public, rendered in the page) and `pages.contact.captcha_secret_key` (server-side only, kept in `server.yml` like other secrets, never returned in a response or written to a log). The server verifies by POSTing `secret`, `response` and `remoteip` to `https://www.google.com/recaptcha/api/siteverify` and accepts only `"success": true` |
+| `hcaptcha` | hCaptcha. Same two keys; verified by POSTing `secret` and `response` to `https://api.hcaptcha.com/siteverify` and accepting only `"success": true` |
+
+- **Validation:** `recaptcha` or `hcaptcha` with an empty site key or secret key fails config validation with a clear error; the keys are ignored for `simple`
+- **Fail closed:** if the provider cannot be reached, the submission is rejected with a retryable error — never accepted unverified
+- **CSP:** only the selected provider's hosts are added to `script-src`, `frame-src` and `connect-src` (for example `https://www.google.com/recaptcha/` and `https://www.gstatic.com/recaptcha/`, or `https://hcaptcha.com` and `https://*.hcaptcha.com`)
+- **Tor and I2P:** requests served through the onion or I2P address always use `simple`, whatever `captcha` is set to — clearnet providers are never called from there (PART 16 → Tor). The same challenge protects the security-report form
+
 ### /server/help
 
 **Help page - documentation and usage instructions for the application.**
@@ -30487,8 +30501,11 @@ server:
     contact:
       # Enable contact form
       enabled: true
-      # Captcha type: recaptcha, hcaptcha, simple (built-in)
+      # Captcha type: simple (built-in, default), recaptcha, hcaptcha
       captcha: simple
+      # Provider keys, required only for recaptcha and hcaptcha (ignored for simple)
+      captcha_site_key: ""
+      captcha_secret_key: ""
       # Success message after form submission
       success_message: "Thank you for your message. We'll respond soon."
 
