@@ -31107,7 +31107,7 @@ groups:
 | Algorithm | AES-256-GCM |
 | Key Derivation | Argon2id (password → encryption key) |
 | File Extension | `.tar.gz` (unencrypted) or `.tar.gz.enc` (encrypted) |
-| Password Storage | **NEVER stored** - operator must remember |
+| Password Storage | Held only as the `server.backup.encryption_password` config value, so scheduled backups can run unattended. Never written to the database, a log, a manifest or an archive; never returned by any API; never hashed (it is key material, not a login verifier). Restore never reads it: the operator supplies the password |
 
 **How Encryption Works:**
 1. Backup creates `.tar.gz` archive in memory
@@ -31124,7 +31124,7 @@ server:
     encryption:
       # true if password was set
       enabled: true
-      # Password is NEVER stored - prompted on-demand
+      # The password itself is set with server.backup.encryption_password in server.yml (see below)
   compliance:
     # HIPAA, SOC2, etc.
     enabled: false
@@ -31158,15 +31158,16 @@ When `server.compliance.enabled: true`:
 
 | Action | Location | Notes |
 |--------|----------|-------|
-| Set during initial config | `backup.encryption_password` in `server.yml` | Optional (unless compliance) |
-| Set later | `backup.encryption_password` in config file | Restart server to apply |
-| Change password | `backup.encryption_password` in config file | New backups use new password |
+| Set during initial config | `server.backup.encryption_password` in `server.yml` | Optional (unless compliance) |
+| Set later | `server.backup.encryption_password` in config file | Hot-reloaded; no restart needed |
+| Change password | `server.backup.encryption_password` in config file | New backups use new password |
 | Remove encryption | Only if compliance disabled | Cannot remove if compliance enabled |
 
 **Important:**
 - Old backups encrypted with old password still need old password to restore
 - Password hint can be stored (optional): "Hint: First pet's name + year"
 - No password recovery - if lost, backups are unrecoverable
+- The Argon2id login-password hashing rule (PART 11) does not apply to this password: it is key material, and Argon2id is used here only to derive the encryption key
 
 **CLI Backup with Encryption:**
 

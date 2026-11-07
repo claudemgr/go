@@ -36844,7 +36844,7 @@ groups:
 | Algorithm | AES-256-GCM |
 | Key Derivation | Argon2id (password → encryption key) |
 | File Extension | `.tar.gz` (unencrypted) or `.tar.gz.enc` (encrypted) |
-| Password Storage | **NEVER stored** - admin must remember |
+| Password Storage | Kept only so scheduled backups can run unattended: encrypted at rest with `server.security.encryption_key` (AES-256-GCM), never hashed (it is key material, not a login verifier), never written to a log, manifest or archive, and never returned by any API. Restore never reads it: the admin supplies the password |
 
 **How Encryption Works:**
 1. Backup creates `.tar.gz` archive in memory
@@ -36861,7 +36861,7 @@ server:
     encryption:
       # true if password was set
       enabled: true
-      # Password is NEVER stored - prompted on-demand
+      # The password itself is set in the admin panel (stored encrypted at rest, see Password Storage above)
   compliance:
     # HIPAA, SOC2, etc.
     enabled: false
@@ -36904,6 +36904,7 @@ When `server.compliance.enabled: true`:
 - Old backups encrypted with old password still need old password to restore
 - Password hint can be stored (optional): "Hint: First pet's name + year"
 - No password recovery - if lost, backups are unrecoverable
+- The Argon2id login-password hashing rule (PART 11) does not apply to this password: it is key material, and Argon2id is used here only to derive the encryption key
 
 **CLI Backup with Encryption:**
 
