@@ -11165,7 +11165,13 @@ func RemovePIDFile(pidPath string) error {
 
 ```
 1. Receive SIGTERM/SIGINT
-2. Graceful shutdown (close connections, flush logs)
+2. Graceful shutdown, in this order:
+   a. Stop accepting new connections; readiness reports not-ready
+   b. Close long-lived connections (SSE, WebSocket, long-poll) with a clean close
+      (SSE: send `event: shutdown` then end the stream); clients reconnect with
+      backoff + jitter (SSE sends `retry: 3000`), they never wait on a dead socket
+   c. Drain in-flight requests (bounded by the shutdown timeout)
+   d. Flush logs, close the database
 3. Remove PID file
 4. Exit
 ```
@@ -14565,6 +14571,15 @@ func versionPurge(w http.ResponseWriter, r *http.Request) {
 ```
 
 Called from the HTML middleware only — never on static, API, or `/sw.js` responses.
+
+**The purge MUST NOT be able to hang a page load** (`"storage"` waits on IndexedDB connections held by other open tabs, `"cache"` holds the navigation until the HTTP cache is cleared):
+
+| Rule | Detail |
+|------|--------|
+| **Top-level documents only** | Emit the header only when `Sec-Fetch-Dest: document` and `Sec-Fetch-Mode: navigate` (or those headers are absent on an old browser) - never for iframes, prefetch, XHR/fetch, `HEAD`, redirects (3xx) or error responses (4xx/5xx) |
+| **No IndexedDB dependency** | The app MUST NOT hold long-lived IndexedDB connections open (the `storage` wipe blocks on them); open, use and close per operation |
+| **Client watchdog** | `app.js` starts a 10 s boot timer (cleared when the first render completes). On expiry, and at most once per tab (`sessionStorage` flag `{project_name}_recovered`), it unregisters every service worker, deletes every Cache API cache and reloads. A second expiry shows the static error page instead of looping |
+| **Never a dependency** | The page works with the purge header ignored: HTML is `no-store`, assets are stamped, so a missed purge costs one revalidation, never a stuck page |
 
 ### Cache Warming
 
@@ -25663,6 +25678,17 @@ if ('serviceWorker' in navigator) {
 }
 ```
 
+### Update and Restart Behavior (Frontend)
+
+**After `--update` / a restart the open page must recover without a manual reload and never hang.**
+
+| Rule | Detail |
+|------|--------|
+| **Reconnect with backoff** | Every long-lived client connection (EventSource, WebSocket, polling loop) reconnects with exponential backoff (1 s -> 30 s) + jitter; every `fetch` has an `AbortController` timeout (30 s) |
+| **Restart window** | While the server is down or starting, the client shows a non-blocking "reconnecting" banner (not a frozen page) and retries; `503` + `Retry-After` is honored |
+| **New build detected** | Every API/SSE response carries the build stamp in `X-Build` (public value). When it differs from the stamp the page was rendered with, the client finishes the current action, then does ONE `location.reload()` (guarded by the `{project_name}_recovered` flag) - never mid-form-edit: if a form is dirty, show an "Update available - reload" button instead |
+| **Service worker handover** | New worker: `skipWaiting()` + `clients.claim()` (already above); the page listens for `controllerchange` and reloads once, not repeatedly |
+
 ### Service Worker Lifecycle
 
 > **Service worker safety — every response MUST resolve to a real `Response` (NON-NEGOTIABLE).**
@@ -25684,16 +25710,19 @@ if ('serviceWorker' in navigator) {
 ```javascript
 // /sw.js - Service Worker
 // Cache name MUST embed the running version - activate deletes all other-version caches
-const CACHE_VERSION = '{project_version}';
+// The server renders /sw.js with the full build stamp ({project_version}-{short_commit}),
+// so a rebuild with the same version but a new commit still gets a new cache name
+const CACHE_VERSION = '{asset_stamp}';
 const CACHE_NAME = `{app_name}-cache-${CACHE_VERSION}`;
 
 // Assets to pre-cache on install
+// URLs MUST carry the same ?v= stamp the asset() helper puts in pages, or page requests
+// never match these entries. HTML ('/') is never precached - it is always network-first.
 const PRECACHE_ASSETS = [
-  '/',
-  '/static/css/app.css',
-  '/static/js/app.js',
-  '/static/icons/icon-192.png',
-  '/static/icons/icon-512.png',
+  '/static/css/app.css?v={asset_stamp}',
+  '/static/js/app.js?v={asset_stamp}',
+  '/static/icons/icon-192.png?v={asset_stamp}',
+  '/static/icons/icon-512.png?v={asset_stamp}',
   '/offline.html'
 ];
 
@@ -37006,7 +37035,7 @@ server:
       max_total_size: "10%"
 ```
 
-**Default: 2 files total** (yesterday's full + today's incremental)
+**Default: 3 files total** (new full + the previous full that today's incremental is based on + today's incremental). File counts in the examples below leave out that one extra base full - see "Incremental Backup Contract".
 
 **With hourly enabled: 3 files total** (+ hourly incremental from `backup_hourly` task)
 
@@ -37019,10 +37048,12 @@ server:
 2. Check free space: if free < 2× size of most recent backup, OR disk usage
    > disk_threshold (default 90%), log backup.skipped_disk_full (level=error)
    and abort — do NOT create the backup
-3. Create full backup: {project_name}_backup_YYYY-MM-DD.tar.gz[.enc]
-4. Verify full backup (all checks must pass)
-5. Create daily incremental: {project_name}-daily.tar.gz[.enc]
-6. Verify daily incremental (all checks must pass)
+3. Take snapshot instant T0 (start of this step); create daily incremental
+   {project_name}-daily.tar.gz[.enc] = changes from the PREVIOUS full's
+   snapshot_at to T0 (skipped on the first run - no previous full exists)
+4. Verify daily incremental (all checks must pass)
+5. Create full backup of the state at T0: {project_name}_backup_YYYY-MM-DD.tar.gz[.enc]
+6. Verify full backup (all checks must pass)
 7. If ALL verifications pass:
    - Apply retention policy (delete old backups per retention settings)
    - If total backup size exceeds max_total_size: delete oldest first until under the cap
@@ -37098,7 +37129,7 @@ Every backup is verified **immediately after creation** - backups must be 100% w
 | File | Description | Retention |
 |------|-------------|-----------|
 | `{project_name}_backup_YYYY-MM-DD.tar.gz[.enc]` | Full backup (yesterday's data) | Controlled by `max_backups` |
-| `{project_name}-daily.tar.gz[.enc]` | Daily incremental (changes since full) | Always 1 (replaced each run) |
+| `{project_name}-daily.tar.gz[.enc]` | Daily incremental (cumulative changes since the previous full - see Incremental Backup Contract) | Always 1 (replaced each run) |
 | `{project_name}-hourly.tar.gz[.enc]` | Hourly incremental (if enabled) | Always 1 (replaced each run) |
 
 ### Retention Validation & Examples
@@ -37235,7 +37266,7 @@ Note: A single backup can satisfy multiple retention types (e.g., Jan 1st 2025
 on a Sunday counts as daily + weekly + monthly + yearly — uses highest priority)
 ```
 
-**Daily incremental is NOT counted** in retention - it's always exactly 1 file that gets replaced.
+**Daily incremental is NOT counted** in retention - it's always exactly 1 file that gets replaced. A full backup that is the `base_backup` of a retained incremental is exempt from pruning until that incremental is replaced (at most one extra full on disk).
 
 ### Cluster Backup Rules
 
@@ -37269,6 +37300,34 @@ on a Sunday counts as daily + weekly + monthly + yearly — uses highest priorit
 - Alert if ANY node has no valid backups
 - Alert if ANY node's daily backup is missing or invalid
 - Alert if nodes have different backup counts (sync issue)
+
+## Incremental Backup Contract
+
+**Decision: incrementals are cumulative (differential), never a chain. Restore always needs exactly one full + at most one incremental.**
+
+| Item | Rule |
+|------|------|
+| **Snapshot instant** | The backup task takes ONE instant `T0` at the start of the run. Every archive made in that run reflects the state at `T0` (SQLite via online backup API / `VACUUM INTO`, files copied after the DB snapshot) |
+| **Order in the 02:00 run** | Daily incremental FIRST (previous full -> `T0`), then the new full at `T0`. An incremental taken after the new full would cover an empty interval, which is the bug this order prevents |
+| **Base** | The most recent full on disk before this run. Hourly incremental: the newest full (including today's) |
+| **Cumulative** | An incremental holds EVERY change since its base's `snapshot_at`, not since the previous incremental; each new run replaces the old one |
+| **Manifest fields** | `manifest.json` of every archive: `type` (`full`/`incremental`), `snapshot_at` (UTC ISO 8601), `sha256`; incrementals add `base_backup` (file name), `base_sha256`, `deleted` (list of paths removed since the base) |
+| **Changed-file detection** | Compare each file's size + mtime + SHA-256 against the base manifest's file list (the full's manifest lists `path`, `size`, `sha256` for every file). Changed or new files go in the archive, removed ones in `deleted` |
+| **Database** | A SQLite database that changed is stored whole in the incremental (no page-level delta) |
+| **Archive format** | Same `tar.gz[.enc]` and encryption as a full; contains only changed/new files plus `manifest.json` |
+| **Base protection** | Retention never deletes a full that is the `base_backup` of a retained incremental |
+| **Verification** | An incremental is verified like a full, plus: base file exists and its SHA-256 equals `base_sha256` |
+| **First run** | No previous full: skip the daily incremental |
+
+**Restore (`--maintenance restore <file>`):**
+
+| Given | Behavior |
+|-------|----------|
+| A full | Restore it as-is |
+| An incremental | Look up `base_backup` in the same directory (same password), verify `base_sha256`, extract the base, then extract the incremental over it, then delete every path in `deleted`. Base missing or checksum mismatch = abort with `ERR_BASE_MISSING` / `ERR_BASE_CORRUPT`, nothing modified |
+| Daily vs hourly | The newest `snapshot_at` wins; the operator may pick either file. Both are applied the same way |
+
+All restore limits (`server.restore.*`) apply to the combined base + incremental expansion.
 
 ## Restore Command
 
