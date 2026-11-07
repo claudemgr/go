@@ -7736,8 +7736,8 @@ PHASE 5: Server startup (actual server start)
     │   ├─ Create hidden service, log .onion address
     │   └─ Error → log WARN, continue without Tor (non-fatal)
 
-    17b. Start I2P (OPT-IN; only if features.i2p.enabled) - see PART 27.2:
-    ├─ features.i2p.enabled false (default) → skip entirely (no port, no config)
+    17b. Start I2P (OPT-IN; only if server.i2p.enabled) - see PART 27.2:
+    ├─ server.i2p.enabled false (default) → skip entirely (no port, no config)
     ├─ enabled, resolve provider:
     │   ├─ i2pd binary found → Model A: create {config_dir}/i2p/, {data_dir}/i2p/site/;
     │   │   allocate backend port; regenerate {config_dir}/i2p/tunnels.conf; start i2pd
@@ -9144,8 +9144,8 @@ func buildHealthResponse() *HealthResponse {
                 Hostname: torManager.Hostname(),
             },
             I2P: I2PInfo{
-                // OPT-IN: false unless features.i2p.enabled
-                Enabled:  cfg.Features.I2P.Enabled,
+                // OPT-IN: false unless server.i2p.enabled
+                Enabled:  cfg.Server.I2P.Enabled,
                 Running:  i2pManager.IsRunning(),
                 // "healthy", "disabled", "error:..."
                 Status:   i2pManager.Status(),
@@ -28677,6 +28677,19 @@ Next run: {next_run}
 
 **Suppression:** `scheduler_error` fires only for tasks that have no dedicated failure event of their own. It is suppressed when a subsystem emits a more specific failure notification for the same execution: `backup_failed` suppresses it for backup tasks; `ssl_renewal_failed` suppresses it for SSL renewal tasks. Tasks with no dedicated failure event (`token_cleanup`, `log_rotation`, `update_check`) still fire `scheduler_error` normally.
 
+### Email Language Selection
+
+**Every email is rendered in exactly one language, chosen in this order:**
+
+| Priority | Source | Applies to |
+|----------|--------|------------|
+| 1 | The recipient's stored language preference | Projects whose recipients have accounts that store one |
+| 2 | The language of the request that triggered the message, captured at submission (the submitter's `lang` cookie, else `Accept-Language`) | Contact-form replies and security-report acknowledgements to the submitter |
+| 3 | `server.i18n.default_language` | Operator notifications (admin, security and abuse roles, scheduler, backup, SSL and the other events above), which have no request context |
+| 4 | `en` | When the chosen language is not in `server.i18n.supported`, and per translation key when a key is missing |
+
+A custom template that uses translation keys follows this order. A custom template written with literal text is sent as written in every language.
+
 ## Email Template Configuration
 
 Templates are stored as files on disk. Override any built-in template by placing a file in the configured template directory. Use `{project_name} email test` to send a test email and verify configuration.
@@ -28788,6 +28801,8 @@ Templates are stored as files on disk. Override any built-in template by placing
 |-------|-----------|:-----:|-------------|
 | Config validation error | ERROR | ✗ | Invalid config value (also fails fast at startup) |
 | Config reloaded | INFO | ✗ | Config file change applied |
+| Server started | INFO | Optional | Startup finished (version, mode); `events.startup`, default off |
+| Server stopped | INFO | Optional | Graceful shutdown completed; `events.shutdown`, default off |
 | Backup started | INFO | ✗ | Backup in progress |
 | Backup complete | INFO | Optional | Backup finished |
 | Backup failed | ERROR | ✓ | Critical - needs attention |
@@ -42129,7 +42144,7 @@ Tor Hidden Service: Connected
 
 ### Overview
 
-**I2P support is OPTIONAL and opt-in — disabled by default.** This is the deliberate difference from Tor (PART 27.1), which is auto-enabled whenever the `tor` binary is found. The eepsite is created **only** when I2P is explicitly enabled (`features.i2p.enabled: true` / `I2P_ENABLED=true` / `--i2p`) **and** a provider is available.
+**I2P support is OPTIONAL and opt-in — disabled by default.** This is the deliberate difference from Tor (PART 27.1), which is auto-enabled whenever the `tor` binary is found. The eepsite is created **only** when I2P is explicitly enabled (`server.i2p.enabled: true` / `I2P_ENABLED=true` / `--i2p`) **and** a provider is available.
 
 **I2P provides one capability here:**
 1. **Eepsite** — server-side `.b32.i2p` hosting over the I2P network.
@@ -42153,7 +42168,7 @@ Tor Hidden Service: Connected
 
 ### Configuration
 
-**I2P is opt-in.** No provider is contacted and no port is allocated unless `enabled: true`.
+**I2P is opt-in.** No provider is contacted and no port is allocated unless `enabled: true`. The canonical config path is `server.i2p.enabled` (env `I2P_ENABLED`, flag `--i2p`), grouped under `server` like `server.tor`; `features.i2p.*` names the same state only as response fields in health output and is never a config key.
 
 ```yaml
 server:
@@ -42198,7 +42213,7 @@ server:
 ### Provider Model
 
 ```
-1. I2P enabled? (features.i2p.enabled)
+1. I2P enabled? (server.i2p.enabled)
    └─ NO  → skip entirely (no port, no config, no session)
    └─ YES → continue
 
