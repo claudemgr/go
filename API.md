@@ -27348,7 +27348,7 @@ func trackingScript(r *http.Request) template.HTML {
       <div class="key-point">
         <span class="icon">🎛️</span>
         <strong>You control your data</strong>
-        <p>Export or delete your data anytime from account settings.</p>
+        <p>Delete the resources you created anytime with your owner token.</p>
       </div>
     </div>
   </section>
@@ -27460,7 +27460,7 @@ func trackingScript(r *http.Request) template.HTML {
     <h2>Your Rights</h2>
     <p>You have the following rights regarding your data:</p>
     <ul>
-      <li><strong>Access:</strong> View all data we have about you in your account settings.</li>
+      <li><strong>Access:</strong> Request a copy of the data we hold about you through the contact page.</li>
       {{ if .Privacy.Retention.ExportAvailable }}
       <li><strong>Export:</strong> Download a copy of all your data in a portable format.</li>
       {{ end }}
@@ -32561,7 +32561,8 @@ description="{app_name}"
 # actual binary (may differ from {internal_name} after rename)
 command="/usr/local/bin/{project_name}"
 command_args=""
-command_user="{internal_name}:{internal_name}"
+# No command_user: the service starts as root so the binary can bind privileged ports, then drops to
+# {internal_name}:{internal_name} in-process (PART 8). start_pre creates the pid and log directories for that user.
 pidfile="/var/run/{internal_org}/{internal_name}.pid"
 command_background=true
 output_log="/var/log/{internal_org}/{internal_name}/server.log"
@@ -32623,8 +32624,9 @@ case "$1" in
         echo "Starting $NAME..."
         mkdir -p $(dirname $PIDFILE) $(dirname $LOGFILE)
         chown -R $DAEMON_USER:$DAEMON_USER $(dirname $PIDFILE) $(dirname $LOGFILE)
+        # No --chuid: the binary drops privileges itself after binding its ports (PART 8)
         start-stop-daemon --start --quiet --background --make-pidfile \
-            --pidfile $PIDFILE --chuid $DAEMON_USER --exec $DAEMON \
+            --pidfile $PIDFILE --exec $DAEMON \
             --no-close >> $LOGFILE 2>&1
         ;;
     stop)
@@ -42159,32 +42161,13 @@ When `use_network` is enabled, the torrc includes `SocksPort auto` for outbound 
 │                                                                     │
 │ Route outbound requests through Tor:  [ ] Enabled (server-wide)    │
 │                                                                     │
-│ Allow users to set preference:        [✓] Enabled                  │
-│   └─ Users can override in their account settings                  │
-│                                                                     │
 │ ⓘ When enabled, external API requests (search, price checks,       │
 │   breach lookups, etc.) are routed through Tor for privacy.        │
 │   This is slower but provides anonymity.                           │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**User Settings → Privacy → Tor Network:**
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│ Tor Network Privacy                                                 │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│ Route my requests through Tor:                                      │
-│                                                                     │
-│   (•) Use server default (currently: Off)                          │
-│   ( ) Always use Tor network                                        │
-│   ( ) Never use Tor network                                         │
-│                                                                     │
-│ ⓘ Tor provides privacy by anonymizing your requests to external    │
-│   services. Requests may be slower when Tor is enabled.            │
-└─────────────────────────────────────────────────────────────────────┘
-```
+API projects have no per-user Tor setting: outbound Tor routing is the single server-wide `server.yml` option above (no accounts, no user override).
 
 **Tor directories are NOT configurable** - always derived from app's directories:
 - Config: `{config_dir}/tor/` (torrc file)

@@ -39122,7 +39122,8 @@ description="{app_name}"
 # actual binary (may differ from {internal_name} after rename)
 command="/usr/local/bin/{project_name}"
 command_args=""
-command_user="{internal_name}:{internal_name}"
+# No command_user: the service starts as root so the binary can bind privileged ports, then drops to
+# {internal_name}:{internal_name} in-process (PART 8). start_pre creates the pid and log directories for that user.
 pidfile="/var/run/{internal_org}/{internal_name}.pid"
 command_background=true
 output_log="/var/log/{internal_org}/{internal_name}/server.log"
@@ -39184,8 +39185,9 @@ case "$1" in
         echo "Starting $NAME..."
         mkdir -p $(dirname $PIDFILE) $(dirname $LOGFILE)
         chown -R $DAEMON_USER:$DAEMON_USER $(dirname $PIDFILE) $(dirname $LOGFILE)
+        # No --chuid: the binary drops privileges itself after binding its ports (PART 8)
         start-stop-daemon --start --quiet --background --make-pidfile \
-            --pidfile $PIDFILE --chuid $DAEMON_USER --exec $DAEMON \
+            --pidfile $PIDFILE --exec $DAEMON \
             --no-close >> $LOGFILE 2>&1
         ;;
     stop)
