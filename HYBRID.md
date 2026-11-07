@@ -167,6 +167,11 @@ Example:
     internal_org:  casjay
     app_name:      jokes
     official_site: https://jokes.example.com
+    # Optional UI labels (defaults: item / items)
+    resource_label: joke
+    resource_label_plural: jokes
+
+**Resource labels (optional):** `resource_label` (singular) and `resource_label_plural` name what the product's users own or create ("paste"/"pastes", "search"/"searches"); defaults `item` / `items`. UI copy that needs the noun uses these (the header's `{{ .ResourceLabel }}` is `resource_label_plural`); a product noun is never hardcoded in the spec's templates.
 
 **`{plist_name}` is NOT stored** — it is derived at substitution time as
 `io.github.{project_org}.{internal_name}`.
@@ -538,7 +543,7 @@ Every piece of user-facing text (UI labels, error messages shown to users, email
 | Human-owned tasks | `TODO.md` | Never emptied or deleted by AI; mark items done in place |
 | Defects found while doing other work, including the exploratory pass | Fixed immediately, otherwise `TODO.AI.md` | Never left only in conversation |
 | Findings from an explicit audit (the user said "audit") with more than 5 issues | Temporary `AUDIT.AI.md` | Not `TODO.AI.md`; deleted when every issue is resolved. Five or fewer are fixed directly with no tracking file |
-| Defects or contradictions in `AI.md` itself | `SPEC.md` (the project's tie-break override) plus a report to the template maintainers | `AI.md` is read-only: never edit it, and never log its defects in `TODO.AI.md` |
+| Defects or contradictions in `AI.md` itself | `SPEC.md` (the project's tie-break override) for the local decision, plus a report appended as one bullet under `## {project_name} AI.md issues` in the `TODO.API.md` of the project's parent directory (the shared template-maintainers' inbox; for apimgr projects `~/Projects/github/apimgr/TODO.API.md`) | `AI.md` is read-only: never edit it, and never log its defects in `TODO.AI.md`. Maintainers clear the inbox once the template is fixed |
 
 ## Check Files Process vs. Audit
 
@@ -16904,7 +16909,7 @@ server:
 server:
   i18n:
     default_language: en
-    supported: [en]
+    available_languages: [en, es, fr, de, it, ar]
 ```
 
 ## Contact Configuration (Server Notification Recipients)
@@ -21902,7 +21907,7 @@ Apply `.copy-value` to any other long-string element (setup token, API token, se
 body {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 main {
@@ -21937,7 +21942,7 @@ footer p {
 | **Content fills the viewport width correctly** | The `.container` rules above apply on every page: phones use the full width minus `1rem` padding; a content column is centered, never stuck left with dead space on the right |
 | **Fixed/overlay containment** | See "Drawer containment" in the header / navigation section ("Mobile Menu Behavior"). Overlays are direct children of `<body>`; no `transform`, `filter`, `backdrop-filter`, `contain` or `will-change` on an ancestor of a `position: fixed` element |
 | **Dynamic viewport** | `100dvh` / `min-height: 100dvh`, never bare `100vh` (mobile browser bars); `env(safe-area-inset-*)` padding on anything touching a screen edge (drawer, toast, banner, bottom actions) |
-| **Spacing scale** | Only `--space-*` tokens (4, 8, 12, 16, 24, 32, 48 px). Label to control `--space-1`, control to control `--space-4`, card to card `--space-6`. A page is never a bare stream of headings, text and controls: group content in `.section-card` blocks |
+| **Spacing scale** | Only the `--space-*` tokens from "CSS Variable Reference" (`--space-1` 4 px, `--space-2` 8 px, `--space-3` 12 px, `--space-4` 16 px, `--space-6` 24 px, `--space-8` 32 px, `--space-12` 48 px). Label to control `--space-1`, control to control `--space-4`, card to card `--space-6` (24 px). A page is never a bare stream of headings, text and controls: group content in `.section-card` blocks |
 | **Page header pattern** | Exactly one `<h1>` per page (the page title); an optional back link above it written `← {parent title}` (arrow icon + one full translated string); one `<h2>` per card. A heading is never repeated at a lower level (an "Owner tokens" `<h1>` followed by an "Owner tokens" `<h2>` is a defect) |
 | **No UI string concatenation** | Every visible label is ONE translation key holding the whole phrase (`nav.back_to_preferences` = "Back to Preferences"). Never join fragments ("Back" + "Preferences" rendered "Back Preferences"; this also breaks RTL and other languages) |
 | **No empty or unlabeled controls** | A `<select>` always has options and a visible selected default; an input always has a visible `<label>`; a button always has visible text or an `aria-label` plus tooltip. Two controls never share a label (a duplicated "Expiry" with a blank select is a defect) |
@@ -22947,7 +22952,7 @@ function renameItem(itemId) {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
   overflow: hidden;
 }
 
@@ -25857,7 +25862,7 @@ Without the script: Esc and overflow detection are unavailable, but the scrim, t
 body {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 main {
@@ -28877,7 +28882,7 @@ Next run: {next_run}
 | 1 | The recipient's stored language preference | Projects whose recipients have accounts that store one |
 | 2 | The language of the request that triggered the message, captured at submission (the submitter's `lang` cookie, else `Accept-Language`) | Contact-form replies and security-report acknowledgements to the submitter |
 | 3 | `server.i18n.default_language` | Operator notifications (admin, security and abuse roles, scheduler, backup, SSL and the other events above), which have no request context |
-| 4 | `en` | When the chosen language is not in `server.i18n.supported`, and per translation key when a key is missing |
+| 4 | `en` | When the chosen language is not in `server.i18n.available_languages`, and per translation key when a key is missing |
 
 A custom template that uses translation keys follows this order. A custom template written with literal text is sent as written in every language.
 
