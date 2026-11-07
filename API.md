@@ -6074,8 +6074,9 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 **Gitignored directories:**
 - `binaries/` - All build output (local + all platforms)
 - `releases/` - Release output
-- `docker/rootfs/` - Build-time container overlay
 - `volumes/` - Runtime volume data (if created locally)
+
+**Note:** `docker/rootfs/` (build-time container overlay) is COMMITTED, never gitignored.
 
 ### .gitignore (REQUIRED)
 
@@ -7763,21 +7764,28 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 
 **Note:** Loopback addresses avoided; global IPs preferred. See PART 8 (BuildURL / URL Variable Resolution) for full details.
 
+### Directory Variables (Every Startup)
+
+| Variable | Flag | Description |
+|----------|------|-------------|
+| `CONFIG_DIR` | `--config` | Configuration directory (holds `server.yml`) |
+| `DATA_DIR` | `--data` | Data directory |
+| `LOG_DIR` | `--log` | Log directory |
+| `DATABASE_DIR` | (none) | SQLite database directory (changeable) |
+| `BACKUP_DIR` | `--backup` | Backup directory (changeable) |
+
+**Directory variables are applied on EVERY startup, never "once".** Precedence: flag, then environment variable, then the platform default (PART 4). They locate `server.yml` and the rest of the app's files, so they cannot live inside `server.yml` and are never written to it.
+
 ### Init-Only Variables (First Run Only)
 
 | Variable | Description |
 |----------|-------------|
-| `CONFIG_DIR` | Configuration directory |
-| `DATA_DIR` | Data directory |
-| `LOG_DIR` | Log directory |
-| `DATABASE_DIR` | SQLite database directory (changeable) |
-| `BACKUP_DIR` | Backup directory (changeable) |
 | `PORT` | Server port |
 | `LISTEN` | Listen address |
 | `APPLICATION_NAME` | Application title |
 | `APPLICATION_TAGLINE` | Application description |
 
-**Init-only variables are used ONCE during first run, then ignored.**
+**Init-only variables are used ONCE during first run to seed `server.yml`, then ignored.**
 
 ---
 
@@ -15793,6 +15801,8 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | `/server/privacy` | GET | Privacy policy |
 | `/server/dpo` | GET | Data Protection Officer contact (GDPR) |
 
+**DPO contact source:** `server.contact.dpo.email` (with optional `server.contact.dpo.name`), part of the Contact Configuration tree (PART 12). When `dpo.email` is empty the page shows `server.contact.general.email`; when that is empty too it renders only a link to the contact form (`/server/contact`). It never invents an address and never shows the admin address. The JSON mirror is `GET /api/{api_version}/server/dpo` (`name`, `email`, `privacy_url`).
+
 **Compliance is configured entirely in `server.yml`. Consent state is stored client-side (cookies, so the server can read it per-request) — there is no server-side user consent table. Operators run `{project_name} --maintenance compliance report` for a compliance summary.**
 
 ### Compliance Audit Events
@@ -16429,6 +16439,15 @@ server:
         discord: ""
         slack: ""
         generic: ""
+
+    # ---- DPO (data protection officer, GDPR) ----
+    # Contact shown on the public /server/dpo page. Default is "" (the server
+    # never invents a DPO address). If email is empty the page shows
+    # server.contact.general.email; if that is empty too it shows only a
+    # link to the contact form. The admin address is NEVER shown here.
+    dpo:
+      name: ""
+      email: ""
 
     # ---- General (public contact form) ----
     # Recipient for /server/contact submissions (non-security). Public
@@ -27926,6 +27945,7 @@ server:
 | `/api/{api_version}/server/help` | GET | Help content (JSON) |
 | `/api/{api_version}/server/help/mcp` | GET | MCP help content (JSON); `404` when MCP is disabled |
 | `/api/{api_version}/server/terms` | GET | Terms of service (JSON) |
+| `/api/{api_version}/server/dpo` | GET | DPO contact (JSON): `name`, `email`, `privacy_url` |
 | `/api/{api_version}/server/security` | GET | Security overview (JSON, no auth): `contacts` (ordered list of `{type, url or address}`), `expires`, `pgp` (`{available, url, fingerprint}`), `policy_url`, `thanks_url` |
 | `/api/{api_version}/server/security/policy` | GET | Disclosure policy (JSON, no auth): `policy` (Markdown) |
 | `/api/{api_version}/server/security/thanks` | GET | Hall of fame (JSON, no auth): `entries` (list of `{credit, date, severity}`; `credit` honors each researcher's credit preference) |
@@ -27955,6 +27975,7 @@ server:
 | `/server/help` | Help page (HTML) |
 | `/server/help/mcp` | MCP help page (HTML); `404` when MCP is disabled |
 | `/server/terms` | Terms of service page (HTML) |
+| `/server/dpo` | Data Protection Officer contact page (HTML) |
 | `/server/healthz` | Health page (HTML) |
 | `/healthz` | Optional direct alias to `/server/healthz` when `server.healthz.root.enabled` is `true` |
 | `/server/docs/swagger` | Swagger UI (HTML) |
