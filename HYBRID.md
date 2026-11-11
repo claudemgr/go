@@ -45300,6 +45300,7 @@ project_name:     {project_name}
 project_org:      {project_org}
 # STABLE — equals project_name on first install; change only on an explicit rename or fork reset
 internal_name:    {project_name}
+internal_org:     {project_org}
 # STABLE — equals project_org on first install; change only on an explicit rename or fork reset
 internal_org:     {project_org}
 app_name:         {App Display Name}
