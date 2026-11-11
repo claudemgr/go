@@ -543,7 +543,7 @@ Every piece of user-facing text (UI labels, error messages shown to users, email
 | Human-owned tasks | `TODO.md` | Never emptied or deleted by AI; mark items done in place |
 | Defects found while doing other work, including the exploratory pass | Fixed immediately, otherwise `TODO.AI.md` | Never left only in conversation |
 | Findings from an explicit audit (the user said "audit") with more than 5 issues | Temporary `AUDIT.AI.md` | Not `TODO.AI.md`; deleted when every issue is resolved. Five or fewer are fixed directly with no tracking file |
-| Defects or contradictions in `AI.md` itself | `SPEC.md` (the project's tie-break override) for the local decision, plus a report appended as one bullet under `## {project_name} AI.md issues` in the `TODO.API.md` of the project's parent directory (the shared template-maintainers' inbox; for apimgr projects `~/Projects/github/apimgr/TODO.API.md`) | `AI.md` is read-only: never edit it, and never log its defects in `TODO.AI.md`. Maintainers clear the inbox once the template is fixed |
+| Defects or contradictions in `AI.md` itself | `SPEC.md` (the project's tie-break override) for the local decision, plus a report appended as one bullet under `## {project_name} AI.md issues` in the `TODO.{TEMPLATE}.md` of the project's parent directory, where `{TEMPLATE}` is the template the project's `AI.md` was copied from (`API`, `SERVER` or `HYBRID`) — the shared template-maintainers' inbox; for apimgr projects (API template) `~/Projects/github/apimgr/TODO.API.md`, for webappsgo projects (SERVER template) `~/Projects/github/webappsgo/TODO.SERVER.md` | `AI.md` is read-only: never edit it, and never log its defects in `TODO.AI.md`. Maintainers clear the inbox once the template is fixed |
 
 ## Check Files Process vs. Audit
 
@@ -7244,7 +7244,7 @@ NO_COLOR=1 {project_name} --status | cat -v
 NO_COLOR=1 {project_name} --status | grep -E '✅|❌|⚠️|🚀'
 ```
 
-**THESE TOP-LEVEL SERVER COMMANDS CANNOT BE CHANGED. This is the complete top-level set:** a project never adds, renames or removes a top-level flag, and an unlisted flag (for example `--header`) is not allowed. **Modifiers** belong to the command they modify and do not extend the top-level set: `--include-ssl` and `--include-data` modify `--maintenance backup` (PART 21), and `--maintenance`, `--service` and `--update` take the subcommands and options shown in their own `--help`.
+**THESE TOP-LEVEL SERVER COMMANDS CANNOT BE CHANGED. This is the complete top-level set:** a project never adds, renames or removes a top-level flag, and an unlisted flag (for example `--header`) is not allowed. **Modifiers** belong to the command they modify and do not extend the top-level set: `--include-ssl` and `--include-data` modify `--maintenance backup` (PART 22), and `--maintenance`, `--service` and `--update` take the subcommands and options shown in their own `--help`.
 
 ## Server Binary Commands
 
@@ -7284,7 +7284,7 @@ NO_COLOR=1 {project_name} --status | grep -E '✅|❌|⚠️|🚀'
 --daemon
 # Enable debug mode (verbose logging, debug endpoints)
 --debug
-# Enable the I2P eepsite (opt-in, PART 31.2)
+# Enable the I2P eepsite (opt-in, PART 27.2)
 --i2p
 # Color output (default: auto, respects NO_COLOR)
 --color {auto|yes|no}
@@ -8696,7 +8696,18 @@ func OpenDatabase(cfg *Config) (*Database, error) {
 -- SERVER.DB - Server state and operations
 -- ============================================================================
 
--- There is NO config table: configuration lives only in server.yml (PART 5)
+-- Single-instance SQLite server.db has NO config table: configuration lives only in server.yml (PART 5).
+-- Cluster Mode ONLY (remote PostgreSQL/MySQL): the remote database is the configuration source of truth (PART 5), so these two tables exist there (srv_ prefix) and server.yml is a synced cache.
+CREATE TABLE IF NOT EXISTS srv_config (
+    key        VARCHAR(255) PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS srv_config_meta (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    version    BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 -- ----------------------------------------------------------------------------
 -- Rate Limiting (sliding window counters)
@@ -18744,7 +18755,7 @@ Same underlying health response as `/server/healthz`, but formatted using the st
 | `features.i2p.enabled` | I2P eepsite enabled (OPT-IN; false by default) |
 | `features.i2p.running` | I2P provider currently running |
 | `features.i2p.status` | Normalized: `disabled`, `starting`, `healthy`, `error:{short message}` (mapped from `features.i2p.state`: `disabled` and `no_provider` -> `disabled`; `starting` and `building` -> `starting`; `running` -> `healthy`; `error` -> `error:{short message}`) |
-| `features.i2p.state` | Full lifecycle: `disabled`, `no_provider`, `starting`, `building`, `running`, `error` (the same values as CLI `--status`, PART 31.2) |
+| `features.i2p.state` | Full lifecycle: `disabled`, `no_provider`, `starting`, `building`, `running`, `error` (the same values as CLI `--status`, PART 27.2) |
 | `features.i2p.hostname` | `.b32.i2p` address (if running) |
 | `features.i2p.provider` | i2pd, sam, or none |
 | `checks.*` | Service health (ok, degraded, error), including dataset checks (`geoip_*`, `blocklist_*`, `data_*`) |
