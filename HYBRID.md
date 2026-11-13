@@ -19021,11 +19021,11 @@ Plain text, no color. The first line is always `{project_name} {project_version}
 - Delete superseded routes after the new route is in place
 - Do NOT keep old and new route trees alive in parallel "for now"
 - Do NOT duplicate handlers just to satisfy both old and new paths
-- Unversioned API aliases (`/api/swagger`, `/api/graphql`, `/api/healthz`) MUST mount the SAME handler as their versioned canonical route - never redirect, never fork behavior
+- Unversioned API aliases (the set in "Unversioned API Exceptions", for example `/api/swagger`, `/api/graphql`, `/api/healthz`) MUST mount the SAME handler as their versioned canonical route - never redirect, never fork behavior
 - Migration is complete only when:
   - old routes are removed
-  - docs/examples use only the canonical routes
-  - tests use only the canonical routes
+  - docs/examples name the canonical routes (an alias appears only where the alias itself is documented)
+  - tests exercise the canonical routes, plus one parity test per alias (same status, headers and body)
   - there is one handler tree per behavior, not duplicates
 
 ## API Versioning
@@ -19040,12 +19040,24 @@ Plain text, no color. The first line is always `{project_name} {project_version}
 
 | Rule | Requirement | Wrong | Correct |
 |------|-------------|-------|---------|
-| **Versioning** | All API routes MUST be versioned | `/api/items` | `/api/{api_version}/items` |
+| **Versioning** | All canonical API routes MUST be versioned; the only exceptions are listed in "Unversioned API Exceptions" below | `/api/items` | `/api/{api_version}/items` |
 | **Plural nouns** | All resource names MUST be plural | `/api/{api_version}/item` | `/api/{api_version}/items` |
 | **Lowercase** | All routes MUST be lowercase | `/api/{api_version}/Items` | `/api/{api_version}/items` |
 | **Hyphens** | Multi-word routes use hyphens | `/api/{api_version}/api_keys` | `/api/{api_version}/api-keys` |
 | **No trailing slash** | Routes MUST NOT end with `/` (see PART 15 URL Normalization) | `/api/{api_version}/items/` | `/api/{api_version}/items` |
 | **No verbs** | Routes are nouns, not actions | `/api/{api_version}/getItems` | `GET /api/{api_version}/items` |
+
+### Unversioned API Exceptions (Exhaustive)
+
+**Canonical API routes are versioned (`/api/{api_version}/...`). The ONLY unversioned API-class paths are the ones listed here; any other unversioned `/api/...` route is a defect.**
+
+| Path | Kind | Rule |
+|------|------|------|
+| `/api/swagger`, `/api/graphql`, `/api/healthz`, `/api/metrics[/{service}]`, `/api/mcp`, `/api/debug/*` | Alias of a versioned canonical route | Mounts the SAME handler as the canonical route for the current `{api_version}`; never a redirect (see "Unversioned API aliases") |
+| `/mcp` | Root alias of `/api/{api_version}/server/mcp` | Same handler, never a redirect; API-class (see "MCP Endpoint") |
+| `/api/autodiscover` | Unversioned by design | Clients call it before they know the API version; it has no versioned form |
+
+**Docs, examples, tests and client code name the canonical versioned route. An alias appears only where the alias itself is being documented, and each alias has one parity test asserting the same status, headers and body as its canonical route.**
 
 ### Frontend-Backend Integration
 
@@ -19159,7 +19171,7 @@ This is a server application, not a client-side SPA. The server should handle as
 
 Before adding ANY route, verify:
 
-- [ ] Is it versioned? (`/api/{api_version}/...`)
+- [ ] Is it versioned? (`/api/{api_version}/...`, unless it is listed in "Unversioned API Exceptions")
 - [ ] Is the resource name plural? (`users`, not `user`)
 - [ ] Is it lowercase with hyphens? (`api-keys`, not `API_Keys`)
 - [ ] Does the route follow scope rules? (`/server/`, `/api/{api_version}/*`)
@@ -20566,8 +20578,8 @@ Need additional compatible endpoints?"
 | `/` | GET | None | Web interface (HTML) |
 | `/server/healthz` | GET | None | Health check (HTML/JSON/text via content negotiation) |
 | `/healthz` | GET | None | Optional direct alias to `/server/healthz` when `server.healthz.root.enabled` is `true` |
-| `/server/docs/swagger` | GET | None | Swagger UI (interactive REST explorer; fetches spec from `/api/swagger`) |
-| `/server/docs/graphql` | GET | None | GraphiQL UI (interactive GraphQL explorer; POSTs to `/api/graphql`) |
+| `/server/docs/swagger` | GET | None | Swagger UI (interactive REST explorer; fetches the spec from `/api/{api_version}/server/swagger`) |
+| `/server/docs/graphql` | GET | None | GraphiQL UI (interactive GraphQL explorer; POSTs to `/api/{api_version}/server/graphql`) |
 | `/server/metrics[/{service}]` | GET | Bearer token (per-service) | Metrics services — `prometheus`, `grafana`, `loki` (PART 19) |
 | `/metrics[/{service}]` | GET | Bearer token (per-service) | Root alias when `server.metrics.root.enabled` is `true` (default); same handler, never a redirect |
 | `/api/metrics[/{service}]` | GET | Bearer token (per-service) | Metrics — unversioned alias for current `{api_version}`; same handlers |
@@ -20603,7 +20615,7 @@ Need additional compatible endpoints?"
 | The contract is stable across versions OR the alias is documented as "current version's contract" | The contract is version-specific and clients should pin a version |
 | The cost of forcing clients to read `/api/autodiscover` first is real | Versioning is the whole point (e.g., `/api/{api_version}/items`) |
 
-**Examples that get an alias:** `/api/swagger`, `/api/graphql`, `/api/healthz`, `/api/debug/*` (current set).
+**Examples that get an alias:** `/api/swagger`, `/api/graphql`, `/api/healthz`, `/api/metrics[/{service}]`, `/api/mcp` (plus the root `/mcp`), `/api/debug/*` (the complete set, see "Unversioned API Exceptions"). `/api/autodiscover` is not an alias; it is unversioned by design.
 **Examples that do NOT get an alias:** `/api/{api_version}/items`, `/api/{api_version}/server/contact` (these stay versioned only).
 
 **Why "served directly — no redirect" (not a 301/302 to the versioned URL):**
@@ -28428,7 +28440,7 @@ When the admin panel is enabled (PART 28) these are editable at `/server/{admin_
 | Getting started | Quick start guide |
 | Features | How to use key features |
 | MCP | Link to `/server/help/mcp` (only shown if `server.mcp.enabled`) |
-| API Documentation | Links to Swagger (`/server/docs/swagger`) and GraphQL (`/server/docs/graphql`) — UIs fetch from `/api/swagger` and `/api/graphql` aliases |
+| API Documentation | Links to Swagger (`/server/docs/swagger`) and GraphQL (`/server/docs/graphql`) — UIs fetch from the versioned `/api/{api_version}/server/swagger` and `/api/{api_version}/server/graphql` routes |
 | Tor Access | How to access via Tor (only shown if Tor enabled) |
 | I2P Access | How to access via I2P (only shown if I2P enabled and running) |
 | FAQ | Frequently asked questions |
