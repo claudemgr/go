@@ -26903,7 +26903,7 @@ server:
 
 ### Feeds (/feed.xml and /rss.xml)
 
-**ALL projects serve two syndication feeds, ON by default, listing the most recent PUBLIC items of the project's primary public resource.** `IDEA.md` names that resource; the feed is the reader-facing "what is new".
+**ALL projects ALWAYS serve two syndication feeds (there is no setting that turns them off), listing the most recent PUBLIC items of the project's primary public resource.** `IDEA.md` names that resource; the feed is the reader-facing "what is new".
 
 | Project type | Feed lists |
 |--------------|------------|
@@ -26933,7 +26933,7 @@ Both routes carry the same items. They are fixed-format files like `sitemap.xml`
 
 **Which items appear:** only items an anonymous visitor can already see and that are listed publicly. Never private, unlisted, password-protected, expired, deleted, moderated-away or burn-after-read items. The public-info rule (PART 11) applies to every feed byte. All text is XML-escaped and characters invalid in XML 1.0 are removed.
 
-**Recent-search filtering (meta search and any project that lists searches):** a recent-search feed is allowed and ON by default. It lists the query text and the time only, never an IP, user, session or result. Before an entry is stored or served, the query is dropped, not masked, when any of these match:
+**Recent-search filtering (meta search and any project that lists searches):** a recent-search feed is always served (no setting turns it off). It lists the query text and the time only, never an IP, user, session or result. Before an entry is stored or served, the query is dropped, not masked, when any of these match:
 
 | Pattern | Examples |
 |---------|----------|
@@ -26945,7 +26945,7 @@ Both routes carry the same items. They are fixed-format files like `sitemap.xml`
 | Token-like string | A run of 20 or more characters of `[A-Za-z0-9+/_=-]` containing digits and letters, or a URL carrying `token`, `key`, `password` or `secret` |
 | Too long | More than 100 characters |
 
-The filter is a best-effort safety net, not a guarantee; when a query is doubtful it is dropped. A project may add patterns, never remove these. Identical queries collapse to one entry. Operators can set `server.seo.feed.search.enabled: false` to turn the recent-search feed off.
+The filter is a best-effort safety net, not a guarantee; when a query is doubtful it is dropped. A project may add patterns, never remove these. Identical queries collapse to one entry.
 
 **Configuration:**
 
@@ -26953,18 +26953,13 @@ The filter is a best-effort safety net, not a guarantee; when a query is doubtfu
 server:
   seo:
     feed:
-      # Default: true
-      enabled: true
       # Entries per feed; range 1-200
       max_items: 50
       # Channel/feed title; default is {app_name}
       title: ""
-      search:
-        # Default: true; only used by projects that list searches
-        enabled: true
 ```
 
-**HTTP behavior:** `Cache-Control: public, max-age=300`, `ETag` and `Last-Modified`, `304` on a matching conditional request, the public read rate limit (PART 11). With `server.seo.feed.enabled: false` both routes return `404`.
+**HTTP behavior:** `Cache-Control: public, max-age=300`, `ETag` and `Last-Modified`, `304` on a matching conditional request, the public read rate limit (PART 11).
 
 **No advertising:** pages never link to or advertise the sitemap or the feeds (no `<link rel="alternate">`, no footer or header links, no badges). The server only provides `/sitemap.xml`, `/feed.xml` and `/rss.xml`; consumers find them by convention. Feed routes are not listed in `robots.txt` and are not disallowed there.
 
