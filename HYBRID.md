@@ -3389,7 +3389,7 @@ func PathSecurityMiddleware(next http.Handler) http.Handler {
 
 | Request | Result | Status |
 |---------|--------|--------|
-| `GET /server/admin//config//settings` | `/server/admin/config/settings` | 200 |
+| `GET /server/admin//settings` | `/server/admin/config/settings` | 200 |
 | `GET //api///v1//items` | `/api/{api_version}/items` | 200 |
 | `GET ///` | `/` | 200 |
 | `GET /static/../server/admin` | Blocked | 400 |
@@ -24185,7 +24185,7 @@ self.addEventListener('notificationclick', event => {
 });
 ```
 
-**Admin Panel Settings (`/server/{admin_path}/config/notifications` — only when the server admin panel is enabled, PART 28):**
+**Admin Panel Settings (`/server/{admin_path}/notifications` — only when the server admin panel is enabled, PART 28):**
 - Enable/disable push notifications
 - VAPID key generation
 - Test push functionality
@@ -26849,7 +26849,7 @@ server:
 | Facebook Verification | `server.seo.verification.facebook` | Facebook domain verification code |
 | Custom Tags | `server.seo.verification.custom` | Additional verification tags |
 
-**Validation:** Server validates codes on startup and logs errors for invalid formats. When the admin panel is enabled (PART 28) these settings are also editable at `/server/{admin_path}/config/seo`, validated on save.
+**Validation:** Server validates codes on startup and logs errors for invalid formats. When the admin panel is enabled (PART 28) these settings are also editable at `/server/{admin_path}/seo`, validated on save.
 
 ### Static Files
 
@@ -26996,7 +26996,7 @@ server:
 | Favicon | `server.branding.favicon` | Custom favicon |
 | Logo | `server.branding.logo` | Custom logo (header) |
 
-When the admin panel is enabled (PART 28) these are also editable at `/server/{admin_path}/config/branding` (file upload supported for images).
+When the admin panel is enabled (PART 28) these are also editable at `/server/{admin_path}/branding` (file upload supported for images).
 
 ### Image Sources
 
@@ -27273,7 +27273,7 @@ messages:
 | End date | `web.announcements.messages[].end` | When to stop showing (ISO 8601) |
 | Dismissible | `web.announcements.messages[].dismissible` | Allow users to dismiss |
 
-When the admin panel is enabled (PART 28) announcements are also manageable at `/server/{admin_path}/config/announcements`.
+When the admin panel is enabled (PART 28) announcements are also manageable at `/server/{admin_path}/announcements`.
 
 ## CORS
 
@@ -27340,7 +27340,7 @@ Credentials (`Access-Control-Allow-Credentials: true`) are sent only when the re
 | CORS Origins | `web.cors` | Comma-separated list of allowed origins (`*` = all) |
 | Root `/healthz` alias | `server.healthz.root.enabled` | Enables `/healthz` alias for compatibility with tools that require it |
 
-When the admin panel is enabled (PART 28) these are also editable at `/server/{admin_path}/config/web`, with a read-only preview of the resulting CORS headers.
+When the admin panel is enabled (PART 28) these are also editable at `/server/{admin_path}/web`, with a read-only preview of the resulting CORS headers.
 
 ## CSRF Protection
 
@@ -27654,7 +27654,7 @@ Admin-panel-only (PART 28) — not rendered unless the admin panel is enabled.
   <div class="admin-footer-content">
     <!-- Version info -->
     <span class="admin-footer-version">
-      <a href="/server/{admin_path}/config/info">{project_name} {project_version}</a>
+      <a href="/server/{admin_path}/info">{project_name} {project_version}</a>
     </span>
 
     <span class="admin-footer-separator">•</span>
@@ -27733,7 +27733,7 @@ Admin-panel-only (PART 28) — not rendered unless the admin panel is enabled.
 
 | Element | Description |
 |---------|-------------|
-| Version | Links to `/server/{admin_path}/config/info` - shows project name and version |
+| Version | Links to `/server/{admin_path}/info` - shows project name and version |
 | Docs | External link to ReadTheDocs documentation |
 | Status | Server health indicator (green/yellow/red) with status text |
 
@@ -27752,7 +27752,7 @@ Admin-panel-only (PART 28) — not rendered unless the admin panel is enabled.
 |---------|------------|-------------|
 | Custom branding HTML | `web.footer.custom_html` | HTML above application footer (sanitized) |
 
-When the admin panel is enabled (PART 28) the footer HTML is also editable at `/server/{admin_path}/config/footer` with sanitized and rendered previews.
+When the admin panel is enabled (PART 28) the footer HTML is also editable at `/server/{admin_path}/footer` with sanitized and rendered previews.
 
 **Related configuration:**
 - Analytics tracking: `server.tracking` (PART 12: Analytics Tracking)
@@ -27764,7 +27764,7 @@ When the admin panel is enabled (PART 28) the footer HTML is also editable at `/
 
 **Configuration:** `server.privacy.consent` (see PART 12: Privacy & Consent)
 
-**Configuration:** `server.privacy` section in the config file (admin panel: `/server/{admin_path}/config/privacy` when enabled — PART 28)
+**Configuration:** `server.privacy` section in the config file (admin panel: `/server/{admin_path}/privacy` when enabled — PART 28)
 
 ### Banner Layout
 
@@ -28114,7 +28114,7 @@ func trackingScript(r *http.Request) template.HTML {
 
 **ALL applications MUST have these standard pages. Content is defined per-application.**
 
-**⚠️ CRITICAL: `/server/about` and `/server/help` MUST be comprehensive, real, project-specific content — never a stub, "coming soon" page, or generic placeholder text.** Both pages are public (no auth). This is unrelated to the admin-only `{admin_path}/config/pages/help` edit route below (PART 28) — never conflate the two: `/server/help` is the public help page every visitor sees; `{admin_path}/config/pages/help` is where an admin edits that page's stored content.
+**⚠️ CRITICAL: `/server/about` and `/server/help` MUST be comprehensive, real, project-specific content — never a stub, "coming soon" page, or generic placeholder text.** Both pages are public (no auth). This is unrelated to the admin-only `{admin_path}/pages/help` edit route below (PART 28) — never conflate the two: `/server/help` is the public help page every visitor sees; `{admin_path}/pages/help` is where an admin edits that page's stored content.
 
 ## PAGE CONTENT SOURCING
 | Page | Content Source |
@@ -28529,7 +28529,7 @@ func trackingScript(r *http.Request) template.HTML {
 | **Data Retention** | `server.privacy.retention.period`, `server.privacy.retention.export_available`, `server.privacy.retention.deletion_available` |
 | **Third Parties** | `server.privacy.third_party.services[]` (name, purpose, data_sent, policy_url) |
 
-When the admin panel is enabled (PART 28) these are editable at `/server/{admin_path}/config/privacy` with a live preview that toggles sold/not-sold views; toggling `data.sold` ON MUST show a warning explaining CCPA implications, and the `*_if_sold` fields are only editable when `data.sold = true`.
+When the admin panel is enabled (PART 28) these are editable at `/server/{admin_path}/privacy` with a live preview that toggles sold/not-sold views; toggling `data.sold` ON MUST show a warning explaining CCPA implications, and the `*_if_sold` fields are only editable when `data.sold = true`.
 
 **Default content provided, fully customizable via the config file (and the admin panel when enabled — PART 28).**
 
@@ -28836,7 +28836,7 @@ server:
 | **Help MCP Page** | `pages.help.mcp` (Markdown, appended after the base MCP help sections) |
 | **Terms of Service** | `pages.terms.content` (Markdown) |
 
-When the admin panel is enabled (PART 28) all pages are editable at `/server/{admin_path}/config/pages` with Markdown editors, previews, and reset-to-default.
+When the admin panel is enabled (PART 28) all pages are editable at `/server/{admin_path}/pages` with Markdown editors, previews, and reset-to-default.
 
 ### /server/ API Endpoints
 
@@ -43274,7 +43274,7 @@ Address: I2P-base64-decode `PRIV`, take the first `387 + certlen` bytes (`certle
 
 **I2P is opt-in — this page includes an Enable toggle** (Tor's page does not, since Tor is auto-enabled). Applies only when the server admin feature is enabled (PART 28).
 
-#### /server/{admin_path}/config/network/i2p (WebUI)
+#### /server/{admin_path}/network/i2p (WebUI)
 
 ##### Status Section (Read-Only)
 
@@ -43308,15 +43308,15 @@ Address: I2P-base64-decode `PRIV`, take the first `387 + certlen` bytes (`certle
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/network/i2p` | GET | Get I2P status, config, and .b32.i2p address |
-| `/api/{api_version}/server/{admin_path}/config/network/i2p` | PATCH | Update I2P settings (validates; toggles opt-in) |
-| `/api/{api_version}/server/{admin_path}/config/network/i2p/validate` | POST | Validate config without saving |
-| `/api/{api_version}/server/{admin_path}/config/network/i2p/regenerate` | POST | Regenerate .b32.i2p address |
-| `/api/{api_version}/server/{admin_path}/config/network/i2p/restart` | POST | Restart the I2P provider |
+| `/api/{api_version}/server/{admin_path}/network/i2p` | GET | Get I2P status, config, and .b32.i2p address |
+| `/api/{api_version}/server/{admin_path}/network/i2p` | PATCH | Update I2P settings (validates; toggles opt-in) |
+| `/api/{api_version}/server/{admin_path}/network/i2p/validate` | POST | Validate config without saving |
+| `/api/{api_version}/server/{admin_path}/network/i2p/regenerate` | POST | Regenerate .b32.i2p address |
+| `/api/{api_version}/server/{admin_path}/network/i2p/restart` | POST | Restart the I2P provider |
 
 ##### Response Format
 
-**GET `/api/{api_version}/server/{admin_path}/config/network/i2p`**
+**GET `/api/{api_version}/server/{admin_path}/network/i2p`**
 
 ```json
 {
@@ -43460,26 +43460,25 @@ HYBRID has no application-level Normal User account type (identity is the OS per
 /server/{admin_path}/{admin_username}/profile  # Admin's own profile
 /server/{admin_path}/{admin_username}/preferences   # Admin's own preferences/settings
 /server/{admin_path}/{admin_username}/notifications # Admin's own notifications
-/server/{admin_path}/config/                   # Server management (EVERYTHING ELSE)
-/server/{admin_path}/config/setup              # Initial setup wizard
-/server/{admin_path}/config/settings           # Server settings
-/server/{admin_path}/config/ssl                # SSL/TLS configuration
-/server/{admin_path}/config/email              # Email configuration
-/server/{admin_path}/config/scheduler          # Scheduled tasks
-/server/{admin_path}/config/logs               # Server logs
-/server/{admin_path}/config/logs/audit         # Audit logs
-/server/{admin_path}/config/backup             # Backup/restore
-/server/{admin_path}/config/updates            # Update management
-/server/{admin_path}/config/info               # Server information
-/server/{admin_path}/config/metrics            # Metrics dashboard
-/server/{admin_path}/config/network/           # Network settings
-/server/{admin_path}/config/network/tor        # Tor configuration
-/server/{admin_path}/config/network/geoip      # GeoIP settings
-/server/{admin_path}/config/security/          # Security settings
-/server/{admin_path}/config/security/auth      # Authentication config (sessions, MFA)
-/server/{admin_path}/config/security/tokens    # API token management
-/server/{admin_path}/config/security/firewall  # Firewall rules
-/server/{admin_path}/config/system-users       # System Users (read-only view of system_users)
+/server/{admin_path}/setup              # Initial setup wizard
+/server/{admin_path}/settings           # Server settings
+/server/{admin_path}/ssl                # SSL/TLS configuration
+/server/{admin_path}/email              # Email configuration
+/server/{admin_path}/scheduler          # Scheduled tasks
+/server/{admin_path}/logs               # Server logs
+/server/{admin_path}/logs/audit         # Audit logs
+/server/{admin_path}/backup             # Backup/restore
+/server/{admin_path}/updates            # Update management
+/server/{admin_path}/info               # Server information
+/server/{admin_path}/metrics            # Metrics dashboard
+/server/{admin_path}/network/           # Network settings
+/server/{admin_path}/network/tor        # Tor configuration
+/server/{admin_path}/network/geoip      # GeoIP settings
+/server/{admin_path}/security/          # Security settings
+/server/{admin_path}/security/auth      # Authentication config (sessions, MFA)
+/server/{admin_path}/security/tokens    # API token management
+/server/{admin_path}/security/firewall  # Firewall rules
+/server/{admin_path}/system-users       # System Users (read-only view of system_users)
 ```
 
 ### Route Hierarchy Rules
@@ -43488,8 +43487,9 @@ HYBRID has no application-level Normal User account type (identity is the OS per
 |------|-------------|
 | **`/server/{admin_path}/` root** | Dashboard ONLY |
 | **`/server/{admin_path}/{admin_username}/*`** | Admin's OWN account/profile/preferences/notifications only |
-| **`/server/{admin_path}/config/*`** | ALL server management goes here |
-| **No other direct children** | ONLY `{admin_username}` and `config` under `/server/{admin_path}/` |
+| **`/server/{admin_path}/{section}/*`** | ALL server management goes here; `{section}` is a fixed name from `validAdminRootPaths` (the admin section set) |
+| **No other direct children** | ONLY `{admin_username}` and the names in `validAdminRootPaths` under `/server/{admin_path}/`. There is NO `config` (or any other grouping) segment |
+| **Admin usernames never collide** | An admin username MUST NOT equal any name in `validAdminRootPaths`; the check runs when an admin is created (setup, invite, external-identity first login) and when a username changes. Adding a section name in a later spec version ships with a migration that renames any admin already using it (numeric suffix) and logs the rename |
 
 ### What Goes Where
 
@@ -43498,25 +43498,23 @@ HYBRID has no application-level Normal User account type (identity is the OS per
 | `/server/{admin_path}/` | Dashboard overview | System status, quick stats |
 | `/server/{admin_path}/{admin_username}/profile` | Admin's personal account | Rotate own API token, 2FA |
 | `/server/{admin_path}/{admin_username}/preferences` | Admin's UI preferences | Theme, language, timezone |
-| `/server/{admin_path}/config/*` | **EVERYTHING server-related** | Config, users, logs, etc. |
+| `/server/{admin_path}/{section}/*` | **EVERYTHING server-related** | Settings, users, logs, backup, security, etc. |
 
 ### INVALID Routes (NEVER DO THIS)
 
 ```
-# WRONG - Server management at admin root level
-/server/{admin_path}/settings          # ✗ WRONG - use /server/{admin_path}/config/settings
-/server/{admin_path}/system-users      # ✗ WRONG - use /server/{admin_path}/config/system-users
-/server/{admin_path}/logs              # ✗ WRONG - use /server/{admin_path}/config/logs
-/server/{admin_path}/security          # ✗ WRONG - use /server/{admin_path}/config/security
-/server/{admin_path}/email             # ✗ WRONG - use /server/{admin_path}/config/email
-/server/{admin_path}/tor               # ✗ WRONG - use /server/{admin_path}/config/network/tor
-/server/{admin_path}/tokens            # ✗ WRONG - use /server/{admin_path}/config/security/tokens
+# WRONG
+/server/{admin_path}/config/settings             # ✗ WRONG - there is no config segment; use /server/{admin_path}/settings
+/server/{admin_path}/config/logs                 # ✗ WRONG - use /server/{admin_path}/logs
+/server/{admin_path}/{admin_username}/settings   # ✗ WRONG - server management under the admin's own area; use /server/{admin_path}/settings
+/server/{admin_path}/misc                        # ✗ WRONG - first segment is not in validAdminRootPaths and is not the admin's username
 
 # CORRECT
-/server/{admin_path}/{admin_username}/profile      # ✓ Admin's own profile
-/server/{admin_path}/{admin_username}/preferences  # ✓ Admin's own preferences
-/server/{admin_path}/config/settings   # ✓ Server settings
-/server/{admin_path}/config/system-users  # ✓ System Users (read-only)
+/server/{admin_path}/{admin_username}/profile    # ✓ Admin's own profile
+/server/{admin_path}/{admin_username}/preferences # ✓ Admin's own preferences
+/server/{admin_path}/settings                    # ✓ Server settings
+/server/{admin_path}/logs                        # ✓ Server logs
+/server/{admin_path}/security/reports            # ✓ Security reports
 ```
 
 ### API Route Hierarchy (Same Pattern)
@@ -43526,10 +43524,9 @@ HYBRID has no application-level Normal User account type (identity is the OS per
 /api/{api_version}/server/{admin_path}/{admin_username}/profile       # Admin's own profile
 /api/{api_version}/server/{admin_path}/{admin_username}/preferences   # Admin's own preferences
 /api/{api_version}/server/{admin_path}/{admin_username}/notifications # Admin's own notifications
-/api/{api_version}/server/{admin_path}/config/                  # Server management API
-/api/{api_version}/server/{admin_path}/config/setup             # Setup flow
-/api/{api_version}/server/{admin_path}/config/settings          # Server settings
-/api/{api_version}/server/{admin_path}/config/system-users      # System Users (read-only)
+/api/{api_version}/server/{admin_path}/setup             # Setup flow
+/api/{api_version}/server/{admin_path}/settings          # Server settings
+/api/{api_version}/server/{admin_path}/system-users      # System Users (read-only)
 ```
 
 ### Route Conflict Prevention
@@ -43540,9 +43537,35 @@ HYBRID has no application-level Normal User account type (identity is the OS per
 // Admin route hierarchy validation
 var validAdminRootPaths = map[string]bool{
     // Dashboard (/server/{admin_path}/)
-    "":       true,
-    // Server management (has sub-routes)
-    "config": true,
+    "": true,
+    // Server management sections: every one is a fixed first segment, never a user-chosen name
+    "announcements": true,
+    "backup": true,
+    "branding": true,
+    "email": true,
+    "footer": true,
+    "info": true,
+    "logs": true,
+    "maintenance": true,
+    "metrics": true,
+    "network": true,
+    "notifications": true,
+    "pages": true,
+    "privacy": true,
+    "restart": true,
+    "scheduler": true,
+    "security": true,
+    "seo": true,
+    "settings": true,
+    "setup": true,
+    "ssl": true,
+    "stats": true,
+    "status": true,
+    "system-users": true,
+    "update": true,
+    "updates": true,
+    "url": true,
+    "web": true,
 }
 
 func validateAdminRoute(path string) error {
@@ -43563,14 +43586,14 @@ func validateAdminRoute(path string) error {
         return nil
     }
 
-    return fmt.Errorf("invalid admin route: /%s/* - use /server/{admin_path}/{admin_username}/* for admin self routes or /server/{admin_path}/config/* for server management", firstSegment)
+    return fmt.Errorf("invalid admin route: /%s/* - use /server/{admin_path}/{admin_username}/* for admin self routes or /server/{admin_path}/{section}/* for server management", firstSegment)
 }
 ```
 
 ### Why This Structure?
 
 1. **Clear separation**: Admin's personal settings vs server management
-2. **No conflicts**: Only `config` and `{admin_username}` live under the admin root
+2. **No conflicts**: Only the fixed section names in `validAdminRootPaths` and `{admin_username}` live under the admin root, and admin usernames can never equal a section name
 3. **Scalability**: All new server features go under `/server/*`
 4. **Predictability**: Developers know where to add new routes
 5. **Security**: Easy to audit - fixed namespace under `/server`
@@ -43639,7 +43662,7 @@ func validateAdminPath(newPath string, router *mux.Router) error {
 
 ### WebUI Change Flow
 
-**When admin path changed via WebUI (`/server/{admin_path}/config/settings`):**
+**When admin path changed via WebUI (`/server/{admin_path}/settings`):**
 
 ```
 1. User submits new admin path
@@ -43656,7 +43679,7 @@ func validateAdminPath(newPath string, router *mux.Router) error {
 **Frontend JavaScript:**
 ```javascript
 async function changeAdminPath(newPath) {
-    const response = await fetch(`/api/{api_version}/server/{admin_path}/config/settings`, {
+    const response = await fetch(`/api/{api_version}/server/{admin_path}/settings`, {
         method: 'PATCH',
         body: JSON.stringify({ admin_path: newPath })
     });
@@ -43928,7 +43951,7 @@ func RegisterAdminRoutes(r *mux.Router) {
 ├───────────────────────────────────────────────────────────┤
 │  Setup Token: {setup_token}                               │
 │                                                           │
-│  Go to {proto}://{fqdn}/server/{admin_path}/config/setup  │
+│  Go to {proto}://{fqdn}/server/{admin_path}/setup  │
 │  and enter this token to complete setup.                  │
 │                                                           │
 │  This token will only be shown ONCE.                      │
@@ -43970,9 +43993,9 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | 1 | Server generates one-time setup token (displayed in console ONCE) |
 | 2 | User navigates to `/server/{admin_path}` |
 | 3 | User enters setup token |
-| 4 | Redirect to `/server/{admin_path}/config/setup` (setup wizard) |
+| 4 | Redirect to `/server/{admin_path}/setup` (setup wizard) |
 
-**Setup Wizard Steps (`/server/{admin_path}/config/setup`):**
+**Setup Wizard Steps (`/server/{admin_path}/setup`):**
 
 **Step 1: Create Admin Account**
 | Field | Default | Notes |
@@ -44321,31 +44344,31 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 |-------|------|-------------|
 | `/server/{admin_path}` | Login | Login form (if not authenticated) |
 | `/server/{admin_path}` | Dashboard | Overview, stats, quick actions |
-| `/server/{admin_path}/config/settings` | Server Settings | Port, mode, FQDN, etc. |
-| `/server/{admin_path}/config/branding` | Branding | Title, logo, favicon, colors |
-| `/server/{admin_path}/config/ssl` | SSL/TLS | Certificates, Let's Encrypt |
-| `/server/{admin_path}/config/scheduler` | Scheduler | View/edit scheduled tasks |
-| `/server/{admin_path}/config/email` | Email | SMTP settings, templates |
-| `/server/{admin_path}/config/logs` | Logs | View access, error, audit logs |
-| `/server/{admin_path}/config/security/auth` | Authentication | Admin token, MFA, sessions |
-| `/server/{admin_path}/config/security/tokens` | API Tokens | Generate, revoke tokens |
-| `/server/{admin_path}/config/security/ratelimit` | Rate Limiting | Configure rate limits |
-| `/server/{admin_path}/config/security/firewall` | Firewall | IP allow/block lists |
-| `/server/{admin_path}/config/security/allowlist` | Allowlist | Trusted IPs (bypass blocklist/ratelimit/geoip) |
-| `/server/{admin_path}/config/network/tor` | Tor | View .onion address, status (auto-enabled if installed) |
-| `/server/{admin_path}/config/network/i2p` | I2P | Enable toggle, view .b32.i2p address, provider status (opt-in) |
-| `/server/{admin_path}/config/network/geoip` | GeoIP | Country blocking, database updates |
-| `/server/{admin_path}/config/network/blocklists` | Blocklists | IP/domain blocklists |
-| `/server/{admin_path}/config/system-users` | System Users | Read-only view of `system_users` (username, uid, token status, last_used_at, rotated_at) |
-| `/server/{admin_path}/config/backup` | Backup | Create/restore backups |
-| `/server/{admin_path}/config/maintenance` | Maintenance | Maintenance mode |
-| `/server/{admin_path}/config/updates` | Updates | Check/apply updates |
-| `/server/{admin_path}/config/info` | Server Info | Version, environment, deps |
-| `/server/{admin_path}/config/pages/help` | Help | Edit help page content (matches the `config/pages/help` API route below and the `/server/{admin_path}/config/pages` grouping used by About/Privacy/Contact/Terms) |
+| `/server/{admin_path}/settings` | Server Settings | Port, mode, FQDN, etc. |
+| `/server/{admin_path}/branding` | Branding | Title, logo, favicon, colors |
+| `/server/{admin_path}/ssl` | SSL/TLS | Certificates, Let's Encrypt |
+| `/server/{admin_path}/scheduler` | Scheduler | View/edit scheduled tasks |
+| `/server/{admin_path}/email` | Email | SMTP settings, templates |
+| `/server/{admin_path}/logs` | Logs | View access, error, audit logs |
+| `/server/{admin_path}/security/auth` | Authentication | Admin token, MFA, sessions |
+| `/server/{admin_path}/security/tokens` | API Tokens | Generate, revoke tokens |
+| `/server/{admin_path}/security/ratelimit` | Rate Limiting | Configure rate limits |
+| `/server/{admin_path}/security/firewall` | Firewall | IP allow/block lists |
+| `/server/{admin_path}/security/allowlist` | Allowlist | Trusted IPs (bypass blocklist/ratelimit/geoip) |
+| `/server/{admin_path}/network/tor` | Tor | View .onion address, status (auto-enabled if installed) |
+| `/server/{admin_path}/network/i2p` | I2P | Enable toggle, view .b32.i2p address, provider status (opt-in) |
+| `/server/{admin_path}/network/geoip` | GeoIP | Country blocking, database updates |
+| `/server/{admin_path}/network/blocklists` | Blocklists | IP/domain blocklists |
+| `/server/{admin_path}/system-users` | System Users | Read-only view of `system_users` (username, uid, token status, last_used_at, rotated_at) |
+| `/server/{admin_path}/backup` | Backup | Create/restore backups |
+| `/server/{admin_path}/maintenance` | Maintenance | Maintenance mode |
+| `/server/{admin_path}/updates` | Updates | Check/apply updates |
+| `/server/{admin_path}/info` | Server Info | Version, environment, deps |
+| `/server/{admin_path}/pages/help` | Help | Edit help page content (matches the `{admin_path}/pages/help` API route below and the `/server/{admin_path}/pages` grouping used by About/Privacy/Contact/Terms) |
 
-**Auth and body format — these WEB routes are NOT the same handler as the API mirror below.** Every route in this table is session-cookie authenticated (admin login session, see "Authentication Methods by Route Family" above) and its mutations (`Save`, `Create`, `Delete`, etc.) are plain HTML `<form method="post" enctype="application/x-www-form-urlencoded">` submissions — never JSON-only (no `ShouldBindJSON`-only handler), per PART 16 "No-JS-first": the admin panel MUST be fully usable with JavaScript disabled. The separate `/api/{api_version}/server/{admin_path}/config/*` routes are the machine-readable mirror: JSON body, `Authorization: Bearer adm_*` token, no session cookie. Do not point a WEB form at the Bearer-only API route or reuse one handler for both — a browser form POST has no `Authorization` header and will 401 against a Bearer-only endpoint.
+**Auth and body format — these WEB routes are NOT the same handler as the API mirror below.** Every route in this table is session-cookie authenticated (admin login session, see "Authentication Methods by Route Family" above) and its mutations (`Save`, `Create`, `Delete`, etc.) are plain HTML `<form method="post" enctype="application/x-www-form-urlencoded">` submissions — never JSON-only (no `ShouldBindJSON`-only handler), per PART 16 "No-JS-first": the admin panel MUST be fully usable with JavaScript disabled. The separate `/api/{api_version}/server/{admin_path}/{section}/*` routes are the machine-readable mirror: JSON body, `Authorization: Bearer adm_*` token, no session cookie. Do not point a WEB form at the Bearer-only API route or reuse one handler for both — a browser form POST has no `Authorization` header and will 401 against a Bearer-only endpoint.
 
-### System Users Page (`/server/{admin_path}/config/system-users`)
+### System Users Page (`/server/{admin_path}/system-users`)
 
 **Read-only view of the `system_users` table (PART 8 → Per-System-User Tokens). Accounts are operating-system accounts; the panel never creates, edits, or deletes them.**
 
@@ -44438,7 +44461,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 
 ### Server Settings Field Definitions
 
-**`/server/{admin_path}/config/settings` - All fields with control types:**
+**`/server/{admin_path}/settings` - All fields with control types:**
 
 #### General Section
 
@@ -44456,7 +44479,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `daemonize` | Toggle | Off | ⚠️ Yes | Detach from terminal on start |
 | `pidfile` | Toggle | On | ⚠️ Yes | Create PID file |
 
-#### Branding Section (`/server/{admin_path}/config/branding`)
+#### Branding Section (`/server/{admin_path}/branding`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44477,7 +44500,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `og_image` | File | (none) | No | OpenGraph image |
 | `twitter_handle` | Text | (empty) | No | Twitter @handle |
 
-#### Security Section (`/server/{admin_path}/config/security`)
+#### Security Section (`/server/{admin_path}/security`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44516,7 +44539,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `allowlist` | Tags | (empty) | No | Trusted IPs — bypass blocklists, rate limits, GeoIP (not auth) |
 | `blocklist` | Tags | (empty) | No | IPs always blocked |
 
-#### SSL/TLS Section (`/server/{admin_path}/config/ssl`)
+#### SSL/TLS Section (`/server/{admin_path}/ssl`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44529,7 +44552,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `ssl.letsencrypt.staging` | Toggle | Off | No | Use LE staging server |
 | `ssl.letsencrypt.challenge` | Dropdown | `http-01` | No | Challenge type |
 
-#### Authentication Section (`/server/{admin_path}/config/security/auth`)
+#### Authentication Section (`/server/{admin_path}/security/auth`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44538,7 +44561,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `mfa.enabled` | Toggle | Off | No | Require MFA for the admin |
 | `mfa.methods` | Checkbox group | TOTP | No | Allowed MFA methods |
 
-#### Backup Section (`/server/{admin_path}/config/backup`)
+#### Backup Section (`/server/{admin_path}/backup`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44558,7 +44581,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `restore.max_file_size` | Text | `"512M"` | No | Max size of any single extracted file |
 | `restore.max_ratio` | Number | `100` | No | Max expanded-to-compressed ratio (`100` = `100:1`); extraction aborts above it |
 
-#### Update Section (`/server/{admin_path}/config/update`)
+#### Update Section (`/server/{admin_path}/update`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44567,7 +44590,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `update.defer_days` | Number | `0` | No | 0-365. A release is eligible for the scheduled task only once it is this many days old; manual `--update check` / `--update yes` ignore it. See Defer Semantics for per-channel behavior |
 | `update.cli_min_version` | Text | (empty) | No | Minimum CLI version the server accepts. Returned verbatim as `cli_min_version` by `/api/autodiscover`; empty means no minimum is enforced. Never derived from the server version |
 
-#### Email/SMTP Section (`/server/{admin_path}/config/email`)
+#### Email/SMTP Section (`/server/{admin_path}/email`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44580,7 +44603,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `from.email` | Text | `no-reply@{fqdn}` | No | Sender email |
 | `[Test Connection]` | Button | - | - | Send test email |
 
-#### Notifications Section (`/server/{admin_path}/config/notifications`)
+#### Notifications Section (`/server/{admin_path}/notifications`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44592,7 +44615,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `notifications.security_alerts` | Toggle | On | No | Security event alerts |
 | `notifications.update_available` | Toggle | On | No | New version available |
 
-#### Scheduler Section (`/server/{admin_path}/config/scheduler`)
+#### Scheduler Section (`/server/{admin_path}/scheduler`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44605,7 +44628,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | - Next run | Readonly | timestamp | - | Next execution |
 | - `[Run Now]` | Button | - | - | Trigger immediately |
 
-#### URL Detection Section (`/server/{admin_path}/config/url`)
+#### URL Detection Section (`/server/{admin_path}/url`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44617,7 +44640,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | Detected domains | Readonly | - | - | Currently detected FQDNs |
 | Inferred wildcard | Readonly | - | - | `*.example.com` if detected |
 
-#### Tor Section (`/server/{admin_path}/config/network/tor`) - *if tor installed*
+#### Tor Section (`/server/{admin_path}/network/tor`) - *if tor installed*
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44626,7 +44649,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `tor.status` | Readonly | - | - | Running/Stopped |
 | `[Copy Address]` | Button | - | - | Copy onion to clipboard |
 
-#### GeoIP Section (`/server/{admin_path}/config/network/geoip`)
+#### GeoIP Section (`/server/{admin_path}/network/geoip`)
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
@@ -44637,7 +44660,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | `geoip.allow_countries` | Tags | (empty) | No | Allow ONLY these countries (overrides deny) |
 | Database status | Readonly | - | - | Last update, size |
 
-#### Blocklists Section (`/server/{admin_path}/config/network/blocklists`)
+#### Blocklists Section (`/server/{admin_path}/network/blocklists`)
 
 **Transmission-style IP/domain blocklist management. Download, parse, and enforce external blocklists from configurable URLs.**
 
@@ -44854,19 +44877,19 @@ func BlocklistMiddleware(lookup *BlocklistLookup, cfg BlocklistConfig) func(http
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/network/blocklists` | GET | List all blocklist sources with stats |
-| `/api/{api_version}/server/{admin_path}/config/network/blocklists` | PATCH | Update blocklist settings (enabled, action, etc.) |
-| `/api/{api_version}/server/{admin_path}/config/network/blocklists/sources` | POST | Add new blocklist source |
-| `/api/{api_version}/server/{admin_path}/config/network/blocklists/sources/{name}` | PATCH | Update source (enable/disable, URL, format) |
-| `/api/{api_version}/server/{admin_path}/config/network/blocklists/sources/{name}` | DELETE | Remove blocklist source |
-| `/api/{api_version}/server/{admin_path}/config/network/blocklists/update` | POST | Trigger immediate update of all enabled sources |
-| `/api/{api_version}/server/{admin_path}/config/network/blocklists/update/{name}` | POST | Trigger update of specific source |
-| `/api/{api_version}/server/{admin_path}/config/network/blocklists/stats` | GET | Get aggregate blocklist statistics |
-| `/api/{api_version}/server/{admin_path}/config/network/blocklists/check/{ip}` | GET | Check if an IP is in any blocklist |
+| `/api/{api_version}/server/{admin_path}/network/blocklists` | GET | List all blocklist sources with stats |
+| `/api/{api_version}/server/{admin_path}/network/blocklists` | PATCH | Update blocklist settings (enabled, action, etc.) |
+| `/api/{api_version}/server/{admin_path}/network/blocklists/sources` | POST | Add new blocklist source |
+| `/api/{api_version}/server/{admin_path}/network/blocklists/sources/{name}` | PATCH | Update source (enable/disable, URL, format) |
+| `/api/{api_version}/server/{admin_path}/network/blocklists/sources/{name}` | DELETE | Remove blocklist source |
+| `/api/{api_version}/server/{admin_path}/network/blocklists/update` | POST | Trigger immediate update of all enabled sources |
+| `/api/{api_version}/server/{admin_path}/network/blocklists/update/{name}` | POST | Trigger update of specific source |
+| `/api/{api_version}/server/{admin_path}/network/blocklists/stats` | GET | Get aggregate blocklist statistics |
+| `/api/{api_version}/server/{admin_path}/network/blocklists/check/{ip}` | GET | Check if an IP is in any blocklist |
 
 **API Response Examples:**
 
-Response for `GET /api/{api_version}/server/{admin_path}/config/network/blocklists`:
+Response for `GET /api/{api_version}/server/{admin_path}/network/blocklists`:
 
 ```json
 {
@@ -44900,7 +44923,7 @@ Response for `GET /api/{api_version}/server/{admin_path}/config/network/blocklis
 }
 ```
 
-Response for `GET /api/{api_version}/server/{admin_path}/config/network/blocklists/check/1.2.3.4`:
+Response for `GET /api/{api_version}/server/{admin_path}/network/blocklists/check/1.2.3.4`:
 
 ```json
 {
@@ -45046,7 +45069,7 @@ Response for `GET /api/{api_version}/server/{admin_path}/config/network/blocklis
 | Read-only info | **Readonly** |
 | Trigger action | **Button** |
 
-### Log Viewer (`/server/{admin_path}/config/logs`)
+### Log Viewer (`/server/{admin_path}/logs`)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -45176,32 +45199,32 @@ The admin panel MUST include a scheduler section with:
 
 **Whenever this PART is enabled, these admin API routes are available.**
 
-### Admin - Server (`/api/{api_version}/server/{admin_path}/config/`)
+### Admin - Server (`/api/{api_version}/server/{admin_path}/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/setup` | GET | Get setup status |
-| `/api/{api_version}/server/{admin_path}/config/setup/verify` | POST | Verify setup token |
-| `/api/{api_version}/server/{admin_path}/config/setup/account` | POST | Create admin account (Step 1) |
-| `/api/{api_version}/server/{admin_path}/config/setup/token` | POST | Generate API token (Step 2) |
-| `/api/{api_version}/server/{admin_path}/config/setup/config` | POST | Save server config (Step 3) |
-| `/api/{api_version}/server/{admin_path}/config/setup/security` | POST | Security settings (Step 4) |
-| `/api/{api_version}/server/{admin_path}/config/setup/services` | POST | Configure services (Step 5) |
-| `/api/{api_version}/server/{admin_path}/config/setup/complete` | POST | Complete setup wizard (Step 6) |
-| `/api/{api_version}/server/{admin_path}/config/settings` | GET | Get server settings |
-| `/api/{api_version}/server/{admin_path}/config/settings` | PATCH | Update server settings |
-| `/api/{api_version}/server/{admin_path}/config/status` | GET | Server status (detailed) |
-| `/api/{api_version}/server/{admin_path}/config/stats` | GET | Statistics |
-| `/api/{api_version}/server/{admin_path}/config/restart` | POST | Restart server |
+| `/api/{api_version}/server/{admin_path}/setup` | GET | Get setup status |
+| `/api/{api_version}/server/{admin_path}/setup/verify` | POST | Verify setup token |
+| `/api/{api_version}/server/{admin_path}/setup/account` | POST | Create admin account (Step 1) |
+| `/api/{api_version}/server/{admin_path}/setup/token` | POST | Generate API token (Step 2) |
+| `/api/{api_version}/server/{admin_path}/setup/config` | POST | Save server config (Step 3) |
+| `/api/{api_version}/server/{admin_path}/setup/security` | POST | Security settings (Step 4) |
+| `/api/{api_version}/server/{admin_path}/setup/services` | POST | Configure services (Step 5) |
+| `/api/{api_version}/server/{admin_path}/setup/complete` | POST | Complete setup wizard (Step 6) |
+| `/api/{api_version}/server/{admin_path}/settings` | GET | Get server settings |
+| `/api/{api_version}/server/{admin_path}/settings` | PATCH | Update server settings |
+| `/api/{api_version}/server/{admin_path}/status` | GET | Server status (detailed) |
+| `/api/{api_version}/server/{admin_path}/stats` | GET | Statistics |
+| `/api/{api_version}/server/{admin_path}/restart` | POST | Restart server |
 
-### Admin - System Users (`/api/{api_version}/server/{admin_path}/config/system-users/`)
+### Admin - System Users (`/api/{api_version}/server/{admin_path}/system-users/`)
 
 **Read-only view of the `system_users` table (PART 8). System user accounts are managed by the operating system, and their per-system-user `sys_` tokens by the PART 8 token lifecycle — the admin panel never creates, edits, or deletes them.**
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/system-users` | GET | List system users (username, uid, token status, last_used_at, rotated_at) |
-| `/api/{api_version}/server/{admin_path}/config/system-users/{username}` | GET | Get one system user's token status details |
+| `/api/{api_version}/server/{admin_path}/system-users` | GET | List system users (username, uid, token status, last_used_at, rotated_at) |
+| `/api/{api_version}/server/{admin_path}/system-users/{username}` | GET | Get one system user's token status details |
 
 **No write endpoints exist under `/config/system-users` — the view is strictly read-only.**
 
@@ -45216,120 +45239,120 @@ The admin panel MUST include a scheduler section with:
 | `/api/{api_version}/server/{admin_path}/{admin_username}/preferences` | GET | Get admin preferences (theme, notifications) |
 | `/api/{api_version}/server/{admin_path}/{admin_username}/preferences` | PATCH | Update admin preferences |
 
-### Admin - Branding (`/api/{api_version}/server/{admin_path}/config/branding/`)
+### Admin - Branding (`/api/{api_version}/server/{admin_path}/branding/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/branding` | GET | Get branding settings |
-| `/api/{api_version}/server/{admin_path}/config/branding` | PATCH | Update branding |
+| `/api/{api_version}/server/{admin_path}/branding` | GET | Get branding settings |
+| `/api/{api_version}/server/{admin_path}/branding` | PATCH | Update branding |
 
-### Admin - SSL (`/api/{api_version}/server/{admin_path}/config/ssl/`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/ssl` | GET | Get SSL settings |
-| `/api/{api_version}/server/{admin_path}/config/ssl` | PATCH | Update SSL settings |
-| `/api/{api_version}/server/{admin_path}/config/ssl/renew` | POST | Force certificate renewal |
-
-### Admin - Tor (`/api/{api_version}/server/{admin_path}/config/network/tor/`)
+### Admin - SSL (`/api/{api_version}/server/{admin_path}/ssl/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/network/tor` | GET | Get Tor status |
-| `/api/{api_version}/server/{admin_path}/config/network/tor` | PATCH | Update Tor settings |
-| `/api/{api_version}/server/{admin_path}/config/network/tor/regenerate` | POST | Regenerate .onion address |
-| `/api/{api_version}/server/{admin_path}/config/network/tor/vanity` | GET | Get vanity generation status |
-| `/api/{api_version}/server/{admin_path}/config/network/tor/vanity` | POST | Start vanity generation |
-| `/api/{api_version}/server/{admin_path}/config/network/tor/vanity` | DELETE | Cancel vanity generation |
-| `/api/{api_version}/server/{admin_path}/config/network/tor/vanity/apply` | POST | Apply vanity address |
-| `/api/{api_version}/server/{admin_path}/config/network/tor/import` | POST | Import external keys |
+| `/api/{api_version}/server/{admin_path}/ssl` | GET | Get SSL settings |
+| `/api/{api_version}/server/{admin_path}/ssl` | PATCH | Update SSL settings |
+| `/api/{api_version}/server/{admin_path}/ssl/renew` | POST | Force certificate renewal |
 
-### Admin - I2P (`/api/{api_version}/server/{admin_path}/config/network/i2p/`)
+### Admin - Tor (`/api/{api_version}/server/{admin_path}/network/tor/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/network/tor` | GET | Get Tor status |
+| `/api/{api_version}/server/{admin_path}/network/tor` | PATCH | Update Tor settings |
+| `/api/{api_version}/server/{admin_path}/network/tor/regenerate` | POST | Regenerate .onion address |
+| `/api/{api_version}/server/{admin_path}/network/tor/vanity` | GET | Get vanity generation status |
+| `/api/{api_version}/server/{admin_path}/network/tor/vanity` | POST | Start vanity generation |
+| `/api/{api_version}/server/{admin_path}/network/tor/vanity` | DELETE | Cancel vanity generation |
+| `/api/{api_version}/server/{admin_path}/network/tor/vanity/apply` | POST | Apply vanity address |
+| `/api/{api_version}/server/{admin_path}/network/tor/import` | POST | Import external keys |
+
+### Admin - I2P (`/api/{api_version}/server/{admin_path}/network/i2p/`)
 
 **OPT-IN:** all endpoints return `enabled: false` / `provider: none` until I2P is enabled.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/network/i2p` | GET | Get I2P status, config, and .b32.i2p address |
-| `/api/{api_version}/server/{admin_path}/config/network/i2p` | PATCH | Update I2P settings (validates; toggles opt-in) |
-| `/api/{api_version}/server/{admin_path}/config/network/i2p/validate` | POST | Validate config without saving |
-| `/api/{api_version}/server/{admin_path}/config/network/i2p/regenerate` | POST | Regenerate .b32.i2p address |
-| `/api/{api_version}/server/{admin_path}/config/network/i2p/restart` | POST | Restart the I2P provider |
+| `/api/{api_version}/server/{admin_path}/network/i2p` | GET | Get I2P status, config, and .b32.i2p address |
+| `/api/{api_version}/server/{admin_path}/network/i2p` | PATCH | Update I2P settings (validates; toggles opt-in) |
+| `/api/{api_version}/server/{admin_path}/network/i2p/validate` | POST | Validate config without saving |
+| `/api/{api_version}/server/{admin_path}/network/i2p/regenerate` | POST | Regenerate .b32.i2p address |
+| `/api/{api_version}/server/{admin_path}/network/i2p/restart` | POST | Restart the I2P provider |
 
-### Admin - Web (`/api/{api_version}/server/{admin_path}/config/web/`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/web` | GET | Get web settings |
-| `/api/{api_version}/server/{admin_path}/config/web` | PATCH | Update web settings |
-| `/api/{api_version}/server/{admin_path}/config/web/robots` | GET | Get robots.txt config |
-| `/api/{api_version}/server/{admin_path}/config/web/robots` | PATCH | Update robots.txt |
-| `/api/{api_version}/server/{admin_path}/config/web/robots/preview` | GET | Preview robots.txt |
-| `/api/{api_version}/server/{admin_path}/config/web/security` | GET | Get security.txt config |
-| `/api/{api_version}/server/{admin_path}/config/web/security` | PATCH | Update security.txt |
-| `/api/{api_version}/server/{admin_path}/config/web/security/preview` | GET | Preview security.txt |
-| `/api/{api_version}/server/{admin_path}/config/web/well-known` | GET | Get well-known namespace settings and supported entries |
-| `/api/{api_version}/server/{admin_path}/config/web/well-known` | PATCH | Update optional well-known entry settings |
-| `/api/{api_version}/server/{admin_path}/config/web/well-known/preview/{name}` | GET | Preview the exact rendered body for one well-known entry |
-
-**`/api/{api_version}/server/{admin_path}/config/web` includes `server.healthz.root.enabled` and well-known namespace status in its settings payload.**
-
-### Admin - Pages (`/api/{api_version}/server/{admin_path}/config/pages/`)
+### Admin - Web (`/api/{api_version}/server/{admin_path}/web/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/pages` | GET | Get all page settings |
-| `/api/{api_version}/server/{admin_path}/config/pages/about` | GET | Get about page content |
-| `/api/{api_version}/server/{admin_path}/config/pages/about` | PATCH | Update about page |
-| `/api/{api_version}/server/{admin_path}/config/pages/privacy` | GET | Get privacy policy |
-| `/api/{api_version}/server/{admin_path}/config/pages/privacy` | PATCH | Update privacy policy |
-| `/api/{api_version}/server/{admin_path}/config/pages/contact` | GET | Get contact page settings |
-| `/api/{api_version}/server/{admin_path}/config/pages/contact` | PATCH | Update contact page |
-| `/api/{api_version}/server/{admin_path}/config/pages/help` | GET | Get help page content |
-| `/api/{api_version}/server/{admin_path}/config/pages/help` | PATCH | Update help page |
+| `/api/{api_version}/server/{admin_path}/web` | GET | Get web settings |
+| `/api/{api_version}/server/{admin_path}/web` | PATCH | Update web settings |
+| `/api/{api_version}/server/{admin_path}/web/robots` | GET | Get robots.txt config |
+| `/api/{api_version}/server/{admin_path}/web/robots` | PATCH | Update robots.txt |
+| `/api/{api_version}/server/{admin_path}/web/robots/preview` | GET | Preview robots.txt |
+| `/api/{api_version}/server/{admin_path}/web/security` | GET | Get security.txt config |
+| `/api/{api_version}/server/{admin_path}/web/security` | PATCH | Update security.txt |
+| `/api/{api_version}/server/{admin_path}/web/security/preview` | GET | Preview security.txt |
+| `/api/{api_version}/server/{admin_path}/web/well-known` | GET | Get well-known namespace settings and supported entries |
+| `/api/{api_version}/server/{admin_path}/web/well-known` | PATCH | Update optional well-known entry settings |
+| `/api/{api_version}/server/{admin_path}/web/well-known/preview/{name}` | GET | Preview the exact rendered body for one well-known entry |
 
-### Admin - Email (`/api/{api_version}/server/{admin_path}/config/email/`)
+**`/api/{api_version}/server/{admin_path}/web` includes `server.healthz.root.enabled` and well-known namespace status in its settings payload.**
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/email` | GET | Get email settings |
-| `/api/{api_version}/server/{admin_path}/config/email` | PATCH | Update email settings |
-| `/api/{api_version}/server/{admin_path}/config/email/test` | POST | Send test email |
-| `/api/{api_version}/server/{admin_path}/config/email/templates` | GET | List email templates |
-| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}` | GET | Get template |
-| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}` | PUT | Update template |
-| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}/reset` | POST | Reset to default |
-| `/api/{api_version}/server/{admin_path}/config/email/templates/{name}/preview` | POST | Preview template |
-
-### Admin - Scheduler (`/api/{api_version}/server/{admin_path}/config/scheduler/`)
+### Admin - Pages (`/api/{api_version}/server/{admin_path}/pages/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/scheduler` | GET | List scheduled tasks |
-| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}` | GET | Get task details |
-| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}` | PATCH | Update task |
-| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/run` | POST | Run task now |
-| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/enable` | POST | Enable task |
-| `/api/{api_version}/server/{admin_path}/config/scheduler/{id}/disable` | POST | Disable task |
+| `/api/{api_version}/server/{admin_path}/pages` | GET | Get all page settings |
+| `/api/{api_version}/server/{admin_path}/pages/about` | GET | Get about page content |
+| `/api/{api_version}/server/{admin_path}/pages/about` | PATCH | Update about page |
+| `/api/{api_version}/server/{admin_path}/pages/privacy` | GET | Get privacy policy |
+| `/api/{api_version}/server/{admin_path}/pages/privacy` | PATCH | Update privacy policy |
+| `/api/{api_version}/server/{admin_path}/pages/contact` | GET | Get contact page settings |
+| `/api/{api_version}/server/{admin_path}/pages/contact` | PATCH | Update contact page |
+| `/api/{api_version}/server/{admin_path}/pages/help` | GET | Get help page content |
+| `/api/{api_version}/server/{admin_path}/pages/help` | PATCH | Update help page |
 
-### Admin - Backup (`/api/{api_version}/server/{admin_path}/config/backup/`)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/backup` | GET | List backups |
-| `/api/{api_version}/server/{admin_path}/config/backup` | POST | Create backup |
-| `/api/{api_version}/server/{admin_path}/config/backup/{id}` | GET | Get backup details |
-| `/api/{api_version}/server/{admin_path}/config/backup/{id}` | DELETE | Delete backup |
-| `/api/{api_version}/server/{admin_path}/config/backup/{id}/download` | GET | Download backup file |
-| `/api/{api_version}/server/{admin_path}/config/backup/restore` | POST | Restore from backup |
-
-### Admin - Logs (`/api/{api_version}/server/{admin_path}/config/logs/`)
+### Admin - Email (`/api/{api_version}/server/{admin_path}/email/`)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/server/{admin_path}/config/logs` | GET | List log files |
-| `/api/{api_version}/server/{admin_path}/config/logs/{type}` | GET | Get log entries |
-| `/api/{api_version}/server/{admin_path}/config/logs/{type}/download` | GET | Download log file |
+| `/api/{api_version}/server/{admin_path}/email` | GET | Get email settings |
+| `/api/{api_version}/server/{admin_path}/email` | PATCH | Update email settings |
+| `/api/{api_version}/server/{admin_path}/email/test` | POST | Send test email |
+| `/api/{api_version}/server/{admin_path}/email/templates` | GET | List email templates |
+| `/api/{api_version}/server/{admin_path}/email/templates/{name}` | GET | Get template |
+| `/api/{api_version}/server/{admin_path}/email/templates/{name}` | PUT | Update template |
+| `/api/{api_version}/server/{admin_path}/email/templates/{name}/reset` | POST | Reset to default |
+| `/api/{api_version}/server/{admin_path}/email/templates/{name}/preview` | POST | Preview template |
+
+### Admin - Scheduler (`/api/{api_version}/server/{admin_path}/scheduler/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/scheduler` | GET | List scheduled tasks |
+| `/api/{api_version}/server/{admin_path}/scheduler/{id}` | GET | Get task details |
+| `/api/{api_version}/server/{admin_path}/scheduler/{id}` | PATCH | Update task |
+| `/api/{api_version}/server/{admin_path}/scheduler/{id}/run` | POST | Run task now |
+| `/api/{api_version}/server/{admin_path}/scheduler/{id}/enable` | POST | Enable task |
+| `/api/{api_version}/server/{admin_path}/scheduler/{id}/disable` | POST | Disable task |
+
+### Admin - Backup (`/api/{api_version}/server/{admin_path}/backup/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/backup` | GET | List backups |
+| `/api/{api_version}/server/{admin_path}/backup` | POST | Create backup |
+| `/api/{api_version}/server/{admin_path}/backup/{id}` | GET | Get backup details |
+| `/api/{api_version}/server/{admin_path}/backup/{id}` | DELETE | Delete backup |
+| `/api/{api_version}/server/{admin_path}/backup/{id}/download` | GET | Download backup file |
+| `/api/{api_version}/server/{admin_path}/backup/restore` | POST | Restore from backup |
+
+### Admin - Logs (`/api/{api_version}/server/{admin_path}/logs/`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/{api_version}/server/{admin_path}/logs` | GET | List log files |
+| `/api/{api_version}/server/{admin_path}/logs/{type}` | GET | Get log entries |
+| `/api/{api_version}/server/{admin_path}/logs/{type}/download` | GET | Download log file |
 
 ---
 
