@@ -139,7 +139,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 **Rule hierarchy:** SPEC.md > AI.md > global CLAUDE.md. If SPEC.md and AI.md conflict, SPEC.md wins — that is its purpose.
 **No SPEC.md (or an empty one):** AI.md alone is the authority — nothing overrides it. SPEC.md exists only to record a project rule that must differ from the template; it never edits AI.md, and it is never created just to log an AI.md defect.
-**Rule:** If AI.md and IDEA.md conflict, AI.md wins. Fix IDEA.md.
+**Rule:** If AI.md and IDEA.md conflict, AI.md wins. Fix IDEA.md (procedure: PART 0 → "IDEA.md Alignment (WHAT vs HOW)").
 
 ## IDEA.md Is the WHAT, AI.md Is the HOW
 
@@ -277,7 +277,7 @@ permission rules, business invariants. The HOW lives in AI.md PARTS 0-30; PART 3
 
 ## THIS IS A STRICT SPECIFICATION — NOT GUIDELINES
 
-Every rule in this document is mandatory unless `IDEA.md` or `SPEC.md` explicitly overrides it for `{project_name}`. "Guideline," "suggestion," and "best practice" language elsewhere in this file does not weaken a rule marked CRITICAL — those are hard requirements.
+Every rule in this document is mandatory unless `SPEC.md` explicitly overrides it for `{project_name}` (`IDEA.md` never overrides a rule; it states the WHAT). "Guideline," "suggestion," and "best practice" language elsewhere in this file does not weaken a rule marked CRITICAL — those are hard requirements.
 
 ### Attribution
 
@@ -393,7 +393,7 @@ Skipping verification to "save time" is not permitted. The cost of a wrong guess
 ### Mandatory Verification Steps
 
 1. Read the relevant `AI.md` PART(s) before implementing.
-2. Read `IDEA.md`/`SPEC.md` for project-specific overrides.
+2. Read `IDEA.md` for the product scope (WHAT) and `SPEC.md` for project-specific rule overrides.
 3. Grep existing code for the pattern before introducing a new one.
 4. Build/test in-container (never on host) before claiming done.
 5. Re-diff the change against the stated requirement.
@@ -446,7 +446,7 @@ Iterate until every applicable check passes — do not stop at "compiles." (Refe
 
 ### Core Rules
 
-1. `AI.md` is authoritative; `IDEA.md`/`SPEC.md` layer project-specific facts and overrides on top of it.
+1. `AI.md` is authoritative; `IDEA.md` adds the project-specific WHAT and only `SPEC.md` can override a rule. An `IDEA.md` line that contradicts `AI.md` is fixed in `IDEA.md`.
 2. Never implement a feature not covered by `IDEA.md` scope without asking.
 3. Never silently reduce scope (dropping a PART's requirement) — ask or log to `TODO.AI.md`.
 4. Keep rule/reference files (below) current as the project evolves.
@@ -502,6 +502,40 @@ identify -format "%wx%h" file.png
 ```
 
 Resize with the first available tool in this order: `imagemagick` (`convert`/`magick`) → `graphicsmagick` (`gm convert`) → `libvips` (`vipsthumbnail`) → `sips` (macOS) → `ffmpeg`. Target a max dimension that keeps the image well under the read limit before invoking Read.
+
+## IDEA.md Alignment (WHAT vs HOW)
+
+**IDEA.md is the WHAT and AI.md is the HOW. When IDEA.md contradicts AI.md, IDEA.md is updated. The implementation never bends to the contradiction, and AI.md is never edited to match it.**
+
+**The test for every IDEA.md line:** would removing it change what the product does for its users or operators? Yes means it is WHAT and stays. Would it change only how the product is built? Yes means it is HOW: it belongs in AI.md or in the code, so it is removed from IDEA.md (or reworded into product terms).
+
+| IDEA.md line | WHAT or HOW | Action |
+|--------------|-------------|--------|
+| "Pastes expire after 1 day, 1 week, or never" | WHAT | Keep |
+| "No user accounts" (a non-goal) | WHAT | Keep; it scopes the optional multi-user parts only |
+| "Stores data in Redis" or "listens on port 8080" | HOW, and it contradicts AI.md (storage and port rules) | Remove, or reword to the product need ("pastes survive a restart") |
+| "Health check lives at `/health` and returns plain text" | HOW, and it contradicts AI.md (health routes and formats) | Remove; AI.md defines it |
+| "Skip the security headers, this is an internal tool" | A waiver of a mandatory requirement | Remove; mandatory parts are built exactly as AI.md defines them |
+| "Publishes a raw TCP paste port 9999" | WHAT (AI.md says such a port is documented in IDEA.md) | Keep |
+
+**IDEA.md may declare only what AI.md explicitly lets it declare:** the product's features, data models, business rules and audience; the template's explicitly OPTIONAL capabilities the project uses; and the specific items AI.md names as "declared in IDEA.md" (for example a custom build image, owner tokens, a custom raw port, a data class or compliance profile). Everything else IDEA.md says about HOW is either a copy of AI.md (remove it: duplicated rules drift when AI.md changes) or a contradiction (fix it). IDEA.md refers to AI.md by PART number instead of restating a rule.
+
+**When to check (every time, not only at setup):**
+
+1. On the first read of the project in a session (Session Initialization).
+2. After AI.md is replaced or synced to a new template version: re-check IDEA.md against the PARTs that changed.
+3. Before implementing a feature: compare the IDEA.md lines for that feature with the relevant PART.
+4. Before any commit that touches IDEA.md or adds a feature.
+
+**What to do when a line contradicts AI.md, in this order:**
+
+1. AI.md wins. The contradiction is a defect in IDEA.md.
+2. Fix IDEA.md with the smallest edit that keeps the product intent: reword the line into product terms (what the user gets) or delete it when it only restates HOW.
+3. Implement what AI.md says. NEVER change code to match the contradictory IDEA.md line.
+4. If the product genuinely needs something AI.md forbids or defines differently (not just different wording), it is NOT an IDEA.md edit. STOP and ask the user. The answer is a SPEC.md rule override (SPEC.md wins over AI.md), recorded in SPEC.md; IDEA.md then states only the product-level behavior.
+5. NEVER touch `## Project variables` as part of a fix (changing a variable needs explicit user confirmation).
+6. Record the fix in one line of the commit message (for example `IDEA.md: reworded the storage line to match AI.md PART 10`). No report file.
+7. If AI.md itself is ambiguous or contradicts itself, that is a template defect, not an IDEA.md problem: handle it under "If Spec Seems Wrong" and do not edit IDEA.md around it.
 
 ## IDEA.md Migration
 
