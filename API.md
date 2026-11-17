@@ -4470,7 +4470,7 @@ db.Query("SELECT * FROM users WHERE email = '" + email + "'")
 
 | Endpoint Type | Default Limit | Default Window | Response |
 |---------------|---------------|----------------|----------|
-| **Failed auth attempts (invalid token)** | 5 | 15 minutes | 429 + lockout |
+| **Failed auth attempts (invalid token)** | 5 | 15 minutes | 429 + lockout (`server.rate_limit.auth_failures`, PART 12 → "Rate Limiting") |
 | **API (authenticated)** | Configurable | 1 minute | 429 + Retry-After header |
 | **API (unauthenticated)** | Configurable | 1 minute | 429 + Retry-After header |
 | **File upload** | 10 | 1 hour | 429 |
@@ -8285,6 +8285,8 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 | `--maintenance pgp <action>` | 🔐 Auth | Requires `server.token` OR root | N/A |
 | `--maintenance security <action>` | 🔐 Auth | Requires `server.token` OR root | N/A |
 | `--maintenance secret rotate <name>` | 🔐 Auth | Requires `server.token` OR root | N/A |
+| `--maintenance data <export\|delete> --owner <prefix>` | 🔐 Auth | Requires `server.token` OR root | N/A |
+| `--maintenance compliance report` | 🔐 Auth | Requires `server.token` OR root | N/A |
 | (normal start) | ❌ No | Adapts paths to current user | N/A |
 
 **Key insight:** After service install, the `{internal_name}` user owns all data directories. However, sensitive operations require AUTHORIZATION, not just file access.
@@ -8777,6 +8779,14 @@ server:
       # per minute per IP (per token when authenticated) (health/status endpoints)
       requests: 120
       window: 60
+    strict:
+      # token reveal, rotate and restore (PART 8), per IP or per owner; every attempt, valid or not, counts
+      requests: 10
+      window: 900
+    auth_failures:
+      # failed authentication (invalid, revoked or expired token), per IP; at the limit the IP is locked out until the window passes
+      requests: 5
+      window: 900
     # per minute per IP (per token when authenticated) (absolute ceiling across all endpoint types)
     global_burst: 240
 
@@ -9543,7 +9553,7 @@ data:
   # GeoIP config lives under server.geoip — see PART 19: GEOIP
 
   # Blocklists: stored in {data_dir}/security/blocklists/
-  # Config is under server.security.blocklists (see Blocklists Section)
+  # Config is under server.security.blocklists (see "Update Contract and Sources" below)
 
   cve:
     # NVD (NIST National Vulnerability Database)
@@ -9556,6 +9566,8 @@ data:
     # error surfaced. Default to the full unfiltered feed; every CVE stays
     # relevant until an actual, verified dependency-to-CPE mapping exists.
     filter_by_cpe: false
+    # Optional NVD API key: raises the request rate limit; a secret like every other key
+    api_key: ""
 
   trivy:
     # Aqua Trivy vulnerability database (optional, for container scanning)
@@ -9577,16 +9589,47 @@ data:
 ├── geoip/                        # see PART 19: GEOIP for file list
 │   └── .last_updated
 ├── blocklists/
-│   ├── firehol_level1.txt
-│   ├── spamhaus_drop.txt
+│   ├── {id}.txt                  # one file per source (the default source is firehol_level1)
 │   └── .last_updated
 ├── cve/
 │   ├── nvd.json
 │   └── .last_updated
 └── trivy/
-    ├── db.tar.gz
+    ├── trivy.db
+    ├── metadata.json
     └── .last_updated
 ```
+
+### Update Contract and Sources
+
+**Blocklist sources** (`server.security.blocklists`, file-only, hot-reloaded):
+
+```yaml
+server:
+  security:
+    blocklists:
+      enabled: true
+      sources:
+        - id: firehol_level1
+          type: ip
+          url: "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset"
+          enabled: true
+```
+
+| Field | Rule |
+|-------|------|
+| `id` | Unique, `a-z0-9_`. The stored file is `{data_dir}/security/blocklists/{id}.txt` and the health check is `blocklist_{id}` |
+| `type` | `ip` (an address or a CIDR per line, IPv4 or IPv6) or `domain` (a lowercase hostname per line; a leading `*.` matches subdomains) |
+| `url` | `https://` only; any other scheme fails config validation |
+| `enabled` | Default `true` |
+| Line format | One entry per line. Blank lines and lines starting with `#` or `;` are ignored; anything after the first whitespace or `;` on a line is ignored. A line that does not parse as the source's `type` is skipped and counted; a file with no valid entry is rejected |
+| Defaults | Exactly one source ships enabled: `firehol_level1` (type `ip`). There is no default domain source |
+
+**NVD (`cve_update`):** the API is paged. Request `resultsPerPage=2000` and advance `startIndex` until `totalResults` is reached. The first run downloads everything; later runs ask only for changes (`lastModStartDate` and `lastModEndDate`, a window of at most 120 days; a longer gap is walked in 120-day windows). Stay at or below 5 requests per 30 seconds without a key and 50 with `data.cve.api_key` set. Records are stored as the API's `cve` objects in `nvd.json` (a JSON array); an incremental update replaces records with the same CVE `id`. A `403` or `429` backs off and retries on the next run and never fails startup.
+
+**Trivy DB (`cve_update`, when `data.trivy.enabled`):** pull `data.trivy.source` with an OCI registry client, read the `application/vnd.aquasec.trivy.db.layer.v1.tar+gzip` layer and extract its `trivy.db` and `metadata.json` into `trivy/`. The pull is skipped while `NextUpdate` in the stored `metadata.json` is still in the future.
+
+**Atomic update (every data set in this section):** download or extract into a temporary file or directory beside the final path, validate it (non-empty, parses, at least one valid entry or record), then rename it over the old one; a directory is swapped by renaming the old one aside and deleting it afterwards. On any failure the previous data stays untouched and in use, a warning is logged, and the data set's health check reports it as stale (PART 13). `.last_updated` holds one line: the UTC RFC 3339 time of the last SUCCESSFUL update of that directory.
 
 ## Display Environment Detection
 
@@ -12098,7 +12141,7 @@ The server creates the owner and its primary token (hash + encrypted copy), stor
 | Never a preferences row | Tokens are credentials in `api_tokens`, not preferences. UI preferences stay cookie-only (see "Client-Side Preferences") |
 | Never in lists or logs | List/detail responses return prefix, name, dates, status — never the token. Only the reveal action decrypts, and it writes an audit event |
 | Audit | `token.created`, `token.rotated`, `token.revealed`, `token.revoked`, `token.restored`, each with owner id and token prefix — never the token |
-| Rate limiting | Reveal, rotate and restore use the strict limiter (same tier as login-like actions); restore failures are counted per IP |
+| Rate limiting | Reveal, rotate and restore use the `strict` limiter (`server.rate_limit.strict`, PART 12); every attempt, valid or not, consumes it, and a restore with an invalid token also counts as a failed authentication |
 
 **Routes** (web forms are cookie-authenticated `POST`s with CSRF; the API mirror accepts the primary token's `Authorization` header only):
 
@@ -12108,6 +12151,7 @@ The server creates the owner and its primary token (hash + encrypted copy), stor
 | `POST /server/preferences/token/reveal` | `POST /api/{api_version}/server/preferences/tokens/primary/reveal` | Reveal the primary token |
 | `POST /server/preferences/token/rotate` | `POST /api/{api_version}/server/preferences/tokens/primary/rotate` | Rotate the primary token in place |
 | `POST /server/preferences/token/restore` | — | Restore an identity from a pasted primary token (sets the cookie; web only) |
+| `POST /server/preferences/token/forget` | — | Forget the token saved in THIS browser (web only): clears the owner cookie (`Max-Age=0`, same attributes) and sends `Clear-Site-Data: "storage"` for the localStorage copy, then `303` to the tokens page. The token stays valid and no resource is touched; restore it by pasting the primary token |
 | `POST /server/preferences/tokens` | `POST /api/{api_version}/server/preferences/tokens` | Create a linked token |
 | `POST /server/preferences/tokens/{id}/reveal` | `POST /api/{api_version}/server/preferences/tokens/{id}/reveal` | Reveal a linked token |
 | `POST /server/preferences/tokens/{id}/rotate` | `POST /api/{api_version}/server/preferences/tokens/{id}/rotate` | Rotate a linked token in place |
@@ -12805,6 +12849,8 @@ All templates, Swagger/OpenAPI, GraphQL, email links, etc. MUST use these resolv
 | 5 | **Public IPv6** | First public IPv6 (excludes private/link-local) |
 | 6 | **Public IPv4** | First public IPv4 (excludes 10/8, 172.16/12, 192.168/16) |
 | 7 | **localhost** | Last resort |
+
+**The request `Host` header (between priorities 1 and 2).** Priority 1 applies only when the TCP peer is a trusted proxy (PART 12 → "Trusted Proxies"); forwarded headers from any other peer are ignored. When no usable forwarded host exists, the request's own `Host` header is used when it is a valid hostname (RFC 1123, optional port) AND either `DOMAIN` is empty or the host is an entry of the `DOMAIN` list (or matches its inferred wildcard). A `Host` that is not in a non-empty `DOMAIN` list is NEVER copied into a URL, redirect, sitemap, feed, `robots.txt` or email link: the first `DOMAIN` entry is used instead (host-header injection defense). Priorities 2-7 apply when no request exists (the startup banner) or when this rule found nothing.
 
 **Public IP Detection (latest stable Go):**
 - Uses `ip.IsGlobalUnicast() && !ip.IsPrivate()`
@@ -14713,6 +14759,8 @@ Server-Timing: db;dur=12.4, render;dur=3.1, total;dur=18.7
 
 ### Default Policy (per-directive)
 
+**`upgrade-insecure-requests` is conditional:** the `upgrade-insecure-requests` line below is sent only when the effective request is HTTPS (TLS on the listener, or a trusted proxy reported `https`). On plain HTTP, and for Tor and I2P responses, it is omitted, because it would upgrade same-origin CSS, scripts and forms to an HTTPS port that does not exist.
+
 ```
 default-src 'self';
 script-src 'self';
@@ -14751,7 +14799,7 @@ report-uri /api/{api_version}/server/reports/csp
 | `base-uri` | `'self'` | Prevents `<base>` tag injection redirecting relative URLs. |
 | `form-action` | `'self'` | Forms can only submit back to the app. Operator extends for OAuth providers via `csp.form_action_extra`. |
 | `object-src` | `'none'` | Blocks `<object>`, `<embed>`, `<applet>` — legacy plugin attack surface. |
-| `upgrade-insecure-requests` | enabled | Browsers auto-upgrade `http://` references to `https://` when SSL is on, eliminating mixed-content warnings. |
+| `upgrade-insecure-requests` | when HTTPS | Sent only when the effective request is HTTPS; browsers then upgrade `http://` references to `https://`, eliminating mixed-content warnings. Omitted on plain HTTP and for Tor and I2P |
 | `report-to` | `default` group | Modern Reporting API. Group definition is in the `Report-To` header above. |
 | `report-uri` | `/api/{api_version}/server/reports/csp` | Legacy CSP-report fallback for browsers that don't support `report-to` yet. |
 
@@ -14838,7 +14886,7 @@ The middleware substitutes `{request_nonce}` per response and adds the same nonc
 | Clickjacking via `<iframe src="https://victim/...">` | ✓ Yes (frame-ancestors `'self'`) |
 | `<base href="https://evil/">` redirecting all relative URLs | ✓ Yes (base-uri `'self'`) |
 | Form-action hijack to `https://evil/login` | ✓ Yes (form-action `'self'`) |
-| Mixed-content `http://` references | ✓ Yes (upgrade-insecure-requests when SSL on) |
+| Mixed-content `http://` references | ✓ Yes (upgrade-insecure-requests on HTTPS requests) |
 | Stolen session cookie replay | ✗ No (CSP can't help — session/CSRF problem) |
 | Server-side template injection | ✗ No (CSP runs in the browser; SSTI is server-side) |
 
@@ -16132,6 +16180,18 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 
 **Compliance is configured entirely in `server.yml`. Consent state is stored client-side (cookies, so the server can read it per-request) — there is no server-side user consent table. Operators run `{project_name} --maintenance compliance report` for a compliance summary.**
 
+### Data Subject Commands (`--maintenance data`, `--maintenance compliance`)
+
+**There are no user accounts, so the data subject is an OWNER (PART 8 → "Owners and Owner Tokens"). Both commands take `--owner <prefix>`: the token prefix of any of that owner's tokens, as printed by `--maintenance token list`. They are authorized like other sensitive operations: `server.token` OR root.**
+
+| Command | Behavior |
+|---------|----------|
+| `--maintenance data export --owner <prefix> [--output FILE]` | Writes ONE JSON file (default `{project_name}-export-{owner_id}-{YYYYMMDD}.json` in the current directory, mode `0600`; `--output -` writes to stdout). Contents: `format: 1`, the owner id with its created and last-seen times, the metadata of its tokens (prefix, kind, name, created, last used, expires, status; NEVER a token value or hash), and every resource the owner owns in the same shape the API returns. Nothing about other owners, no audit or security log lines |
+| `--maintenance data delete --owner <prefix> [--yes]` | Deletes the owner, all its tokens and all its resources in ONE transaction, after the operator types the owner id to confirm (`--yes` skips the prompt for scripts). Audit log entries keep only the anonymized owner id (the rule above). Backups are not rewritten: the data leaves them with their normal retention |
+| `--maintenance compliance report` | Prints a plain-text summary: the enabled standards with their effective settings, the retention periods, counts (owners, resources, active tokens, open security reports), the compliance events of the last 30 days, and the time of the last backup. It contains counts and settings only, never personal data |
+
+In the audit events below, `User ID` means the owner id in this project (a random identifier, never an email address or a token).
+
 ### Compliance Audit Events
 
 | Event | Description | Logged Data |
@@ -16703,6 +16763,14 @@ server:
       # per minute per IP (per token when authenticated) (health/status endpoints)
       requests: 120
       window: 60
+    strict:
+      # token reveal, rotate and restore (PART 8), per IP or per owner; every attempt, valid or not, counts
+      requests: 10
+      window: 900
+    auth_failures:
+      # failed authentication (invalid, revoked or expired token), per IP; at the limit the IP is locked out until the window passes
+      requests: 5
+      window: 900
     # per minute per IP (per token when authenticated) (absolute ceiling across all endpoint types)
     global_burst: 240
 ```
@@ -16713,6 +16781,8 @@ server:
 | Write (POST, PUT, PATCH, DELETE) | 10 req/min | 60s | Per IP (anonymous) or per token (authenticated), sliding window |
 | Health / status | 120 req/min | 60s | `/server/healthz` (and the optional `/healthz` root alias) |
 | Global burst | 240 req/min | 60s | Absolute ceiling across all types |
+| Strict (token reveal, rotate, restore) | 10 / 15 min | 900s | Per IP (anonymous restore) or per owner (authenticated reveal and rotate). Every attempt, valid or not, consumes it |
+| Failed authentication | 5 failures / 15 min | 900s | Per IP, sliding window. At the limit every request from that IP, even one with a valid token, gets `429` until the oldest failure leaves the window; a success never resets the count |
 
 **Response when limited:** `429 Too Many Requests` with `Retry-After` header set to seconds until the window resets. Body: `{"ok":false,"error":"RATE_LIMITED","message":"Too many requests"}` — the wait time is conveyed via the `Retry-After` header only, never as a top-level body field (see PART 14 error-response rules).
 
@@ -23743,12 +23813,12 @@ document.querySelectorAll('.form-group input, .form-group select, .form-group te
 |---------|----------------|-------|
 | **Manifest** | `/manifest.json` with app metadata | Required for install |
 | **Icons** | Multiple sizes including maskable | For all platforms |
-| **Service Worker** | Cache, background sync, offline | Core of PWA |
+| **Service Worker** | Cache and offline (background sync only when IDEA.md needs it) | Core of PWA |
 | **Installable** | Meets PWA install criteria | Add to home screen |
 | **HTTPS** | Required for service workers | Non-negotiable |
-| **Geolocation** | GPS access via Geolocation API | User permission required |
-| **Background Sync** | Queue actions when offline, sync when online | Seamless offline |
-| **App Updates** | Detect new SW version, prompt user | Keep app current |
+| **Geolocation** | GPS access via Geolocation API | OPTIONAL: only when IDEA.md defines a feature that needs it; user permission required |
+| **Background Sync** | Queue actions when offline, sync when online | OPTIONAL: only when IDEA.md defines a feature that must work offline |
+| **App Updates** | Detect the new SW version, prompt the user, activate it only on their approval (a first install activates at once) | Keep app current |
 
 ### Service Worker Registration
 
@@ -23790,7 +23860,7 @@ if ('serviceWorker' in navigator) {
 | **Reconnect with backoff** | Every long-lived client connection (EventSource, WebSocket, polling loop) reconnects with exponential backoff (1 s -> 30 s) + jitter; every `fetch` has an `AbortController` timeout (30 s) |
 | **Restart window** | While the server is down or starting, the client shows a non-blocking "reconnecting" banner (not a frozen page) and retries; `503` + `Retry-After` is honored |
 | **New build detected** | Every API/SSE response carries the build stamp in `X-Build` (public value). When it differs from the stamp the page was rendered with, the client finishes the current action, then does ONE `location.reload()` (guarded by the `{project_name}_recovered` flag) - never mid-form-edit: if a form is dirty, show an "Update available - reload" button instead |
-| **Service worker handover** | New worker: `skipWaiting()` + `clients.claim()` (already above); the page listens for `controllerchange` and reloads once, not repeatedly |
+| **Service worker handover** | First install: the worker activates by itself and `clients.claim()` runs in `activate`. Update (a controller already exists): the new worker WAITS, the page shows the update prompt, and only after the user accepts it the page posts `SKIP_WAITING`, the worker calls `skipWaiting()`, and the page reloads once on `controllerchange`, never repeatedly |
 
 ### Service Worker Lifecycle
 
@@ -23833,8 +23903,7 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(PRECACHE_ASSETS))
-      // Activate immediately
-      .then(() => self.skipWaiting())
+      // No skipWaiting() here: an UPDATED worker waits for the user to accept the update prompt (SKIP_WAITING message); a first install has no waiting state and activates by itself
   );
 });
 
@@ -23945,7 +24014,7 @@ function offlineFallbackResponse() {
 1. User visits app
 2. Browser checks for new sw.js
 3. If changed → install event fires
-4. New SW waits until old SW's pages close (or skipWaiting)
+4. New SW waits until the user accepts the update prompt (the page sends `SKIP_WAITING`) or the old SW's pages close; a first install has nothing to wait for
 5. activate event fires → clean old caches
 6. New SW controls all pages
 ```
@@ -24059,6 +24128,8 @@ function isInstalledPWA() {
 
 ### Background Sync
 
+**OPTIONAL: implemented only when IDEA.md defines a feature that must work offline.** IDEA.md names each action that may be queued. Only idempotent actions (a replay is safe) are queued; a queued request never contains a credential (the replay goes through an open page that attaches the token), so the generic `/api/data` below is an illustration, never a real route; a queued request is discarded after success, after any `4xx` response, or after 24 hours; and the UI shows how many changes are waiting, with a control to discard them. A project without such a feature ships no Background Sync code.
+
 **Queue actions when offline, automatically sync when back online:**
 
 ```javascript
@@ -24118,6 +24189,8 @@ async function syncPendingData() {
 | Final | ~1 hour | Browser may give up |
 
 ### Geolocation (GPS Access)
+
+**OPTIONAL: implemented only when IDEA.md defines a feature that needs the device position.** The permission prompt appears only after a user action that needs it, never on load; the position is sent for that one request and is never stored or logged by the server beyond it; the privacy page lists it as data collected. A project without such a feature ships no Geolocation code.
 
 **Access device GPS like a native app:**
 
@@ -24331,7 +24404,7 @@ Preferences aren't tied to identity — any two guests who set the same `theme`/
 | 14 | **Import field** | An always-visible field named `code` (textarea or text input, accepts a pasted full URL, query string or short code) inside the single preferences form (rule 15) — no separate Import form or button. On save, a non-empty `code` is resolved per rule 5 and its valid values override the form's submitted values key by key (the visitor pasted it on purpose); an empty `code` is ignored. `GET /server/preferences/import` stays for shared links and API parity (rule 5 unchanged). JS may enhance (clipboard paste) but never changes the request |
 | 15 | **Page layout and buttons** | `/server/preferences` is ONE `<form method="POST" action="/server/preferences">` carrying the CSRF token and every section: appearance (`theme`), language (`lang`), cookie-consent and CCPA controls, every `{project_name}_pref_{key}` control, and a Data Management section (export block, rule 13; import field, rule 14) — all sections always visible, none collapsed or revealed by a button. The form has exactly three action buttons (the header theme toggle is a separate mini-form on other pages and is not part of this page's form): **Save** (submit; applies every changed field plus `code`, then `303` per rules 9–10), **Cancel** (a link to the rule 10 redirect target; discards unsaved edits, sends no write) and **Reset** (a `type="button"` with `popovertarget` that opens a native HTML `popover` — no JS; the popover holds the warning, an **Erase everything** submit with `action=reset`, and a dismiss control using `popovertargetaction="hide"`; those two belong to Reset, not to the page's button set; forgets the visitor completely: every noncredential cookie this app set — `theme`, `lang`, `{project_name}_pref_*`, `cookie_consent`, `ccpa_opt_out`, `{project_name}_build`, plus any other noncredential cookie the project defines (announcement dismissals, flash messages, age-verification or content-acknowledgment cookies, forwarding preferences) — is deleted (`Max-Age=0`, same `Path`/attributes as rule 8), and the `303` carries `Clear-Site-Data: "storage"` to wipe localStorage/sessionStorage/IndexedDB without JS. Defaults apply and the consent banner returns on the next page. Never deletes session, CSRF or other credential cookies — signing out is a separate action. The popover warning states exactly what is erased. Only Reset confirms — Save and Cancel never ask for confirmation. The popover is styled with CSS, and a direct `POST action=reset` behaves identically on the server). No per-section save buttons, no "Sync", "Export", "Import" or "Show" buttons; Copy controls (rule 13) are the only other controls. Owner-token management (PART 12) is NOT part of this form: it lives on its own page, `GET /server/preferences/tokens`, reached from a plain link on this page, and that page's per-action mini-forms are exempt from this button limit. Reset never deletes credential cookies: session, CSRF and the owner-token cookie |
 | 16 | **Web save never `400`** | `400 VALIDATION_FAILED` (rule 11) is API-only. A web `POST /server/preferences` always answers `303` (rule 9) — including empty submits, unchecked checkboxes (absent fields), invalid values (dropped) and a bad `code`. The only `4xx` is a missing/invalid CSRF token (`403`), so the page form MUST always render the token and post only to the canonical route, never to the `/api/{api_version}/…` mirror |
-| 17 | **Consent and CCPA controls** | The page form's cookie-consent toggles (`consent_preferences`, `consent_analytics`; `essential` is always on and not a field) and CCPA opt-out toggle (`ccpa_opt_out`) are web-form-only controls handled by `POST /server/preferences`, with a hidden `consent_form=1` marker rendered inside the form. They are applied only when `consent_form=1` is present — an unchecked checkbox then means off, while a POST without the marker (the header theme toggle) never touches consent or CCPA. Applying writes `cookie_consent` (JSON per PART 16 consent state, with a fresh timestamp in Unix seconds) and `ccpa_opt_out` with the rule 8 attributes. Import and the API mirror never write them, Reset deletes them (rule 15), and they are never exported (rule 1) |
+| 17 | **Consent and CCPA controls** | The page form's cookie-consent toggles (`consent_preferences`, `consent_analytics`; `essential` is always on and not a field) and the CCPA opt-out toggle (`ccpa_opt_out`, rendered only when `server.privacy.data.sold` is `true`; otherwise absent and never written) are web-form-only controls handled by `POST /server/preferences`, with a hidden `consent_form=1` marker rendered inside the form. They are applied only when `consent_form=1` is present — an unchecked checkbox then means off, while a POST without the marker (the header theme toggle) never touches consent or CCPA. Applying writes `cookie_consent` (JSON per PART 16 consent state, with a fresh timestamp in Unix seconds) and `ccpa_opt_out` with the rule 8 attributes. Import and the API mirror never write them, Reset deletes them (rule 15), and they are never exported (rule 1) |
 
 **Page layout (`/server/preferences`) — one form, one Save, always visible:**
 ```
@@ -25009,6 +25082,8 @@ ERROR: VALIDATION_FAILED: email must be valid
 
 A route opts into bare-value output only by declaring a primary value; there is no per-request switch. Clients that need the structure use JSON.
 
+**Where the pieces come from:** `{message}` is the response's `message` when the handler set one; otherwise the default for the operation: `Retrieved successfully` (GET), `Created successfully` (POST that creates), `Updated successfully` (PUT, PATCH), `Deleted successfully` (DELETE), `OK` (anything else). `message` is optional in a JSON success body, so these defaults exist only for the text output. A route declares its primary value (`Primary`: the JSON field name, empty when there is none) once, in the same route definition that feeds Swagger and `llms.txt`. Field order is the order of the fields in the Go response struct (the order `encoding/json` writes); a `map` is written with its keys sorted alphabetically, so a response whose order matters is a struct, never a map.
+
 ## Server Response Rules
 
 **These rules apply SERVER-WIDE to ALL responses (API, frontend AJAX, CLI, webhooks).**
@@ -25610,7 +25685,7 @@ function copyToClipboard(text, btn) {
 // ============================================================================
 // Toast notifications
 // ============================================================================
-// Durations per toast spec: success/info 3s, warning 5s, error never auto-dismisses
+// Defaults of server.notifications.webui duration (success/info) and warning_duration (warning); the page may override them through data-toast-duration and data-toast-warning-duration on <body>; errors never auto-dismiss
 const TOAST_DURATIONS = { success: 3000, info: 3000, warning: 5000, error: 0 };
 const TOAST_ICONS = { success: '✓', error: '✗', warning: '⚠', info: 'ℹ' };
 
@@ -26766,7 +26841,7 @@ server:
 - Split into multiple sitemap files: `/sitemap-1.xml`, `/sitemap-2.xml`, etc.
 - Each sitemap file max 50,000 URLs
 
-**Absolute URLs (sitemap, feeds, `robots.txt`):** every URL these files emit is ABSOLUTE and built per request with `BuildURL(r, path)`, that is `{proto}://{fqdn}[:{port}]/path`, resolved from the request context (PART 8 → "Resolution Order"). In these files `{app_url}` means exactly that value. Never relative paths, never a value cached at startup: `<loc>`, feed `<link>`, `<id>`, `rel="self"`, `<guid>` permalinks and the `Sitemap:` line must match the host and scheme the client used (a `.onion` request gets `.onion` URLs).
+**Absolute URLs (sitemap, feeds, `robots.txt`):** every URL these files emit is ABSOLUTE and built per request with `BuildURL(r, path)`, that is `{proto}://{fqdn}[:{port}]/path`, resolved from the request context (PART 8 → "Resolution Order"). In these files `{app_url}` means exactly that value. Never relative paths, never a value cached at startup: `<loc>`, feed `<link>`, `<id>`, `rel="self"`, `<guid>` permalinks and the `Sitemap:` line must match the host and scheme the client used, as accepted by PART 8 → "Resolution Order" (a `.onion` request gets `.onion` URLs; an unlisted `Host` is replaced by the primary `DOMAIN` entry).
 
 ### Feeds (/feed.xml and /rss.xml)
 
@@ -29338,7 +29413,7 @@ server:
 | Setting | Default | Description |
 |---------|---------|-------------|
 | Toast position | `top-right` | Corner for toast notifications |
-| Toast duration | `3` seconds (success/info), `5` (warning), manual (error) | Auto-dismiss time (0 = manual) |
+| Toast duration | `duration: 3` seconds (success/info), `warning_duration: 5` (warning); errors are always manual | Auto-dismiss time under `server.notifications.webui` (0 = manual) |
 | Error dismiss | `manual` | Errors require manual dismiss |
 | Banner type | `info` | Default announcement type when `announcements[].type` is unset |
 
@@ -29358,8 +29433,10 @@ server:
     webui:
       position: top-right
       # top-right, top-left, bottom-right, bottom-left
-      duration: 5
-      # seconds (0 = manual dismiss)
+      # success and info toasts auto-dismiss after this many seconds (0 = manual dismiss)
+      duration: 3
+      # warning toasts auto-dismiss after this many seconds (0 = manual dismiss); error toasts never auto-dismiss and have no setting
+      warning_duration: 5
 
     # Email notifications
     # enabled is auto-set based on SMTP availability (no manual toggle)
@@ -29493,7 +29570,7 @@ Every project MUST include these scheduled tasks:
 | `blocklist_update` | Daily at 04:00 | Download/update IP/domain blocklists | Yes |
 | `cve_update` | Daily at 05:00 | Download/update CVE (NVD) and Trivy vulnerability databases — trivy has no separate scheduled task despite its own directory/config; this task owns it too | Yes |
 | `update_check` | Daily at 06:00 | Check release channel for a newer version — notify-only unless `update.auto_install: true` (default false); honors `update.defer_days` | Yes |
-| `token_cleanup` | Every 15 minutes | Remove expired API tokens and sessions, and used or expired simple-captcha challenges | No |
+| `token_cleanup` | Every 15 minutes | Delete used or expired simple-captcha challenges and apply the owner idle purge (`server.tokens.idle_purge_days`, PART 8). Expired linked tokens are NOT deleted: they stay listed as expired until the owner revokes them or changes their expiry | No |
 | `log_rotation` | Daily at 00:00 | Rotate and compress old logs | No |
 | `backup_daily` | Daily at 02:00 | Full backup + daily incremental (default: 2 files) | Yes |
 | `backup_hourly` | Hourly | Hourly incremental (disabled by default) | Yes |
@@ -45759,15 +45836,26 @@ update:
 
 **Why CLI download default is unauthenticated:** the CLI is the entry point for new users. Forcing auth on the download means they need a token before they can install the tool that obtains the token. Operators who run a private deployment can flip `cli.binary_download.require_auth` to `true`.
 
+**Configuration (server `server.yml`):**
+
+```yaml
+cli:
+  binary_download:
+    # false (default): the CLI binary download is public; true: it needs an Authorization: Bearer token
+    require_auth: false
+```
+
 **Audit events (added to PART 11 taxonomy):**
 
-| Event | Description |
-|-------|-------------|
-| `cli.update_started` | CLI began an auto-update download |
-| `cli.update_completed` | CLI restarted on new version |
-| `cli.update_checksum_invalid` | SHA-256 didn't match the published checksum |
-| `cli.update_forced` | CLI below `cli_min_version`; refused to make further requests until updated |
-| `cli.token_revoked_detected` | CLI received `401 TOKEN_REVOKED`, exited / cleared cached token |
+| Event | Producer | Description |
+|-------|----------|-------------|
+| `cli.update_started` | Server | A CLI binary download was served: logged with the OS-arch, the served version and the client IP |
+| `cli.token_revoked_detected` | Server | The server answered `401 TOKEN_REVOKED` to a CLI request (User-Agent `{project_name}-cli/...`): logged with the token prefix, never the token |
+| `cli.update_completed` | CLI | The CLI restarted on the new version (old version, new version, OS-arch) |
+| `cli.update_checksum_invalid` | CLI | The SHA-256 did not match the published checksum (versions, OS-arch) |
+| `cli.update_forced` | CLI | The CLI is below `cli_min_version` and refuses further requests (current version, minimum) |
+
+**Where they are recorded:** server events go to the server audit log (PART 11). CLI events are written to the CLI's own `cli.log` as audit-format lines (timestamp, event, the fields above) and printed to stderr. The CLI sends no telemetry and no endpoint exists to report them, so the server audit log never contains them.
 
 
 ### Flag-to-Config Save Rules
@@ -46069,6 +46157,10 @@ Why CLI needs a setup wizard:
 | **Error handling** | Clear error dialogs | Clear error messages |
 | **Accessibility** | Platform a11y support | Screen reader compatible |
 | **Theming** | Follow system theme | Follow terminal colors |
+
+**What "100% of server functionality" means:** the feature inventory is the CLI command tree (`{project_name}-cli --help`). Every CLI command and subcommand that talks to the server has exactly one screen in the GUI and one view in the TUI, reached from the main menu in the same order as the help output. Machine-only endpoints (the token check, MCP, autodiscover) and server-binary actions (`--service`, `--maintenance`) are not client features in the CLI, the GUI or the TUI. A CLI command that lacks either its GUI screen or its TUI view is a defect, and the test suite lists the screen and the view for every CLI command.
+
+**Interaction contract:** every control is reachable with Tab and Shift+Tab, activated with Enter or Space, and dialogs close with Escape; the focused control is always visible; an error opens a modal dialog (TUI: a status line) whose text is the API `message`, which takes focus and returns it to the control that triggered it; an action that changes data on the server shows its result the same way. Where the GUI toolkit has no accessibility API for a control, the TUI and CLI are the accessible path and the gap is stated in the README.
 
 **GUI must NOT be:**
 - Electron or web-based (use native toolkits only)
@@ -46378,15 +46470,13 @@ func LaunchGUI(config *Config) error {
             }
             cw, ch = w, h
         }
-        sv := dc.SurfaceView()
-        sw, sh := dc.SurfaceSize()
         canvas.Draw(func(cc *gg.Context) {
             cc.SetRGBA(0.94, 0.94, 0.94, 1)
             cc.DrawRectangle(0, 0, float64(cw), float64(ch))
             cc.Fill()
             uiApp.Window().DrawTo(render.NewCanvas(cc, cw, ch))
         })
-        if err := canvas.RenderDirect(sv, sw, sh); err != nil {
+        if err := canvas.Render(dc.RenderTarget()); err != nil {
             log.Printf("render: %v", err)
         }
     })
