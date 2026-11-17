@@ -13269,7 +13269,6 @@ var restartRequiredSettings = []string{
     "ssl.min_version",
     "server.daemonize",
     "database.path",
-    "tor.enabled",
 }
 
 func categorizeChanges(changes []string) (hotReload, needsRestart []string) {
@@ -16922,7 +16921,7 @@ The server enforces exactly what it publishes: the same descriptors drive the HT
 
 ### Security Report Storage & Operator Workflow
 
-**Table `security_reports`** lives in the application database (created by the schema migration that ships with this feature, PART 10 → "Migrations"). It is the only place report state is kept.
+**Table `security_reports`** lives in the application database (created by the idempotent startup schema, PART 10 → "Schema Updates (Idempotent Approach)"). It is the only place report state is kept.
 
 ```sql
 CREATE TABLE IF NOT EXISTS security_reports (
@@ -31898,7 +31897,7 @@ func RegisterAdminRoutes(r *mux.Router) {
 **What Setup Wizard Provides:**
 - Custom admin username/password (instead of generated)
 - Customize app name/branding
-- Review HTTPS/certificate configuration if customization is needed, and enable optional features like multi-user - Note: Tor is auto-enabled if the binary is found; admins can toggle it later via the Tor settings (`config/network/tor`)
+- Review HTTPS/certificate configuration if customization is needed, and enable optional features like multi-user - Note: Tor is auto-enabled if the binary is found; there is no toggle (its status and address are on the Tor settings page, `network/tor`)
 - Receive API token for programmatic access
 
 ### Setup Flow
@@ -32729,7 +32728,6 @@ Admin Panel Header:
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
-| `tor.enabled` | Toggle | (auto) | No | Enable hidden service |
 | `tor.onion_address` | Readonly | - | - | `.onion` address |
 | `tor.status` | Readonly | - | - | Running/Stopped |
 | `[Copy Address]` | Button | - | - | Copy onion to clipboard |
@@ -36253,7 +36251,7 @@ server:
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `tor_enabled` | Gauge | - | 1 if Tor is enabled, 0 otherwise |
+| `tor_enabled` | Gauge | - | 1 if a `tor` binary was found (the hidden service is active on this instance), 0 otherwise |
 | `tor_running` | Gauge | - | 1 if Tor process is running, 0 otherwise |
 | `tor_circuit_established` | Gauge | - | 1 if circuit established, 0 otherwise |
 | `tor_requests_total` | Counter | - | Total requests via Tor hidden service |
@@ -36398,7 +36396,7 @@ server:
 # TYPE {project_name}_cluster_is_primary gauge
 {project_name}_cluster_is_primary 1
 
-# HELP {project_name}_tor_enabled 1 if Tor is enabled
+# HELP {project_name}_tor_enabled 1 if a tor binary was found
 # TYPE {project_name}_tor_enabled gauge
 {project_name}_tor_enabled 1
 
@@ -53520,7 +53518,7 @@ func ValidateTorConfig(config *TorConfig) []ValidationError {
 
 **Search algorithm:** the built-in search brute-forces v3 onion keypairs in-process — the same approach as `mkp224o`, with no external tool dependency: each worker generates a random ed25519 keypair, derives the v3 onion address per rend-spec-v3 (`base32(pubkey ‖ checksum ‖ 0x03)` where `checksum = SHA3-256(".onion checksum" ‖ pubkey ‖ 0x03)[0:2]`), compares the prefix, and repeats until a worker finds a match. A vanity key is an ordinary random ed25519 keypair merely *selected* by its address — the search does not weaken key security.
 
-**Parameters** (JSON body of POST `…/config/network/tor/vanity`):
+**Parameters** (JSON body of POST `…/network/tor/vanity`):
 
 | Field | Default | Rules |
 |-------|---------|-------|
@@ -53529,9 +53527,9 @@ func ValidateTorConfig(config *TorConfig) []ValidationError {
 
 - **One search at a time** — POST while a search is running returns 409 naming the running search's prefix
 - A running search does NOT survive a server restart; found candidates on disk do
-- DELETE `…/config/network/tor/vanity` cancels the running search; candidates already written to disk are kept
+- DELETE `…/network/tor/vanity` cancels the running search; candidates already written to disk are kept
 
-**Status** (GET `…/config/network/tor/vanity`):
+**Status** (GET `…/network/tor/vanity`):
 
 ```json
 {
@@ -62063,7 +62061,7 @@ func AutodiscoverHandler(w http.ResponseWriter, r *http.Request) {
             },
             "features": map[string]interface{}{
                 "clustering": cfg.Cluster.Enabled,
-                "tor":        cfg.Tor.Enabled,
+                "tor":        torManager.Enabled(),
                 "webauthn":   cfg.Auth.WebAuthn.Enabled,
                 "oauth":      cfg.Auth.OAuth.EnabledProviders(),
             },

@@ -15248,7 +15248,7 @@ The server enforces exactly what it publishes: the same descriptors drive the HT
 
 ### Security Report Storage & Operator Workflow
 
-**Table `security_reports`** lives in the application database (created by the schema migration that ships with this feature, PART 10 → "Migrations"). It is the only place report state is kept.
+**Table `security_reports`** lives in the application database (created by the idempotent startup schema, PART 10 → "Schema Updates (Idempotent Approach)"). It is the only place report state is kept.
 
 ```sql
 CREATE TABLE IF NOT EXISTS security_reports (
@@ -30282,7 +30282,7 @@ server:
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `tor_enabled` | Gauge | - | 1 if Tor is enabled, 0 otherwise |
+| `tor_enabled` | Gauge | - | 1 if a `tor` binary was found (the hidden service is active on this instance), 0 otherwise |
 | `tor_running` | Gauge | - | 1 if Tor process is running, 0 otherwise |
 | `tor_circuit_established` | Gauge | - | 1 if circuit established, 0 otherwise |
 | `tor_requests_total` | Counter | - | Total requests via Tor hidden service |
@@ -30400,7 +30400,7 @@ server:
 # TYPE {project_name}_go_gc_runs_total counter
 {project_name}_go_gc_runs_total 1523
 
-# HELP {project_name}_tor_enabled 1 if Tor is enabled
+# HELP {project_name}_tor_enabled 1 if a tor binary was found
 # TYPE {project_name}_tor_enabled gauge
 {project_name}_tor_enabled 1
 
