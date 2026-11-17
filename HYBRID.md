@@ -15581,7 +15581,9 @@ web:
 
 #### Tools
 
-- **One tool per public API operation** (`{api_version}` routes), generated from the same route definitions that feed Swagger and `llms.txt` — never a hand-maintained second list.
+- **One tool per API operation the project defines** (`{api_version}` routes): the public reads AND every authenticated operation, create / read / list / update / delete included, for every resource the project defines. Everything the REST API lets a caller do, that caller can do as a tool; nothing authenticated is REST-only and nothing is added that REST lacks. Generated from the same route definitions that feed Swagger and `llms.txt` — never a hand-maintained second list.
+- **Annotations come from the HTTP method** (MCP tool annotations, so a client can ask its user before a risky call): `GET` → `readOnlyHint: true`; `DELETE` → `destructiveHint: true`; `PUT` and `DELETE` → `idempotentHint: true`; `POST` and `PATCH` → `readOnlyHint: false`.
+- **Never a tool:** the MCP endpoint itself, and every route that signs a caller in or hands out a secret: login, logout, registration, password reset, 2FA, OAuth, and any token reveal, rotate or create. MCP clients authenticate with their Bearer token, and tool results enter the model's context.
 - Tool `name` = the OpenAPI `operationId`; `description` and `inputSchema` come from the OpenAPI definition; `tools/list` returns only the tools the caller's token may use.
 - A tool call dispatches **in-process into the existing handler** with the caller's `Authorization` header — no second implementation, no loopback HTTP request, no bypass of middleware (validation, rate limits, audit, the project's ownership checks).
 - Handler errors map to the MCP tool result with `isError: true` and the API's normal error body (`ok: false`, `error`, `message`); secrets are never included in a tool result any more than in an API response.
@@ -28658,13 +28660,42 @@ When the admin panel is enabled (PART 28) these are editable at `/server/{admin_
 | Value | Behavior |
 |-------|----------|
 | `simple` (default) | Built-in, self-hosted challenge: no third party, no keys, works over Tor and with JavaScript disabled. The server generates a question and stores only the hashed answer; each challenge is single-use, expires after 10 minutes and is rate-limited |
-| `recaptcha` | Google reCAPTCHA v2 checkbox. Needs `pages.contact.captcha_site_key` (public, rendered in the page) and `pages.contact.captcha_secret_key` (server-side only, kept in `server.yml` like other secrets, never returned in a response or written to a log). The server verifies by POSTing `secret`, `response` and `remoteip` to `https://www.google.com/recaptcha/api/siteverify` and accepts only `"success": true` |
-| `hcaptcha` | hCaptcha. Same two keys; verified by POSTing `secret` and `response` to `https://api.hcaptcha.com/siteverify` and accepting only `"success": true` |
+| `recaptcha` | Google reCAPTCHA v2 checkbox. Needs `pages.contact.captcha_site_key` (public, rendered in the page) and `pages.contact.captcha_secret_key` (server-side only, kept in `server.yml` like other secrets, never returned in a response or written to a log). The server verifies by POSTing `secret`, `response` and `remoteip` to `https://www.google.com/recaptcha/api/siteverify` and accepts only `"success": true`; the widget needs JavaScript, so the no-JavaScript fallback below applies |
+| `hcaptcha` | hCaptcha. Same two keys; verified by POSTing `secret` and `response` to `https://api.hcaptcha.com/siteverify` and accepting only `"success": true`; the widget needs JavaScript, so the no-JavaScript fallback below applies |
 
 - **Validation:** `recaptcha` or `hcaptcha` with an empty site key or secret key fails config validation with a clear error; the keys are ignored for `simple`
 - **Fail closed:** if the provider cannot be reached, the submission is rejected with a retryable error — never accepted unverified
 - **CSP:** only the selected provider's hosts are added to `script-src`, `frame-src` and `connect-src` (for example `https://www.google.com/recaptcha/` and `https://www.gstatic.com/recaptcha/`, or `https://hcaptcha.com` and `https://*.hcaptcha.com`)
 - **Tor and I2P:** requests served through the onion or I2P address always use `simple`, whatever `captcha` is set to — clearnet providers are never called from there (PART 16 → Tor). The same challenge protects the security-report form
+
+#### No-JavaScript fallback and the simple challenge
+
+**Every form that carries a CAPTCHA works with JavaScript disabled (PART 16).** The `recaptcha` and `hcaptcha` widgets need JavaScript, so a provider is never the only way to pass:
+
+- **Fallback:** when `captcha` is `recaptcha` or `hcaptcha`, the form renders the provider widget AND, inside `<noscript>`, the built-in simple challenge (the question text, a visible answer field and a hidden `captcha_id`). A browser with JavaScript never shows the fallback; a browser without it shows only the fallback. The fallback involves no provider script, key or request
+- **API clients** cannot solve a provider widget either, so the `GET` descriptor for a provider also carries a `fallback` object (the simple challenge): a program can always pass with the simple answer
+- **What the server accepts:** exactly one proof per submission. A provider token (`captcha_response`; browser forms post the provider's own field, `g-recaptcha-response` or `h-captcha-response`) is verified with the provider; otherwise `captcha_id` + `captcha_answer` is verified as the simple challenge. When both are present only the provider token is checked, and a failure is final (no second try with the other proof)
+- **Fail closed:** a missing, wrong, expired or already used proof rejects the submission with `VALIDATION_FAILED` (`400`) on the field `captcha`, and the error response carries a fresh `captcha` descriptor, so a retry never needs another `GET`
+
+**The simple challenge contract:**
+
+| Rule | Detail |
+|------|--------|
+| Question | Plain text only, never an image or audio, so screen readers, text browsers and Tor Browser at its strictest level all work. A short arithmetic question (two integers from 1 to 20 joined by `+` or `-`, never a negative result) phrased through the translation keys of the visitor's language; the answer is always an integer written in digits |
+| Answer check | The submitted answer is trimmed, then compared in constant time against the stored hash. The answer itself is never stored or logged |
+| Storage | Table `captcha_challenges` in the application database (idempotent startup schema), shown below |
+| Lifetime | Single-use and valid for 10 minutes. A challenge is deleted when it is used or when it expires (the `token_cleanup` task removes the leftovers) |
+| Issuing | A new challenge for every render of the form page, every `GET /api/{api_version}/server/contact` (and the security-report equivalent) and every failed submission. An issued challenge never changes |
+| Rate limit | Issuing and verifying both count against the caller's rate limiter (PART 12) |
+
+```sql
+CREATE TABLE IF NOT EXISTS captcha_challenges (
+    id          VARCHAR(32) PRIMARY KEY,
+    answer_hash VARCHAR(64) NOT NULL,
+    expires_at  TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_captcha_challenges_expires ON captcha_challenges(expires_at);
+```
 
 ### /server/help
 
@@ -28844,7 +28875,7 @@ When `server.mcp.enabled` is `false`, both routes return `404` and no link to th
 
 | Anchor | Section | Content |
 |--------|---------|---------|
-| `#overview` | What this is | One short paragraph: this application is an MCP server over Streamable HTTP (remote only); every public API operation is available to an assistant as a tool |
+| `#overview` | What this is | One short paragraph: this application is an MCP server over Streamable HTTP (remote only); every API operation the project defines, authenticated create, read, update and delete included, is available to an assistant as a tool; the token decides which ones it sees (anonymous callers see only the public ones) |
 | `#endpoint` | Endpoint | The full MCP URL resolved for this request (PART 8 → "Resolution Order", never hardcoded) with the two aliases (`/api/mcp`, `/mcp`) and a copy control; the URL text uses CSS `user-select: all` so it works without JS |
 | `#authentication` | Authentication | Requests authenticate with `Authorization: Bearer {token}` — the same tokens as the REST API, no MCP-specific token. Anonymous access works for public tools. Use the signed-in user's own `sys_` token (`{user_config_dir}/user.token`); it reaches only that OS user's context. A resource owner token reaches only its one resource. Never hand the operator token (`server.token`) to an MCP client. |
 | `#connect` | Connect a client | Copy-paste snippets using the resolved URL and the project name: a Claude Code command (`claude mcp add --transport http {project_name} {url} --header "Authorization: Bearer $MCP_TOKEN"`), a generic JSON client config (`mcpServers` with `type`, `url`, `headers`), and a `curl` `initialize` request that verifies the connection. The token is the only value the page cannot know, so it appears as the shell variable `$MCP_TOKEN` — no other placeholders |
@@ -28941,8 +28972,8 @@ When the admin panel is enabled (PART 28) all pages are editable at `/server/{ad
 |-------|--------|-------------|
 | `/api/{api_version}/server/about` | GET | About information (JSON) |
 | `/api/{api_version}/server/privacy` | GET | Privacy policy (JSON) |
-| `/api/{api_version}/server/contact` | GET | Contact form description (JSON, no auth): `fields` (list of `{name, type, required, max_length, required_when, max_length_when}`, see "Length limits"), `captcha` (`{provider, site_key}` for `recaptcha`-style providers, `{provider, challenge_id, question}` for `simple`), `security_url`, `abuse_email`. Nothing else about recipients |
-| `/api/{api_version}/server/contact` | POST | Submit contact form |
+| `/api/{api_version}/server/contact` | GET | Contact form description (JSON, no auth): `fields` (list of `{name, type, required, max_length, required_when, max_length_when}`, see "Length limits"), `captcha` (`{provider: "simple", challenge_id, question}` for `simple`; `{provider, site_key, fallback}` for `recaptcha` and `hcaptcha`, where `fallback` is the same `{provider: "simple", challenge_id, question}` object; a new challenge on every call), `security_url`, `abuse_email`. Nothing else about recipients |
+| `/api/{api_version}/server/contact` | POST | Submit contact form: the fields above plus ONE captcha proof (`captcha_response`, or `captcha_id` + `captcha_answer`; see "No-JavaScript fallback and the simple challenge") |
 | `/api/{api_version}/server/auth/check` | GET | Token check (machine-only, no page; `Authorization: Bearer` required): `200` with `{kind}` when the token is valid (`kind` is `operator`, `owner` or, where the project has accounts, `user`), `401` otherwise. Side-effect free, rate-limited like other auth endpoints, never echoes the token |
 | `/api/{api_version}/server/help` | GET | Help content (JSON) |
 | `/api/{api_version}/server/help/mcp` | GET | MCP help content (JSON); `404` when MCP is disabled |
@@ -29743,7 +29774,7 @@ Every project MUST include these scheduled tasks:
 | `blocklist_update` | Daily at 04:00 | Download/update IP/domain blocklists | Yes |
 | `cve_update` | Daily at 05:00 | Download/update CVE (NVD) and Trivy vulnerability databases — trivy has no separate scheduled task despite its own directory/config; this task owns it too | Yes |
 | `update_check` | Daily at 06:00 | Check release channel for a newer version — notify-only unless `update.auto_install: true` (default false); honors `update.defer_days` | Yes |
-| `token_cleanup` | Every 15 minutes | Remove expired API tokens and sessions | No |
+| `token_cleanup` | Every 15 minutes | Remove expired API tokens and sessions, and used or expired simple-captcha challenges | No |
 | `log_rotation` | Daily at 00:00 | Rotate and compress old logs | No |
 | `backup_daily` | Daily at 02:00 | Full backup + daily incremental (default: 2 files) | Yes |
 | `backup_hourly` | Hourly | Hourly incremental (disabled by default) | Yes |

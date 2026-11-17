@@ -2793,7 +2793,7 @@ resize_for_context() {
 | "Skip the security headers, this is an internal tool" | A waiver of a mandatory requirement | Remove; mandatory parts are built exactly as AI.md defines them |
 | "Publishes a raw TCP paste port 9999" | WHAT (AI.md says such a port is documented in IDEA.md) | Keep |
 
-**IDEA.md may declare only what AI.md explicitly lets it declare:** the product's features, data models, business rules and audience; the template's explicitly OPTIONAL capabilities the project uses; and the specific items AI.md names as "declared in IDEA.md" (for example a custom build image, owner tokens, a custom raw port, a data class or compliance profile). Everything else IDEA.md says about HOW is either a copy of AI.md (remove it: duplicated rules drift when AI.md changes) or a contradiction (fix it). IDEA.md refers to AI.md by PART number instead of restating a rule.
+**IDEA.md may declare only what AI.md explicitly lets it declare:** the product's features, data models, business rules and audience; the template's explicitly OPTIONAL capabilities the project uses; and the specific items AI.md names as "declared in IDEA.md" (for example a custom build image, a custom raw port, a data class or compliance profile). Everything else IDEA.md says about HOW is either a copy of AI.md (remove it: duplicated rules drift when AI.md changes) or a contradiction (fix it). IDEA.md refers to AI.md by PART number instead of restating a rule.
 
 **When to check (every time, not only at setup):**
 
@@ -4068,7 +4068,7 @@ User preferences like theme, language, and UI settings can be stored client-side
 
 | Storage | Use Case | Persistence |
 |---------|----------|-------------|
-| Cookies | Theme, language, consent flags — anything the server reads to render pages; plus, only when the project defines owner tokens (PART 12, per IDEA.md), the `owner_token` cookie (HttpOnly + Secure + SameSite=Strict) set when an owner is issued (web-form resource creation) or restored on `/server/preferences/tokens`, so token-gated web management works with JS disabled | Configurable expiry |
+| Cookies | Theme, language, consent flags — anything the server reads to render pages; plus the `owner_token` cookie (HttpOnly + Secure + SameSite=Strict) set when an owner is issued (web-form resource creation) or restored on `/server/preferences/tokens`, so token-gated web management works with JS disabled | Configurable expiry |
 | `localStorage` | Optional JS-enhancement copy of the owner API token, and pure client-only state — never load-bearing; every flow must also work via the `owner_token` cookie with JS disabled | Until cleared |
 
 ## AI Implementation Process
@@ -15132,15 +15132,17 @@ web:
 | No token | Anonymous: only what an unauthenticated API call may do (public endpoints, default rate limits). An operation that needs auth returns the API's normal `401` (with `WWW-Authenticate: Bearer`, PART 8 → "Auth Token Presentation") JSON-RPC error |
 | Authorization | Per tool call, with the caller's token, by the same checks as the matching API endpoint. A token that cannot call an endpoint over REST cannot call its tool |
 | Rate limiting, audit | The same limiters and audit events as the API; the audit `source` is `mcp` so MCP traffic is distinguishable |
-| Owner and linked tokens | Both work as the Bearer token. A tool call sees exactly the owner's resources and runs the API's ownership check. **A linked token is the intended credential for MCP clients** — create one named for the client on `/server/preferences/tokens` so it can be revoked without touching the primary |
+| Owner and linked tokens | Owner tokens exist in EVERY project (PART 8 → "API Token Model"), so every MCP client can always hold a credential for the create, update and delete tools. Both kinds work as the Bearer token. A tool call sees exactly the owner's resources and runs the API's ownership check. **A linked token is the intended credential for MCP clients** — create one named for the client on `/server/preferences/tokens` so it can be revoked without touching the primary |
 | Operator token | `server.token` works as Bearer and sees operator-only tools; for any other caller those tools are absent from `tools/list` AND rejected on `tools/call` |
-| MCP clients | Give each MCP client its own linked token (never the primary, never `server.token` — that is full operator access). A project without owner tokens exposes only its public endpoints to MCP clients; there is no non-operator credential to issue there |
+| MCP clients | Give each MCP client its own linked token (never the primary, never `server.token` — that is full operator access). |
 | Token management | **Never exposed as tools.** Reveal, rotate, create, revoke and restore of tokens exist only on `/server/preferences/tokens` and its API mirror, never over MCP |
 | Creation by an anonymous client | **Not allowed over MCP.** A tool that would issue a new owner (and its token) requires an existing token; without one it fails with the API's `401`, and such tools are absent from `tools/list` for anonymous callers. Owner tokens are issued only by the REST API or the web form, never inside a tool result — tool results enter the model's context and the provider's logs. A caller that already has a token passes it and no new owner is created |
 
 #### Tools
 
-- **One tool per public API operation** (`{api_version}` routes), generated from the same route definitions that feed Swagger and `llms.txt` — never a hand-maintained second list.
+- **One tool per API operation the project defines** (`{api_version}` routes): the public reads AND every authenticated operation, create / read / list / update / delete included, for every resource the project defines. Everything the REST API lets a caller do, that caller can do as a tool; nothing authenticated is REST-only and nothing is added that REST lacks. Generated from the same route definitions that feed Swagger and `llms.txt` — never a hand-maintained second list.
+- **Annotations come from the HTTP method** (MCP tool annotations, so a client can ask its user before a risky call): `GET` → `readOnlyHint: true`; `DELETE` → `destructiveHint: true`; `PUT` and `DELETE` → `idempotentHint: true`; `POST` and `PATCH` → `readOnlyHint: false`.
+- **Never a tool:** the MCP endpoint itself, and token management (see Authentication → "Token management").
 - Tool `name` = the OpenAPI `operationId`; `description` and `inputSchema` come from the OpenAPI definition; `tools/list` returns only the tools the caller's token may use.
 - A tool call dispatches **in-process into the existing handler** with the caller's `Authorization` header — no second implementation, no loopback HTTP request, no bypass of middleware (validation, rate limits, audit, the project's ownership checks).
 - Handler errors map to the MCP tool result with `isError: true` and the API's normal error body (`ok: false`, `error`, `message`); secrets are never included in a tool result any more than in an API response.
@@ -24296,7 +24298,7 @@ Preferences aren't tied to identity — any two guests who set the same `theme`/
 | 12 | **Auth and CSRF** | None required — guest cookies. `POST` forms carry the normal CSRF token; the API mirror needs none (no ambient authority: it accepts and sets only these UI cookies). Import is a `GET` on purpose so a shared link works; it can set only the exportable set (rule 1), so it can never change credentials or consent. Standard rate limits apply |
 | 13 | **Export response** | The export block (full URL and short code as read-only selectable text, each with one Copy control) is rendered inline on `/server/preferences` on every load — never behind a button, toggle, accordion or separate step. Web `GET /server/preferences/export` is content-negotiated like every page: HTML → the same preferences page; `text/plain` → the lines `URL: ...` and `Code: ...`; JSON → the API body below. Copy is a client-side action (clipboard) and never submits the form; the export link and code use CSS `user-select: all` so one click selects the whole value for a manual copy, and the Copy control is an optional JS enhancement over that baseline — the page is fully usable without JS |
 | 14 | **Import field** | An always-visible field named `code` (textarea or text input, accepts a pasted full URL, query string or short code) inside the single preferences form (rule 15) — no separate Import form or button. On save, a non-empty `code` is resolved per rule 5 and its valid values override the form's submitted values key by key (the visitor pasted it on purpose); an empty `code` is ignored. `GET /server/preferences/import` stays for shared links and API parity (rule 5 unchanged). JS may enhance (clipboard paste) but never changes the request |
-| 15 | **Page layout and buttons** | `/server/preferences` is ONE `<form method="POST" action="/server/preferences">` carrying the CSRF token and every section: appearance (`theme`), language (`lang`), cookie-consent and CCPA controls, every `{project_name}_pref_{key}` control, and a Data Management section (export block, rule 13; import field, rule 14) — all sections always visible, none collapsed or revealed by a button. The form has exactly three action buttons (the header theme toggle is a separate mini-form on other pages and is not part of this page's form): **Save** (submit; applies every changed field plus `code`, then `303` per rules 9–10), **Cancel** (a link to the rule 10 redirect target; discards unsaved edits, sends no write) and **Reset** (a `type="button"` with `popovertarget` that opens a native HTML `popover` — no JS; the popover holds the warning, an **Erase everything** submit with `action=reset`, and a dismiss control using `popovertargetaction="hide"`; those two belong to Reset, not to the page's button set; forgets the visitor completely: every noncredential cookie this app set — `theme`, `lang`, `{project_name}_pref_*`, `cookie_consent`, `ccpa_opt_out`, `{project_name}_build`, plus any other noncredential cookie the project defines (announcement dismissals, flash messages, age-verification or content-acknowledgment cookies, forwarding preferences) — is deleted (`Max-Age=0`, same `Path`/attributes as rule 8), and the `303` carries `Clear-Site-Data: "storage"` to wipe localStorage/sessionStorage/IndexedDB without JS. Defaults apply and the consent banner returns on the next page. Never deletes session, CSRF or other credential cookies — signing out is a separate action. The popover warning states exactly what is erased. Only Reset confirms — Save and Cancel never ask for confirmation. The popover is styled with CSS, and a direct `POST action=reset` behaves identically on the server). No per-section save buttons, no "Sync", "Export", "Import" or "Show" buttons; Copy controls (rule 13) are the only other controls. Owner-token management (PART 12) is NOT part of this form: it lives on its own page, `GET /server/preferences/tokens`, reached from a plain link on this page (rendered only when the project defines owner tokens), and that page's per-action mini-forms are exempt from this button limit. Reset never deletes credential cookies: session, CSRF and, when the project defines owner tokens, the owner-token cookie |
+| 15 | **Page layout and buttons** | `/server/preferences` is ONE `<form method="POST" action="/server/preferences">` carrying the CSRF token and every section: appearance (`theme`), language (`lang`), cookie-consent and CCPA controls, every `{project_name}_pref_{key}` control, and a Data Management section (export block, rule 13; import field, rule 14) — all sections always visible, none collapsed or revealed by a button. The form has exactly three action buttons (the header theme toggle is a separate mini-form on other pages and is not part of this page's form): **Save** (submit; applies every changed field plus `code`, then `303` per rules 9–10), **Cancel** (a link to the rule 10 redirect target; discards unsaved edits, sends no write) and **Reset** (a `type="button"` with `popovertarget` that opens a native HTML `popover` — no JS; the popover holds the warning, an **Erase everything** submit with `action=reset`, and a dismiss control using `popovertargetaction="hide"`; those two belong to Reset, not to the page's button set; forgets the visitor completely: every noncredential cookie this app set — `theme`, `lang`, `{project_name}_pref_*`, `cookie_consent`, `ccpa_opt_out`, `{project_name}_build`, plus any other noncredential cookie the project defines (announcement dismissals, flash messages, age-verification or content-acknowledgment cookies, forwarding preferences) — is deleted (`Max-Age=0`, same `Path`/attributes as rule 8), and the `303` carries `Clear-Site-Data: "storage"` to wipe localStorage/sessionStorage/IndexedDB without JS. Defaults apply and the consent banner returns on the next page. Never deletes session, CSRF or other credential cookies — signing out is a separate action. The popover warning states exactly what is erased. Only Reset confirms — Save and Cancel never ask for confirmation. The popover is styled with CSS, and a direct `POST action=reset` behaves identically on the server). No per-section save buttons, no "Sync", "Export", "Import" or "Show" buttons; Copy controls (rule 13) are the only other controls. Owner-token management (PART 12) is NOT part of this form: it lives on its own page, `GET /server/preferences/tokens`, reached from a plain link on this page, and that page's per-action mini-forms are exempt from this button limit. Reset never deletes credential cookies: session, CSRF and the owner-token cookie |
 | 16 | **Web save never `400`** | `400 VALIDATION_FAILED` (rule 11) is API-only. A web `POST /server/preferences` always answers `303` (rule 9) — including empty submits, unchecked checkboxes (absent fields), invalid values (dropped) and a bad `code`. The only `4xx` is a missing/invalid CSRF token (`403`), so the page form MUST always render the token and post only to the canonical route, never to the `/api/{api_version}/…` mirror |
 | 17 | **Consent and CCPA controls** | The page form's cookie-consent toggles (`consent_preferences`, `consent_analytics`; `essential` is always on and not a field) and CCPA opt-out toggle (`ccpa_opt_out`) are web-form-only controls handled by `POST /server/preferences`, with a hidden `consent_form=1` marker rendered inside the form. They are applied only when `consent_form=1` is present — an unchecked checkbox then means off, while a POST without the marker (the header theme toggle) never touches consent or CCPA. Applying writes `cookie_consent` (JSON per PART 16 consent state, with a fresh timestamp in Unix seconds) and `ccpa_opt_out` with the rule 8 attributes. Import and the API mirror never write them, Reset deletes them (rule 15), and they are never exported (rule 1) |
 
@@ -28352,13 +28354,42 @@ func trackingScript(r *http.Request) template.HTML {
 | Value | Behavior |
 |-------|----------|
 | `simple` (default) | Built-in, self-hosted challenge: no third party, no keys, works over Tor and with JavaScript disabled. The server generates a question and stores only the hashed answer; each challenge is single-use, expires after 10 minutes and is rate-limited |
-| `recaptcha` | Google reCAPTCHA v2 checkbox. Needs `pages.contact.captcha_site_key` (public, rendered in the page) and `pages.contact.captcha_secret_key` (server-side only, kept in `server.yml` like other secrets, never returned in a response or written to a log). The server verifies by POSTing `secret`, `response` and `remoteip` to `https://www.google.com/recaptcha/api/siteverify` and accepts only `"success": true` |
-| `hcaptcha` | hCaptcha. Same two keys; verified by POSTing `secret` and `response` to `https://api.hcaptcha.com/siteverify` and accepting only `"success": true` |
+| `recaptcha` | Google reCAPTCHA v2 checkbox. Needs `pages.contact.captcha_site_key` (public, rendered in the page) and `pages.contact.captcha_secret_key` (server-side only, kept in `server.yml` like other secrets, never returned in a response or written to a log). The server verifies by POSTing `secret`, `response` and `remoteip` to `https://www.google.com/recaptcha/api/siteverify` and accepts only `"success": true`; the widget needs JavaScript, so the no-JavaScript fallback below applies |
+| `hcaptcha` | hCaptcha. Same two keys; verified by POSTing `secret` and `response` to `https://api.hcaptcha.com/siteverify` and accepting only `"success": true`; the widget needs JavaScript, so the no-JavaScript fallback below applies |
 
 - **Validation:** `recaptcha` or `hcaptcha` with an empty site key or secret key fails config validation with a clear error; the keys are ignored for `simple`
 - **Fail closed:** if the provider cannot be reached, the submission is rejected with a retryable error — never accepted unverified
 - **CSP:** only the selected provider's hosts are added to `script-src`, `frame-src` and `connect-src` (for example `https://www.google.com/recaptcha/` and `https://www.gstatic.com/recaptcha/`, or `https://hcaptcha.com` and `https://*.hcaptcha.com`)
 - **Tor and I2P:** requests served through the onion or I2P address always use `simple`, whatever `captcha` is set to — clearnet providers are never called from there (PART 16 → Tor). The same challenge protects the security-report form
+
+#### No-JavaScript fallback and the simple challenge
+
+**Every form that carries a CAPTCHA works with JavaScript disabled (PART 16).** The `recaptcha` and `hcaptcha` widgets need JavaScript, so a provider is never the only way to pass:
+
+- **Fallback:** when `captcha` is `recaptcha` or `hcaptcha`, the form renders the provider widget AND, inside `<noscript>`, the built-in simple challenge (the question text, a visible answer field and a hidden `captcha_id`). A browser with JavaScript never shows the fallback; a browser without it shows only the fallback. The fallback involves no provider script, key or request
+- **API clients** cannot solve a provider widget either, so the `GET` descriptor for a provider also carries a `fallback` object (the simple challenge): a program can always pass with the simple answer
+- **What the server accepts:** exactly one proof per submission. A provider token (`captcha_response`; browser forms post the provider's own field, `g-recaptcha-response` or `h-captcha-response`) is verified with the provider; otherwise `captcha_id` + `captcha_answer` is verified as the simple challenge. When both are present only the provider token is checked, and a failure is final (no second try with the other proof)
+- **Fail closed:** a missing, wrong, expired or already used proof rejects the submission with `VALIDATION_FAILED` (`400`) on the field `captcha`, and the error response carries a fresh `captcha` descriptor, so a retry never needs another `GET`
+
+**The simple challenge contract:**
+
+| Rule | Detail |
+|------|--------|
+| Question | Plain text only, never an image or audio, so screen readers, text browsers and Tor Browser at its strictest level all work. A short arithmetic question (two integers from 1 to 20 joined by `+` or `-`, never a negative result) phrased through the translation keys of the visitor's language; the answer is always an integer written in digits |
+| Answer check | The submitted answer is trimmed, then compared in constant time against the stored hash. The answer itself is never stored or logged |
+| Storage | Table `captcha_challenges` in the application database (idempotent startup schema), shown below |
+| Lifetime | Single-use and valid for 10 minutes. A challenge is deleted when it is used or when it expires (the `token_cleanup` task removes the leftovers) |
+| Issuing | A new challenge for every render of the form page, every `GET /api/{api_version}/server/contact` (and the security-report equivalent) and every failed submission. An issued challenge never changes |
+| Rate limit | Issuing and verifying both count against the caller's rate limiter (PART 12) |
+
+```sql
+CREATE TABLE IF NOT EXISTS captcha_challenges (
+    id          VARCHAR(32) PRIMARY KEY,
+    answer_hash VARCHAR(64) NOT NULL,
+    expires_at  TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_captcha_challenges_expires ON captcha_challenges(expires_at);
+```
 
 ### /server/help
 
@@ -28538,9 +28569,9 @@ When `server.mcp.enabled` is `false`, both routes return `404` and no link to th
 
 | Anchor | Section | Content |
 |--------|---------|---------|
-| `#overview` | What this is | One short paragraph: this application is an MCP server over Streamable HTTP (remote only); every public API operation is available to an assistant as a tool |
+| `#overview` | What this is | One short paragraph: this application is an MCP server over Streamable HTTP (remote only); every API operation the project defines, authenticated create, read, update and delete included, is available to an assistant as a tool; the token decides which ones it sees (anonymous callers see only the public ones) |
 | `#endpoint` | Endpoint | The full MCP URL resolved for this request (PART 8 → "Resolution Order", never hardcoded) with the two aliases (`/api/mcp`, `/mcp`) and a copy control; the URL text uses CSS `user-select: all` so it works without JS |
-| `#authentication` | Authentication | Requests authenticate with `Authorization: Bearer {token}` — the same tokens as the REST API, no MCP-specific token. Anonymous access works for public tools. Use a **linked token** created for this client on `/server/preferences/tokens` (named for the client, revocable alone). Never the primary token and never the operator token (`server.token`). A project without owner tokens has no client credential to issue: MCP clients get its public tools anonymously. |
+| `#authentication` | Authentication | Requests authenticate with `Authorization: Bearer {token}` — the same tokens as the REST API, no MCP-specific token. Anonymous access works for public tools. Use a **linked token** created for this client on `/server/preferences/tokens` (named for the client, revocable alone). Never the primary token and never the operator token (`server.token`). |
 | `#connect` | Connect a client | Copy-paste snippets using the resolved URL and the project name: a Claude Code command (`claude mcp add --transport http {project_name} {url} --header "Authorization: Bearer $MCP_TOKEN"`), a generic JSON client config (`mcpServers` with `type`, `url`, `headers`), and a `curl` `initialize` request that verifies the connection. The token is the only value the page cannot know, so it appears as the shell variable `$MCP_TOKEN` — no other placeholders |
 | `#tools` | Tools | The live tool list for an anonymous caller (name and description from the same registry that backs `tools/list`) — never hand-written. When authenticated callers see more tools, say so |
 | `#limits` | Behavior and limits | `POST` only; no sessions; the same rate limits and audit as the API; `Origin` validated; the supported MCP protocol versions |
@@ -28633,8 +28664,8 @@ server:
 |-------|--------|-------------|
 | `/api/{api_version}/server/about` | GET | About information (JSON) |
 | `/api/{api_version}/server/privacy` | GET | Privacy policy (JSON) |
-| `/api/{api_version}/server/contact` | GET | Contact form description (JSON, no auth): `fields` (list of `{name, type, required, max_length, required_when, max_length_when}`, see "Length limits"), `captcha` (`{provider, site_key}` for `recaptcha`-style providers, `{provider, challenge_id, question}` for `simple`), `security_url`, `abuse_email`. Nothing else about recipients |
-| `/api/{api_version}/server/contact` | POST | Submit contact form |
+| `/api/{api_version}/server/contact` | GET | Contact form description (JSON, no auth): `fields` (list of `{name, type, required, max_length, required_when, max_length_when}`, see "Length limits"), `captcha` (`{provider: "simple", challenge_id, question}` for `simple`; `{provider, site_key, fallback}` for `recaptcha` and `hcaptcha`, where `fallback` is the same `{provider: "simple", challenge_id, question}` object; a new challenge on every call), `security_url`, `abuse_email`. Nothing else about recipients |
+| `/api/{api_version}/server/contact` | POST | Submit contact form: the fields above plus ONE captcha proof (`captcha_response`, or `captcha_id` + `captcha_answer`; see "No-JavaScript fallback and the simple challenge") |
 | `/api/{api_version}/server/auth/check` | GET | Token check (machine-only, no page; `Authorization: Bearer` required): `200` with `{kind}` when the token is valid (`kind` is `operator`, `owner` or, where the project has accounts, `user`), `401` otherwise. Side-effect free, rate-limited like other auth endpoints, never echoes the token |
 | `/api/{api_version}/server/help` | GET | Help content (JSON) |
 | `/api/{api_version}/server/help/mcp` | GET | MCP help content (JSON); `404` when MCP is disabled |
@@ -29431,7 +29462,7 @@ Every project MUST include these scheduled tasks:
 | `blocklist_update` | Daily at 04:00 | Download/update IP/domain blocklists | Yes |
 | `cve_update` | Daily at 05:00 | Download/update CVE (NVD) and Trivy vulnerability databases — trivy has no separate scheduled task despite its own directory/config; this task owns it too | Yes |
 | `update_check` | Daily at 06:00 | Check release channel for a newer version — notify-only unless `update.auto_install: true` (default false); honors `update.defer_days` | Yes |
-| `token_cleanup` | Every 15 minutes | Remove expired API tokens and sessions | No |
+| `token_cleanup` | Every 15 minutes | Remove expired API tokens and sessions, and used or expired simple-captcha challenges | No |
 | `log_rotation` | Daily at 00:00 | Rotate and compress old logs | No |
 | `backup_daily` | Daily at 02:00 | Full backup + daily incremental (default: 2 files) | Yes |
 | `backup_hourly` | Hourly | Hourly incremental (disabled by default) | Yes |
@@ -30128,7 +30159,7 @@ server:
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `{project_name}_auth_attempts_total` | Counter | `method`, `status` | Auth attempts |
-| `{project_name}_owner_tokens_active` | Gauge | `kind` | Active (not revoked, not expired) owner tokens; `kind` is `primary` or `linked`. Emitted ONLY when the project implements owner tokens (PART 12, per `IDEA.md`); a project without them omits the metric. This product has no sessions or user accounts |
+| `{project_name}_owner_tokens_active` | Gauge | `kind` | Active (not revoked, not expired) owner tokens; `kind` is `primary` or `linked`. Always emitted: owner tokens exist in every project. This product has no sessions or user accounts |
 
 ### Optional: Extended Metrics
 
@@ -39052,7 +39083,7 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
 - ✓ Test ALL `.txt` endpoints (robots.txt, security.txt, API .txt extension)
 - ✓ Test content negotiation with ALL required Accept headers (see below)
 - ✓ Test frontend smart detection (browser → HTML, CLI → formatted text)
-- ✓ Test authentication (`server.token`, owner tokens, and linked tokens, if applicable)
+- ✓ Test authentication (`server.token`, owner tokens, and linked tokens)
 
 ### Content Negotiation Testing (REQUIRED)
 
