@@ -127,11 +127,11 @@ AI reads AI.md for the first time
 
 **See `IDEA.md` for features, data models, and business rules.**
 
-IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
+IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH for the template baseline; only a SPEC.md override can differ from it.
 
 | File | Role | Update When |
 |------|------|-------------|
-| **AI.md** | SOURCE OF TRUTH - implementation rules (readonly template copy) | No — use SPEC.md for project-specific rule overrides |
+| **AI.md** | SOURCE OF TRUTH for the template baseline - implementation rules (readonly template copy) | No — use SPEC.md for project-specific rule overrides |
 | **SPEC.md** | Project-specific rule overrides — created only when a rule must contradict the template or global. May be empty. SPEC.md wins over AI.md. | When a project rule must differ from the template or global |
 | **IDEA.md** | PROJECT PLAN - must follow AI.md | Features change, project variables change |
 
@@ -702,7 +702,7 @@ if cacheSize > 1024*1024*1024 {
 | **Unsafe PR triggers forbidden by default** | Do NOT use `pull_request_target` for untrusted code execution, build, test, or artifact upload paths |
 | **Secrets never exposed to forks** | Fork PR workflows run without repo secrets, write tokens, publish steps, or deployment credentials |
 | **Dependency updates are automated** | Public repos include dependency update automation for every ecosystem in use |
-| **Secret scanning is mandatory** | Public repos run `truffleHog` (`trufflesecurity/trufflehog`, Apache-2.0, no license key) on push/PR via `ci.yml`; blocking statuses: `verified` always; `unknown` (unverified) only in push/PR range scans, never in a full-history scan (scheduled runs and new-branch pushes), where unverified noise is reported but does not fail the run. Every `unknown` finding is reviewed and true false positives are allowlisted. Never use `gitleaks` — requires a commercial license for org repos |
+| **Secret scanning is mandatory** | Public repos run `truffleHog` (`trufflesecurity/trufflehog`, Apache-2.0, no license key) on push/PR via `ci.yml`; blocking statuses: `verified` always; `unknown` (unverified) only in push/PR range scans, never in a full-history scan (scheduled runs and new-branch pushes), where unverified noise is reported but does not fail the run. Every `unknown` finding is reviewed and true false positives are allowlisted in place with truffleHog's inline `trufflehog:ignore` comment on that line (no root config file exists for it). Never use `gitleaks` — requires a commercial license for org repos |
 | **Release outputs are verifiable** | Releases publish checksums, SBOM, release notes, and provenance/attestation when the host platform supports it |
 
 ### Workflow Permissions
@@ -1258,6 +1258,9 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | `.dockerignore` | ✓ | Docker ignore rules |
 | `.gitattributes` | Optional | Git attributes |
 | `Jenkinsfile` | ✓ | Jenkins pipeline — required on every project per `cicd_conventions.md` |
+| `.gitlab-ci.yml` | ✓ | GitLab CI pipeline — required on every project (PART 27: all five CI/CD providers ship) |
+| `.golangci.yml` | Optional | golangci-lint configuration, only when the project tunes the default linters |
+| `.trivyignore` | Optional | Trivy ignore list for the required image scan: one finding per line, each with a comment naming the reviewed reason |
 | `mkdocs.yml` | ✓ | MkDocs configuration |
 | `.readthedocs.yaml` | ✓ | ReadTheDocs configuration |
 | `.editorconfig` | Optional | Editor configuration |
@@ -2020,8 +2023,9 @@ Instructions for how this agent should behave...
 | `scripts/` | ✓ | Production/install scripts | No |
 | `tests/` | ✓ | Repository-root executable integration test scripts (`run_tests.sh`, `docker.sh`, `incus.sh`, `e2e.sh`, optional helpers). Go unit tests live alongside code as `*_test.go` | No |
 | `deps/` | | Optional, committed, project-specific support files not part of build/release output (e.g. scripts or Dockerfiles for building a dependency) — never a cache or temp/output dir | No |
-| `.github/` | If GitHub / public repo | GitHub Actions, community files, templates | No |
-| `.gitea/` | If Gitea | Gitea Actions, templates | No |
+| `.github/` | ✓ | GitHub Actions workflows (PART 27: every project ships all five providers' files); on a public GitHub repo also community files and templates | No |
+| `.gitea/` | ✓ | Gitea Actions workflows (PART 27) | No |
+| `.forgejo/` | ✓ | Forgejo Actions workflows (PART 27) | No |
 | `.claude/` | Auto | Claude Code config — team config (rules, agents, hooks, `settings.json`) committed; personal/runtime files gitignored | Partial (see AI-Specific Files table) |
 | `.cursor/` | Auto | Cursor AI config — `rules/`, `mcp.json` committed; personal settings gitignored | Partial (see AI-Specific Files table) |
 | `.aider/` | Auto | Aider AI config (regenerated) | **Yes** |
@@ -3102,7 +3106,7 @@ See IDEA.md for the full project breakdown.
 
 | File | Purpose | Update When |
 |------|---------|-------------|
-| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH, readonly template copy | No — use SPEC.md for project-specific rule overrides |
+| **AI.md** | Implementation spec (HOW) - SOURCE OF TRUTH for the template baseline, readonly template copy | No — use SPEC.md for project-specific rule overrides |
 | **SPEC.md** | Project-specific rule overrides (optional, may be empty) | When a project rule must contradict the template or global; also used to activate optional PARTS 34-36 |
 | **IDEA.md** | Project plan (WHAT) - must follow AI.md | Features change |
 | **TODO.AI.md** | Task tracking (AI-owned) | Tasks added/completed |
@@ -3200,7 +3204,7 @@ Getting code correct on the first try is much harder than iterating with feedbac
 
 **Subagents:** do not write COMMIT_MESS or call gitcommit — complete your edits and report back to the parent instance to handle the commit. Subagents also never run `make`, tests, lint, or any build/test gate — the parent runs them once after reviewing the full diff.
 
-1. **Remove all completed items from TODO.AI.md** - delete each item only after it is fully resolved and committed; never truncate the whole file at once
+1. **Remove each completed item from TODO.AI.md** only after the commit that resolved it succeeded (see "Commit sequence" below); never truncate the whole file at once
 2. **Write COMMIT_MESS** with the following format:
 
 **Title Format:**
@@ -3237,8 +3241,7 @@ Implemented core server functionality and API.
 - The ✅ emoji MUST be used for todo completion commits
 - Title is EXACTLY: `✅ all todo items have been completed ✅`
 - Body MUST summarize what was accomplished
-- Remove completed items from TODO.AI.md as each one is fully resolved and committed — do not empty the file before writing COMMIT_MESS
-- The file should be empty only after every item has been individually removed
+- **Commit sequence (one order, no alternatives):** (1) implement a task and commit it normally; its item is still in TODO.AI.md. (2) After that commit succeeds, delete the item from TODO.AI.md. (3) The deletion is committed together with the next task. (4) The commit that deletes the LAST item uses the ✅ title and body above, so the file is empty only in that commit and an item never disappears before the commit that resolved it
 
 **Format Rules:**
 - Title line: max 64 characters (including emojis)
@@ -3260,6 +3263,8 @@ Implemented core server functionality and API.
 | Defects found while doing other work, including the exploratory pass | Fixed immediately, otherwise `TODO.AI.md` | Never left only in conversation |
 | Findings from an explicit audit (the user said "audit") with more than 5 issues | Temporary `AUDIT.AI.md` | Not `TODO.AI.md`; deleted when every issue is resolved. Five or fewer are fixed directly with no tracking file |
 | Defects or contradictions in `AI.md` itself | The local decision (follow `AI.md` as written when the project has no `SPEC.md`; record it in `SPEC.md` only when the project must deviate), plus a report appended as one bullet under `## {project_name} AI.md issues` in the `TODO.{TEMPLATE}.md` of the project's parent directory, where `{TEMPLATE}` is the template the project's `AI.md` was copied from (`API`, `SERVER` or `HYBRID`) — the shared template-maintainers' inbox; for apimgr projects (API template) `~/Projects/github/apimgr/TODO.API.md`, for webappsgo projects (SERVER template) `~/Projects/github/webappsgo/TODO.SERVER.md` | `AI.md` is read-only: never edit it, and never log its defects in `TODO.AI.md`. Maintainers clear the inbox once the template is fixed |
+
+**`TODO.AI.md` holds THIS project's implementation work only.** A defect or contradiction in the template (`AI.md`) is never an item in it: it follows the `AI.md` row of the table above, so it never blocks, delays or reopens a `TODO.AI.md` completion.
 
 ## Project Audit
 
@@ -4527,7 +4532,7 @@ Every feature MUST work via:
 - Every public page has a corresponding public API
 - Project-specific features (IDEA.md) follow same pattern
 
-**Rule:** For every web page, there's a corresponding API endpoint. For every API endpoint, the data can be displayed in a web page.
+**Rule (the pairing rule):** every web page has a corresponding API endpoint, and every USER-FACING API endpoint (project features and public server pages) has a web page that shows the same data. **Exception, system-only endpoints:** an endpoint that only programs call, never a person in a browser (the token check `/api/{api_version}/server/auth/check`, the MCP endpoint, `/api/autodiscover`, and any route whose route-table row says "machine-only"), is API-only: it has no page, and that is never a defect. PART 14 → "Frontend-Backend Integration" and the FINAL checklist apply this rule; they neither widen nor narrow it.
 
 ---
 
@@ -9307,6 +9312,9 @@ server:
       challenge: http-01
       # Use staging server for testing
       staging: false
+      # DNS-01 only: provider name and its credentials (PART 15 → DNS-01 Provider Configuration)
+      dns_provider: ""
+      dns_credentials: {}
 
   # Scheduler - manages all background tasks
   scheduler:
@@ -15694,6 +15702,16 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 |-----|--------|---------|---------|----------|
 | `server.security.encryption_key` | 32 bytes (AES-256-GCM) | `server.yml` (auto-generated on first run), alongside a companion `server.security.encryption_key_version` integer (starts at 1) | At-rest encryption for ALL sensitive server data: 2FA secrets, security report bodies (used as the AES fallback when no PGP keypair exists or when an admin has no personal pubkey, see PART 11 → "Security Reports"), and any future at-rest encrypted data. | Manual via admin panel (`/server/{admin_path}/security/encryption` → "Rotate Encryption Key"). Sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt admin password, log to `audit.log` as `security.encryption_key_rotated`. 30-day grace for in-flight encrypted data. `encryption_key_version` is incremented on every rotation and distributed to cluster nodes via the same propagation mechanism as the key itself. |
 
+**Rotation contract (`installation_secret`, `encryption_key` and `cookie_signing_key`):**
+
+| Rule | Detail |
+|------|--------|
+| Previous value | Kept in `server.db` as the rows `app_secrets.{name}_previous` and `app_secrets.{name}_previous_until` (a UTC timestamp: the rotation time plus the grace period: 7 days for `installation_secret` and `cookie_signing_key`, 30 days for `encryption_key`). A previous `encryption_key` is stored AES-256-GCM-wrapped under the new key, never in plaintext. In a cluster the previous-value rows travel with the key through the same propagation as `encryption_key_version` |
+| Order | (1) write the previous-value rows, (2) generate the new value and persist it (a config file is written to a temp file and atomically renamed), (3) re-encrypt or re-base every dependent row EAGERLY, in batches, (4) write the audit event. A row is decrypted with the current key first and the previous key second, so a re-run skips rows that are already done |
+| Failure | The previous value is stored before the new one is used, so a crash or a failed step loses nothing. At the next start the server finishes any unfinished re-encryption: a row readable only with the previous key is re-encrypted then. A second rotation while a previous value still exists is refused until every row is readable under the current key |
+| Reads during grace | A value that fails under the current key is tried with the previous key; a success also re-encrypts that row under the current key |
+| Retirement | The daily cleanup task deletes `{name}_previous` and `{name}_previous_until` once `_until` has passed. A row that still needs the retired value fails closed and logs `security.decrypt_failed` with the table and row id, never any content |
+
 **Note on consolidation:** `server.security.encryption_key` is the canonical at-rest AES key — every place the spec talks about "encrypt this sensitive data at rest" resolves to this one key, including security report bodies. It is NOT duplicated in `app_secrets`. The three `app_secrets` rows above are HMAC keys (not AES) and a root-secret for HMAC derivation; they are stored in the DB rather than `server.yml` because they have independent rotation lifecycles and need to be visible to cluster replicas via shared DB read. `encryption_key`'s own version is instead tracked via the `encryption_key_version` field written alongside it in `server.yml` (see "Pre-existing key" above) — used to populate `server_security_encryption_key_version` in the cluster heartbeat below.
 
 **All secrets above:**
@@ -16935,6 +16953,8 @@ CREATE TABLE IF NOT EXISTS security_reports (
     body_enc           BLOB NOT NULL,
     body_alg           VARCHAR(16) NOT NULL,
     contact_enc        BLOB,
+    credit_pref        VARCHAR(8) NOT NULL DEFAULT 'no',
+    credit_name        VARCHAR(100),
     researcher_comment TEXT NOT NULL DEFAULT '',
     disclosure_date    DATE,
     cve_requested      BOOLEAN NOT NULL DEFAULT FALSE,
@@ -16945,20 +16965,30 @@ CREATE TABLE IF NOT EXISTS security_reports (
     closed_at          TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_security_reports_status ON security_reports(status, created_at);
+
+CREATE TABLE IF NOT EXISTS security_thanks (
+    tracking_id  VARCHAR(32) PRIMARY KEY,
+    credit       VARCHAR(120) NOT NULL,
+    severity     VARCHAR(16) NOT NULL,
+    disclosed_on DATE NOT NULL
+);
 ```
 
 | Field | Rule |
 |-------|------|
 | `tracking_id` | `sec_` + 16 random hex chars (Submission Flow step 2) |
 | `status` | `received` (default), `triaged`, `confirmed`, `patching`, `disclosed`, `wont_fix`. Shown to the researcher as Received / Triaged / Confirmed / Patching / Disclosed / Won't Fix. Moves forward, or to `wont_fix`, never backward; `disclosed` and `wont_fix` set `closed_at` |
-| `body_enc`, `body_alg`, `contact_enc` | The report body and the researcher's contact (email and optional pubkey) are encrypted exactly as Submission Flow step 3 says (PGP, or AES-256-GCM with `server.security.encryption_key`); `body_alg` is `pgp` or `aes-256-gcm`. Plaintext is never stored. `BLOB` is `BYTEA` on PostgreSQL |
+| `severity` | `critical`, `high`, `medium`, `low` or `informational` (lowercase). Starts as the researcher's self-assessment; a maintainer re-triages it (`severity` in the update). The hall of fame shows the value at disclosure |
+| `body_enc`, `body_alg`, `contact_enc` | `body_enc` is encrypted exactly as Submission Flow step 3 says (PGP, or AES-256-GCM with `server.security.encryption_key`), and `body_alg` (`pgp` or `aes-256-gcm`) describes `body_enc` ONLY. `contact_enc` (the researcher's email and optional pubkey) is ALWAYS AES-256-GCM under `server.security.encryption_key`, whatever the body uses, because the server itself must decrypt it to send status notices (a PGP blob addressed to the project key could not be read by the server); it is re-encrypted on key rotation (PART 11 → "Rotation contract"). Plaintext is never stored. `BLOB` is `BYTEA` on PostgreSQL |
 | `researcher_comment` | Plain text, at most 2000 characters, shown on the researcher status page. Never contains report content. Output-escaped when rendered |
 | `disclosure_date` | Optional expected disclosure date (ISO 8601 date), shown on the researcher status page |
+| `credit_pref`, `credit_name` | Set at submission from "Credit preference". `credit_pref` is `name` ("Yes (real name)": `credit_name` is the Name field), `handle` ("Yes (handle)": `credit_name` is the Credit handle), `anon` ("Anonymous") or `no` ("No"); `credit_name` is NULL for `anon` and `no` |
+| Hall of fame (`security_thanks`) | When an operator sets the status to `disclosed` and `credit_pref` is not `no`, one `security_thanks` row is written in the same transaction (idempotent on `tracking_id`): `credit` is `credit_name`, or `Anonymous Researcher #n` for `anon` (n is the number of existing `anon` rows plus one, fixed once written), `severity` is the report's severity at that moment, `disclosed_on` is today (UTC). The row holds no contact data and is NOT removed by report retention, so the hall of fame outlives the report |
 | `token_hash`, `token_last_used` | SHA-256 of the one-shot status token, compared in constant time; `token_last_used` enforces single use per day |
 | Retention | The daily cleanup task deletes a report row, including `body_enc` and `contact_enc`, `server.security.reports.retention_days` (default `365`) after `closed_at`. Open reports are never purged. The status link stops working 30 days after `closed_at` |
 | Backup | The table lives in the database, so every backup and restore includes it |
 
-**Operator workflow.** Maintainers manage reports in the admin panel at `/server/{admin_path}/security/reports`: a list filtered by status, a detail view with the metadata, the researcher comment, the disclosure date and the decrypted report body (decrypted on the server for the authenticated admin session, never written to a log; every view writes a `security.report_viewed` audit entry with `tracking_id` and the admin username, no content), and an update form for `status`, `researcher_comment` and `disclosure_date`. An update bumps `updated_at`, logs `security.report_updated` (`tracking_id`, old and new status, no content) to `security.log`, and, when SMTP works and `contact_enc` exists, emails the researcher a status-change notice that carries no report content. The page requires an authenticated admin session; there is no API mirror.
+**Operator workflow.** Maintainers manage reports in the admin panel at `/server/{admin_path}/security/reports`: a list filtered by status, a detail view with the metadata, the researcher comment, the disclosure date and the decrypted report body (decrypted on the server for the authenticated admin session, never written to a log; every view writes a `security.report_viewed` audit entry with `tracking_id` and the admin username, no content), and an update form for `status`, `severity`, `researcher_comment` and `disclosure_date`. An update bumps `updated_at`, logs `security.report_updated` (`tracking_id`, old and new status, no content) to `security.log`, and, when SMTP works and `contact_enc` exists, emails the researcher a status-change notice that carries no report content. The page requires an authenticated admin session; there is no API mirror.
 
 ### Public Pages
 
@@ -16968,7 +16998,7 @@ CREATE INDEX IF NOT EXISTS idx_security_reports_status ON security_reports(statu
 | `/.well-known/pgp-key.asc` | GET | None | Project's PGP public key (ASCII-armored). 404 if no keypair generated yet. |
 | `/server/security` | GET | None | Security overview page (HTML). Human-readable rendering of everything in `/.well-known/security.txt` — contact channels in RFC 9116 preference order (GitHub private vulnerability reporting, `/server/contact?security_id={id}`, `mailto:` CC address), `Expires`, and the `Encryption` key when a keypair exists — plus plain-language instructions for reporting a vulnerability. Links to `/server/security/policy`, `/server/security/thanks`, `/.well-known/pgp-key.asc`, and the machine-readable `/.well-known/security.txt`. Rendered from live config — nothing to edit. |
 | `/server/security/policy` | GET | None | Disclosure policy page (HTML). Default content provided; editable from admin panel. Lists the coordinated-disclosure window, in-scope domains, out-of-scope behaviors, safe-harbor language. |
-| `/server/security/thanks` | GET | None | Acknowledgments page. Lists researchers who opted in (real name, handle, or anonymized "Anonymous Researcher #n") with the year and short credit. |
+| `/server/security/thanks` | GET | None | Acknowledgments page. Lists researchers who opted in (real name, handle, or anonymized "Anonymous Researcher #n") with the year and severity: the `security_thanks` entries, newest first (the same entries as the API mirror). |
 | `/server/security/report/{tracking_id}` | GET | One-shot token in URL (no API mirror: explicit exception to the API-for-every-page rule, because the one-shot emailed link must not be duplicated onto the API surface) | Researcher status page — shows triage state (Received / Triaged / Confirmed / Patching / Disclosed / Won't Fix), maintainer comments visible to researcher, expected disclosure date. Token is single-use-per-day; expires after the report is closed for 30 days. |
 
 ### Admin Panel — `/server/{admin_path}/security/`
@@ -21306,12 +21336,13 @@ Plain text, no color. The first line is always `{project_name} {project_version}
 
 ### Frontend-Backend Integration
 
-**API is the source of truth. Frontend consumes the API. Not every API needs a frontend route.**
+**API is the source of truth. Frontend consumes the API. Not every API needs a frontend route (PART 1 → "Endpoint Pattern" defines which).**
 
 | API Type | Frontend Required | Example |
 |----------|-------------------|---------|
 | **User-facing features** | Yes | `/api/{api_version}/users` → `/users` page |
 | **Admin features** | Yes | `/api/{api_version}/server/{admin_path}/*` → `/server/{admin_path}/*` pages |
+| **System-only (machine) endpoints** | No (API-only, marked "machine-only" in its route row) | `/api/{api_version}/server/auth/check`, the MCP endpoint, `/api/autodiscover` |
 | **Health/status** | Yes | `/server/healthz` has HTML frontend (with emojis), `/api/{api_version}/server/healthz` is JSON, `/api/healthz` is direct alias JSON |
 | **Agent endpoints** | No | `/api/{api_version}/*/agents/*` - CLI/agent only |
 | **Cluster nodes** | No | `/api/{api_version}/server/{admin_path}/nodes/*` - node-to-node only |
@@ -24045,7 +24076,7 @@ Startup (for configured FQDN)
 
 | Requirement | Description |
 |-------------|-------------|
-| **Fully Functional** | ALL features work in browser - not just API |
+| **Fully Functional** | ALL user-facing features work in browser - not just API (system-only endpoints are API-only, PART 1 → "Endpoint Pattern") |
 | **Professional UI/UX** | Clean, modern, polished design |
 | **Mobile Support** | Full responsive design with touch-friendly targets |
 | **HTML5** | Full web standards compliance |
@@ -31246,18 +31277,18 @@ server:
 
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/{api_version}/server/about` | GET | About information (JSON) |
+| `/api/{api_version}/server/about` | GET | About page (JSON, no auth): `title`, `content` (the Markdown source of `pages.about.content` after placeholder substitution, never rendered HTML) and `format` (always `markdown`) |
 | `/api/{api_version}/server/privacy` | GET | Privacy policy (JSON) |
 | `/api/{api_version}/server/contact` | GET | Contact form description (JSON, no auth): `fields` (list of `{name, type, required, max_length, required_when, max_length_when}`, see "Length limits"), `captcha` (`{provider: "simple", challenge_id, question}` for `simple`; `{provider, site_key, fallback}` for `recaptcha` and `hcaptcha`, where `fallback` is the same `{provider: "simple", challenge_id, question}` object; a new challenge on every call), `security_url`, `abuse_email`. Nothing else about recipients |
 | `/api/{api_version}/server/contact` | POST | Submit contact form: the fields above plus ONE captcha proof (`captcha_response`, or `captcha_id` + `captcha_answer`; see "No-JavaScript fallback and the simple challenge") |
 | `/api/{api_version}/server/auth/check` | GET | Token check (machine-only, no page; `Authorization: Bearer` required): `200` with `{kind}` when the token is valid (`kind` is `operator`, `owner` or, where the project has accounts, `user`), `401` otherwise. Side-effect free, rate-limited like other auth endpoints, never echoes the token |
-| `/api/{api_version}/server/help` | GET | Help content (JSON) |
-| `/api/{api_version}/server/help/mcp` | GET | MCP help content (JSON); `404` when MCP is disabled |
-| `/api/{api_version}/server/terms` | GET | Terms of service (JSON) |
+| `/api/{api_version}/server/help` | GET | Help page (JSON, no auth): `title`, `content` (Markdown source of `pages.help.content`) and `format` (always `markdown`) |
+| `/api/{api_version}/server/help/mcp` | GET | MCP help (JSON, no auth): `title`, `endpoint` (the resolved MCP URL) and `sections` (the `/server/help/mcp` sections in page order, each `{id, title, content}` with Markdown `content`); `404` when MCP is disabled |
+| `/api/{api_version}/server/terms` | GET | Terms of service (JSON, no auth): `title`, `content` (Markdown source of `pages.terms.content`) and `format` (always `markdown`) |
 | `/api/{api_version}/server/dpo` | GET | DPO contact (JSON): `name`, `email`, `privacy_url` |
-| `/api/{api_version}/server/security` | GET | Security overview (JSON, no auth): `contacts` (ordered list of `{type, url or address}`), `expires`, `pgp` (`{available, url, fingerprint}`), `policy_url`, `thanks_url` |
+| `/api/{api_version}/server/security` | GET | Security overview (JSON, no auth): `contacts` (ordered list of `{type, value}` in RFC 9116 preference order: `github` with the private-vulnerability-reporting URL, `contact_form` with the absolute `/server/contact?security_id={id}` URL for the current id, `email` with the CC address; a channel that is not configured is omitted), `expires`, `pgp` (`{available, url, fingerprint}`: `url` is the absolute `/.well-known/pgp-key.asc` URL and `fingerprint` the 40-character uppercase hex v4 fingerprint without spaces; `available: false` with both `null` when no keypair exists), `policy_url`, `thanks_url` |
 | `/api/{api_version}/server/security/policy` | GET | Disclosure policy (JSON, no auth): `policy` (Markdown) |
-| `/api/{api_version}/server/security/thanks` | GET | Hall of fame (JSON, no auth): `entries` (list of `{credit, date, severity}`; `credit` honors each researcher's credit preference) |
+| `/api/{api_version}/server/security/thanks` | GET | Hall of fame (JSON, no auth): `entries` (list of `{credit, date, severity}`; `credit` is the stored credit string, `date` is `disclosed_on` as an ISO 8601 date `YYYY-MM-DD`, `severity` is `critical`, `high`, `medium`, `low` or `informational`; newest first, `[]` when empty) |
 | `/api/{api_version}/server/healthz` | GET | Health check (JSON default; text via API rules) |
 | `/api/{api_version}/server/swagger` | GET | OpenAPI JSON spec |
 | `/api/{api_version}/server/graphql` | POST | GraphQL endpoint |
@@ -66600,11 +66631,11 @@ make docker
 - [ ] Multi-word routes use hyphens (`saved-searches`, not `saved_searches`)
 - [ ] No trailing slashes on routes
 - [ ] No verbs in routes (use HTTP methods)
-- [ ] Every API route has corresponding frontend route
+- [ ] Every user-facing API route has a corresponding frontend route (system-only routes are documented machine-only, PART 1 → "Endpoint Pattern")
 - [ ] Frontend routes match API structure (`/users` ↔ `/api/{api_version}/users`)
 - [ ] Frontend is fully functional (not just display)
 - [ ] All CRUD operations work from both frontend and API
-- [ ] No orphan routes (frontend-only or API-only)
+- [ ] No orphan routes (a frontend-only or API-only route that is not a documented exception)
 - [ ] Routes follow scope rules (`/server/`, `/server/auth/`, `/users/`, `/orgs/`, `/server/{admin_path}/`)
 
 ### REST API (`/api/{api_version}/`)

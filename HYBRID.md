@@ -129,11 +129,11 @@ AI reads AI.md for the first time
 
 **See `IDEA.md` for features, data models, and business rules.**
 
-IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
+IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH for the template baseline; only a SPEC.md override can differ from it.
 
 | File | Role | Update When |
 |------|------|-------------|
-| **AI.md** | SOURCE OF TRUTH - implementation rules (readonly template copy) | No — use SPEC.md for project-specific rule overrides |
+| **AI.md** | SOURCE OF TRUTH for the template baseline - implementation rules (readonly template copy) | No — use SPEC.md for project-specific rule overrides |
 | **SPEC.md** | Project-specific rule overrides — created only when a rule must contradict the template or global. May be empty. SPEC.md wins over AI.md. | When a project rule must differ from the template or global |
 | **IDEA.md** | PROJECT PLAN - must follow AI.md | Features change, project variables change |
 
@@ -4919,6 +4919,9 @@ server:
       challenge: http-01
       # Use staging server for testing
       staging: false
+      # DNS-01 only: provider name and its credentials (PART 15 → DNS-01 Provider Configuration)
+      dns_provider: ""
+      dns_credentials: {}
 
   # Scheduler - manages all background tasks
   scheduler:
@@ -14854,7 +14857,17 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 | Action | Command | Effect |
 |--------|---------|--------|
 | **Rotate installation_secret** | `--maintenance secret rotate installation_secret` | Sensitive-operation flow: re-prompt for the operator token, log to `audit.log` as `security.installation_secret_rotated`. Generates a new 32-byte secret, re-encrypts the PGP private key, and re-bases all live HMACs. Previous secret kept 7 days to validate in-flight `{security_id}` URLs. |
-| **Rotate encryption_key** | `--maintenance secret rotate encryption_key` | Sensitive-operation flow: re-prompt for the operator token, log to `audit.log` as `security.encryption_key_rotated`. Generates a new AES-256-GCM key in `server.yml`, re-encrypts all at-rest data (API token hashes, security report bodies) under the new key. Previous key kept 30 days to decrypt any data not yet re-encrypted. |
+| **Rotate encryption_key** | `--maintenance secret rotate encryption_key` | Sensitive-operation flow: re-prompt for the operator token, log to `audit.log` as `security.encryption_key_rotated`. Generates a new AES-256-GCM key in `server.yml`, re-encrypts all at-rest data under the new key (the `token_enc` copies of owner and linked tokens, AES-encrypted security report bodies and every `contact_enc`; PGP-encrypted bodies are not touched). Previous key kept 30 days to decrypt any data not yet re-encrypted (see "Rotation contract" below). |
+
+**Rotation contract (`installation_secret`, `encryption_key` and `cookie_signing_key`):**
+
+| Rule | Detail |
+|------|--------|
+| Previous value | Kept in `server.db` as the rows `app_secrets.{name}_previous` and `app_secrets.{name}_previous_until` (a UTC timestamp: the rotation time plus the grace period: 7 days for `installation_secret` and `cookie_signing_key`, 30 days for `encryption_key`). A previous `encryption_key` is stored AES-256-GCM-wrapped under the new key, never in plaintext |
+| Order | (1) write the previous-value rows, (2) generate the new value and persist it (a config file is written to a temp file and atomically renamed), (3) re-encrypt or re-base every dependent row EAGERLY, in batches, (4) write the audit event. A row is decrypted with the current key first and the previous key second, so a re-run skips rows that are already done |
+| Failure | The previous value is stored before the new one is used, so a crash or a failed step loses nothing. At the next start the server finishes any unfinished re-encryption: a row readable only with the previous key is re-encrypted then. A second rotation while a previous value still exists is refused until every row is readable under the current key |
+| Reads during grace | A value that fails under the current key is tried with the previous key; a success also re-encrypts that row under the current key |
+| Retirement | The daily cleanup task deletes `{name}_previous` and `{name}_previous_until` once `_until` has passed. A row that still needs the retired value fails closed and logs `security.decrypt_failed` with the table and row id, never any content |
 
 **Note on consolidation:** `server.security.encryption_key` is the canonical at-rest AES key — every place the spec talks about "encrypt this sensitive data at rest" resolves to this one key, including security report bodies. It is NOT duplicated in `app_secrets`. The three `app_secrets` rows above are HMAC keys (not AES) and a root-secret for HMAC derivation; they are stored in the DB rather than `server.yml` because they have independent rotation lifecycles.
 
@@ -15705,6 +15718,8 @@ CREATE TABLE IF NOT EXISTS security_reports (
     body_enc           BLOB NOT NULL,
     body_alg           VARCHAR(16) NOT NULL,
     contact_enc        BLOB,
+    credit_pref        VARCHAR(8) NOT NULL DEFAULT 'no',
+    credit_name        VARCHAR(100),
     researcher_comment TEXT NOT NULL DEFAULT '',
     disclosure_date    DATE,
     cve_requested      BOOLEAN NOT NULL DEFAULT FALSE,
@@ -15715,15 +15730,25 @@ CREATE TABLE IF NOT EXISTS security_reports (
     closed_at          TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_security_reports_status ON security_reports(status, created_at);
+
+CREATE TABLE IF NOT EXISTS security_thanks (
+    tracking_id  VARCHAR(32) PRIMARY KEY,
+    credit       VARCHAR(120) NOT NULL,
+    severity     VARCHAR(16) NOT NULL,
+    disclosed_on DATE NOT NULL
+);
 ```
 
 | Field | Rule |
 |-------|------|
 | `tracking_id` | `sec_` + 16 random hex chars (Submission Flow step 2) |
 | `status` | `received` (default), `triaged`, `confirmed`, `patching`, `disclosed`, `wont_fix`. Shown to the researcher as Received / Triaged / Confirmed / Patching / Disclosed / Won't Fix. Moves forward, or to `wont_fix`, never backward; `disclosed` and `wont_fix` set `closed_at` |
-| `body_enc`, `body_alg`, `contact_enc` | The report body and the researcher's contact (email and optional pubkey) are encrypted exactly as Submission Flow step 3 says (PGP, or AES-256-GCM with `server.security.encryption_key`); `body_alg` is `pgp` or `aes-256-gcm`. Plaintext is never stored. `BLOB` is `BYTEA` on PostgreSQL |
+| `severity` | `critical`, `high`, `medium`, `low` or `informational` (lowercase). Starts as the researcher's self-assessment; a maintainer re-triages it (`severity` in the update). The hall of fame shows the value at disclosure |
+| `body_enc`, `body_alg`, `contact_enc` | `body_enc` is encrypted exactly as Submission Flow step 3 says (PGP, or AES-256-GCM with `server.security.encryption_key`), and `body_alg` (`pgp` or `aes-256-gcm`) describes `body_enc` ONLY. `contact_enc` (the researcher's email and optional pubkey) is ALWAYS AES-256-GCM under `server.security.encryption_key`, whatever the body uses, because the server itself must decrypt it to send status notices (a PGP blob addressed to the project key could not be read by the server); it is re-encrypted on key rotation (PART 11 → "Rotation contract"). Plaintext is never stored. `BLOB` is `BYTEA` on PostgreSQL |
 | `researcher_comment` | Plain text, at most 2000 characters, shown on the researcher status page. Never contains report content. Output-escaped when rendered |
 | `disclosure_date` | Optional expected disclosure date (ISO 8601 date), shown on the researcher status page |
+| `credit_pref`, `credit_name` | Set at submission from "Credit preference". `credit_pref` is `name` ("Yes (real name)": `credit_name` is the Name field), `handle` ("Yes (handle)": `credit_name` is the Credit handle), `anon` ("Anonymous") or `no` ("No"); `credit_name` is NULL for `anon` and `no` |
+| Hall of fame (`security_thanks`) | When an operator sets the status to `disclosed` and `credit_pref` is not `no`, one `security_thanks` row is written in the same transaction (idempotent on `tracking_id`): `credit` is `credit_name`, or `Anonymous Researcher #n` for `anon` (n is the number of existing `anon` rows plus one, fixed once written), `severity` is the report's severity at that moment, `disclosed_on` is today (UTC). The row holds no contact data and is NOT removed by report retention, so the hall of fame outlives the report |
 | `token_hash`, `token_last_used` | SHA-256 of the one-shot status token, compared in constant time; `token_last_used` enforces single use per day |
 | Retention | The daily cleanup task deletes a report row, including `body_enc` and `contact_enc`, `server.security.reports.retention_days` (default `365`) after `closed_at`. Open reports are never purged. The status link stops working 30 days after `closed_at` |
 | Backup | The table lives in the database, so every backup and restore includes it |
@@ -15734,7 +15759,7 @@ CREATE INDEX IF NOT EXISTS idx_security_reports_status ON security_reports(statu
 |---------|--------|
 | `--maintenance security list [--status STATUS]` | Lists `tracking_id`, status, severity, component, `created_at`, `updated_at`. Never prints report content |
 | `--maintenance security show TRACKING_ID` | Prints the metadata, the researcher comment and the disclosure date. NEVER prints the report body: maintainers read it only in the encrypted notification email (or by decrypting it with the project PGP key) |
-| `--maintenance security update TRACKING_ID [--status STATUS] [--comment TEXT] [--disclosure-date YYYY-MM-DD]` | Sets the given fields, bumps `updated_at`, logs `security.report_updated` (`tracking_id`, old and new status, no content) to `security.log`, and, when SMTP works and `contact_enc` exists, emails the researcher a status-change notice that carries no report content |
+| `--maintenance security update TRACKING_ID [--status STATUS] [--comment TEXT] [--disclosure-date YYYY-MM-DD] [--severity LEVEL]` | Sets the given fields, bumps `updated_at`, logs `security.report_updated` (`tracking_id`, old and new status, no content) to `security.log`, and, when SMTP works and `contact_enc` exists, emails the researcher a status-change notice that carries no report content |
 
 ### Public Pages
 
@@ -15744,7 +15769,7 @@ CREATE INDEX IF NOT EXISTS idx_security_reports_status ON security_reports(statu
 | `/.well-known/pgp-key.asc` | GET | None | Project's PGP public key (ASCII-armored). 404 if no keypair generated yet. |
 | `/server/security` | GET | None | Security overview page (HTML). Human-readable rendering of everything in `/.well-known/security.txt` — contact channels in RFC 9116 preference order (GitHub private vulnerability reporting, `/server/contact?security_id={id}`, `mailto:` CC address), `Expires`, and the `Encryption` key when a keypair exists — plus plain-language instructions for reporting a vulnerability. Links to `/server/security/policy`, `/server/security/thanks`, `/.well-known/pgp-key.asc`, and the machine-readable `/.well-known/security.txt`. Rendered from live config — nothing to edit. |
 | `/server/security/policy` | GET | None | Disclosure policy page (HTML). Default content provided; customizable via the `web.security.policy` config key (Markdown, config file only — no mutation API). Lists the coordinated-disclosure window, in-scope domains, out-of-scope behaviors, safe-harbor language. |
-| `/server/security/thanks` | GET | None | Acknowledgments page. Lists researchers who opted in (real name, handle, or anonymized "Anonymous Researcher #n") with the year and short credit. |
+| `/server/security/thanks` | GET | None | Acknowledgments page. Lists researchers who opted in (real name, handle, or anonymized "Anonymous Researcher #n") with the year and severity: the `security_thanks` entries, newest first (the same entries as the API mirror). |
 | `/server/security/report/{tracking_id}` | GET | One-shot token in URL (no API mirror: explicit exception to the API-for-every-page rule, because the one-shot emailed link must not be duplicated onto the API surface) | Researcher status page — shows triage state (Received / Triaged / Confirmed / Patching / Disclosed / Won't Fix), maintainer comments visible to researcher, expected disclosure date. Token is single-use-per-day; expires after the report is closed for 30 days. |
 
 ### Security Administration (config file)
@@ -19177,12 +19202,13 @@ Plain text, no color. The first line is always `{project_name} {project_version}
 
 ### Frontend-Backend Integration
 
-**API is the source of truth. Frontend consumes the API. Not every API needs a frontend route.**
+**API is the source of truth. Frontend consumes the API. Not every API needs a frontend route (PART 1 → "Endpoint Pattern" defines which).**
 
 | API Type | Frontend Required | Example |
 |----------|-------------------|---------|
 | **Project-specific features** | Yes | `/api/{api_version}/items` → `/items` page |
 | **Admin features** | No (config file only) | Server administration is file-only — no web routes |
+| **System-only (machine) endpoints** | No (API-only, marked "machine-only" in its route row) | `/api/{api_version}/server/auth/check`, the MCP endpoint, `/api/autodiscover` |
 | **Health/status** | Yes | `/server/healthz` has HTML frontend (with emojis), `/api/{api_version}/server/healthz` is JSON, `/api/healthz` is direct alias JSON |
 
 | Requirement | Description |
@@ -20895,12 +20921,12 @@ Before proceeding, confirm you understand:
 
 ### DNS-01 Provider Configuration
 
-**ALL DNS providers are supported.** Set `server.tls.dns_provider` in `server.yml` to the provider name; the corresponding credential fields are documented below.
+**ALL DNS providers are supported.** Set `server.ssl.letsencrypt.dns_provider` in `server.yml` to the provider name; the corresponding credential fields are documented below.
 
 **DNS-01 Provider Configuration (config file):**
 
-1. Set `server.tls.dns_provider` to the desired provider name
-2. Set provider credentials in `server.tls.dns_credentials.*` (encrypted at rest)
+1. Set `server.ssl.letsencrypt.dns_provider` to the desired provider name
+2. Set provider credentials in `server.ssl.letsencrypt.dns_credentials.*` (encrypted at rest)
 3. Server validates credentials on startup and before certificate requests
 
 **Provider Credential Storage:**
@@ -21852,7 +21878,7 @@ Startup (for configured FQDN)
 
 | Requirement | Description |
 |-------------|-------------|
-| **Fully Functional** | ALL features work in browser - not just API |
+| **Fully Functional** | ALL user-facing features work in browser - not just API (system-only endpoints are API-only, PART 1 → "Endpoint Pattern") |
 | **Professional UI/UX** | Clean, modern, polished design |
 | **Mobile Support** | Full responsive design with touch-friendly targets |
 | **HTML5** | Full web standards compliance |
@@ -28970,18 +28996,18 @@ When the admin panel is enabled (PART 28) all pages are editable at `/server/{ad
 
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/{api_version}/server/about` | GET | About information (JSON) |
+| `/api/{api_version}/server/about` | GET | About page (JSON, no auth): `title`, `content` (the Markdown source of `pages.about.content` after placeholder substitution, never rendered HTML) and `format` (always `markdown`) |
 | `/api/{api_version}/server/privacy` | GET | Privacy policy (JSON) |
 | `/api/{api_version}/server/contact` | GET | Contact form description (JSON, no auth): `fields` (list of `{name, type, required, max_length, required_when, max_length_when}`, see "Length limits"), `captcha` (`{provider: "simple", challenge_id, question}` for `simple`; `{provider, site_key, fallback}` for `recaptcha` and `hcaptcha`, where `fallback` is the same `{provider: "simple", challenge_id, question}` object; a new challenge on every call), `security_url`, `abuse_email`. Nothing else about recipients |
 | `/api/{api_version}/server/contact` | POST | Submit contact form: the fields above plus ONE captcha proof (`captcha_response`, or `captcha_id` + `captcha_answer`; see "No-JavaScript fallback and the simple challenge") |
 | `/api/{api_version}/server/auth/check` | GET | Token check (machine-only, no page; `Authorization: Bearer` required): `200` with `{kind}` when the token is valid (`kind` is `operator`, `owner` or, where the project has accounts, `user`), `401` otherwise. Side-effect free, rate-limited like other auth endpoints, never echoes the token |
-| `/api/{api_version}/server/help` | GET | Help content (JSON) |
-| `/api/{api_version}/server/help/mcp` | GET | MCP help content (JSON); `404` when MCP is disabled |
-| `/api/{api_version}/server/terms` | GET | Terms of service (JSON) |
+| `/api/{api_version}/server/help` | GET | Help page (JSON, no auth): `title`, `content` (Markdown source of `pages.help.content`) and `format` (always `markdown`) |
+| `/api/{api_version}/server/help/mcp` | GET | MCP help (JSON, no auth): `title`, `endpoint` (the resolved MCP URL) and `sections` (the `/server/help/mcp` sections in page order, each `{id, title, content}` with Markdown `content`); `404` when MCP is disabled |
+| `/api/{api_version}/server/terms` | GET | Terms of service (JSON, no auth): `title`, `content` (Markdown source of `pages.terms.content`) and `format` (always `markdown`) |
 | `/api/{api_version}/server/dpo` | GET | DPO contact (JSON): `name`, `email`, `privacy_url` |
-| `/api/{api_version}/server/security` | GET | Security overview (JSON, no auth): `contacts` (ordered list of `{type, url or address}`), `expires`, `pgp` (`{available, url, fingerprint}`), `policy_url`, `thanks_url` |
+| `/api/{api_version}/server/security` | GET | Security overview (JSON, no auth): `contacts` (ordered list of `{type, value}` in RFC 9116 preference order: `github` with the private-vulnerability-reporting URL, `contact_form` with the absolute `/server/contact?security_id={id}` URL for the current id, `email` with the CC address; a channel that is not configured is omitted), `expires`, `pgp` (`{available, url, fingerprint}`: `url` is the absolute `/.well-known/pgp-key.asc` URL and `fingerprint` the 40-character uppercase hex v4 fingerprint without spaces; `available: false` with both `null` when no keypair exists), `policy_url`, `thanks_url` |
 | `/api/{api_version}/server/security/policy` | GET | Disclosure policy (JSON, no auth): `policy` (Markdown) |
-| `/api/{api_version}/server/security/thanks` | GET | Hall of fame (JSON, no auth): `entries` (list of `{credit, date, severity}`; `credit` honors each researcher's credit preference) |
+| `/api/{api_version}/server/security/thanks` | GET | Hall of fame (JSON, no auth): `entries` (list of `{credit, date, severity}`; `credit` is the stored credit string, `date` is `disclosed_on` as an ISO 8601 date `YYYY-MM-DD`, `severity` is `critical`, `high`, `medium`, `low` or `informational`; newest first, `[]` when empty) |
 | `/api/{api_version}/server/healthz` | GET | Health check (JSON default; text via API rules) |
 | `/api/{api_version}/server/swagger` | GET | OpenAPI JSON spec |
 | `/api/{api_version}/server/graphql` | POST | GraphQL endpoint |
