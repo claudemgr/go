@@ -3828,7 +3828,8 @@ server:
 |---------|----------|
 | Database connection | server.yml |
 | Server settings | server.yml |
-| Branding/SEO | server.yml |
+| Branding, SEO and theme | yaml.d/branding.yml (server mode: also synced to the database) |
+| Page content (about, privacy, terms, header, footer) | html/ (server mode: also synced to the database) |
 | SSL settings | server.yml |
 | API tokens (resource owner) | Database (`api_tokens`, SHA-256 stored) |
 | Resource state, audit log | Database |
@@ -4895,13 +4896,7 @@ server:
       # When true, mount /healthz to the SAME handler as /server/healthz (never redirect).
       enabled: false
 
-  # Branding & SEO - see PART 15 for full details
-  branding:
-    title: "{project_name}"
-    tagline: ""
-    description: ""
-  seo:
-    keywords: []
+  # Branding, SEO and the default theme are not in server.yml: they live in yaml.d/branding.yml (PART 15 → "Branding File")
 
   # System user/group
   user: {auto}
@@ -5042,8 +5037,7 @@ server:
 # =============================================================================
 
 web:
-  ui:
-    theme: dark
+  # ui.theme (the default theme) lives in yaml.d/branding.yml (PART 15 → "Branding File")
 ```
 
 ---
@@ -8656,7 +8650,7 @@ The app automatically watches config files and hot-reloads what it can. Settings
 |------------------|----------|
 | Rate limits | `rate_limit.*` |
 | CORS settings | `cors.*` |
-| Branding/SEO | `branding.*`, `seo.*` |
+| Branding/SEO/theme | `branding.*`, `seo.*`, `web.ui.theme` (from `yaml.d/branding.yml`) |
 | Logging level | `logging.level` |
 | Notification settings | `notifications.*`, `smtp.*` |
 | Security headers | `security.headers.*` |
@@ -26947,7 +26941,9 @@ the hex values from `ThemePaletteDark`/`ThemePaletteLight`.
 | OpenGraph data | Service names |
 | Swagger UI title | Container names |
 
-### Configuration
+### Branding File (`yaml.d/branding.yml`)
+
+**All branding, white-labeling and theming live in ONE file: `{config_dir}/yaml.d/branding.yml`.** It holds `server.branding.*`, `server.seo.*` (including `seo.verification`) and `web.ui.theme`, with the dotted paths below, and nothing else.
 
 ```yaml
 server:
@@ -26958,6 +26954,10 @@ server:
     tagline: ""
     # Longer description for SEO/about
     description: ""
+    # URL or file name in {config_dir}/html/; empty = use embedded default
+    favicon: ""
+    # URL or file name in {config_dir}/html/; empty = use embedded default
+    logo: ""
 
   seo:
     # Project-specific - define per app
@@ -26969,7 +26969,20 @@ server:
     og_image: ""
     # Twitter @handle for cards
     twitter_handle: ""
+
+web:
+  ui:
+    # Default theme for visitors without a theme cookie: dark, light or auto
+    theme: dark
 ```
+
+| Rule | Behavior |
+|------|----------|
+| **Home** | `{config_dir}/yaml.d/branding.yml`, a normal drop-in (PART 5 → "Drop-in Config Directory"): same merge order, `0600`, hot reload and backup. These keys are not in the generated `server.yml` |
+| **Never generated** | The server does not create it. No file means the built-in defaults (the title is `{project_name}`). The operator creates it by hand, or the setup flow or the admin panel does |
+| **Writes** | The admin panel, the setup flow and `--admin config set branding.*` write `branding.yml` (atomic, `0600`); the whole file is rewritten and comments are not kept. They never write these keys to `server.yml`. An operator may also edit it by hand; the file watcher applies the change |
+| **Images** | `logo`, `favicon` and `seo.og_image` take a URL or a file name. A file name resolves in `{config_dir}/html/` (`.svg`, `.png`, `.ico`, `.webp`, `.jpg`, at most 2 MiB each); empty means the embedded default |
+| **Sync** | SERVER and HYBRID sync branding to the database like every other setting (PART 5: ConfigManager keeps the database and the file in step, and the database layer stays above the file layer). A node that loads or saves `branding.yml` writes the keys to the `config` table and every other node applies the database value, so all nodes show the same branding, theme and images. A branding key found in `server.yml` is still honored (it merges below `branding.yml`), but no tool writes it there |
 
 ### Where Branding Is Used
 
@@ -27039,7 +27052,7 @@ Default to `index,follow` only for routes explicitly marked public; every other 
 
 **Custom verification meta tags for search engines and services MUST be validated before rendering.**
 
-**Configuration:**
+**Configuration** (in `yaml.d/branding.yml`, "Branding File"):
 
 ```yaml
 server:
@@ -27286,6 +27299,9 @@ When the admin panel is enabled (PART 28) these are also editable at `/server/{a
 | Local file | File path | Set `server.branding.logo` in config to an absolute file path (or upload via the admin panel — PART 28) |
 | Remote URL | URL input | `https://example.com/logo.png` |
 | Embedded default | - | Built-in fallback |
+
+**A local file** is stored in `{config_dir}/html/` and referenced by file name in `yaml.d/branding.yml` (SERVER and HYBRID: mirrored to every node, "Operator Content Files"). A remote URL is fetched and cached locally; that cache is derived data and is not synced.
+
 
 ### Image Scaling
 
@@ -27745,6 +27761,7 @@ web:
 | **Permissions** | `html/` is `0700` and its files `0600` (PART 8 → "Directory Validation Rules": private paths) |
 | **Reload** | The file watcher watches `html/` like `yaml.d/`: an added, changed or removed file applies without a restart, and an invalid file keeps the last good content |
 | **Backup** | `{config_dir}/html/` is included in backups whenever it exists (PART 20 → "Backup Contents") |
+| **Sync** | `html/` is mirrored through the database so every node shows the same pages, header and footer. ConfigManager writes an added, changed or removed file to the `config` table (keys `html.{name}` and `html.{name}.{lang}`, value `{format, body}`; a removal is a tombstone row) and every other node writes the database content to its own `html/` (atomic, `0600`). The database layer stays above the file layer, and the newest `updated_at` wins when two nodes change the same file. Branding images under `html/` (`logo`, `favicon`, `seo.og_image`) sync the same way (value `{format: image, body: base64}`, at most 2 MiB each). The admin editors write the file and the sync does the rest |
 | **Overlay hosts** | Files are served as written. The Tor and I2P privacy rules apply to built-in content only, so an operator must not put clearnet identity into a file that is also shown on `.onion` or `.i2p` |
 
 **Admin panel (when enabled):** the Pages editors (About, Privacy, Terms) and the footer editor read and write these same files (atomic write, `0600`); a save never touches `server.yml`, "Reset to default" deletes the file, and a new file is written as `.md` (`.html` for header and footer).
