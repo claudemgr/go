@@ -5543,8 +5543,8 @@ Every target that builds a binary builds **both** the HYBRID binary (`./src`) an
 PROJECT_NAME := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git)?$$|\1|' || basename "$$(pwd)")
 PROJECT_ORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$$|\1|' || basename "$$(dirname "$$(pwd)")")
 
-# Version precedence: release.txt (wins if it exists) > VERSION env var > "devel" fallback
-VERSION := $(shell cat release.txt 2>/dev/null || echo "$${VERSION:-devel}")
+# Version precedence: VERSION env (user override, AI never sets it) > release.txt > "devel" fallback
+VERSION ?= $(shell cat release.txt 2>/dev/null || echo "devel")
 
 # BUILD_EPOCH: Unix build timestamp (seconds, UTC) - the single captured time source
 BUILD_EPOCH := $(shell date -u +%s)
@@ -6079,8 +6079,8 @@ make build
 
 **When extracting VERSION variable from tag:**
 - Git tag `v1.2.3` → VERSION=`1.2.3` (strip v for internal use)
-- Git tag `dev` → VERSION=`dev` (no v to strip)
-- Git tag `beta` → VERSION=`beta` (no v to strip)
+- Git tag `devel` (rolling) → VERSION=short commit id of the built commit, not the tag name
+- Git tag `YYYYMMDDHHMMSS-beta` → VERSION=`YYYYMMDDHHMMSS-beta` (same string, no v to strip)
 
 | Tag Input | Type | Add `v`? | Display As | Why |
 |-----------|------|----------|------------|-----|
@@ -6125,9 +6125,10 @@ format_version_tag() {
 
 ### Version Priority
 
-1. `VERSION` environment variable (if set)
-2. `release.txt` file (if exists)
-3. Create `release.txt` with `0.1.0` (first release)
+1. `VERSION` environment variable, only when explicitly set by the user (local/manual builds; CI workflows never read it); AI agents never set it
+2. Channel rule (CI): devel = `git rev-parse --short=7 HEAD`, beta = `YYYYMMDDHHMMSS-beta`; `release.txt` is never consulted for these channels
+3. `release.txt` in project root (stable releases and local builds); release workflows fall back to the pushed tag with `v` stripped only when `release.txt` is absent
+4. Fallback: `devel` — create `release.txt` with `0.1.0` before the first release
 
 ### Release Summary
 
@@ -6240,7 +6241,7 @@ FROM casjaysdev/go:latest AS builder
 RUN apk add --no-cache git bash
 
 ARG TARGETARCH
-ARG VERSION=dev
+ARG VERSION=devel
 ARG BUILD_EPOCH
 ARG COMMIT_ID
 # Optional: set via --build-arg OFFICIAL_SITE=... (empty by default)
@@ -6264,7 +6265,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
 FROM alpine:latest
 
 # ARGs for build-time values (set by docker build --build-arg)
-ARG VERSION=dev
+ARG VERSION=devel
 ARG BUILD_DATE
 ARG BUILD_EPOCH
 ARG COMMIT_ID
@@ -7188,7 +7189,7 @@ jobs:
 - `release.txt` is a single-line canonical version source when present
 - It overrides derived/tag-based defaults and should stay in sync with `go.mod` module version if applicable
 - Use semantic versions (`MAJOR.MINOR.PATCH`) unless the project intentionally uses another documented scheme (see PART 6 → "Release Types" for beta/devel/dev formats)
-- If `release.txt` exists, CI/CD and release scripts must use it rather than inventing a version
+- For stable releases, CI/CD and release scripts must use it rather than inventing a version; devel and beta builds derive their own version
 - If not present, create it with `0.1.0` before the first release
 
 ## `site.txt` (Optional Official Site)
@@ -7207,10 +7208,10 @@ https://api.example.com
 ## Metadata Priority Rules
 
 ### Version
-1. `release.txt` (when present)
-2. `VERSION` environment variable (if set)
-3. `go.mod` module version / git tag
-4. explicit documented fallback (`devel`) for bootstrap/dev builds
+1. `VERSION` environment variable (user override only; AI never sets it)
+2. Channel rule: devel = short commit id, beta = `YYYYMMDDHHMMSS-beta`
+3. `release.txt` (when present)
+4. explicit documented fallback (`devel`)
 
 ### Official Site
 1. `site.txt` (when present)
@@ -19460,9 +19461,10 @@ Same underlying health response as `/server/healthz`, but formatted using the st
 
 ### Sources (Priority Order)
 
-1. `release.txt` in project root
-2. Git tag (if available)
-3. Fallback: `dev`
+1. `VERSION` environment variable, only when explicitly set by the user (local/manual builds; CI workflows never read it); AI agents never set it
+2. Channel rule (CI): devel = `git rev-parse --short=7 HEAD`, beta = `YYYYMMDDHHMMSS-beta`; `release.txt` is never consulted for these channels
+3. `release.txt` in project root (stable releases and local builds); release workflows fall back to the pushed tag with `v` stripped only when `release.txt` is absent
+4. Fallback: `devel` — create `release.txt` with `0.1.0` before the first release
 
 ### --version Output
 
@@ -36159,7 +36161,7 @@ The release job MUST NOT publish the Docker image (server-mode artifact) unless 
 | Least privilege | CI tokens/permissions default to read-only |
 | Pinned actions | Third-party actions pinned to full commit SHAs; verify runtime and maintenance status on every SHA update |
 | No unsafe fork secrets | Fork PRs do not receive secrets or publish permissions |
-| Version precedence | `release.txt` wins when present |
+| Version precedence | `VERSION` env var (user override, AI never sets it) > channel (devel = short commit id, beta = `YYYYMMDDHHMMSS-beta`; `release.txt` ignored) > `release.txt` > `devel` |
 | Site precedence | `site.txt` wins when present |
 | Verifiable outputs | Releases publish checksums and an SBOM (always); provenance/attestation when the platform supports it |
 
@@ -37066,11 +37068,7 @@ jobs:
       - name: Compute version
         id: v
         run: |
-          if [ -f release.txt ]; then
-            VERSION="$(cat release.txt)"
-          else
-            VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
-          fi
+          VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
   build:
@@ -38076,11 +38074,7 @@ jobs:
       - name: Compute version
         id: v
         run: |
-          if [ -f release.txt ]; then
-            VERSION="$(cat release.txt)"
-          else
-            VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
-          fi
+          VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
           echo "version=$VERSION" >> "$GITEA_OUTPUT"
 
   build:
@@ -39252,7 +39246,7 @@ docker:build:
         YYMM=$(date +%y%m)
         TAGS="-t $CI_REGISTRY_IMAGE:$VERSION -t $CI_REGISTRY_IMAGE:latest -t $CI_REGISTRY_IMAGE:$YYMM -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
       elif [ "$CI_COMMIT_BRANCH" = "beta" ]; then
-        VERSION="beta-${CI_COMMIT_SHA:0:7}"
+        VERSION="$(date -u +%Y%m%d%H%M%S)-beta"
         TAGS="-t $CI_REGISTRY_IMAGE:beta -t $CI_REGISTRY_IMAGE:${CI_COMMIT_SHA:0:7}"
       else
         VERSION="${CI_COMMIT_SHA:0:7}"
