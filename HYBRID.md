@@ -36632,7 +36632,7 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 - Use CI-native caching (NOT local host paths)
 - Set VERSION, COMMIT_ID, BUILD_DATE, BUILD_EPOCH explicitly
 - Build all platforms in matrix
-- Auto-cancel older in-progress runs for the same ref on push workflows targeting `main`, `master`, `devel`, `dev`, or `beta`
+- Auto-cancel older in-progress runs for the same ref on push workflows targeting `main`, `master`, or `beta`
 
 **CI/CD workflows MUST NOT:**
 - Reference local user paths like `~/.local/share/go` (use `/tmp/` or CI-native caching)
@@ -36666,7 +36666,7 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 | `docker.yml` | Any push (all branches) + version tags + daily schedule | Docker images (`build-standard` + `build-devel` jobs) |
 > **Note:** `ci.yml` and `release.yml` are required on every project. Go projects never have `build-toolchain.yml` — `casjaysdev/go:latest` is maintained externally. `beta.yml`, `devel.yml`, and `docker.yml` are project-specific optional workflows — include only when the project requires them.
 
-**Branch push auto-cancel policy:** Any workflow triggered by pushes to `main`, `master`, `devel`, `dev`, or `beta` MUST use workflow concurrency to cancel older in-progress runs for the same ref. This applies to branch-based CI (for example `beta.yml`, `devel.yml`, `docker.yml`, and any project-specific branch-push workflow).
+**Branch push auto-cancel policy:** Any workflow triggered by pushes to `main`, `master`, or `beta` MUST use workflow concurrency to cancel older in-progress runs for the same ref. This applies to branch-based CI (for example `beta.yml`, `devel.yml`, `docker.yml`, and any project-specific branch-push workflow).
 
 **Tag release auto-cancel policy:** Tag-only release workflows like `release.yml` MUST also use workflow concurrency, but only per exact tag ref. A newer run for `refs/tags/v1.2.3` should cancel the older `refs/tags/v1.2.3` run. A run for `v1.2.4` must NOT cancel `v1.2.3`.
 
@@ -37277,7 +37277,7 @@ on:
 
 concurrency:
   group: devel-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/beta' }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/beta' }}
 
 permissions:
   contents: read
@@ -37496,7 +37496,7 @@ on:
 
 concurrency:
   group: docker-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/beta' }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/beta' }}
 
 env:
   PROJECT_NAME: {project_name}
@@ -38271,7 +38271,7 @@ on:
 
 concurrency:
   group: devel-${{ gitea.ref }}-${{ gitea.event_name }}
-  cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/devel' || gitea.ref == 'refs/heads/dev' || gitea.ref == 'refs/heads/beta' }}
+  cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/beta' }}
 
 permissions:
   contents: read
@@ -38461,7 +38461,7 @@ on:
 
 concurrency:
   group: docker-${{ gitea.ref }}-${{ gitea.event_name }}
-  cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/devel' || gitea.ref == 'refs/heads/dev' || gitea.ref == 'refs/heads/beta' }}
+  cancel-in-progress: ${{ gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master' || gitea.ref == 'refs/heads/beta' }}
 
 env:
   PROJECT_NAME: {project_name}
