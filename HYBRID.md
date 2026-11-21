@@ -36670,6 +36670,8 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 
 **Tag release auto-cancel policy:** Tag-only release workflows like `release.yml` MUST also use workflow concurrency, but only per exact tag ref. A newer run for `refs/tags/v1.2.3` should cancel the older `refs/tags/v1.2.3` run. A run for `v1.2.4` must NOT cancel `v1.2.3`.
 
+**Pull requests and merges:** a pull request runs `ci.yml` only (build, test, lint, coverage, secret scan, workflow policy) — it never publishes an image or a release, and a fork PR receives no secrets. Merging into `main`/`master` is simply a push to that branch, so the merge triggers `ci.yml`, `devel.yml` (the rolling `devel` release) and `docker.yml` (the `{commit_id}` image and the `:devel` image). Merging into `beta` triggers `beta.yml`; a stable release is a tag push, never a merge. A PR and its target branch have different refs, so their concurrency groups never cancel each other.
+
 **Artifact retention:** Every `actions/upload-artifact` step MUST set a finite `retention-days` — no infinite retention of build outputs:
 
 ```yaml
@@ -37475,7 +37477,7 @@ jobs:
 - `{yymm}` = year/month (e.g., `2512`)
 - Built for `linux/amd64` and `linux/arm64` using `docker buildx`
 - Registry: `ghcr.io`
-- `:devel` is built by the `build-devel` job in this same workflow, from `docker/Dockerfile.dev`, on a daily schedule and on every non-tag push — see the job in the YAML above
+- `:devel` is built by the `build-devel` job in this same workflow, from `docker/Dockerfile.dev`, on a daily schedule and on every push to `main`/`master` — see the job in the YAML above
 - `docker.yml` also runs on a daily schedule (`0 4 * * *`) to keep `:devel` fresh
 
 **File:** `.github/workflows/docker.yml`
@@ -37603,7 +37605,7 @@ jobs:
 
   build-devel:
     runs-on: ubuntu-26.04
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     permissions:
       contents: read
       packages: write
@@ -38582,7 +38584,7 @@ jobs:
 
   build-devel:
     runs-on: ubuntu-26.04
-    if: gitea.event_name == 'schedule' || gitea.event_name == 'workflow_dispatch' || (gitea.event_name == 'push' && !startsWith(gitea.ref, 'refs/tags/'))
+    if: (gitea.event_name == 'schedule' || gitea.event_name == 'workflow_dispatch' || gitea.event_name == 'push') && (gitea.ref == 'refs/heads/main' || gitea.ref == 'refs/heads/master')
     permissions:
       contents: read
       packages: write
@@ -39333,7 +39335,7 @@ docker:build:
     - if: $CI_COMMIT_BRANCH == "beta"
 
 # =============================================================================
-# DOCKER DEVEL BUILD (`:devel` tag — every push + daily schedule, never docker:build)
+# DOCKER DEVEL BUILD (`:devel` tag — main/master push + daily schedule, never docker:build)
 # =============================================================================
 
 docker:build:devel:
@@ -39387,11 +39389,11 @@ docker:build:devel:
         .
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $DEVEL_SCHEDULE == "true"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG == null
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG == null && ($CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master")
 
 ```
 
-`:devel` is never produced by `docker:build` — it is built only by `docker:build:devel`, which runs on every push (excluding tag pipelines) and on a daily scheduled pipeline (see "GitLab Scheduled Pipelines" below), from `docker/Dockerfile.dev`.
+`:devel` is never produced by `docker:build` — it is built only by `docker:build:devel`, which runs on every push to `main`/`master` and on a daily scheduled pipeline targeting the main branch (see "GitLab Scheduled Pipelines" below), from `docker/Dockerfile.dev`.
 
 ## GitLab CI Variables
 
@@ -39470,7 +39472,7 @@ Jenkins provides equivalent functionality to GitHub Actions, Gitea Actions, and 
 | Main/master | `when { anyOf { branch 'main'; branch 'master' } }` | `devel.yml` |
 | Scheduled | `triggers { cron('0 3 * * *') }` | `devel.yml` schedule |
 | All branches | Default (no `when`) | `docker.yml` |
-| All branches (excluding release tags) + daily schedule | `when { expression { env.BUILD_TYPE != 'release' } }` + `triggers { cron('0 4 * * *') }` | `docker.yml` `build-devel` job |
+| `main`/`master` + daily schedule | `when { anyOf { branch 'main'; branch 'master' } }` + `triggers { cron('0 4 * * *') }` | `docker.yml` `build-devel` job |
 
 ## Jenkinsfile
 
@@ -40073,11 +40075,11 @@ pipeline {
             }
         }
 
-        // Docker Devel - matches docker.yml build-devel job (every push, all branches, excluding release tags + daily 4am cron)
+        // Docker Devel - matches docker.yml build-devel job (push to main/master + daily 4am cron)
         stage('Docker Devel') {
             agent { label 'amd64' }
             when {
-                expression { env.BUILD_TYPE != 'release' }
+                anyOf { branch 'main'; branch 'master' }
             }
             steps {
                 script {
@@ -40199,7 +40201,7 @@ REGISTRY = "ghcr.io/${PROJECT_ORG}/${INTERNAL_NAME}"
 | Beta | `beta.yml` (beta branch) | `BUILD_TYPE == 'beta'` (beta branch) |
 | Devel | `devel.yml` (schedule + main) | `BUILD_TYPE == 'devel'` (cron + main/master) |
 | Docker | `docker.yml` (all branches) | Docker stage (always runs) |
-| Docker Devel | `docker.yml` `build-devel` job (all branches + daily schedule) | Docker Devel stage (`BUILD_TYPE != 'release'`, plus 4am cron) |
+| Docker Devel | `docker.yml` `build-devel` job (`main`/`master` + daily schedule) | Docker Devel stage (`main`/`master` only, plus 4am cron) |
 
 ---
 
