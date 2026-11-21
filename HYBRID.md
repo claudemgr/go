@@ -4182,7 +4182,7 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 | **Reload** | The file watcher watches `server.yml`, `yaml.d/`, `secrets.yml` and `assets/`. A change, add or remove re-merges everything; an invalid value resets that key to its default and an unparseable file keeps its last good copy ("Validation") |
 | **Generated values** | The server writes generated values (the saved random port) to `server.yml` and the secrets to `secrets.yml`. It writes area files only for the automatic migration, the admin panel, the setup flow, the CLI and the database sync. If two files set the same key, the later one wins and the startup log says which file did |
 | **Permissions** | `server.yml`, `secrets.yml` and every drop-in are ALWAYS `0600`, and `yaml.d/` is `0700` (PART 8 → "Directory Validation Rules": private paths); a wrong mode is fixed at start, and a drop-in that is group or world writable and cannot be fixed is refused: it is ignored and the error is logged |
-| **Early read** | Before the privileged bind (PART 8 startup, step 8e), ONLY `server.port`, `server.address` and `server.daemonize` are read, from the same merged view (`server.yml`, then drop-ins in order). So a drop-in MAY set either key and it takes effect on the first start; neither key is rebound later (`server.address` and `server.port` need a restart, PART 12) |
+| **Early read** | Before the privileged bind (PART 8 startup, step 8e), ONLY `server.port`, `server.address` and `server.daemonize` are read, from the same merged view (`server.yml`, then drop-ins in order). So a drop-in MAY set any of these three settings and it takes effect on the first start; none of them is re-read or rebound later, so changing `server.port`, `server.address` or `server.daemonize` needs a restart (PART 12) |
 | **Backup** | `{config_dir}/yaml.d/` and `{config_dir}/secrets.yml` are included in backups whenever they exist (PART 20 → "Backup Contents") |
 - **Visibility:** the startup log lists each loaded drop-in in order (info level) and names the file that won for every overridden key (debug level); secret values are never logged.
 
@@ -6347,9 +6347,9 @@ RUN chmod 755 /usr/local/bin/*
 # Note: Tor available (binary installed) but binary controls Tor startup (see PART 27)
 # DATABASE_DIR: SQLite location (binary auto-detects container, but explicit is clearer)
 # MODE is never baked into the production image — binary defaults to production; compose sets MODE explicitly (only Dockerfile.dev bakes MODE=development)
+# I2P_ENABLED is never baked either: the binary's own default is on in a container, so an operator's explicit flag, variable or config value always overrides it (PART 31.2)
 ENV TZ=America/New_York \
-    DATABASE_DIR=/data/db/sqlite \
-    I2P_ENABLED=true
+    DATABASE_DIR=/data/db/sqlite
 
 # Expose internal port (always 80)
 EXPOSE 80
@@ -9672,7 +9672,7 @@ $ kill -TERM $(cat /var/run/myorg/myapp/myapp.pid)
 | `--port` | `PORT` | Listen port |
 | `--address` | `LISTEN` | Listen address |
 | `--mode` | `MODE` | Application mode (production/development/debug) |
-| `--i2p` | `I2P_ENABLED` | Enable the I2P eepsite (config key: `server.i2p.enabled`); the container image sets it to `true`, everywhere else it is off |
+| `--i2p` | `I2P_ENABLED` | Enable the I2P eepsite (config key: `server.i2p.enabled`); built-in default `true` in a container and `false` elsewhere (no image variable sets it) |
 | (none) | `DATABASE_DIR` | SQLite database directory (Docker: `/data/db/sqlite`, Native: `{data_dir}/db/`) |
 | (none) | `BACKUP_DIR` | Backup directory (defaults to `/mnt/Backups/{internal_org}/{internal_name}` when writable, else `{data_dir}/backup/`; changeable) |
 
@@ -16069,7 +16069,7 @@ CREATE TABLE IF NOT EXISTS security_thanks (
 | `credit_pref`, `credit_name` | Set at submission from "Credit preference". `credit_pref` is `name` ("Yes (real name)": `credit_name` is the Name field), `handle` ("Yes (handle)": `credit_name` is the Credit handle), `anon` ("Anonymous") or `no` ("No"); `credit_name` is NULL for `anon` and `no` |
 | Hall of fame (`security_thanks`) | When an operator sets the status to `disclosed` and `credit_pref` is not `no`, one `security_thanks` row is written in the same transaction (idempotent on `tracking_id`): `credit` is `credit_name`, or `Anonymous Researcher #n` for `anon` (n is the number of existing `anon` rows plus one, fixed once written), `severity` is the report's severity at that moment, `disclosed_on` is today (UTC). The row holds no contact data and is NOT removed by report retention, so the hall of fame outlives the report |
 | `token_hash`, `token_last_used` | SHA-256 of the one-shot status token, compared in constant time; `token_last_used` enforces single use per day |
-| Retention | The daily cleanup task deletes a report row, including `body_enc` and `contact_enc`, `server.security.reports.retention_days` (default `365`) after `closed_at`. Open reports are never purged. The status link stops working 30 days after `closed_at` |
+| Retention | The daily cleanup task deletes a report row, including `body_enc` and `contact_enc`, `server.security.reports.retention_days` (default `365`) after `closed_at`. Open reports are never purged. Key rotation re-encrypts retained bodies (GPG Keypair Management → Rotate), so the retention period never outlives the ability to read them. The status link stops working 30 days after `closed_at` |
 | Backup | The table lives in the database, so every backup and restore includes it |
 
 **Operator workflow (no admin web UI, no HTTP route changes these fields).** Maintainers manage reports with `{project_name} --maintenance security <action>`, authorized like every other `--maintenance` action: `server.token` OR root.
@@ -16113,12 +16113,12 @@ CREATE TABLE IF NOT EXISTS security_thanks (
 | Action | CLI | Behavior |
 |--------|-----|----------|
 | **Generate** | `--maintenance pgp generate` | Generates an Ed25519 (signing) + Curve25519 (encryption) keypair. Identity is `{app_name} Security <{security_contact}>`. Expires 2 years from generation. Private key is encrypted with a key derived from `installation_secret` and stored in `{config_dir}/security/pgp.priv.asc.enc`. Public key stored at `{config_dir}/security/pgp.pub.asc` (also served at `/.well-known/pgp-key.asc`). |
-| **Rotate** | `--maintenance pgp rotate` | Generates a new keypair, signs the new pubkey with the old key, publishes the rotation to configured keyservers. Old key stays valid for 30 days for in-flight reports. |
+| **Rotate** | `--maintenance pgp rotate` | Generates a new keypair, signs the new pubkey with the old key, publishes the rotation to configured keyservers. In ONE database transaction, taken under the same lock the submission step uses, it re-encrypts every stored `body_enc` whose `body_alg` is `pgp` to the new key (decrypt with the old private key, encrypt to the new public key). If any row fails, the transaction rolls back and the old key stays active, so no retained report is ever left readable only by a discarded key. After a successful rotation every stored body is readable with the current key for its whole retention period. The old private key is kept encrypted at `{config_dir}/security/pgp.priv.old.asc.enc` for 30 days, only for items already in transit (notifications sent to the old key, researchers who fetched the old public key); the daily cleanup then deletes it. |
 | **Publish to keyservers** | `--maintenance pgp publish` | POST the public key to each entry in `web.security.keyservers`. Uses the keyserver's HTTP submission endpoint (`https://keys.openpgp.org/vks/v1/upload` for keys.openpgp.org, similar for ubuntu). Triggered automatically on generate/rotate; manually via `--maintenance pgp publish`. Failures are logged + retried with exponential backoff. |
 | **Export public key** | `--maintenance pgp export public [path]` | Use the public URL `/.well-known/pgp-key.asc`, copy `{config_dir}/security/pgp.pub.asc` directly, or write it to `[path]` (stdout if omitted) via the CLI. |
 | **Export private key** | `--maintenance pgp export private <path>` | **Full export, ASCII-armored, decrypted after operator token confirmation.** Triggers a sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt for the operator token, log to `audit.log` as `security.private_key_exported`, write the key to `<path>` with mode 0600. **The export is rate-limited to 1 per hour per operator and the audit entry includes operator IP and reason text the operator must type.** |
 | **Import private key** | `--maintenance pgp import <file>` | Import an existing `pgp.priv.asc` from a local file (e.g., restoring from backup, migrating from another instance). Same sensitive-operation gate. Validates the key's identity matches the project's expected identity (warns on mismatch — operator can override). |
-| **Delete** | `--maintenance pgp delete` | Sensitive-operation flow. Deletes both keys, sets `web.security.publish_pgp_key: false`, removes `Encryption:` line from security.txt. In-flight encrypted reports become un-decryptable — operator warned and must type confirmation. |
+| **Delete** | `--maintenance pgp delete` | Sensitive-operation flow. Deletes both keys, sets `web.security.publish_pgp_key: false`, removes `Encryption:` line from security.txt. Stored and in-flight PGP-encrypted report bodies become un-decryptable (retention still purges them on schedule) — operator warned and must type confirmation. |
 
 **Keypair properties stored in DB (NOT the keys themselves — those are on disk):**
 
@@ -29731,7 +29731,7 @@ When the admin panel is enabled (PART 28) all pages are editable at `/server/{ad
 | `/api/{api_version}/server/contact` | POST | Submit the report form in two calls (the first returns the `review` and a `review_token` and delivers nothing; the second repeats every field with `review_token` and `confirmed: true` and delivers): the fields above (including `type` and the fields that type requires), the `form_token` from the `GET`, no `website`, plus ONE captcha proof (`captcha_response`, or `captcha_id` + `captcha_answer`; see "No-JavaScript fallback and the simple challenge") |
 | `/api/{api_version}/server/auth/check` | GET | Token check (machine-only, no page; `Authorization: Bearer` required): `200` with `{kind}` when the token is valid (`kind` is `operator`, `owner` or, where the project has accounts, `user`), `401` otherwise. Side-effect free, rate-limited like other auth endpoints, never echoes the token |
 | `/api/{api_version}/server/help` | GET | Help page (JSON, no auth): `title`, `content` (Markdown source of `server.pages.help.content`) and `format` (always `markdown`) |
-| `/api/{api_version}/server/help/mcp` | GET | MCP help (JSON, no auth): `title`, `endpoint` (the resolved MCP URL) and `sections` (the `/server/help/mcp` sections in page order, each `{id, title, content}` with Markdown `content`) |
+| `/api/{api_version}/server/help/mcp` | GET | MCP help (JSON, no auth; the same content as the help page): `enabled`, `url`, `aliases`, `auth`, `tools` and `project` — field names are fixed, see "/server/help/mcp" |
 | `/api/{api_version}/server/terms` | GET | Terms of service (JSON, no auth): `title`, `content` (the source of `server.branding.content.terms` for the request's language, or the built-in terms in Markdown when there is no entry) and `format` (`markdown`, `html` or `text`) |
 | `/api/{api_version}/server/dpo` | GET | DPO contact (JSON): `name`, `email`, `privacy_url` |
 | `/api/{api_version}/server/security` | GET | Security overview (JSON, no auth): `contacts` (ordered list of `{type, value}` in RFC 9116 preference order: `github` with the private-vulnerability-reporting URL, `contact_form` with the absolute `/server/contact?security_id={id}` URL for the current id, `email` with the CC address; a channel that is not configured is omitted), `expires`, `pgp` (`{available, url, fingerprint}`: `url` is the absolute `/.well-known/pgp-key.asc` URL and `fingerprint` the 40-character uppercase hex v4 fingerprint without spaces; `available: false` with both `null` when no keypair exists), `policy_url`, `thanks_url`, `report_url` (the absolute `/server/contact` URL without `security_id`, for terms violations, DMCA notices and privacy requests; omitted when `server.pages.contact.enabled` is false) |
@@ -44335,13 +44335,13 @@ Tor Hidden Service: Connected
 
 ### Configuration
 
-**I2P is off by default outside a container, and on by default inside one** (the image sets `I2P_ENABLED=true`; an explicit flag, variable or config value always wins). No provider is contacted and no port is allocated unless `enabled: true`. The canonical config path is `server.i2p.enabled` (env `I2P_ENABLED`, flag `--i2p`), grouped under `server` like `server.tor`; `features.i2p.*` names the same state only as response fields in health output and is never a config key. Precedence follows PART 8: `--i2p` flag, then `I2P_ENABLED`, then `server.i2p.enabled`.
+**I2P is off by default outside a container, and on by default inside one** (the built-in default is computed from container detection, PART 8: `true` in a container, `false` elsewhere; the image sets no `I2P_ENABLED` variable, so an operator's explicit setting is never confused with the default). No provider is contacted and no port is allocated unless `enabled: true`. The canonical config path is `server.i2p.enabled` (env `I2P_ENABLED`, flag `--i2p`), grouped under `server` like `server.tor`; `features.i2p.*` names the same state only as response fields in health output and is never a config key. Precedence follows PART 8: `--i2p` / `--i2p=false`, then an `I2P_ENABLED` the operator set, then an explicit `server.i2p.enabled` in server.yml, then the computed default.
 
 ```yaml
 server:
   i2p:
-    # The built-in default is false (bare metal and VM: opt-in). The container image sets
-    # I2P_ENABLED=true. Unlike Tor (auto-enabled when the binary is found), the eepsite
+    # The built-in default is computed: true in a container, false on bare metal and in a VM (opt-in).
+    # No image variable sets it. Unlike Tor (auto-enabled when the binary is found), the eepsite
     # is created only when this is true.
     enabled: false
 
@@ -44373,7 +44373,7 @@ server:
 ```
 
 **Notes:**
-- **Never inferred from the binary** — outside a container it needs an explicit config/flag/env; in a container the image supplies `I2P_ENABLED=true` as that explicit env.
+- **Never inferred from the binary** — outside a container it needs an explicit config/flag/env; in a container the built-in default is on (computed from container detection, never an image variable).
 - Model A uses the external `i2pd` binary (not embedded), keeping `CGO_ENABLED=0` static binaries.
 - Model B needs no dependency — SAMv3 is spoken over a plain `net.Conn`.
 - **I2P directories are NOT configurable** — always derived: config `{config_dir}/i2p/`, data `{data_dir}/i2p/`, log `{log_dir}/i2pd.log` (Model A only).
