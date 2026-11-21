@@ -1445,7 +1445,7 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 ├── PLAN.AI.md              # Implementation plan (AI-owned, optional)
 ├── PLAN.md                 # Implementation plan (human-owned, optional - AI marks items done only)
 ├── Jenkinsfile             # Jenkins pipeline
-├── release.txt             # Version tracking
+├── release.txt             # Local-build version (optional)
 └── site.txt                # Official site URL (optional)
 ```
 
