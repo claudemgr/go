@@ -969,13 +969,30 @@ Structure (PART 3) · Core app + server features (PART 2, 4, 8, 9, 10, 12–21 a
 
 **When ALL items in TODO.AI.md are completed:**
 
-**Subagents:** do not write COMMIT_MESS or call gitcommit — complete edits and report back to the parent instance to handle the commit. Subagents also never run `make`, tests, lint, or any build/test gate — the parent runs them once after reviewing the full diff.
+**Subagents:** do not write COMMIT_MESS or call gitcommit — complete your edits and report back to the parent instance to handle the commit. Subagents also never run `make`, tests, lint, or any build/test gate — the parent runs them once after reviewing the full diff.
 
-1. Remove each completed item from TODO.AI.md only after it is fully resolved and committed — never truncate the whole file at once
-2. Write COMMIT_MESS with title EXACTLY `all todo items have been completed`, and a body summarizing what was accomplished as bullet points
+1. **Remove each completed item from TODO.AI.md** only after the commit that resolved it succeeded (see "Commit sequence" below); never truncate the whole file at once
+2. **Write COMMIT_MESS** with the following format:
 
+**Title Format:**
 ```
-all todo items have been completed
+✅ all todo items have been completed ✅
+```
+
+**Body Format:**
+```
+All tasks from TODO.AI.md have been completed.
+
+{summary of completed tasks}
+
+- Task 1 completed
+- Task 2 completed
+- etc.
+```
+
+**Example:**
+```
+✅ all todo items have been completed ✅
 
 All tasks from TODO.AI.md have been completed.
 
@@ -987,7 +1004,20 @@ Implemented core application and server functionality.
 - Wired operator token (`server.token`) authentication for protected endpoints
 ```
 
-**This completion ritual applies ONLY to TODO.AI.md.** The human-owned `TODO.md` is never emptied or truncated by AI — AI may only mark individual items done in place.
+**TODO Completion Rules:**
+- The ✅ emoji MUST be used for todo completion commits
+- Title is EXACTLY: `✅ all todo items have been completed ✅`
+- Body MUST summarize what was accomplished
+- **Commit sequence (one order, no alternatives):** (1) implement a task and commit it normally; its item is still in TODO.AI.md. (2) After that commit succeeds, delete the item from TODO.AI.md. (3) The deletion is committed together with the next task. (4) The commit that deletes the LAST item uses the ✅ title and body above, so the file is empty only in that commit and an item never disappears before the commit that resolved it
+
+**Format Rules:**
+- Title line: max 64 characters (including emojis)
+- Blank line after title
+- Detailed description follows
+- Use bullet points for multiple changes
+- Be specific about what changed and why
+
+**This completion ritual applies ONLY to TODO.AI.md.** The human-owned `TODO.md` is never emptied or truncated by AI — AI may only mark individual items done in place. The ✅ commit format is also reserved for TODO.AI.md completion.
 
 ## Self-Validation Loop
 

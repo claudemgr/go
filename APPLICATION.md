@@ -326,6 +326,30 @@ Getting code correct on the first try is much harder than iterating with feedbac
 
 **AGENTS.md (REQUIRED, root):** Many non-Claude coding agents/tools read `AGENTS.md` at the project root instead of `CLAUDE.md`. Generate/reconcile `AGENTS.md` as an exact copy of root `CLAUDE.md`'s final content — same loader text, kept in sync whenever `CLAUDE.md` changes. Always a real file copy, never a symlink (symlinks are not portable across all platforms/filesystems).
 
+## Commit workflow (required on every commit)
+
+1. `git status --porcelain` + `git diff --stat` — see exactly what changed.
+2. **Test gate** — `make test` (the Go tests, run in Docker) must pass; never skip it to save time.
+3. **Lint gate** — the `go-lint` Agent, spawned through the Agent tool (never a shell command). Only NEW findings block; pre-existing findings are logged to `TODO.AI.md` before moving on. Never commit with a failing test or a new lint violation.
+4. Write `{dir}/.git/COMMIT_MESS` from that output — every changed or untracked file needs a `- path: change` bullet (a `- dir/: …` bullet covers the files beneath it); never from memory.
+5. **Doc-sync line** — for whichever of `IDEA.md` / `README.md` exists at the project root, add `- IDEA.md: updated (<what changed in Business Logic>)` or `- IDEA.md: N/A — no user-facing change` (the same for `README.md`); only Business Logic changes count as "updated".
+6. Re-read `COMMIT_MESS` against the diff; rewrite if anything is missing or wrong.
+7. `gitcommit --dir {dir} all` — the only commit path; never bare `git commit` or `git push` (they bypass signing and the unified commit+push wrapper), never `-m`/`--message`. Call it as plain `gitcommit` with no path prefix and never read its script. `gitcommit --dir {dir} spec` commits only markdown spec files.
+
+**Format:** `{emoji} Title (≤64 chars) {emoji}` + blank line + body + `- path: change` bullets. Emoji map: ✨ feat · 🐛 fix · 📝 docs · 🎨 style · ♻️ refactor · ⚡ perf · ✅ test · 🔧 chore · 🔒 security · 🗑️ remove · 🚀 deploy · 📦 deps. No bare `@` handles (they notify and link a GitHub user); no AI attribution trailers; never invent a role label such as "operator decision" for who made a change — state the fact plainly ("removed at the user's request") or leave the attribution out.
+
+**Scope:** a commit's scope is the resolved unit of work, not "one fix" by default — decide the scope BEFORE fixing, in this order (first match wins): **(1)** user states or implies a single commit → everything for that request in one commit, overriding every rule below (never the gates); **(2)** ad hoc "fix X and anything else you find" → one commit for the whole request; **(3)** multi-file bug fixes → one commit per group of files actually coupled by dependency/root cause, split when files are independent; **(4)** findings-based work (audits, reviews, numbered fix-lists) → one commit per finding by default, batched only when genuinely inseparable; **(5)** feature work → one commit for the entire feature plus directly-related bugs, never split per part. Never commit a half-finished or inconsistent state. Unrelated bugs found mid-feature go to `TODO.AI.md`, except app-breaking bugs, which must be fixed immediately.
+
+**Findings-based work:** before writing `COMMIT_MESS`, re-list every finding by its original number and confirm with a grep or diff that its fix is present in the working tree. A finding without a matching diff hunk is not fixed: do not list it as done, and either resolve it or say plainly that it is deferred.
+
+**Who commits:** only the main session runs `gitcommit` or writes `COMMIT_MESS`. Agents and subagents never commit or push, never write `COMMIT_MESS`, and never run `make`, tests, lint or any gate — they edit their scoped files and report back; the main session reviews the full diff, runs the gates once and commits.
+
+**Push behavior:** push is immediate and irreversible, and `gitcommit` creates the remote repository when it does not exist yet. To skip pushing, `touch .no_push` (confirm with the user first). If the push fails offline, run `gitcommit --dir {dir} push` later — do not recreate `COMMIT_MESS`.
+
+**Hook blocks and overrides:** a hook that blocks a commit (test/lint gate, doc-sync, `COMMIT_MESS` coverage) is reported to the user and never bypassed automatically. The `TEST_LINT_GATE_OVERRIDE=1` and `DOC_SYNC_GATE_OVERRIDE=1` prefixes exist only for a user who explicitly directs the bypass after confirming the underlying check passed.
+
+**`TODO.AI.md` completion:** (1) implement a task and commit it normally, its item still in `TODO.AI.md`; (2) after that commit succeeds, delete the item; (3) the deletion is committed together with the next task; (4) the commit that deletes the LAST item uses the title `✅ all todo items have been completed ✅` and a body that summarizes what was accomplished. The human-owned `TODO.md` is never emptied or truncated by AI — only individual items are marked done in place.
+
 ---
 
 # PART 2: GO APPLICATION MODEL
