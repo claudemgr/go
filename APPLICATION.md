@@ -1760,6 +1760,7 @@ No hidden telemetry. Any analytics, crash reporting, or update pings must be doc
 | No unsafe fork secrets | Fork PRs do not receive secrets or publish permissions |
 | Secret scanning | truffleHog on push, PR and weekly: `verified` and `unknown` block range scans, `verified` blocks full-history scans; exclusions only in `.github/trufflehog-exclude.txt`; doc examples use `{user}:{password}` placeholders (see Secret Scan Job) |
 | Version precedence | CI release = pushed tag with `v` stripped; CI never reads `release.txt`; local Makefile builds = `VERSION` env (user override, AI never sets it) > non-empty `release.txt` > devel rule (short commit id, `devel` outside git) |
+| **Generated text is fully expanded** | Release notes, release names and descriptions, asset names and links, labels and any other text a workflow generates MUST contain real values, never a literal `${VAR}`, `${{ … }}` or a spec placeholder such as `{project_name}`. Shell: build a file with an unquoted heredoc or `printf` (a quoted heredoc is only for text that must stay literal). GitHub/Gitea/Forgejo YAML values use `${{ env.X }}`; shell `${X}` is not expanded there. GitLab keywords outside `script:` (`release:` name, description and assets, `artifacts:paths`) expand only `$VAR` / `${VAR}`, never `${VAR:0:7}` or `${VAR#v}`: compute the value in an upstream job and pass it with a dotenv report. Jenkins: Groovy `"…"` strings interpolate, `'…'` strings do not. Any workflow that builds its own notes or description file runs the guard step below before publishing |
 | Site precedence | `site.txt` wins when present |
 | Verifiable outputs | Releases publish aggregate `sha256.txt` / `sha512.txt` checksum files and an SBOM (always); provenance/attestation when the platform supports it |
 | Single build time source | Every build job — on every provider (GitHub Actions, Gitea/Forgejo, GitLab CI, Jenkins) — captures `BUILD_EPOCH="$(date -u +%s)"` exactly once and exports it to the build environment so the `go build` `-ldflags` `-X 'main.BuildEpoch=…'` injection embeds it (PART 6). `BUILD_DATE` is never independently captured; where a Docker build needs the OCI `image.created` label, derive it (`date -u -d "@${BUILD_EPOCH}" +%Y-%m-%dT%H:%M:%SZ`) and pass both via `--build-arg BUILD_EPOCH=` / `--build-arg BUILD_DATE=` |
@@ -2141,6 +2142,17 @@ echo "::error file=.github/workflows/release.yml,line=12::message tied to a sour
 ```
 
 Always write messages so a developer reading only the step name + message understands what failed and what to do next.
+
+**Generated-text guard.** A workflow that builds its own notes or description file checks it before publishing, so an unexpanded variable can never reach a release:
+
+```yaml
+- name: Guard generated text
+  run: |
+    if grep -nE '\$\{|\{\{|\{(project_name|project_org|version)\}' RELEASE_NOTES.md; then
+      echo "::error::RELEASE_NOTES.md still contains an unexpanded variable or placeholder. Build it with an unquoted heredoc or printf so shell variables expand."
+      exit 1
+    fi
+```
 
 ## Release Pre-flight Validation
 

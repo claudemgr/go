@@ -36211,6 +36211,7 @@ The release job MUST NOT publish the Docker image (server-mode artifact) unless 
 | Pinned actions | Third-party actions pinned to full commit SHAs; verify runtime and maintenance status on every SHA update |
 | No unsafe fork secrets | Fork PRs do not receive secrets or publish permissions |
 | Version precedence | CI release = pushed tag with `v` stripped; CI devel = short commit id; CI beta = `YYYYMMDDHHMMSS-beta`; CI never reads `release.txt`; local Makefile builds = `VERSION` env (user override, AI never sets it) > non-empty `release.txt` > devel rule (short commit id, `devel` outside git) |
+| **Generated text is fully expanded** | Release notes, release names and descriptions, asset names and links, labels and any other text a workflow generates MUST contain real values, never a literal `${VAR}`, `${{ … }}` or a spec placeholder such as `{project_name}`. Shell: build a file with an unquoted heredoc or `printf` (a quoted heredoc is only for text that must stay literal). GitHub/Gitea/Forgejo YAML values use `${{ env.X }}`; shell `${X}` is not expanded there. GitLab keywords outside `script:` (`release:` name, description and assets, `artifacts:paths`) expand only `$VAR` / `${VAR}`, never `${VAR:0:7}` or `${VAR#v}`: compute the value in an upstream job and pass it with a dotenv report. Jenkins: Groovy `"…"` strings interpolate, `'…'` strings do not. Any workflow that builds its own notes or description file runs the guard step below before publishing |
 | Site precedence | `site.txt` wins when present |
 | Verifiable outputs | Releases publish checksums and an SBOM (always); provenance/attestation when the platform supports it |
 
@@ -36571,6 +36572,17 @@ echo "::error file=.github/workflows/release.yml,line=12::message tied to a sour
 ```
 
 Always write messages so a developer reading only the step name + message understands what failed and what to do next.
+
+**Generated-text guard.** A workflow that builds its own notes or description file checks it before publishing, so an unexpanded variable can never reach a release:
+
+```yaml
+- name: Guard generated text
+  run: |
+    if grep -nE '\$\{|\{\{|\{(project_name|project_org|version)\}' RELEASE_NOTES.md; then
+      echo "::error::RELEASE_NOTES.md still contains an unexpanded variable or placeholder. Build it with an unquoted heredoc or printf so shell variables expand."
+      exit 1
+    fi
+```
 
 ## Release Pre-flight Validation
 
@@ -39109,6 +39121,7 @@ build:devel:
     # Devel identity is the commit itself, not a stamped release.txt/timestamp version
     - export VERSION="${CI_COMMIT_SHA:0:7}"
     - export COMMIT_ID="${CI_COMMIT_SHA:0:7}"
+    - echo "RELEASE_VERSION=${COMMIT_ID}" > release.env
     - export BUILD_EPOCH="$(date -u +%s)"
     - export BUILD_DATE="$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")"
     - if [ -f site.txt ]; then export OFFICIAL_SITE="$(cat site.txt)"; else export OFFICIAL_SITE="${OFFICIAL_SITE:-}"; fi
@@ -39135,6 +39148,8 @@ build:devel:
   artifacts:
     paths:
       - ${PROJECT_NAME}-*
+    reports:
+      dotenv: release.env
     expire_in: 1 day
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
@@ -39181,16 +39196,16 @@ release:devel:
     expire_in: 1 day
   release:
     tag_name: "devel"
-    name: "Devel Build ${CI_COMMIT_SHA:0:7}"
-    description: "Devel build: ${CI_COMMIT_SHA:0:7}"
+    name: "Devel Build ${RELEASE_VERSION}"
+    description: "Devel build: ${RELEASE_VERSION}"
     assets:
       links:
         - name: "sha256.txt"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/sha256.txt?job=release:devel"
         - name: "sha512.txt"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/sha512.txt?job=release:devel"
-        - name: "${PROJECT_NAME}-${CI_COMMIT_SHA:0:7}-source.tar.gz"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-${CI_COMMIT_SHA:0:7}-source.tar.gz?job=release:devel"
+        - name: "${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-${RELEASE_VERSION}-source.tar.gz?job=release:devel"
         - name: "${PROJECT_NAME}-bom.json"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_SHA}/raw/${PROJECT_NAME}-bom.json?job=sbom:devel"
         - name: "${PROJECT_NAME}-linux-amd64"
