@@ -42,7 +42,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 (All project variables in `key: value` form. Required keys at minimum: `project_name`,
 `project_org`, `internal_name`, `internal_org`. Add more as the project needs — `app_name`,
-`official_site`, `maintainer_name`, `maintainer_email`, `module_path`, etc.)
+`official_site` (only when the user supplies it — never invented), `maintainer_name`, `maintainer_email`, `module_path`, etc.)
 
 Example:
 
@@ -54,7 +54,7 @@ Example:
     internal_org:  casjay
     app_name:      Notes
     module_path:   github.com/casjay/notes
-    official_site: https://notes.example.com
+    # official_site is OPTIONAL: add it only when the user gives the real URL; omit the key otherwise
 
 ## Business logic
 
@@ -1162,7 +1162,7 @@ docker run --rm \
 
 - Optional single-line URL file in project root
 - Use it for the official site, homepage, docs root, support page, or update landing page
-- Never guess it
+- Never guess it, never derive it from the project name, org, FQDN or a git remote, and never write an `example.com` or placeholder host into it or into `official_site`; unset means unset (no key, no file, empty `OFFICIAL_SITE`)
 - If `site.txt` exists, it wins over `IDEA.md`, README, environment variables, and CI secrets
 - If `site.txt` and `IDEA.md` disagree, `site.txt` wins; update IDEA.md to match or remove the stale variable
 
@@ -2569,7 +2569,7 @@ internal_name:    {project_name}
 internal_org:     {project_org}
 app_name:         {App Display Name}
 module_path:      github.com/{project_org}/{project_name}
-official_site:    {full URL with scheme, e.g., https://example.com — or empty}
+official_site:    {full URL with scheme as the user gave it — or empty (the default; never invented)}
 maintainer_name:  {Maintainer Name — defaults to {project_org} if unset}
 maintainer_email: {maintainer@example.com — or empty; used only if set}
 

@@ -167,7 +167,7 @@ Free-form prose. This is the human-readable elevator pitch.)
 
 (All project variables in `key: value` form. Values are the canonical source used to
 resolve placeholders referenced in AI.md. Required keys at minimum: `project_name`, `project_org`,
-`internal_name`, `internal_org`. Add more as the project needs — `app_name`, `official_site`,
+`internal_name`, `internal_org`. Add more as the project needs — `app_name`, `official_site` (only when the user supplies it — never invented),
 `maintainer_name`, `maintainer_email`, etc. Use lower_snake_case for keys.)
 
 Example:
@@ -179,7 +179,7 @@ Example:
     # STABLE — set at first-time setup; change only on an explicit rename or fork reset
     internal_org:  casjay
     app_name:      jokes
-    official_site: https://jokes.example.com
+    # official_site is OPTIONAL: add it only when the user gives the real URL; omit the key otherwise
     # Optional UI labels (defaults: item / items)
     resource_label: joke
     resource_label_plural: jokes
@@ -1216,7 +1216,7 @@ There is deliberately no application-level multi-user account system, no organiz
 |-------|-------|
 | **Name** | {project_name} |
 | **Organization** | {project_org} |
-| **Official Site** | `{official_site}` (e.g. `https://{project_name}.example.com`) |
+| **Official Site** | `{official_site}` when defined; omitted otherwise |
 | **Repository** | {PLATFORM_REPO_URL} |
 | **README** | README.md |
 | **License** | MIT > LICENSE.md |
@@ -5587,7 +5587,7 @@ COMMIT_ID := $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo "N/A")
 # Official site URL (OPTIONAL - never guess or assume; see PART 7)
 # Sources (in order of precedence):
 #   1. File: site.txt in project root (single line, URL only)
-#   2. Environment variable: OFFICIAL_SITE=https://example.com
+#   2. Environment variable: OFFICIAL_SITE=<url>
 #   3. Empty (self-hosted deployments - users must use --server flag / config)
 # NEVER infer from project name, domain, or any other source
 OFFICIAL_SITE := $(shell [ -f site.txt ] && cat site.txt || echo "${OFFICIAL_SITE:-}")
@@ -7232,12 +7232,12 @@ jobs:
 ## `site.txt` (Optional Official Site)
 
 - Optional single-line URL file in project root — the official site, homepage, docs root, support page, or update landing page
-- Never guess it — must be explicitly created by the user
+- Never guess it — must be explicitly created by the user; never derive it from the project name, org, FQDN or a git remote, and never write an `example.com` or placeholder host into it or into `official_site`. Unset means unset: no key, no file, empty `OFFICIAL_SITE`, empty embedded `OfficialSite`
 - If `site.txt` exists, it wins over `IDEA.md`, README, environment variables, and CI secrets
 - If `site.txt` and `IDEA.md` disagree, `site.txt` wins; update IDEA.md to match or remove the stale variable
 - If not present, users of the embedded client/CLI mode must always specify a `--server` flag or equivalent config value (self-hosted deployments have no default site)
 
-**Example:**
+**Illustration only** (`example.com` is a reserved documentation domain; never write it into a project):
 ```
 https://api.example.com
 ```
@@ -7324,7 +7324,7 @@ Every binary MUST have these values embedded at build time:
 | `CommitID` | `a1b2c3d` | Git short commit hash |
 | `BuildDate` | `2025-12-04T13:05:13Z` | Derived from `BuildEpoch` in `init()` (RFC 3339 UTC) — not an ldflag |
 | `BuildEpoch` | `1765112713` | Unix build timestamp (seconds, UTC), the single captured time source — used by the updater's devel-channel check and to derive `BuildDate` |
-| `OfficialSite` | `https://api.example.com` | Default server URL (empty if self-hosted) |
+| `OfficialSite` | the user's URL, or empty | Default server URL (empty when no official site is defined) |
 
 **Build date format:** Uses build system timezone or `TZ` env var.
 
@@ -47001,7 +47001,7 @@ internal_org:     {project_org}
 internal_org:     {project_org}
 app_name:         {App Display Name}
 module_path:      github.com/{project_org}/{project_name}
-official_site:    {full URL with scheme, e.g., https://example.com — or empty}
+official_site:    {full URL with scheme as the user gave it — or empty (the default; never invented)}
 maintainer_name:  {Maintainer Name — defaults to {project_org} if unset}
 maintainer_email: {maintainer@example.com — or empty; used only if set}
 
