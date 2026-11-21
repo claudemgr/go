@@ -783,7 +783,7 @@ func main() {
 }
 ```
 
-No `gcc`, no C headers, no `//go:build cgo` — `go build` with `CGO_ENABLED=0` (the project default) produces the same binary on Linux, macOS, and Windows. `WithTitle`/`WithSize` and Material 3 theming (`material3.New(widget.Hex(...))`) plug directly into "Theme detection" above for OS light/dark — never hardcode the accent color; resolve it from the detected theme instead of the literal `0x6750A4` shown here.
+No `gcc`, no C headers, no `//go:build cgo` — `go build` with `CGO_ENABLED=0` (the project default) produces the same binary on Linux, macOS, and Windows. `WithTitle`/`WithSize` and Material 3 theming (`material3.New(widget.Hex(...))`) plug directly into the Theme System below — never hardcode the accent color; use the resolved `Theme.Accent` instead of the literal `0x6750A4` shown here.
 
 ## Go Commands
 
@@ -1316,7 +1316,7 @@ All machine-dependent settings MUST be detected at runtime on the target machine
 | OS / architecture | `runtime.GOOS`, `runtime.GOARCH` | hardcode dev machine values |
 | Home/config/data dirs | `os.UserHomeDir()`, `os.UserConfigDir()`, `os.UserCacheDir()` | hardcode absolute dev paths |
 | Locale | `LANG`, platform locale APIs | assume English-only unless documented |
-| Theme preference | OS theme APIs / config | assume dark/light universally |
+| Theme preference | `theme` config key (default `dark`); OS theme APIs only when it is `auto` | assume dark/light universally |
 | Terminal capability | TTY + TERM + negotiated features | assume ANSI/alt-screen support |
 | Display stack | X11 (`DISPLAY`) and Wayland (`WAYLAND_DISPLAY`) detection on Linux — both backends supported, runtime-selected by GUI toolkit; no GUI backend on BSD (falls to TUI/CLI) | assume GUI exists; ship X11-only or Wayland-only |
 | CPU / memory | `runtime.NumCPU()`, runtime detection if needed | tune only for dev hardware |
@@ -1482,20 +1482,57 @@ hoc `NO_COLOR` check. `lipgloss`/`termenv` (TUI) auto-detect `NO_COLOR`
 on their own; raw `fmt.Printf` ANSI escapes in the CLI path are not
 NO_COLOR-aware by themselves and must check `ColorEnabled()` explicitly.
 
-## Color Palette (TUI/CLI/GUI)
+## Theme System (GUI / TUI / CLI)
 
-**This is a single native binary — there is no Web CSS palette. TUI/CLI
-and GUI theming are defined separately, and neither uses literal hex:**
+**Default: dark. Always.** Every GUI and TUI supports three modes:
 
-### TUI/CLI — ANSI-mapped
+| Mode | Behaviour |
+|------|-----------|
+| `dark` | Dark background, light text — the default |
+| `light` | Light background, dark text |
+| `auto` | Follows the OS preference |
 
-Terminals render a fixed, user-configured 16/256-color set, so TUI/CLI
-map semantic roles to the nearest ANSI color instead of literal hex:
+Rules:
+
+- The mode is the config key `theme` (`dark` default, `light`, `auto`) in the user config file. The GUI/TUI settings screen has one theme control that cycles dark, light, auto and writes the key. There is no `--theme` flag: the standard flag set (see "Standard CLI Flags") is unchanged, and `--color` controls color output only (`auto`/`yes`/`no`), never light versus dark.
+- The user's choice always wins over OS detection and persists across restarts.
+- `auto` resolves through OS theme detection (see "Theme detection") and re-resolves on live OS changes without a restart where the OS API supports it. Where no preference can be read (most terminals, BSD without a GUI), `auto` resolves to dark.
+- The mode is resolved once into a single `Theme` value that is passed down the UI tree. Widgets never read the OS theme and never hold color values themselves.
+- `NO_COLOR`, `TERM=dumb`, `--color no` or a non-TTY stream strip all color: output is plain text, the theme has no visual effect, and the `theme` setting is left untouched.
+- Colors come only from the design tokens (`~/.claude/memory/ui_ux_conventions.md` → Design Token System) and only in the pre-checked token pairings (WCAG 2.1 AA, 4.5:1 minimum). The OS or toolkit high-contrast mode is honored where it exposes one.
+
+### Theme struct (GUI and true-color TUI)
+
+```go
+// Theme is built once from the design tokens for the resolved mode and passed through the UI tree.
+// It is the only place hex values live; widgets read fields, never literals.
+type Theme struct {
+    Bg, BgSubtle, BgElevated, BgOverlay, BgInset string
+    Fg, FgMuted, FgSubtle, FgDisabled, FgOnAccent, FgLink string
+    BorderSubtle, Border, BorderStrong string
+    Accent, AccentHover, AccentPressed, AccentSubtle, AccentFg string
+    Success, Warning, Error, Info StatusColors
+}
+
+// StatusColors carries the three token roles every status color needs.
+type StatusColors struct{ Fg, Bg, Border string }
+```
+
+How each surface uses it:
+
+- **GUI:** the toolkit theme is built from the resolved `Theme`, never from the toolkit's own OS-driven default — for `gogpu/ui` the Material 3 accent seed is `Theme.Accent` and the light/dark mode is the resolved mode.
+- **TUI:** true-color terminals (`COLORTERM` = `truecolor` or `24bit`) use the `Theme`; any other terminal uses the 16-color ANSI mapping below. Plain CLI output uses the ANSI mapping only.
+
+## Color Palette (TUI/CLI)
+
+**This is a single native binary — there is no Web CSS palette. Hex values exist only in the `Theme` built from the design tokens; 16-color terminals and CLI output map the same roles to ANSI indices instead:**
 
 | Role | Dark ANSI | Light ANSI |
 |------|-----------|------------|
 | `Foreground` | `BrightWhite` | `Black` |
 | `Muted` | `White` | `DarkGray` |
+| `Subtle` / `Disabled` | `BrightBlack` | `BrightBlack` |
+| `OnAccent` | `Black` | `White` |
 | `Primary` / `Accent` | `BrightMagenta` | `Blue` |
 | `Secondary` / `Success` | `BrightGreen` | `Green` |
 | `Warning` | `BrightYellow` | `Yellow` |
@@ -1509,6 +1546,9 @@ map semantic roles to the nearest ANSI color instead of literal hex:
 type TerminalPalette struct {
     Foreground string `json:"foreground"`
     Muted      string `json:"muted"`
+    Subtle     string `json:"subtle"`
+    Disabled   string `json:"disabled"`
+    OnAccent   string `json:"on_accent"`
     Primary    string `json:"primary"`
     Success    string `json:"success"`
     Warning    string `json:"warning"`
@@ -1518,23 +1558,15 @@ type TerminalPalette struct {
 }
 
 var TerminalPaletteDark = TerminalPalette{
-    Foreground: "15", Muted: "7", Primary: "13",
+    Foreground: "15", Muted: "7", Subtle: "8", Disabled: "8", OnAccent: "0", Primary: "13",
     Success: "10", Warning: "11", Error: "9", Info: "12", Border: "13",
 }
 
 var TerminalPaletteLight = TerminalPalette{
-    Foreground: "0", Muted: "8", Primary: "4",
+    Foreground: "0", Muted: "8", Subtle: "8", Disabled: "8", OnAccent: "15", Primary: "4",
     Success: "2", Warning: "3", Error: "1", Info: "4", Border: "4",
 }
 ```
-
-### GUI — native theming only
-
-GUI never consumes `TerminalPalette` or any literal hex palette. It
-detects light/dark only (`github.com/adrg/xdg` / OS theme APIs — see
-"Theme detection" above) and lets the toolkit (`gogpu/ui`'s Material 3 /
-Fluent / Cupertino theme, per "GUI Toolkit — `gogpu/ui` Minimal Example"
-above) apply its own light/dark widget theme.
 
 ---
 
@@ -1558,8 +1590,8 @@ Before building a new TUI view, GUI widget, or CLI output helper, check for an e
 
 **This is a single native binary — there is no Web CSS to reuse.** Styling reuse instead means: never invent a second color palette, a second set of semantic role names, or a second theme-detection mechanism alongside the ones already defined above.
 
-- **TUI/CLI:** always style through the existing `TerminalPalette` struct and its semantic roles (`Foreground`, `Muted`, `Primary`, `Success`, `Warning`, `Error`, `Info`, `Border`) and the existing `TerminalPaletteDark`/`TerminalPaletteLight` instances — never a new hardcoded ANSI index or a second palette struct. New TUI/CLI output reuses existing `lipgloss` styles built from the palette; a genuinely new style still derives from a `TerminalPalette` role, never a literal color value.
-- **GUI:** never invent a custom color palette or literal hex values. Reuse the existing native-toolkit theming path (`gogpu/ui`'s design-system theme + OS light/dark detection) so widgets automatically match the user's OS theme — the same "no literal hex, detect and defer to the platform" rule already established in Color Palette (TUI/CLI/GUI) above.
+- **TUI/CLI:** always style through the existing `Theme` (true-color) or `TerminalPalette` struct (16-color/CLI) and its semantic roles (`Foreground`, `Muted`, `Subtle`, `Disabled`, `OnAccent`, `Primary`, `Success`, `Warning`, `Error`, `Info`, `Border`) and the existing `TerminalPaletteDark`/`TerminalPaletteLight` instances — never a new hardcoded ANSI index or a second palette struct. New TUI/CLI output reuses existing `lipgloss` styles built from the palette; a genuinely new style still derives from a `TerminalPalette` role, never a literal color value.
+- **GUI:** never invent a custom color palette or a literal hex value at a widget call site: read the `Theme` passed down the UI tree (hex values live only in the `Theme` built from the design tokens, see Theme System above). A genuinely new semantic color is added to the token-built `Theme`, not inlined.
 
 ```go
 // CORRECT — new TUI element styled from the existing palette, no new
