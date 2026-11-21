@@ -264,7 +264,7 @@ The single binary contains **everything the app needs to function**. The user is
 | **PLAN.md** | Implementation plan (human-owned) | AI may mark done; never rewrite wholesale |
 | **README.md** | User-facing install/usage docs | Usage changes |
 | **LICENSE.md** | Project + dependency licenses | Dependency set changes |
-| **release.txt** | Canonical release version when present | Release version changes |
+| **release.txt** | Optional local-build version (Makefile only; empty or missing = devel rule) | Local-build version changes |
 | **site.txt** | Optional official site/homepage URL | Official site changes |
 | **Makefile** | Build, test, run targets for local development. Convenience wrappers around the Docker-wrapped commands. **Never called from CI workflow `run:` steps** (PART 10 → "CI/CD Rules") | Local-dev targets change |
 | **.dockerignore** | Build-context exclusions; Go-specific entries: `binaries/`, `releases/`. See `dockerfile_conventions.md` → ".dockerignore" for the full standard entry set (version control, `.env`, build artifacts, `volumes/`, OS files, markdown/LICENSE). `docker/`, `src/`, `go.mod`, `go.sum`, `release.txt` are NEVER excluded. | Build-context surface changes |
@@ -793,7 +793,7 @@ $(GO_DOCKER) go test ./...
 # Release build (artifacts land in binaries/ via the mounted workspace)
 $(GO_DOCKER) \
   sh -c "GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
-    -ldflags=\"-s -w -X main.Version=\$(cat release.txt)\" \
+    -ldflags=\"-s -w -X main.Version=$(VERSION)\" \
     -o binaries/{project_name}-linux-amd64 ./src"
 
 # Run with display forwarding via the `gui` compose service, which mounts
@@ -821,7 +821,7 @@ Inject version, commit ID, build epoch, and official site via `-ldflags`. `Build
 ```go
 // Build info - BuildEpoch is set via -ldflags at build time; BuildDate is derived from it
 var (
-    // overridden by: -ldflags="-X main.Version=$(cat release.txt)"
+    // overridden by: -ldflags="-X main.Version=${VERSION}"
     Version      = "devel"
     // overridden by: -ldflags="-X main.CommitID=$(git rev-parse --short=7 HEAD)"
     CommitID     = "N/A"
@@ -860,7 +860,7 @@ BUILD_EPOCH="$(date -u +%s)"
 go build \
   -buildvcs=false -trimpath \
   -ldflags="-s -w \
-    -X main.Version=$(cat release.txt) \
+    -X main.Version=${VERSION} \
     -X main.CommitID=$(git rev-parse --short=7 HEAD) \
     -X 'main.BuildEpoch=${BUILD_EPOCH}' \
     -X main.OfficialSite=$(cat site.txt 2>/dev/null || true)" \
@@ -1126,12 +1126,13 @@ docker run --rm \
 
 # PART 6: VERSION, SITE, AND BUILD METADATA
 
-## `release.txt` (Canonical Version When Present)
+## `release.txt` (Local-Build Version, Optional)
 
-- `release.txt` is a single-line canonical version source when present
-- It overrides derived/tag-based defaults and should stay in sync with `go.mod` module version if applicable
+- `release.txt` is a single-line version for local Makefile builds when present and non-empty
+- It overrides the devel rule for local builds and should stay in sync with `go.mod` module version if applicable
 - Use semantic versions unless the project intentionally uses another documented scheme
-- If `release.txt` exists, CI/CD and release scripts must use it rather than inventing a version
+- Only the Makefile reads it, for local builds; CI/CD workflows derive VERSION from the pushed tag (leading `v` stripped) and never read it
+- If missing or empty, the Makefile uses the devel rule (short commit id)
 
 ## `site.txt` (Optional Official Site)
 
@@ -1144,9 +1145,10 @@ docker run --rm \
 ## Metadata Priority Rules
 
 ### Version
-1. `release.txt` (when present)
-2. `go.mod` module version / git tag
-3. explicit documented fallback for bootstrap/dev builds
+1. CI release: pushed tag with leading `v` stripped (CI never reads `release.txt`)
+2. Local builds: `VERSION` environment variable (user override only; AI never sets it)
+3. `release.txt` (Makefile only, when present and non-empty)
+4. explicit documented fallback (`devel`)
 
 ### Official Site
 1. `site.txt` (when present)
@@ -1185,7 +1187,8 @@ PROJECTORG  := {project_org}
 BINDIR      := binaries
 RELDIR      := releases
 
-VERSION     ?= $(shell cat release.txt 2>/dev/null || echo "devel")
+# Local builds only: VERSION env (user override, AI never sets it) > non-empty release.txt > devel rule (short commit id, "devel" outside git)
+VERSION     ?= $(shell v=; [ -r release.txt ] && v=$$(tr -d '[:space:]' < release.txt); if [ -n "$$v" ]; then echo "$$v"; else git rev-parse --short=7 HEAD 2>/dev/null || echo devel; fi)
 COMMIT_ID   := $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo "N/A")
 # BUILD_EPOCH is the single captured time source - captured once per build
 BUILD_EPOCH := $(shell date -u +%s)
@@ -1699,7 +1702,8 @@ No hidden telemetry. Any analytics, crash reporting, or update pings must be doc
 | Least privilege | CI tokens/permissions default to read-only |
 | Pinned actions | Third-party actions pinned to full commit SHAs; verify runtime and maintenance status on every SHA update |
 | No unsafe fork secrets | Fork PRs do not receive secrets or publish permissions |
-| Version precedence | `release.txt` wins when present |
+| Secret scanning | truffleHog on push, PR and weekly: `verified` and `unknown` block range scans, `verified` blocks full-history scans; exclusions only in `.github/trufflehog-exclude.txt`; doc examples use `{user}:{password}` placeholders (see Secret Scan Job) |
+| Version precedence | CI release = pushed tag with `v` stripped; CI never reads `release.txt`; local Makefile builds = `VERSION` env (user override, AI never sets it) > non-empty `release.txt` > devel rule (short commit id, `devel` outside git) |
 | Site precedence | `site.txt` wins when present |
 | Verifiable outputs | Releases publish aggregate `sha256.txt` / `sha512.txt` checksum files and an SBOM (always); provenance/attestation when the platform supports it |
 | Single build time source | Every build job — on every provider (GitHub Actions, Gitea/Forgejo, GitLab CI, Jenkins) — captures `BUILD_EPOCH="$(date -u +%s)"` exactly once and exports it to the build environment so the `go build` `-ldflags` `-X 'main.BuildEpoch=…'` injection embeds it (PART 6). `BUILD_DATE` is never independently captured; where a Docker build needs the OCI `image.created` label, derive it (`date -u -d "@${BUILD_EPOCH}" +%Y-%m-%dT%H:%M:%SZ`) and pass both via `--build-arg BUILD_EPOCH=` / `--build-arg BUILD_DATE=` |
@@ -1861,29 +1865,27 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          # required: truffleHog needs full history
           fetch-depth: 0
-
-      # Empty base/head = full-history scan (schedule runs and new-branch pushes)
-      - name: Determine scan range
-        id: range
+      - name: Pick the scan scope
+        id: scope
         run: |
-          BASE=""; HEAD=""
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
-            BASE="${{ github.event.before }}"; HEAD="${{ github.sha }}"
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE="${{ github.event.pull_request.base.sha }}"; HEAD="${{ github.event.pull_request.head.sha }}"
+          ZERO=0000000000000000000000000000000000000000
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+            echo "results=verified,unknown" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.event.before }}" != "$ZERO" ]; then
+            echo "base=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.after }}" >> "$GITHUB_OUTPUT"
+            echo "results=verified,unknown" >> "$GITHUB_OUTPUT"
+          else
+            echo "results=verified" >> "$GITHUB_OUTPUT"
           fi
-          echo "base=$BASE" >> "$GITHUB_OUTPUT"
-          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
-
-      - name: TruffleHog secret scan
-        uses: trufflesecurity/trufflehog@b2b0a92070f206ab7b5a1105d82a7f2f48d92341  # v3.99.0
+      - uses: trufflesecurity/trufflehog@b2b0a92070f206ab7b5a1105d82a7f2f48d92341  # v3.99.0
         with:
-          # NEVER use default_branch — it resolves to HEAD post-push and skips the scan
-          base: ${{ steps.range.outputs.base }}
-          head: ${{ steps.range.outputs.head }}
-          extra_args: --results=verified,unknown
+          base: ${{ steps.scope.outputs.base }}
+          head: ${{ steps.scope.outputs.head }}
+          extra_args: --results=${{ steps.scope.outputs.results }} --exclude-paths=.github/trufflehog-exclude.txt
 
   workflow-policy:
     runs-on: ubuntu-26.04
@@ -1938,6 +1940,26 @@ jobs:
 - GitLab: `secret-scan` runs as a docker job using `image: trufflesecurity/trufflehog:latest` with `GIT_DEPTH: 0`; `image-scan` uses `image: aquasec/trivy:0.70.0`.
 - Jenkins: `Security` stage uses `parallel {}`; truffleHog and Trivy each run via `docker.image(...).inside { ... }`.
 - All providers: same gates, same severities, same exit conditions — no weaker subset on any provider.
+
+### Secret Scan Job (truffleHog)
+
+**`secret-scan` in `ci.yml` is a host-runner job (no `container:`, no `needs`) that runs `trufflesecurity/trufflehog`, pinned by SHA like every action, with `fetch-depth: 0` so the whole history is available. What it scans, and what blocks, depends on the event:**
+
+| Event | Scope | Results that FAIL the job |
+|-------|-------|---------------------------|
+| Pull request | `base.sha` to `head.sha` | `verified` and `unknown` |
+| Push to an existing branch | `event.before` to `event.after` | `verified` and `unknown` |
+| New-branch push (`before` is all zeros), weekly schedule, manual run | The full history | `verified` only |
+
+| Rule | Detail |
+|------|--------|
+| **Flag** | `--results=verified,unknown` or `--results=verified`, always with `--exclude-paths=.github/trufflehog-exclude.txt`. The old `--only-verified` flag is not used. `unknown` means verification was attempted and could not complete; `unverified` (checked and found inactive) is reported and does not fail the job |
+| **Never `default_branch`** | `base` is never `repository.default_branch`: after a push it equals the pushed commit and truffleHog skips the scan ("BASE and HEAD commits are the same") |
+| **Documentation examples** | `AI.md`, `IDEA.md`, `README.md` and `docs/` never contain a credential-shaped string. Connection strings use `{user}:{password}` placeholders; a flagged example is rewritten, not allowlisted, because a copied spec file is read-only in the projects that receive it |
+| **Excluded paths** | `.github/trufflehog-exclude.txt` (the same path on every provider), passed as `--exclude-paths=.github/trufflehog-exclude.txt`. One regex per line, no comments (it is a data file). It lists ONLY files that are not production code: `^go\.sum$` (dependency hashes), `(^|/)testdata/` (test fixtures) and `^AI\.md$` (the read-only copy of this specification, which carries example values; the template repository scans the original itself). Source, test code, docs, configuration and the exclude file itself are never listed. Adding a path needs a reason in the commit message. Everything else is handled by the placeholder rule or the allowlist below |
+| **Test fixtures** | Fixtures live ONLY in `testdata/` (the one directory the exclude file lists). Their values are obviously fake (`EXAMPLE`, `xxxx`, `{placeholder}`) and never a real credential, because that directory is not scanned. A test that needs a credential-shaped string builds it at run time in the test code, which IS scanned |
+| **Allowlist** | Only a reviewed true false positive in project code or a test fixture, with truffleHog's inline `trufflehog:ignore` comment on that line. There is no root config file for it |
+| **Other providers** | GitLab and Jenkins run the same contract in Docker: `trufflehog git file://. --since-commit HEAD~1 --results=verified,unknown --exclude-paths=.github/trufflehog-exclude.txt --fail` for a range, `trufflehog git file://. --results=verified --exclude-paths=.github/trufflehog-exclude.txt --fail` for the full history |
 
 ## Post-Push CI Verification
 
@@ -2014,6 +2036,7 @@ docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -
 sed -n '/<!-- GENERATED:/,$p' LICENSE.md > LICENSE.committed-generated.md
 diff LICENSE.committed-generated.md LICENSE.generated.md
 
+# VERSION comes from the CI version rule (release = pushed tag with leading v stripped); never from release.txt
 # Build statically linked release binaries (one per supported target).
 for TARGET in "linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows/amd64" "windows/arm64" "freebsd/amd64" "freebsd/arm64"; do
   GOOS="${TARGET%/*}"
@@ -2028,7 +2051,7 @@ for TARGET in "linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows
     -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false -e GOOS="$GOOS" -e GOARCH="$GOARCH" \
     casjaysdev/go:latest \
     go build -buildvcs=false -trimpath \
-      -ldflags="-s -w -X main.Version=$(cat release.txt) -X main.CommitID=$(git rev-parse --short=7 HEAD) -X 'main.BuildEpoch=${BUILD_EPOCH}'" \
+      -ldflags="-s -w -X main.Version=${VERSION} -X main.CommitID=$(git rev-parse --short=7 HEAD) -X 'main.BuildEpoch=${BUILD_EPOCH}'" \
       -o "binaries/$ARTIFACT" ./src
 
   # Verify static linkage on Linux
@@ -2338,7 +2361,7 @@ Drift between `go.sum` and the generated section of `LICENSE.md` is a CI failure
 - [ ] `CLAUDE.md` / `.claude/CLAUDE.md` are short loaders, not duplicate specs
 - [ ] `AGENTS.md` exists at project root as an exact copy of `CLAUDE.md` (real file, not a symlink)
 - [ ] `.claude/memory/` directory exists (with an empty `MEMORY.md` index if no entries yet) and is committed, not gitignored
-- [ ] `release.txt` exists if the project is using explicit release versioning
+- [ ] `release.txt` is read only by the Makefile for local builds
 - [ ] `site.txt` exists only if there is a real official site URL
 - [ ] `docker/Dockerfile`, `docker/docker-compose.yml`, `docker/docker-compose.dev.yml`, `docker/docker-compose.test.yml`, and `docker/rootfs/usr/local/bin/entrypoint.sh` exist; `Dockerfile` is the runtime image
 - [ ] `.dockerignore` exists and excludes `binaries/`, `releases/`, and other build noise — but never `docker/`, `src/`, `go.mod`, `go.sum`, or `release.txt`
@@ -2402,13 +2425,14 @@ reports a clean result. Invoke the `go-lint` agent before running `gitcommit`; a
 
 - [ ] No hidden telemetry
 - [ ] No secrets in logs
+- [ ] `.github/trufflehog-exclude.txt` exists and lists only `AI.md`, `go.sum` and the fixtures directory `testdata/` (plus any other non-production file, with a reason in its commit)
 - [ ] No automatic privilege escalation
 - [ ] No unsafe downloaded-code execution
 - [ ] `govulncheck` and license checks remain enabled in CI
 
 ## Release Checklist
 
-- [ ] Version comes from `release.txt` when present
+- [ ] CI version comes from the pushed tag (`v` stripped); only the Makefile reads `release.txt`
 - [ ] Official site comes from `site.txt` when present
 - [ ] Release notes match actual changes
 - [ ] Aggregate `sha256.txt` and `sha512.txt` checksum files are published, covering every artifact
