@@ -15772,7 +15772,7 @@ web:
 
 **AI Crawler Rules:**
 - AI bots are ordinary crawlers: there is no AI-specific blocking, no `ai_bots` setting and no per-bot stanzas in `robots.txt`, and the server never refuses a request because the caller is an AI.
-- **Unauthenticated:** an AI client gets exactly what any other crawler gets — the `User-agent: *` rules above (`Allow` and `Disallow` paths, advisory like every `robots.txt`) and the public endpoints. Anonymous MCP calls see only the public API operations, the same as an unauthenticated REST call.
+- **Unauthenticated:** an AI client gets exactly what any other crawler gets — the `User-agent: *` rules above (`Allow` and `Disallow` paths, advisory like every `robots.txt`) and the public endpoints. MCP requires a token, so an unauthenticated AI client cannot use MCP at all.
 - **Authenticated (Bearer token, including MCP):** `robots.txt` does not apply. The caller can use everything its token allows, auth-only routes and tools included, and nothing more; access is decided by the token's permissions and scope alone, never by the caller being an AI.
 
 ### security.txt (RFC 9116)
@@ -15930,12 +15930,12 @@ web:
 | Token types | All existing tiers work unchanged: the operator `server.token`, resource owner tokens, and per-system-user `sys_` tokens each get exactly the access they have over REST |
 | Validation | Run through the SAME token validation function and middleware as the API — one code path, not a copy |
 | Cookies | Ignored. Like every `/api/...` route, the MCP endpoint accepts the `Authorization` header only — no ambient authority |
-| No token | Anonymous: only what an unauthenticated API call may do (public endpoints, default rate limits). An operation that needs auth returns the API's normal `401` (with `WWW-Authenticate: Bearer`, PART 8 → "Auth Token Presentation") JSON-RPC error |
+| No token | **Rejected.** Every MCP request carries `Authorization: Bearer ...`; without a valid token the endpoint answers `401` (with `WWW-Authenticate: Bearer`, PART 8 → "Auth Token Presentation") and a JSON-RPC error, and `tools/list` is never served. The REST API is different: it works without a token, and a token only links what the caller creates to its owner and unlocks MCP |
 | Authorization | Per tool call, with the caller's token, by the same checks as the matching API endpoint. A token that cannot call an endpoint over REST cannot call its tool |
 | Rate limiting, audit | The same limiters and audit events as the API; the audit `source` is `mcp` so MCP traffic is distinguishable |
 | Operator-only endpoints | Exposed as tools only to a caller whose token is already operator/admin-scoped; for any other caller they are absent from `tools/list` AND rejected on `tools/call` |
 | MCP clients | Use the user's own `sys_` token for per-user work (it reaches only that OS user's context); a resource owner token reaches only its one resource. Never hand `server.token` to an MCP client — it is full operator access. No MCP-specific token exists |
-| Creation by an anonymous client | **Not allowed over MCP.** A tool that would issue a new owner (and its token) requires an existing token; without one it fails with the API's `401`, and such tools are absent from `tools/list` for anonymous callers. Owner tokens are issued only by the REST API or the web form, never inside a tool result — tool results enter the model's context and the provider's logs. A caller that already has a token passes it and no new owner is created |
+| Token issuance | **Never a tool.** A new owner and its token are issued only by the REST API or the web form, never inside a tool result: tool results enter the model's context and the provider's logs. An MCP client always starts from a token it was given |
 
 #### Tools
 
@@ -21160,12 +21160,12 @@ Need additional compatible endpoints?"
 | `/api/autodiscover` | GET | None | Server settings, config schema, and options for CLI (non-versioned) |
 | `/api/swagger` | GET | None | OpenAPI JSON spec — direct alias for current `{api_version}` |
 | `/api/graphql` | POST | None | GraphQL queries — direct alias for current `{api_version}` |
-| `/api/mcp` | POST | Bearer (optional) | MCP endpoint — direct alias for current `{api_version}`; same auth as the API |
-| `/mcp` | POST | Bearer (optional) | MCP endpoint — root alias for current `{api_version}`; same handler, never a redirect |
+| `/api/mcp` | POST | Bearer (required) | MCP endpoint — direct alias for current `{api_version}`; same auth as the API |
+| `/mcp` | POST | Bearer (required) | MCP endpoint — root alias for current `{api_version}`; same handler, never a redirect |
 | `/api/healthz` | GET | None | Health check JSON — direct alias for current `{api_version}` |
 | `/api/{api_version}/server/swagger` | GET | None | OpenAPI JSON spec (versioned) |
 | `/api/{api_version}/server/graphql` | POST | None | GraphQL queries (versioned; schema may differ across versions) |
-| `/api/{api_version}/server/mcp` | POST | Bearer (optional) | MCP endpoint (versioned; Streamable HTTP, same tokens as the API) |
+| `/api/{api_version}/server/mcp` | POST | Bearer (required) | MCP endpoint (versioned; Streamable HTTP, same tokens as the API) |
 | `/api/{api_version}/server/healthz` | GET | None | Health check (JSON default; text via API rules) |
 | `/server/preferences` | GET, POST | None (POST: CSRF) | Guest preferences hub and save form; links every registered preferences page; `POST` sets cookies, `303` |
 | `/server/preferences/sync` | GET, POST | None (POST: CSRF) | Sync page: export block (full URL + short code, content-negotiated) and the import form; `POST` applies `code`, `303` (see "Cross-device preference sync") |
@@ -29806,11 +29806,11 @@ curl -H "Accept: application/xml" https://jokes.example.com/api/v1/joke</code></
 
 | Anchor | Section | Content |
 |--------|---------|---------|
-| `#overview` | What this is | One short paragraph: this application is an MCP server over Streamable HTTP (remote only); every API operation the project defines, authenticated create, read, update and delete included, is available to an assistant as a tool; the token decides which ones it sees (anonymous callers see only the public ones) |
+| `#overview` | What this is | One short paragraph: this application is an MCP server over Streamable HTTP (remote only); every API operation the project defines, authenticated create, read, update and delete included, is available to an assistant as a tool; every request carries a token, and the token decides which ones it sees |
 | `#endpoint` | Endpoint | The full MCP URL resolved for this request (PART 8 → "Resolution Order", never hardcoded) with the two aliases (`/api/mcp`, `/mcp`) and a copy control; the URL text uses CSS `user-select: all` so it works without JS |
-| `#authentication` | Authentication | Requests authenticate with `Authorization: Bearer {token}` — the same tokens as the REST API, no MCP-specific token. Anonymous access works for public tools. Use the signed-in user's own `sys_` token (`{user_config_dir}/user.token`); it reaches only that OS user's context. A resource owner token reaches only its one resource. Never hand the operator token (`server.token`) to an MCP client. |
+| `#authentication` | Authentication | Requests authenticate with `Authorization: Bearer {token}` — the same tokens as the REST API, no MCP-specific token. A token is required for every MCP request and there is no anonymous MCP access (the REST API itself works without one). Use the signed-in user's own `sys_` token (`{user_config_dir}/user.token`); it reaches only that OS user's context. A resource owner token reaches only its one resource. Never hand the operator token (`server.token`) to an MCP client. |
 | `#connect` | Connect a client | Copy-paste snippets using the resolved URL and the project name: a Claude Code command (`claude mcp add --transport http {project_name} {url} --header "Authorization: Bearer $MCP_TOKEN"`), a generic JSON client config (`mcpServers` with `type`, `url`, `headers`), and a `curl` `initialize` request that verifies the connection. The token is the only value the page cannot know, so it appears as the shell variable `$MCP_TOKEN` — no other placeholders |
-| `#tools` | Tools | The live tool list for an anonymous caller (name and description from the same registry that backs `tools/list`) — never hand-written. When authenticated callers see more tools, say so |
+| `#tools` | Tools | The live tool list a standard, non-operator token sees (name and description from the same registry that backs `tools/list`) — never hand-written. When the operator token sees more tools, say so |
 | `#limits` | Behavior and limits | `POST` only; no sessions; the same rate limits and audit as the API; `Origin` validated; the supported MCP protocol versions |
 | `#troubleshooting` | Troubleshooting | A table of `400` (protocol-version or header mismatch), `401` (missing, invalid or expired token — `WWW-Authenticate: Bearer`), `403` (bad `Origin` or insufficient scope), `405` (GET or DELETE; the endpoint is POST-only) with the fix for each |
 
