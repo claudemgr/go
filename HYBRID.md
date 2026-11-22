@@ -14410,7 +14410,7 @@ func isColumnExistsError(err error) bool {
 | **Never destructive** | Never `DROP COLUMN`, `DROP TABLE`, or `DELETE` |
 | **Add only** | Add columns, add tables, add indexes |
 | **Defaults required** | New columns must have `DEFAULT` or be nullable |
-| **No renames** | Add new column, migrate data in app code, deprecate old |
+| **No renames of a project's own columns** | Add new column, migrate data in app code, deprecate old ("Handling Column Renames"). The one exception is a column this specification itself renames to its canonical name ("Canonical Column Renames") |
 | **Comments in code** | Note version that introduced each change |
 
 ### Handling Column Renames
@@ -14441,6 +14441,10 @@ func (p *Paste) SetSlug(slug string) {
 // Step 3: After the deployment is upgraded, old column ignored (v1.5.0+)
 // Old column stays in DB (never drop), just unused
 ```
+
+### Canonical Column Renames (names this specification defines)
+
+**When this specification renames one of its own columns to the canonical name (for example the scheduler tables: `task_id` becomes `id`, `task_name` becomes `name`, `ran_at` becomes `started_at`), a database created with the old name is upgraded in place by the schema step.** The step runs `ALTER TABLE ... RENAME COLUMN old TO new` only when the table's column list shows the old name and not the new one, so it is idempotent. SQLite and libSQL both support `RENAME COLUMN`, and the column list comes from `PRAGMA table_info`. Data is kept, nothing is dropped and no alias or duplicate column remains, so "Never destructive" holds. A column that is missing after the rename (for example `finished_at` on an old history table) is added with the plain `ADD COLUMN` rule. This exception covers only columns whose canonical name this specification defines; a project's own columns follow "Handling Column Renames".
 
 ### Remote Database Updates
 
