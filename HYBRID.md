@@ -3857,23 +3857,9 @@ server:
       # Notify when exiting maintenance mode
 ```
 
-### Config Sync (SERVER and HYBRID)
+### Config Writes (HYBRID has no config sync)
 
-**Shared settings live in the database, and every node keeps its area files in step with it. `server.yml` and `secrets.yml` are node-local and are never synced.** This applies in Cluster Mode, when a remote database is configured. A single instance has no sync: the admin panel, the CLI and the setup flow write the owning area file directly, and the file watcher applies a hand edit. API projects have no sync.
-
-| Rule | Behavior |
-|------|----------|
-| **Initialization** | The first node to reach an EMPTY database takes the initialization lock (an advisory lock in PostgreSQL and MySQL, an exclusive transaction in SQLite) and writes its running, merged configuration for every area-file section into the `srv_config` table, one row per dotted key (`updated_by: node:{id}`), then releases the lock. Every other node finds the table filled, so all nodes start from the same settings |
-| **Changes** | The admin panel, the CLI and the API write to the database first. The node then writes the owning area file, and every other node applies the row and writes its own copy ("Sync to files"). The panel and the CLI are the preferred way to change settings |
-| **Hand edits** | A hand edit of an area file is detected by the file watcher, validated and imported as a change (`updated_by: node:{id}`), exactly like a panel change, so it is never lost and never left on one node. A node's own sync writes are recognized by content hash and are not re-imported |
-| **Sync to files** | A node writes the area file that owns a changed key atomically (temporary file, fsync, rename), `0600`, creating it when missing. Values only: comments are not kept |
-| **`app.yml`** | The project-defined sections in `yaml.d/app.yml` are an area file like every other: each dotted key is imported into the `srv_config` table, synced and written to every node's `app.yml`. Values are kept as written (the specification defines no schema for them); the project's own validation and its "Invalid → default" rule apply on each node |
-| **New node** | Setup is automatic, with no admin input: a node that joins a cluster writes every area file (including `app.yml`) and every `assets/` file from the database before it serves, and it replaces its own first-run generated secrets with the ones in the join payload ("Join Cluster Flow") |
-| **Conflicts** | Per key the newest `updated_at` wins; equal timestamps go to the higher node id |
-| **Priority** | The database layer is above the file layer (PART 5 priority). At start, a file value that differs from the database is imported when the file is newer than the row's `updated_at`; otherwise the database value wins and the file is rewritten |
-| **Database unavailable** | The node keeps running on its area files, which are the last synced copy. Changes made on that node wait and are imported when the database returns |
-| **Migration** | The automatic migration runs on each node's own files before the first sync and never changes a value ("Area Files and Automatic Migration") |
-| **Not synced** | `server.yml`, `secrets.yml` (shared secrets travel by the join payload and by rotation) and per-node state such as the onion address |
+**HYBRID runs as a single instance and has no clustering, so it has no config sync.** The admin panel (when enabled), the CLI and the setup flow write the owning area file directly (atomically: temporary file, fsync, rename, `0600`, creating it when missing; values only, comments are not kept), and the file watcher validates and applies a hand edit. Configuration is never stored in the database. The automatic migration runs on this instance's own files and never changes a value ("Area Files and Automatic Migration").
 
 ### What Goes Where
 
@@ -3881,8 +3867,8 @@ server:
 |---------|----------|
 | Database connection | server.yml |
 | Server settings | server.yml |
-| Branding, SEO and theme | yaml.d/branding.yml (Cluster Mode: also synced through the database) |
-| Branding images | assets/ (Cluster Mode: also synced through the database) |
+| Branding, SEO and theme | yaml.d/branding.yml |
+| Branding images | assets/ |
 | SSL settings | server.yml |
 | API tokens (resource owner) | Database (`api_tokens`, SHA-256 stored) |
 | Resource state, audit log | Database |
@@ -3904,7 +3890,7 @@ server:
 
 ### Full Database Schema Summary
 
-**Table names:** the SQLite single-instance names are the unprefixed names (`admins`, `users`, `audit_log`), split across two files: tables in the Server list live in `server.db`, tables in the User list live in `users.db`. In a remote PostgreSQL/MySQL database (Cluster Mode) the same tables share one database and carry a prefix that follows the file they would live in: `srv_` for the Server list, `usr_` for the User list (`admins` becomes `usr_admins`, `audit_log` becomes `srv_audit_log`). There is no other prefix (never `server_`), and each table has exactly these two names, one per mode.
+**Table names:** the SQLite names are the unprefixed names (`rate_limits`, `audit_log`), all in `server.db`. In a remote libsql/Turso database the same tables carry the prefix `srv_` (`rate_limits` becomes `srv_rate_limits`), and there is no other prefix. The specification's SQL is written with the unprefixed names; the database layer owns the mapping: every table and index name goes through ONE function that returns the name unchanged for SQLite and `srv_` plus the name for libsql, and no query, `CREATE` or schema-update statement spells a table or index name any other way, so the same statements and the same code serve both drivers. An index name follows its table (`idx_rate_limits_window` becomes `srv_idx_rate_limits_window`), because index names are database-wide.
 
 **Server Tables (srv_* prefix in remote DB, or server.db in SQLite):**
 
@@ -4143,7 +4129,7 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 | `DATABASE_URL` | First run: the full database connection string, saved to `secrets.yml` (when it carries a credential) or `server.yml`; ignored afterwards ("Connection Strings") |
 | `CACHE_URL` | First run: the full cache connection string (`valkey://`, `redis://`), saved the same way |
 
-**Init-only variables are used ONCE during first run to seed `server.yml` (and `secrets.yml` for a credential), then ignored.** The database and cache connection variables are init-only because the saved connections belong to the node's setup: a node added to a cluster receives the cluster's database and cache connections, not its environment's, and a database migrated from the admin panel must not be reverted by an environment variable at the next start.
+**Init-only variables are used ONCE during first run to seed `server.yml` (and `secrets.yml` for a credential), then ignored.** The database and cache connection variables are init-only because the saved connections belong to the installation's setup: a database changed in the files, by the CLI or in the admin panel must not be reverted by an environment variable at the next start.
 
 ---
 
@@ -4194,7 +4180,7 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 
 | File | Holds |
 |------|-------|
-| `server.yml` | This node only: `server.port`, `server.address`, `server.fqdn`, `server.mode`, `server.api_version`, `server.baseurl`, `server.pidfile`, `server.daemonize`, `server.debug`, `server.database`, `server.cache`, `server.ssl`, `server.trusted_proxies`, `server.cluster` |
+| `server.yml` | This node only: `server.port`, `server.address`, `server.fqdn`, `server.mode`, `server.api_version`, `server.baseurl`, `server.pidfile`, `server.daemonize`, `server.debug`, `server.database`, `server.cache`, `server.ssl`, `server.trusted_proxies` |
 | `yaml.d/branding.yml` | `server.branding`, `server.seo`, `web.ui` ("Branding File") |
 | `yaml.d/web.yml` | `web.*` except `web.ui`; `server.cors`, `server.csrf`, `server.url_detection`, `server.compression`, `server.healthz`, `server.i18n` |
 | `yaml.d/pages.yml` | `server.pages` (the report form and its antispam, the help pages) |
@@ -4211,7 +4197,7 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 | `yaml.d/app.yml` | Every other section, which is project-defined (the product's own settings) |
 | `secrets.yml` | Credentials only ("Secrets File") |
 
-Only the sections a project has apply. Each key has exactly one home, and the area files are the shared settings: they are synced through the database in SERVER and HYBRID ("Config Sync"), while `server.yml` is never synced.
+Only the sections a project has apply. Each key has exactly one home, and the area files hold every setting that is not in `server.yml`, and nothing is synced ("Config Writes").
 
 Wherever this specification says a setting is set "in `server.yml`", it means that dotted path in the merged configuration, in whichever file the table assigns it to.
 
@@ -4297,7 +4283,7 @@ Wherever this specification says a setting is set "in `server.yml`", it means th
 
 | Rule | Behavior |
 |------|----------|
-| **Precedence** | First run, with no saved connection: the environment variable seeds the saved connection (a URL that carries a credential goes to `secrets.yml`, any other to `server.yml`); after that the variable is IGNORED, and one warning (variable name only) is logged when it differs from the saved value. Every later change comes from the admin panel, the CLI, the files or the cluster join. At any time a saved `url` wins over the separate fields (`host`, `port`, `name`, `username`, `password`, `sslmode`, and the cache equivalents), which are then ignored |
+| **Precedence** | First run, with no saved connection: the environment variable seeds the saved connection (a URL that carries a credential goes to `secrets.yml`, any other to `server.yml`); after that the variable is IGNORED, and one warning (variable name only) is logged when it differs from the saved value. Every later change comes from the admin panel, the CLI or the files. At any time a saved `url` wins over the separate fields (`host`, `port`, `name`, `username`, `password`, `sslmode`, and the cache equivalents), which are then ignored |
 | **Driver** | The scheme selects the driver ("Accepted forms"). When `DATABASE_DRIVER` disagrees with the scheme, the scheme wins, with one warning |
 | **Not accepted** | ADO.NET or key-value strings (`Server=...;Password=...`, `host=... user=...`) and `jdbc:` URLs. The server reports one error that names the key and says "use the URL form", never the value. The "Invalid → default" rule does NOT apply to a connection URL: a rejected database URL is never replaced by another database (not even SQLite) and is reported exactly like an unreachable database |
 | **Encoding** | The user does NOT have to encode a password. The userinfo ends at the LAST `@` before the host (a host name cannot contain `@`), and the user name is split from the password at the FIRST `:`, so a password may hold `@`, `:`, `/`, `?`, `#`, `[`, `]` and spaces as typed. A valid `%XX` is read as already encoded and decoded; a `%` that is not followed by two hex digits is a literal. A password that literally contains something like `%41` is ambiguous: put it in the separate `password` field (raw value) or write the percent sign as `%25`. Query values are left as written. The server never rewrites a URL it was given; a URL it builds itself (for example from the setup wizard fields) is percent-encoded per RFC 3986. In a Docker Compose file a `$` in the value must be written `$$` (Compose's own rule) |
@@ -4306,7 +4292,7 @@ Wherever this specification says a setting is set "in `server.yml`", it means th
 | **Credentials** | A URL that carries a password or a token (in the userinfo, or as a `password`, `pwd`, `token` or `authToken` query value) is a secret: it lives in `secrets.yml` under the same key (`server.database.url`, `server.cache.url`) and the automatic migration moves it there from `server.yml` or a drop-in ("Secrets File"). A URL with no credential (`valkey://cache:6379`) stays in `server.yml` |
 | **Never shown** | Logs, `--config` output, the admin panel and error messages show only the redacted form `scheme://user:********@host:port/name?authToken=********`. The full URL is never logged, never returned by an API and never part of a health response (PART 11) |
 | **Backup** | A backup holds the URL (and so its credential) through `secrets.yml` and `server.yml`, and the TLS files named by the six file keys, even without `--include-ssl` (PART 20 → "Backup Contents"). The seeded connection is saved at first run, so it is part of every later backup |
-| **References** | `${NAME}` and `${NAME:-default}` inside any string value are replaced from the environment after the files are merged and are never written back. `url: ${DATABASE_URL}` therefore works, but is not needed: the variable is read directly. An unset name without a default becomes an empty string. A reference is read at every load, so it keeps a value tied to the environment; a cluster join replaces the saved value with the payload's literal one |
+| **References** | `${NAME}` and `${NAME:-default}` inside any string value are replaced from the environment after the files are merged and are never written back. `url: ${DATABASE_URL}` therefore works, but is not needed: the variable is read directly. An unset name without a default becomes an empty string. A reference is read at every load, so it keeps a value tied to the environment |
 
 **Accepted forms** (placeholders in braces; replace them with the real values, typed as they are):
 
@@ -4325,7 +4311,7 @@ Wherever this specification says a setting is set "in `server.yml`", it means th
 | `require` | TLS, certificate NOT verified. This is what any TLS request in a connection string means, unless verification is asked for below | `tls: true`, `tls_skip_verify: true` (the default whenever `tls` is on) |
 | `verify-full` | TLS, certificate chain and host name verified. Chosen explicitly: `tls_skip_verify: false`, or by setting `tls_ca` (a private CA only makes sense when it is checked) | `tls: true`, `tls_skip_verify: false` |
 
-`tls_cert` and `tls_key` add a client certificate. The three file keys take a path inside `{config_dir}/ssl/` (a relative name is resolved there) and are private paths (PART 8). The files are node-local: Cluster Mode does not sync them, so place them in every node's `{config_dir}/ssl/`. PostgreSQL's own `verify-ca` is accepted and passed through unchanged. A scheme or URL option that turns TLS on (`rediss://`, `valkeys://`, `libsql://`, `https://`, `mongodb+srv://`, `tls=true`, `encrypt=true`) selects `require`. `http://` to a libsql host is rejected unless the host is loopback (`127.0.0.0/8`, `::1`) or a private address (RFC 1918 `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, or IPv6 unique-local `fc00::/7`); a host name counts only when EVERY address it resolves to is in those ranges.
+`tls_cert` and `tls_key` add a client certificate. The three file keys take a path inside `{config_dir}/ssl/` (a relative name is resolved there) and are private paths (PART 8). PostgreSQL's own `verify-ca` is accepted and passed through unchanged. A scheme or URL option that turns TLS on (`rediss://`, `valkeys://`, `libsql://`, `https://`, `mongodb+srv://`, `tls=true`, `encrypt=true`) selects `require`. `http://` to a libsql host is rejected unless the host is loopback (`127.0.0.0/8`, `::1`) or a private address (RFC 1918 `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, or IPv6 unique-local `fc00::/7`); a host name counts only when EVERY address it resolves to is in those ranges.
 
 | Driver | URL option that sets the mode |
 |--------|-------------------------------|
@@ -9083,18 +9069,7 @@ func OpenDatabase(cfg *Config) (*Database, error) {
 -- SERVER.DB - Server state and operations
 -- ============================================================================
 
--- Single-instance SQLite server.db has NO config table: configuration lives only in server.yml (PART 5).
--- Cluster Mode ONLY (remote PostgreSQL/MySQL): the remote database is the configuration source of truth (PART 5), so these two tables exist there (srv_ prefix) and the area files in `yaml.d/` are its synced copy (`server.yml` and `secrets.yml` are node-local).
-CREATE TABLE IF NOT EXISTS srv_config (
-    key        VARCHAR(255) PRIMARY KEY,
-    value      TEXT NOT NULL,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE IF NOT EXISTS srv_config_meta (
-    id         INTEGER PRIMARY KEY CHECK (id = 1),
-    version    BIGINT NOT NULL DEFAULT 0,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+-- server.db has NO config table: configuration lives only in the files (PART 5).
 
 -- ----------------------------------------------------------------------------
 -- Rate Limiting (sliding window counters)
@@ -9148,7 +9123,7 @@ CREATE TABLE IF NOT EXISTS learned_origins (
     -- Lowercase hostname (RFC 1123), with ":port" only when the port is not the scheme default; the origin is https://{host}
     host        TEXT PRIMARY KEY,
     first_seen  INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-    -- Last time a trusted proxy presented this host; written at most once a minute per host; MAX(observed_at) is the cluster heartbeat version
+    -- Last time a trusted proxy presented this host; written at most once a minute per host
     observed_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
     -- Always trusted_proxy: a host is never learned from a request that did not come from a trusted proxy
     source      TEXT NOT NULL DEFAULT 'trusted_proxy'
@@ -14564,7 +14539,7 @@ func NewDB(cfg *config.Database) (*sql.DB, error) {
 
 ## SQLite Concurrency Contract
 
-**Fixes `database is locked` (`SQLITE_BUSY`). Applies to every SQLite file the application opens (for example `server.db` and `users.db`): each file gets its OWN write handle and read handle. libsql/Turso is remote and not covered.**
+**Fixes `database is locked` (`SQLITE_BUSY`). Applies to every SQLite file the application opens (for example `server.db`): each file gets its OWN write handle and read handle. libsql/Turso is remote and not covered.**
 
 SQLite allows ONE writer at a time. Without the rules below, concurrent requests, the scheduler and the CLI queue up for the write lock, a deferred transaction that starts as a read and then writes fails at once with `database is locked` (the busy timeout is ignored for that upgrade), and a long transaction starves everything else.
 
@@ -17255,7 +17230,7 @@ server:
 | `write_timeout` | Write timeout | 30s |
 | `idle_timeout` | Idle connection timeout | 120s |
 
-The keys live in `yaml.d/security.yml` (`server.limits`, "Area Files and Automatic Migration"). Each timeout is a Go-style duration (`30s`, `2m`) greater than zero and `max_body_size` is a size with a unit; a missing, malformed or non-positive value is invalid and the default applies (invalid-to-default, with one warning). The three timeouts apply by a graceful reload of the HTTP server (no restart, no downtime).
+The keys live in `yaml.d/security.yml` (`server.limits`, "Area Files and Automatic Migration"). Each timeout is a duration with a unit (`30s`, `2m`) greater than zero and `max_body_size` is a size with a unit; a missing, malformed or non-positive value is invalid and the default applies (invalid-to-default, with one warning). The three timeouts apply by a graceful reload of the HTTP server (no restart, no downtime).
 
 ## Response Compression
 
@@ -19408,7 +19383,7 @@ Same underlying health response as `/server/healthz`, but formatted using the st
 
 | Key | Meaning | Rule |
 |-----|---------|------|
-| `requests_total` | HTTP requests served since the database was created | Counted by the outermost middleware for EVERY response (HTML, API, static files, errors). Health probes (`/server/healthz`, `/healthz`, `/api/**/healthz`) and the `/server/metrics` scrape are NOT counted. The value is kept in the database (written in batches, at most every 60 seconds and at shutdown) so a restart does not reset it; in Cluster Mode every node adds to the shared row, so it is cluster-wide |
+| `requests_total` | HTTP requests served since the database was created | Counted by the outermost middleware for EVERY response (HTML, API, static files, errors). Health probes (`/server/healthz`, `/healthz`, `/api/**/healthz`) and the `/server/metrics` scrape are NOT counted. The value is kept in the database (written in batches, at most every 60 seconds and at shutdown) so a restart does not reset it |
 | `requests_24h` | Requests in the last 24 hours | A rolling window of 24 hourly buckets (the current partial hour counts), same counting rule |
 | `active_connections` | In-flight requests right now | The health request itself counts, so the minimum is `1` |
 
@@ -23996,7 +23971,7 @@ document.querySelectorAll(".site-banner .site-banner-dismiss").forEach((form) =>
 
 ### Theme Toggle
 
-**Theme toggle button in header — the default header action, always present.** When a session menu is shown (see "Profile Icon" below) the toggle moves into that dropdown.
+**Theme toggle button in header — the default header action, always present.** When a session menu is shown (see "User Menu" below) the toggle moves into that dropdown.
 
 **Theme Toggle Behavior:**
 
@@ -26332,7 +26307,7 @@ document.querySelectorAll('.theme-toggle-form').forEach((form) => {
 
 | Partial | Public | Admin | Purpose |
 |---------|:------:|:-----:|---------|
-| `partial/public/header.tmpl` | ✓ | | Brand, top nav and `.header-actions` (login/user menu and theme toggle), then `branding.content.header` ("Page Content") |
+| `partial/public/header.tmpl` | ✓ | | Brand, top nav and `.header-actions` (the Guest Header, or the User Menu), then `branding.content.header` ("Page Content") |
 | `partial/public/nav.tmpl` | ✓ | | Horizontal navigation links |
 | `partial/public/footer.tmpl` | ✓ | | About, Privacy links (never the report form) |
 | `partial/admin/header.tmpl` | | ✓ | Logo + search + bell + admin menu |
@@ -26592,12 +26567,12 @@ partial/
 Brand sits left, nav links are horizontally centered (not pushed right against
 the actions), and the actions cluster (profile/preferences, then theme toggle)
 sits right. Do NOT split header/nav into two separate rows on desktop — that
-pushes links flush right against the header edge with no centering. The two items on the right (profile/preferences, then theme toggle) are not zones of their own: both sit inside the one `.header-actions` element, in that order, so the DOM has exactly three top-level header zones.
+pushes links flush right against the header edge with no centering. The items on the right (profile/preferences and theme toggle) are not zones of their own: they all sit inside the one `.header-actions` element (with a session the theme toggle is inside the profile menu), so the DOM has exactly three top-level header zones.
 
 **Default Navigation (nav.tmpl):**
 
 ```
-Desktop (single row, 3 zones; the actions zone holds two items):
+Desktop (single row, 3 zones; the actions zone is one element):
 ┌─────────────────────────────────────────────────────────────────┐
 │ {project_name}   Home | Section 1 | Section 2      [⚙] [Theme]  │  ← Header
 └─────────────────────────────────────────────────────────────────┘
@@ -27375,7 +27350,7 @@ web:
 | **Images** | `logo`, `favicon` and `seo.og_image` take an `https://` URL, a `data:` URI or a file name in `{config_dir}/assets/` ("Image Files"); empty means the embedded default |
 | **SEO tags** | `{canonical_url}` is `seo.canonical` (when set) plus the request path, otherwise the request origin plus the path; sitemap, feeds and `robots.txt` always use `BuildURL(r, path)`. `seo.noindex: true` forces `{robots}` to `noindex,nofollow` on every route and adds `X-Robots-Tag: noindex, nofollow`. `opengraph.enabled: false` or `twitter.enabled: false` omits that whole tag group. `meta_tags` names are limited to `[a-z0-9:_.-]`, contents are HTML-escaped, and a name this specification already generates (`description`, `keywords`, `author`, `robots`, `viewport`) is ignored. `title_separator` is at most 8 characters. An invalid value is replaced by its default (PART 5 → "Invalid → default") |
 | **Accent** | `web.ui.accent` is a 6-digit hex color (`#RRGGBB`), the base of `--color-primary` (links, buttons, focus ring) and of its `--color-primary-bg` tint. No single color reaches 4.5:1 against both a dark and a light background, so the server derives one color per theme: the base itself when it already reaches 4.5:1 against that theme's `--color-bg` (`#282a36` dark, `#ffffff` light), otherwise the same hue and saturation with the lightness moved (up on dark, down on light) in 1% steps until it does. `--color-primary-bg` is that color at 15% alpha (dark) or 12% (light). A value that is not valid hex is ignored, the built-in color is used, and one warning names the key. The server emits the result in `/static/css/accent.css`, linked after the app stylesheet (never an inline style, CSP), setting the variables for the dark default (`:root`), for `html.theme-light` and, inside `@media (prefers-color-scheme: light)`, for `html.theme-auto`; no valid key, no file |
-| **Sync** | In Cluster Mode, SERVER and HYBRID sync `branding.yml` like every other area file ("Config Sync"), so all nodes show the same branding, theme, page content and images (`assets/` is mirrored too, "Image Files"). A branding key found in `server.yml` is still honored (it merges below `branding.yml`) and is moved by the automatic migration |
+| **Sync** | Only SERVER syncs `branding.yml` (Cluster Mode); this template has no sync, so the files on this instance are the only copy. A branding key found in `server.yml` is still honored (it merges below `branding.yml`) and is moved by the automatic migration |
 
 ### Page Content (`server.branding.content`)
 
@@ -27430,7 +27405,7 @@ server:
 | `data:` URI | At most 256 KiB, type `image/png`, `image/jpeg`, `image/webp`, `image/x-icon` or `image/svg+xml` |
 | File name | A file in `{config_dir}/assets/` (`.svg`, `.png`, `.ico`, `.webp`, `.jpg`, at most 2 MiB each). A name with a path, or a file that is missing, is ignored and the embedded default is used |
 
-SVG is rendered only through `<img>`, never inline. `assets/` is optional, `0700` with `0600` files (PART 8 → "Directory Validation Rules": private paths), watched like `yaml.d/`, and included in backups whenever it exists (PART 20 → "Backup Contents"). In Cluster Mode (SERVER and HYBRID), `assets/` is mirrored through the database like `branding.yml` itself (ConfigManager writes an added, changed or removed file to the `srv_config` table as `assets.{name}`, a removal is a tombstone row, and every other node writes the content to its own `assets/` atomically); the newest `updated_at` wins.
+SVG is rendered only through `<img>`, never inline. `assets/` is optional, `0700` with `0600` files (PART 8 → "Directory Validation Rules": private paths), watched like `yaml.d/`, and included in backups whenever it exists (PART 20 → "Backup Contents").
 
 ### Where Branding Is Used
 
@@ -28995,7 +28970,7 @@ These rules tighten "Header Layout" above. A header that breaks one of them is a
 
 | No. | Rule |
 |-----|------|
-| 1 | **Allowed elements, in this order, and nothing else:** the brand link, `<nav class="nav-links">`, the hamburger label (below the desktop breakpoint), then `.header-actions` containing exactly the preferences link (or the owner dropdown) and the theme-toggle form. No language selector, no search box (a project's search lives in `<main>`), no install button, no sign-in or sign-up buttons, no sponsor or social icons, no second preferences link for mobile. The one addition is the operator's `branding.content.header` fragment ("Page Content"): when the operator sets it, it is rendered as the last child of `<header>`, after `.header-actions`; with the entry unset nothing is rendered. The conformance test renders every page with it unset, and one more render with it set asserts the fragment is the last child and that nothing else in the header changed. This list is the content of `<header>`: the `nav-toggle` checkbox, the drawer panel and the scrim are not header elements but siblings of `<header>` in `<body>` (as in the example), and the `~` selectors need only those three to share that parent |
+| 1 | **Allowed elements, in this order, and nothing else:** the brand link, `<nav class="nav-links">`, the hamburger label (below the desktop breakpoint), then `.header-actions` containing exactly: the Guest Header (the preferences link, then the theme-toggle form) when there is no session; otherwise the User Menu alone, whose dropdown holds the theme toggle ("Theme Toggle", "User Menu"). No language selector, no search box (a project's search lives in `<main>`), no install button, no sign-in or sign-up buttons, no sponsor or social icons, no second preferences link for mobile. The one addition is the operator's `branding.content.header` fragment ("Page Content"): when the operator sets it, it is rendered as the last child of `<header>`, after `.header-actions`; with the entry unset nothing is rendered. The conformance test renders every page with it unset, and one more render with it set asserts the fragment is the last child and that nothing else in the header changed. This list is the content of `<header>`: the `nav-toggle` checkbox, the drawer panel and the scrim are not header elements but siblings of `<header>` in `<body>` (as in the example), and the `~` selectors need only those three to share that parent |
 | 2 | **Nav is application sections only:** Home plus the project's own sections, labels of one or two words, plain `<a>` elements, no dropdowns. About, Help, Privacy, Terms, Preferences and API or documentation links belong to the footer; the Contact form is linked nowhere (see "/server/contact" → "Who can reach the form"). The current page carries `aria-current="page"` and `.active`. A project with many sections groups them behind a landing page instead of growing the bar |
 | 3 | **Mobile:** one hamburger (checkbox plus label, no JavaScript) opens the drawer; the preferences link and the theme toggle stay in the bar and never move into the drawer; the drawer holds exactly the nav links |
 | 4 | **No JavaScript required:** the theme toggle is a form `POST` whose target is the server-computed next mode; no `<noscript>` copy of a control; option and button labels come from the value enum (`dark`, `light`, `auto` → their translated names), never by position |
@@ -33479,7 +33454,7 @@ server:
 3. The restart runs as root. Startup step 7b verifies the SHA256 again, checks that the staged version is newer than the running one, runs `replaceBinary()` (step 4), deletes `{data_dir}/update/` and re-executes the new binary (step 5), which continues at step 6 as the new version.
 4. Any failure (bad checksum, rename error): the staged files are deleted, the old binary keeps running, `update.failed` is recorded and the Server Admins get the "Update failed" notification. The same version is not staged again until the next release.
 
-**Restart support:** systemd (`Restart=on-failure`), launchd (`KeepAlive`), runit and s6 restart the service after exit `75`. OpenRC, SysV and rc.d do not supervise it: the staged update waits for the next start (boot or `--service restart`) and the Server Admins get "Update staged: restart to apply". In a cluster the rollout stays node-by-node.
+**Restart support:** systemd (`Restart=on-failure`), launchd (`KeepAlive`), runit and s6 restart the service after exit `75`. OpenRC, SysV and rc.d do not supervise it: the staged update waits for the next start (boot or `--service restart`) and the Server Admins get "Update staged: restart to apply".
 
 ### Platform-Specific Binary Replacement
 
