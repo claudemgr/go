@@ -1118,7 +1118,7 @@ Independently of which persona is active, the binary also has a **production/dev
 | Setting | Priority |
 |---|---|
 | Mode | `--mode` flag > `MODE` env > default `production` |
-| Debug | `--debug` flag > `DEBUG` env > `MODE=debug` (defaults debug on) > default `false` |
+| Debug | `--debug` flag > `DEBUG` env > `MODE=debug` (defaults debug on) > default `false`; `server.debug.*` holds debug settings, never the flag (no file source) |
 
 Six operational states result: production, production+debug, development, development+debug, debug (debug flag on by default), and debug with `DEBUG=false` (debug mode, debug endpoints off). In every state, operator/token authentication (`server.token`) is NEVER bypassed by debug mode — debug only ever adds observability (pprof endpoints, `/debug/*` API routes, verbose logging), never removes a security control. Development mode alone (without `--debug`) still keeps debug/pprof endpoints DISABLED. This mode/debug axis applies to the server persona; it has no meaning for a plain interactive GUI/TUI/CLI session.
 
