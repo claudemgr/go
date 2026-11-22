@@ -18904,7 +18904,7 @@ type StatsInfo struct {
 | **Stable keys** | `{kind}_{id}` is a stable snake_case identifier — NEVER a file path, URL, or filename (public-safe; see Security) |
 | **Order** | Core checks first (`database`, `cache`, `disk`, `scheduler`), then `tor`, `i2p`, then dataset checks in registration order. JSON emits keys in exactly this order (custom marshaller — never an unordered map) |
 | **Cost** | `/server/healthz` reads CACHED results. The scheduler re-runs dataset checks at most every 60 seconds and after every data-set reload/update; a request NEVER triggers a disk scan, parse, or network fetch |
-| **Freshness** | Each data set declares a `max_age` (e.g. 7 days for GeoIP, per-list for blocklists); the check compares last successful load/update against it |
+| **Freshness** | Each data set declares a `max_age` (e.g. 7 days for GeoIP, 72 hours for every blocklist source, fixed, no per-source field); the check compares last successful load/update against it |
 | **Public-safe** | `ok` / `degraded` / `error` only — no paths, URLs, sizes, record counts, versions, or error text |
 
 **Frontend labels:** the Component Status table shows one row per check. Labels come from i18n keys `health.check.{key}`; a key with no translation falls back to a humanized form of the key (`blocklist_ads` → `Blocklist: ads`). Dataset rows follow the core rows, grouped under their kind.
