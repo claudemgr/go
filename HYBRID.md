@@ -885,7 +885,7 @@ A HYBRID project implements every PART of this document that applies given `IDEA
 | 24 | CI/CD, Releases & Automation | ✅ Implement fully |
 | 25 | Documentation, License & ReadTheDocs | ✅ Implement fully |
 | 26 | I18N & A11Y | ✅ Implement fully |
-| 27 | Overlay Networks (Tor & I2P) | ✅ Implement fully (27.1 Tor auto; 27.2 I2P opt-in) |
+| 27 | Overlay Networks (Tor & I2P) | ✅ Implement fully (27.1 Tor auto; 27.2 I2P opt-in outside containers, default on in a container) |
 | 29 | Client (companion to PART 8) | ✅ Implement fully |
 | 30 | Checklists | ✅ Verify all items |
 | 31 | IDEA.md Reference | ✅ Reference-only (do NOT modify) |
@@ -1870,6 +1870,7 @@ require (
 | Purpose | Library | Notes |
 |---------|---------|-------|
 | **Router** | `github.com/go-chi/chi/v5` | Lightweight, stdlib compatible |
+| **OpenPGP** | `github.com/ProtonMail/go-crypto/openpgp` | Security-report keypair (PART 11): Ed25519 + Curve25519 generation, signing and encryption; the maintained fork of the frozen `golang.org/x/crypto/openpgp` |
 | **Tor** | `github.com/cretz/bine` | Pure Go Tor controller |
 | **WebSocket** | `github.com/gorilla/websocket` | WebSocket support |
 | **CORS** | `github.com/rs/cors` | CORS middleware |
@@ -3861,11 +3862,11 @@ server:
 
 | Rule | Behavior |
 |------|----------|
-| **Initialization** | The first node to reach an EMPTY database takes the initialization lock (an advisory lock in PostgreSQL and MySQL, an exclusive transaction in SQLite) and writes its running, merged configuration for every area-file section into the `config` table, one row per dotted key (`updated_by: node:{id}`), then releases the lock. Every other node finds the table filled, so all nodes start from the same settings |
+| **Initialization** | The first node to reach an EMPTY database takes the initialization lock (an advisory lock in PostgreSQL and MySQL, an exclusive transaction in SQLite) and writes its running, merged configuration for every area-file section into the `srv_config` table, one row per dotted key (`updated_by: node:{id}`), then releases the lock. Every other node finds the table filled, so all nodes start from the same settings |
 | **Changes** | The admin panel, the CLI and the API write to the database first. The node then writes the owning area file, and every other node applies the row and writes its own copy ("Sync to files"). The panel and the CLI are the preferred way to change settings |
 | **Hand edits** | A hand edit of an area file is detected by the file watcher, validated and imported as a change (`updated_by: node:{id}`), exactly like a panel change, so it is never lost and never left on one node. A node's own sync writes are recognized by content hash and are not re-imported |
 | **Sync to files** | A node writes the area file that owns a changed key atomically (temporary file, fsync, rename), `0600`, creating it when missing. Values only: comments are not kept |
-| **`app.yml`** | The project-defined sections in `yaml.d/app.yml` are an area file like every other: each dotted key is imported into the `config` table, synced and written to every node's `app.yml`. Values are kept as written (the specification defines no schema for them); the project's own validation and its "Invalid → default" rule apply on each node |
+| **`app.yml`** | The project-defined sections in `yaml.d/app.yml` are an area file like every other: each dotted key is imported into the `srv_config` table, synced and written to every node's `app.yml`. Values are kept as written (the specification defines no schema for them); the project's own validation and its "Invalid → default" rule apply on each node |
 | **New node** | Setup is automatic, with no admin input: a node that joins a cluster writes every area file (including `app.yml`) and every `assets/` file from the database before it serves, and it replaces its own first-run generated secrets with the ones in the join payload ("Join Cluster Flow") |
 | **Conflicts** | Per key the newest `updated_at` wins; equal timestamps go to the higher node id |
 | **Priority** | The database layer is above the file layer (PART 5 priority). At start, a file value that differs from the database is imported when the file is newer than the row's `updated_at`; otherwise the database value wins and the file is rewritten |
@@ -7611,12 +7612,13 @@ NO_COLOR=1 {project_name} --status | grep -E '✅|❌|⚠️|🚀'
 --baseurl {path}
 # Show status and health (exit 0=healthy, 1=unhealthy)
 --status
+# Service control takes exactly one action: start, restart, stop and reload are bare words; --install, --uninstall, --disable and --help keep their double dash (--service --install)
 --service {start,restart,stop,reload,--install,--uninstall,--disable,--help}
 # Daemonize (detach from terminal)
 --daemon
 # Enable debug mode (verbose logging, debug endpoints)
 --debug
-# Enable the I2P eepsite (opt-in, PART 27.2)
+# Enable the I2P eepsite (opt-in outside containers, on by default in a container, PART 27.2)
 --i2p
 # Color output (default: auto, respects NO_COLOR)
 --color {auto|yes|no}
@@ -7661,7 +7663,7 @@ Server Configuration:
 --baseurl PATH                         - URL path prefix (default: /)
 --daemon                               - Run as daemon (detach from terminal)
 --debug                                - Enable debug mode
---i2p                                  - Enable the I2P eepsite (opt-in)
+--i2p                                  - Enable the I2P eepsite (default on in a container, opt-in elsewhere)
 --color {auto|yes|no}                  - Color output (default: auto)
 --lang CODE                            - Language for output (default: auto)
 
@@ -8962,9 +8964,22 @@ All projects use SQLite with a single database file:
 |----------|-------|---------|
 | `server.db` | `rate_limits` | Sliding window rate limit counters |
 | `server.db` | `audit_log` | Config changes, security events, request log |
+| `server.db` | `app_secrets` | Generated secrets and their rotation rows (see "`app_secrets` schema") |
 | `server.db` | `scheduler_tasks` | Background task definitions |
 | `server.db` | `scheduler_history` | Task run history |
 | `server.db` | `backups` | Backup metadata and history |
+
+**`app_secrets` schema (`server.db`):** a key-value table that holds the generated secrets of PART 11 and their rotation bookkeeping.
+
+```sql
+CREATE TABLE IF NOT EXISTS app_secrets (
+    name       TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+```
+
+`name` is the secret name used in PART 11 (`installation_secret`, `cookie_signing_key`, `csrf_token_secret`, and the `{name}_previous` and `{name}_previous_until` rotation rows); `value` is base64 text (or a UTC ISO 8601 timestamp for `*_until` and `*_at` rows); `updated_at` is UTC ISO 8601. **Startup initialization:** after the schema step, in ONE transaction, every generated secret whose row is missing is created from `crypto/rand` and inserted with `INSERT ... ON CONFLICT DO NOTHING`, so an existing row is never replaced and two processes starting together end with the same values. The values are never logged, never returned by an API, and are restored with the database from a backup.
 
 **`server.db` can be recreated from the config file if needed.**
 
@@ -13918,9 +13933,9 @@ Server Version: {project_version} (compatible)
 | **Bookmark Manager** | Linkding, Shaarli | Batch import/export |
 | **Time Tracking** | Toggl CLI, Clockify CLI | `mycli start "task"` without context switch |
 
-**Projects that do NOT need CLI:**
+**Projects that need only the minimum client (PART 32 still requires the client; these products add no product-specific commands):**
 
-| Project Type | Example Names | Why No CLI |
+| Project Type | Example Names | Why Minimal |
 |--------------|---------------|------------|
 | **Photo Sharing** | Immich, Photoprism, Google Photos | Visual content needs visual interface |
 | **Social Media** | Mastodon, Pixelfed | Social experience is visual |
@@ -13950,7 +13965,7 @@ Is your target user comfortable in a terminal?
 │       └─► YES → CLI beneficial
 │
 └─► NO (general consumers, non-technical users)
-    └─► Skip CLI - focus on web/mobile UI
+    └─► Ship the required minimum client only - focus on web/mobile UI
 ```
 
 #### CLI vs Just Using curl
@@ -13968,7 +13983,7 @@ Is your target user comfortable in a terminal?
 | Interactive mode | None | TUI for browsing |
 
 **If users would just use curl anyway, CLI is worthwhile.**
-**If users would never touch terminal, skip CLI.**
+**If users would never touch a terminal, the client still ships (PART 32 has no skip case) with its required commands only; do not invest in product-specific commands, TUI screens or GUI beyond that.**
 
 #### Quick Decision
 
@@ -15894,7 +15909,7 @@ web:
 |--------|------|
 | Availability | **Always on.** There is no `server.mcp` key in `server.yml` and no admin toggle; the Bearer token (the same one the API uses) is the only gate |
 | Transport | **Streamable HTTP, remote only** — one endpoint, JSON-RPC 2.0 over HTTP `POST`. No stdio build, no local-process mode, no separate MCP binary or port |
-| Specification | Follow the current MCP specification (https://modelcontextprotocol.io/specification) — the revision, header and error rules come from it, not from this file. Negotiate the version the client asks for; unsupported version → `400` with the spec's `UnsupportedProtocolVersionError` listing the supported versions |
+| Specification | This template targets MCP revision **2026-07-28** (https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http). A request whose `MCP-Protocol-Version` names any other revision, or an `initialize` handshake from an older client, is answered `400` with the spec's `UnsupportedProtocolVersionError` listing `2026-07-28`; the older initialize negotiation that answers with another supported version is not implemented. The header, error and transport rules come from that revision, not from this file |
 | Canonical route | `/api/{api_version}/server/mcp` |
 | Aliases | `/api/mcp` and `/mcp` — direct aliases for the current `{api_version}`; the SAME handler mounted at all three paths, never a redirect (see "Unversioned API aliases") |
 | Route class | All three paths, including the root `/mcp` alias, are API-class: never content-negotiated, no User-Agent detection, never HTML or plain text. Every response, including `400`, `403`, `404` and `405`, is JSON (a JSON-RPC error object when the request parsed, otherwise the canonical error body); success is `application/json` or `text/event-stream` according to the client's `Accept` |
@@ -16097,6 +16112,16 @@ CREATE TABLE IF NOT EXISTS security_thanks (
 | `/server/security/thanks` | GET | None | Acknowledgments page. Lists researchers who opted in (real name, handle, or anonymized "Anonymous Researcher #n") with the year and severity: the `security_thanks` entries, newest first (the same entries as the API mirror). |
 | `/server/security/report/{tracking_id}` | GET | One-shot token in URL (no API mirror: explicit exception to the API-for-every-page rule, because the one-shot emailed link must not be duplicated onto the API surface) | Researcher status page — shows triage state (Received / Triaged / Confirmed / Patching / Disclosed / Won't Fix), maintainer comments visible to researcher, expected disclosure date. Token is single-use-per-day; expires after the report is closed for 30 days. |
 
+**Built-in default policy text (used when the operator supplies no policy).** The page is generated from these fixed sections, with `{app_name}` and `{fqdn}` filled in; an operator-supplied policy replaces the whole body:
+
+| Section | Default content |
+|---------|-----------------|
+| Scope | The application served at `{fqdn}` (and the other hosts in `DOMAIN`, the Tor address and the I2P address when published), including its API |
+| Out of scope | Denial of service and volumetric testing, social engineering of operators or users, physical attacks, findings in third-party services or dependencies without an exploitable path here, automated scanner output without a demonstrated impact, and missing best-practice headers on non-sensitive pages |
+| Coordinated disclosure | Please report privately through `/server/security` and allow 90 days from the report to publish; the window ends early once a fix is released, and may be extended by agreement |
+| Safe harbor | Good-faith research that follows this policy, avoids privacy violations and service disruption, accesses only what is needed to show the issue and stops when it has done so is authorized, and no legal action will be taken for it |
+| Reporting | A link to `/server/security` |
+
 ### Security Administration (config file)
 
 **Server security is managed via config file. There are no web routes for server administration.**
@@ -16130,7 +16155,7 @@ CREATE TABLE IF NOT EXISTS security_thanks (
 
 | Field | Description |
 |-------|-------------|
-| `fingerprint` | Full SHA-256 fingerprint, returned by the status API and embedded in security.txt comments |
+| `fingerprint` | The 40-character uppercase hex OpenPGP v4 fingerprint, no spaces; this exact value is `pgp.fingerprint` in `GET /api/{api_version}/server/security` and is embedded in security.txt comments (no SHA-256 variant exists) |
 | `created_at` | When the keypair was generated |
 | `expires_at` | Key expiry (2 years default) |
 | `last_rotated_at` | When most recently rotated (NULL if never) |
@@ -18785,7 +18810,7 @@ type FeaturesInfo struct {
     // PART 27.1: Tor Hidden Service
     Tor TorInfo `json:"tor"`
 
-    // PART 27.2: I2P Eepsite (OPTIONAL - opt-in)
+    // PART 27.2: I2P Eepsite (OPTIONAL - opt-in outside containers)
     I2P I2PInfo `json:"i2p"`
 
     // PART 18: GeoIP
@@ -19639,7 +19664,7 @@ Plain text, no color. The first line is always `{project_name} {project_version}
 | Requirement | Description |
 |-------------|-------------|
 | **Forms work** | All frontend forms submit to backend and process responses |
-| **CRUD complete** | Create, Read, Update, Delete all work from frontend |
+| **CRUD complete** | Every create, read, update and delete the product defines in IDEA.md works from the frontend (a read-only product defines reads only) |
 | **Error handling** | Frontend displays backend errors appropriately |
 | **Validation** | Client-side validation matches server-side rules |
 | **State sync** | Frontend state reflects backend state after operations |
@@ -21144,7 +21169,6 @@ Need additional compatible endpoints?"
 | `/server/preferences` | GET, POST | None (POST: CSRF) | Guest preferences hub and save form; links every registered preferences page; `POST` sets cookies, `303` |
 | `/server/preferences/sync` | GET, POST | None (POST: CSRF) | Sync page: export block (full URL + short code, content-negotiated) and the import form; `POST` applies `code`, `303` (see "Cross-device preference sync") |
 | `/server/preferences/sync/import` | GET | None | Import via `code` or direct params; sets cookies, `303` |
-| `/server/preferences/export`, `/server/preferences/import` | GET | None | Legacy paths: `308` to `/server/preferences/sync` and `/server/preferences/sync/import` with the query kept, so links shared before the move keep working. Not registered, not linked |
 | `/api/{api_version}/server/preferences` | GET, POST | None | Current preferences / partial update (JSON) |
 | `/api/{api_version}/server/preferences/sync` | GET | None | Preferences plus `url` and `code` (JSON) |
 | `/api/{api_version}/server/preferences/sync/import` | GET | None | Import; JSON with `applied` and `ignored` |
@@ -22589,7 +22613,7 @@ func detectClientType(r *http.Request) string {
 
 ### CRUD Operations MUST Work in All Modes
 
-**ALL CRUD operations must be accessible via:**
+**Every CRUD operation the product defines (IDEA.md `## Business logic`; a read-only product defines only reads) must be accessible via:**
 
 1. **HTML Forms** (browser users):
    ```html
@@ -25101,7 +25125,7 @@ Preferences aren't tied to identity — any two guests who set the same `theme`/
 | 2 | **Canonical query** | `theme` and `lang` always present (effective value: the cookie, else the default), then each app preference only when its cookie is set and valid. Keys sorted ascending (bytewise); encoded as `application/x-www-form-urlencoded`. Example: `lang=fr&{project_name}_pref_sort=name&theme=dark`. The same preferences always produce the same string |
 | 3 | **Full URL** | `{origin}/server/preferences/sync/import?{canonical query}`; `{origin}` is resolved per request by the URL-resolution rules (PART 8 → "Resolution Order"), never a cached value |
 | 4 | **Short code** | `base64url` (RFC 4648 §5 URL-safe alphabet) of the UTF-8 canonical query, **no padding**. Decoders MUST accept padded and unpadded input |
-| 5 | **Import input** | The request's own query parameters AND an optional `code` parameter. Resolve `code` as: trim whitespace → if it contains `?`, discard everything up to and including the FIRST `?` (a pasted full URL) → if the rest contains `=`, it is a plain query string → otherwise base64url-decode it → parse as a query string. Any decode/parse failure yields an empty set, never an error. **Direct request parameters win over `code` values, key by key** |
+| 5 | **Import input** | The request's own query parameters AND an optional `code` parameter. Resolve `code` as: trim whitespace → if it contains `?`, discard everything up to and including the FIRST `?` (a pasted full URL) → if the rest, after removing any trailing `=` padding characters, still contains `=`, it is a plain query string (`theme=dark&lang=fr`) → otherwise base64url-decode it (padded or unpadded) → parse as a query string. Any decode/parse failure yields an empty set, never an error. **Direct request parameters win over `code` values, key by key** |
 | 6 | **Limits** | `code` longer than 2048 characters is discarded whole before decoding, exactly like a decode failure (rule 5: empty set, no error, `303`/`200` as usual); because `code` is a control field (rule 1) it is NEVER reported in `ignored`, and the visitor's other submitted values still apply. At most 32 parameters are considered (extras dropped); each value at most 64 characters |
 | 7 | **Validation** | `theme`: exactly `dark`, `light` or `auto`. `lang`: case-insensitive match against the supported tags, canonicalized to the supported tag; an unsupported regional tag falls back to its base language (`fr-CA` → `fr`) if that is supported, otherwise dropped. `{project_name}_pref_{key}`: `{key}` matches `^[a-z][a-z0-9_]{0,63}$` and the value is in that key's documented enum; a key without an enum accepts `^[A-Za-z0-9_.\-]{1,64}$`. Anything invalid is dropped (reported in `ignored`) — an imported value is still untrusted input |
 | 8 | **Apply** | Each valid value sets its cookie with `Path=/`, `Max-Age=31536000`, `SameSite=Lax`, not HttpOnly (JS reads them), no `Domain`, and `Secure` whenever the resolved request scheme is `https` (resolved behind reverse proxies exactly as in rule 3, not from the raw socket). Import is **additive**: preferences absent from the input keep their current cookie — import never resets or deletes anything |
@@ -25172,7 +25196,7 @@ Sync page (`/server/preferences/sync`), one form, one Import button:
 
 `prefs` is keyed by the bare `{key}` (without the `{project_name}_pref_` prefix) and is `{}` when none are set. `theme`, `lang` and `prefs` are the resulting effective state. `applied` and `ignored` list request parameter names (`theme`, `lang`, `{project_name}_pref_{key}`, or the unrecognized name) and are always arrays. The names `url` and `code` are fixed — never `full_url`, `short_code`, `export_url` or `export_code`.
 
-**Tests required** (the preferences sync is easy to get subtly wrong; these are the minimum): round trip export → import yields identical cookies; direct params override `code`; pasted full URL, plain query string, padded and unpadded base64url all import; invalid `theme`/`lang`/pref values are dropped and listed in `ignored`; excluded names (`cookie_consent`, `{project_name}_build`, an owner/session token) are never exported and are ignored on import; import never removes an existing cookie; redirect rejects `//evil.example`, `/\evil`, absolute URLs and CR/LF; cookie attributes match rule 8 behind a TLS-terminating proxy; oversized `code` is ignored; the web page renders the export block, import field and exactly Save/Cancel/Reset with no other buttons, and Save/Cancel without any confirmation; a web `POST` with no valid values, with an empty body or with only a bad `code` returns `303`, not `400`; Reset deletes every noncredential app-set cookie (including `cookie_consent`, `ccpa_opt_out`, `{project_name}_build`, dismissal and flash cookies) and sends `Clear-Site-Data: "storage"` but leaves session/CSRF/credential cookies, and the Reset popover opens without JS, shows the warning and only its confirm submits; a non-empty `code` on save overrides the form's values.
+**Tests required** (the preferences sync is easy to get subtly wrong; these are the minimum): round trip export → import yields identical cookies; direct params override `code`; pasted full URL, plain query string, padded and unpadded base64url all import; invalid `theme`/`lang`/pref values are dropped and listed in `ignored`; excluded names (`cookie_consent`, `{project_name}_build`, an owner/session token) are never exported and are ignored on import; import never removes an existing cookie; redirect rejects `//evil.example`, `/\evil`, absolute URLs and CR/LF; cookie attributes match rule 8 behind a TLS-terminating proxy; oversized `code` is ignored; the web page renders the export block, import field and exactly Save/Cancel/Reset with no other buttons, and Save/Cancel without any confirmation; a web `POST` with no valid values, with an empty body or with only a bad `code` returns `303`, not `400`; Reset deletes every noncredential app-set cookie (including `cookie_consent`, `ccpa_opt_out`, `{project_name}_build`, dismissal and flash cookies) and sends `Clear-Site-Data: "storage"` but leaves session/CSRF/credential cookies, and the Reset popover opens without JS, shows the warning and only its confirm submits; a `code` field posted to `POST /server/preferences` is ignored (it is a control field, never applied there and never listed in `ignored`), while a non-empty `code` posted to `POST /server/preferences/sync` is applied per rules 5 and 8.
 
 ### Offline Behavior
 
@@ -26587,7 +26611,7 @@ partial/
 **Nav does NOT contain:**
 - API link (users access via `/server/docs/swagger` if needed)
 - Admin link (don't advertise - admins know where it is)
-- Help, About, Privacy, Terms and Contact links (they belong in the footer)
+- Help, About, Privacy and Terms links (they belong in the footer); the Contact form is linked nowhere (see "/server/contact")
 - Language selector (language is detected automatically and changed in Preferences, see "Language Selection")
 - Preferences link (lives next to the theme toggle in the header, not in nav — it's UI state, not app content; also always present in the footer for discoverability)
 
@@ -27438,7 +27462,7 @@ server:
 | `data:` URI | At most 256 KiB, type `image/png`, `image/jpeg`, `image/webp`, `image/x-icon` or `image/svg+xml` |
 | File name | A file in `{config_dir}/assets/` (`.svg`, `.png`, `.ico`, `.webp`, `.jpg`, at most 2 MiB each). A name with a path, or a file that is missing, is ignored and the embedded default is used |
 
-SVG is rendered only through `<img>`, never inline. `assets/` is optional, `0700` with `0600` files (PART 8 → "Directory Validation Rules": private paths), watched like `yaml.d/`, and included in backups whenever it exists (PART 20 → "Backup Contents"). In Cluster Mode (SERVER and HYBRID), `assets/` is mirrored through the database like `branding.yml` itself (ConfigManager writes an added, changed or removed file to the `config` table as `assets.{name}`, a removal is a tombstone row, and every other node writes the content to its own `assets/` atomically); the newest `updated_at` wins.
+SVG is rendered only through `<img>`, never inline. `assets/` is optional, `0700` with `0600` files (PART 8 → "Directory Validation Rules": private paths), watched like `yaml.d/`, and included in backups whenever it exists (PART 20 → "Backup Contents"). In Cluster Mode (SERVER and HYBRID), `assets/` is mirrored through the database like `branding.yml` itself (ConfigManager writes an added, changed or removed file to the `srv_config` table as `assets.{name}`, a removal is a tombstone row, and every other node writes the content to its own `assets/` atomically); the newest `updated_at` wins.
 
 ### Where Branding Is Used
 
@@ -28976,7 +29000,7 @@ func trackingScript(r *http.Request) template.HTML {
 |------|--------|
 | **Complete** | The hub links every registered page of its tree, exactly once, in `order`. `/server/help` links `/server/help/mcp` and every other registered help page; `/server/preferences` links `/server/preferences/tokens`, `/server/preferences/sync` and every project page |
 | **Registry is the source** | The same registry drives the hub, the sitemap exclusions, the footer links (Help, Preferences point at the hubs) and the `pages` list in the help JSON. Nothing else lists these pages |
-| **Action routes are not pages** | Routes that only change state (`POST /server/preferences/token/reveal`, `GET /server/preferences/sync/import`, the legacy redirects) are not registered and never linked |
+| **Action routes are not pages** | Routes that only change state (`POST /server/preferences/token/reveal`, `GET /server/preferences/sync/import`, the retired export and import paths, which answer `404` like any unknown route) are not registered and never linked |
 | **Project pages** | A project adds pages as further direct children (`/server/preferences/engines`, `/server/preferences/bangs`, `/server/help/engines`, `/server/help/bangs`), declared in IDEA.md `## Business logic` → `### Product scope & non-goals` with path, title, one-line description and the data the page edits or explains. They follow the page shell, the component standard and the conformance test; they never appear as new rows in this specification |
 | **Depth** | One level below the hub; no page has children of its own. A page that needs sections uses cards and anchors |
 | **Test** | The conformance test enumerates the registry: every entry answers `200` as HTML, appears once on its hub, and, for help pages, in the help JSON; every `/server/preferences/*` and `/server/help/*` route is either registered or an action route |
@@ -28987,7 +29011,7 @@ func trackingScript(r *http.Request) template.HTML {
 |------|-----|--------|--------|-------|
 | `/server/preferences/tokens` | yes | when the project defines owner tokens | when the project defines owner tokens | Registered only where owner and linked tokens exist (always in API projects) |
 | `/server/preferences/sync` | yes | yes | yes | Cross-device preference sync (see "Client-Side Preferences (cookies)") |
-| `/server/help/mcp` | yes | yes | yes | Registered while the MCP endpoint is enabled |
+| `/server/help/mcp` | yes | yes | yes | Always registered (the MCP endpoint is always on) |
 
 Project pages (engines, bangs, tools, saved items …) are registered by the project in the same way in every template. The API-specific examples above apply to SERVER and HYBRID unchanged.
 
@@ -29000,7 +29024,7 @@ These rules tighten "Header Layout" above. A header that breaks one of them is a
 | No. | Rule |
 |-----|------|
 | 1 | **Allowed elements, in this order, and nothing else:** the brand link, `<nav class="nav-links">`, the hamburger label (below the desktop breakpoint), then `.header-actions` containing exactly the preferences link (or the owner dropdown) and the theme-toggle form. No language selector, no search box (a project's search lives in `<main>`), no install button, no sign-in or sign-up buttons, no sponsor or social icons, no second preferences link for mobile |
-| 2 | **Nav is application sections only:** Home plus the project's own sections, labels of one or two words, plain `<a>` elements, no dropdowns. About, Help, Privacy, Terms, Contact, Preferences and API or documentation links belong to the footer. The current page carries `aria-current="page"` and `.active`. A project with many sections groups them behind a landing page instead of growing the bar |
+| 2 | **Nav is application sections only:** Home plus the project's own sections, labels of one or two words, plain `<a>` elements, no dropdowns. About, Help, Privacy, Terms, Preferences and API or documentation links belong to the footer; the Contact form is linked nowhere (see "/server/contact" → "Who can reach the form"). The current page carries `aria-current="page"` and `.active`. A project with many sections groups them behind a landing page instead of growing the bar |
 | 3 | **Mobile:** one hamburger (checkbox plus label, no JavaScript) opens the drawer; the preferences link and the theme toggle stay in the bar and never move into the drawer; the drawer holds exactly the nav links |
 | 4 | **No JavaScript required:** the theme toggle is a form `POST` whose target is the server-computed next mode; no `<noscript>` copy of a control; option and button labels come from the value enum (`dark`, `light`, `auto` → their translated names), never by position |
 | 5 | **Brand:** the branding logo (with `alt` equal to the application name) or the application name as text, linking to `/`; one brand element |
@@ -29032,7 +29056,7 @@ Language is detected automatically and changed in Preferences. It is never a hea
 |------|----------------|
 | /server/about | IDEA.md → name, tagline, description, features, links |
 | /server/help | IDEA.md → real endpoints, real curl examples, real FAQ |
-| /server/privacy | Config → `server.privacy.*` settings |
+| /server/privacy | Built-in privacy text (project data), extended by `server.branding.content.privacy`; `server.privacy.*` only switches behavior (consent, `data.sold`) |
 | /server/terms | Config → customizable, default template |
 | /server/contact | Config → `server.contact.general.*` + `server.pages.contact.*` settings |
 
@@ -29500,7 +29524,7 @@ When the admin panel is enabled (PART 28) these are editable at `/server/{admin_
 
 **Above the form the page MUST render this purpose notice (the wording may vary, the meaning may not):** "This form is only for security reports, terms violations at a URL on this site, DMCA notices and privacy requests. It cannot be used for support, bug reports, feature requests or general questions."
 
-**Below the form, the page MUST render exactly two informational sections — the content is spec'd here; never improvise it:**
+**Below the chooser (the page shown before a type is selected) the page MUST render exactly two informational sections; below a type-specific form only the Security Issues pointer is rendered — the content is spec'd here; never improvise it:**
 
 | Section | Content |
 |---------|---------|
@@ -29817,6 +29841,16 @@ curl -H "Accept: application/xml" https://jokes.example.com/api/v1/joke</code></
 
 **Default template provided, customizable via the config file (and the admin panel when enabled — PART 28).**
 
+**Built-in default terms text (used when `server.branding.content.terms` has no entry).** The default names no jurisdiction and no legal entity, because the template cannot know them; the operator adds both when customizing the terms:
+
+| Section | Default content |
+|---------|-----------------|
+| Acceptance | Using `{app_name}` means accepting these terms; stop using it if you do not agree |
+| Acceptable use | No unlawful use, no abuse of other people, no attempt to bypass rate limits or access controls, and no testing beyond the security policy at `/server/security/policy` |
+| Liability | The service is provided as is, without warranty of any kind; to the extent the law allows, the operator is not liable for loss arising from its use |
+| Changes | The terms may change; the current text on this page applies from the moment it is published |
+| Governing law | The law of the place where the operator is established, unless the operator's own terms text names another |
+
 ### Configuration
 
 ```yaml
@@ -29892,7 +29926,7 @@ When the admin panel is enabled (PART 28) all pages are editable at `/server/{ad
 
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/api/{api_version}/server/about` | GET | About page (JSON, no auth): `title`, `content` (the source of `server.branding.content.about` for the request's language after placeholder substitution, never rendered HTML; an empty string when there is no entry) and `format` (`markdown`, `html` or `text`, from its `format`; `markdown` when there is no entry) |
+| `/api/{api_version}/server/about` | GET | About page (JSON, no auth): `title`, `content` (the source of `server.branding.content.about` for the request's language after placeholder substitution, never rendered HTML; the built-in About text derived from IDEA.md (name, tagline, description, features, links) as Markdown when there is no entry) and `format` (`markdown`, `html` or `text`, from its `format`; `markdown` when there is no entry) |
 | `/api/{api_version}/server/privacy` | GET | Privacy policy (JSON) |
 | `/api/{api_version}/server/contact` | GET | Contact form description (JSON, no auth): `fields` (list of `{name, type, required, max_length, required_when, max_length_when}`, see "Length limits"), `captcha` (`{provider: "simple", captcha_id, question}` for `simple`; `{provider, site_key, fallback}` for `recaptcha` and `hcaptcha`, where `fallback` is the same `{provider: "simple", captcha_id, question}` object; a new challenge on every call), `security_url`, `abuse_email`. Nothing else about recipients |
 | `/api/{api_version}/server/contact` | POST | Submit the report form in two calls (the first returns the `review` and a `review_token` and delivers nothing; the second repeats every field with `review_token` and `confirmed: true` and delivers): the fields above (including `type` and the fields that type requires), the `form_token` from the `GET`, no `website`, plus ONE captcha proof (`captcha_response`, or `captcha_id` + `captcha_answer`; see "No-JavaScript fallback and the simple challenge") |
@@ -41596,20 +41630,7 @@ func LanguageMiddleware(next http.Handler) http.Handler {
 }
 ```
 
-**Language selector UI (in header/footer):**
-
-```html
-<form method="get" action="">
-  <select name="lang" aria-label="{{t .Lang `common.select_language`}}">
-    {{range .AvailableLanguages}}
-      <option value="{{.Code}}" {{if eq .Code $.Lang}}selected{{end}}>{{.NativeName}}</option>
-    {{end}}
-  </select>
-  <button type="submit">Go</button>
-</form>
-```
-
-The selector is a plain GET form — the server already handles `?lang=`, so switching languages works with zero JavaScript. As progressive enhancement, external JS may auto-submit the form on `change` and hide the Go button (bound via `addEventListener` in an external file — never inline, the CSP blocks inline event handlers).
+**Language selection UI.** There is no language selector in the header and none on any other page (PART 16 → "Header and Navigation Conformance" and "Language Selection"). The visitor changes the language only on `/server/preferences`, in the Language section: one `<select name="lang">` of native names whose first option is Automatic. The footer shows the active language name as a plain link to `/server/preferences#language`. Saving is a normal form `POST` and works without JavaScript; `?lang=` stays the one-shot link form for sharing.
 
 **Shareable links:** Users can share `https://example.com/page?lang=fr` to force French for the recipient. After the first visit, the cookie persists and `?lang=` is no longer needed.
 
@@ -42987,7 +43008,7 @@ server:
     # Seconds to wait for Tor to publish its control_port file at startup (10-300)
     startup_timeout: 60
 
-    # Circuit timeout in seconds (how long before giving up)
+    # Circuit timeout in seconds (how long before giving up) — rendered into torrc as CircuitBuildTimeout
     circuit_timeout: 60
 
     # Bootstrap timeout in seconds (wait for Tor network connection)
@@ -42997,10 +43018,10 @@ server:
     # Scrub sensitive info from Tor logs
     safe_logging: true
 
-    # Maximum concurrent streams per circuit
+    # Maximum concurrent streams per circuit — rendered into torrc as HiddenServiceMaxStreams (hidden service circuits)
     max_streams_per_circuit: 100
 
-    # Close circuit when stream limit exceeded
+    # Close circuit when stream limit exceeded — rendered into torrc as HiddenServiceMaxStreamsCloseCircuit
     close_circuit_on_stream_limit: true
 
     # --- Bandwidth Settings ---
@@ -43015,7 +43036,7 @@ server:
     max_monthly_bandwidth: "100 GB"
 
     # --- Hidden Service Settings ---
-    # Number of introduction points (3-10, more = resilient but more traffic)
+    # Number of introduction points (3-10, more = resilient but more traffic) — rendered into torrc as HiddenServiceNumIntroductionPoints
     num_intro_points: 3
 
     # Virtual port for hidden service (what users connect to)
@@ -43056,7 +43077,7 @@ This closes the `onion visitor → app → onion/clearnet target` path (e.g. an 
 
 **torrc hardening (in addition to the settings above):**
 - `ExitRelay 0`, `ExitPolicy reject *:*` — never act as an exit
-- No `ORPort` directive — client + hidden service only, never a relay
+- `ORPort 0` — relaying is explicitly disabled (the generated torrc carries that one line and no relay listener is ever configured); client + hidden service only, never a relay
 - `PublishServerDescriptor 0`, `DirPort 0` — never publish as a relay/directory
 - `SocksPort` bound to `127.0.0.1:auto` only — never `0.0.0.0`, never reachable from the hidden-service listener
 - `SocksPolicy accept 127.0.0.1` (implicit reject all else)
@@ -43823,6 +43844,12 @@ func getTorConfig(cfg *TorConfig, hsDir string, torBackendPort int) string {
         safeLogging = "0"
     }
 
+    // HiddenServiceMaxStreamsCloseCircuit takes 0 or 1
+    closeOnLimit := "0"
+    if cfg.CloseCircuitOnStreamLimit {
+        closeOnLimit = "1"
+    }
+
     // Monthly bandwidth accounting (if not "unlimited")
     var accountingConfig string
     if cfg.MaxMonthlyBandwidth != "" && cfg.MaxMonthlyBandwidth != "unlimited" {
@@ -43853,7 +43880,10 @@ SafeLogging %s
 
 # Circuit limits (MaxClientCircuitsPending comes from server.tor.max_circuits)
 MaxCircuitDirtiness 600
-MaxClientCircuitsPending {max_circuits}
+MaxClientCircuitsPending %d
+# Fixed circuit build timeout from server.tor.circuit_timeout
+LearnCircuitBuildTimeout 0
+CircuitBuildTimeout %d
 
 # Bandwidth limits per second (from config)
 BandwidthRate %s
@@ -43884,10 +43914,14 @@ DisableDebuggerAttachment 1
 # ============================================================
 HiddenServiceDir %s
 HiddenServiceVersion 3
+HiddenServiceNumIntroductionPoints %d
+HiddenServiceMaxStreams %d
+HiddenServiceMaxStreamsCloseCircuit %s
 HiddenServicePort %d 127.0.0.1:%d
 # Export per-rendezvous-circuit ID via HAProxy PROXY protocol (opaque token, not an IP)
 HiddenServiceExportCircuitID haproxy
-`, socksConfig, controlConfig, safeLogging, cfg.BandwidthRate, cfg.BandwidthBurst, accountingConfig, hsDir, cfg.VirtualPort, torBackendPort)
+`, socksConfig, controlConfig, safeLogging, cfg.MaxCircuits, cfg.CircuitTimeout, cfg.BandwidthRate, cfg.BandwidthBurst, accountingConfig,
+        hsDir, cfg.NumIntroPoints, cfg.MaxStreamsPerCircuit, closeOnLimit, cfg.VirtualPort, torBackendPort)
 }
 ```
 
@@ -43904,6 +43938,12 @@ HiddenServiceExportCircuitID haproxy
 | `ExitPolicy reject *:*` | Block all | Extra safety |
 | `MaxCircuitDirtiness 600` | 10 minutes | Keep circuits longer |
 | `MaxClientCircuitsPending {max_circuits}` | `server.tor.max_circuits` (default 32) | Cap on circuits under construction at once |
+| `CircuitBuildTimeout {circuit_timeout}` | `server.tor.circuit_timeout` (default 60) | Seconds before a circuit build is abandoned; `LearnCircuitBuildTimeout 0` makes Tor honor the fixed value |
+| `HiddenServiceNumIntroductionPoints {num_intro_points}` | `server.tor.num_intro_points` (default 3) | Introduction points of the hidden service |
+| `HiddenServiceMaxStreams {max_streams_per_circuit}` | `server.tor.max_streams_per_circuit` (default 100) | Streams one rendezvous circuit may carry |
+| `HiddenServiceMaxStreamsCloseCircuit {0 or 1}` | `server.tor.close_circuit_on_stream_limit` (default true → 1) | Close the circuit when the stream limit is exceeded, instead of dropping the extra stream |
+
+**Interpolation:** every value in the generated torrc comes from the `server.tor.*` setting named in the table above and is written as a plain literal (integers in decimal); no `{name}` placeholder is ever left in the file. The four settings that map to Tor options are: `circuit_timeout` → `CircuitBuildTimeout` (with `LearnCircuitBuildTimeout 0`), `max_streams_per_circuit` → `HiddenServiceMaxStreams`, `close_circuit_on_stream_limit` → `HiddenServiceMaxStreamsCloseCircuit`, and `num_intro_points` → `HiddenServiceNumIntroductionPoints`.
 
 **Runtime Port Detection:**
 - Ports are NEVER hardcoded or saved - always detected at runtime
@@ -44512,7 +44552,7 @@ Tor Hidden Service: Connected
 
 ---
 
-## PART 27.2: I2P Eepsite (OPTIONAL — opt-in)
+## PART 27.2: I2P Eepsite (OPTIONAL — opt-in outside containers)
 
 > **Trust chain integration:** an `.b32.i2p` request is trusted for FQDN resolution exactly like a `.onion` request — the eepsite host is served by the app's own I2P provider, so no reverse-proxy header or IP check applies. See **PART 12 → overlay HTTP semantics** for request detection, `BuildURL` / `GetURLVars` behavior, and the privacy rules (no HTTPS upgrade, no HSTS, no cert).
 
