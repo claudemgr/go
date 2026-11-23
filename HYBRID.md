@@ -19,8 +19,9 @@
 have_name=$(grep -cE '^project_name:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
 have_org=$(grep -cE '^project_org:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
 have_internal=$(grep -cE '^internal_name:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
+have_internal_org=$(grep -cE '^internal_org:[[:space:]]*.+$' IDEA.md 2>/dev/null || true)
 
-[ "$have_name" -eq 0 ] || [ "$have_org" -eq 0 ] || [ "$have_internal" -eq 0 ] && \
+[ "$have_name" -eq 0 ] || [ "$have_org" -eq 0 ] || [ "$have_internal" -eq 0 ] || [ "$have_internal_org" -eq 0 ] && \
   echo "SETUP NEEDED - IDEA.md project variables incomplete"
 ```
 
@@ -16776,9 +16777,9 @@ server:
 
 When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requirements):
 1. User data is **anonymized** (not deleted) to preserve audit trail
-2. All PII is removed, replaced with `[REDACTED]` or anonymized IDs
-3. Audit log entries reference anonymized user ID
-4. Original user ID mapping is deleted
+2. All PII is removed from the stored data, replaced with `[REDACTED]` or a new random ID
+3. Audit log entries are never rewritten (append-only, hash-chained): they identify the subject only by an opaque ID (never a name or email address), which names nobody once the record is gone
+4. Every mapping from that ID to a person is deleted
 5. This satisfies both erasure (PII gone) and retention (audit preserved)
 
 ### Compliance-Specific Behaviors
@@ -16954,7 +16955,7 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | Command | Behavior |
 |---------|----------|
 | `--maintenance data export (--user <username> \| --owner <prefix>) [--output FILE]` | Writes ONE JSON file (default `{project_name}-export-{subject}-{YYYYMMDD}.json` in the current directory, mode `0600`, `{subject}` being the username or the token prefix; `--output -` writes to stdout). Contents: `format: 1`, the subject kind (`user` or `owner`) and, for a user, the `system_users` metadata (username, uid, status, created, rotated and last-used times; NEVER the token or its hash) plus every row of every table that references `system_users(username)` ("Per-System-User Tokens"); for an owner, the token metadata (prefix, resource type, resource id, created, last used, expires, status; NEVER a token value or hash) plus the one resource it owns, in the same shape the API returns. Nothing about other subjects, no audit or security log lines |
-| `--maintenance data delete (--user <username> \| --owner <prefix>) [--yes]` | Deletes, in ONE transaction, for a user the `system_users` row (the foreign keys cascade to every per-user record), and for an owner the `api_tokens` row and the resource it owns. The operator first types the username or the token prefix to confirm (`--yes` skips the prompt for scripts). A retention standard (HIPAA/SOC2) never blocks the command: what it requires to keep is the audit log, and the log keeps only an anonymized id (a new random id; the original mapping is deleted in the same transaction, the rule above). The tables that hold per-user records are found from the schema and never listed in IDEA.md ("Per-System-User Tokens"); `--owner` deletes the one resource. A kind kept for a legal or contractual reason is the one exception declared in IDEA.md (name and reason): it is not deleted, and its reference to the subject is replaced by the same anonymized id. `--user` never touches the operating-system account, the user's home directory, `user.token` or running instances (the operating system owns them); it only removes what the server database holds, so the user's `sys_` token stops working at once. The command prints how many items were deleted and how many were anonymized, and `compliance.data_deletion_completed` records both counts. Backups are not rewritten: the data leaves them with their normal retention |
+| `--maintenance data delete (--user <username> \| --owner <prefix>) [--yes]` | Deletes, in ONE transaction, for a user the `system_users` row (the foreign keys cascade to every per-user record), and for an owner the `api_tokens` row and the resource it owns. The operator first types the username or the token prefix to confirm (`--yes` skips the prompt for scripts). A retention standard (HIPAA/SOC2) never blocks the command: what it requires to keep is the audit log, and the log is never rewritten (it is append-only and hash-chained): its entries keep the id they were written with, an opaque identifier that names nobody once the record and any mapping from that id to a person are deleted in the same transaction (the rule above). The tables that hold per-user records are found from the schema and never listed in IDEA.md ("Per-System-User Tokens"); `--owner` deletes the one resource. A kind kept for a legal or contractual reason is the one exception declared in IDEA.md (name and reason): it is not deleted, and its reference to the subject is replaced by a new random id (the same id in every retained row of that subject). `--user` never touches the operating-system account, the user's home directory, `user.token` or running instances (the operating system owns them); it only removes what the server database holds, so the user's `sys_` token stops working at once. The command prints how many items were deleted and how many were anonymized, and `compliance.data_deletion_completed` records both counts. Backups are not rewritten: the data leaves them with their normal retention |
 | `--maintenance compliance report` | Prints a plain-text summary: the enabled standards with their effective settings, the retention periods, counts (system users, active `own_` tokens, open security reports), the compliance events of the last 30 days, the time of the last backup, and the audit log integrity result (`intact (N entries)`, or `broken at <file>:<line>`; see "Audit Log Integrity"). It contains counts and settings only, never personal data |
 
 In the audit events below, `User ID` means the subject: the username of a system user or the prefix of an `own_` token (never a token value). After a deletion the log keeps only the anonymized id.
@@ -16968,8 +16969,8 @@ In the audit events below, `User ID` means the subject: the username of a system
 | `compliance.data_export_requested` | User requested data export | User ID, request ID |
 | `compliance.data_export_completed` | Data export ready | User ID, request ID, file size |
 | `compliance.data_deletion_requested` | User requested deletion | User ID, request ID |
-| `compliance.data_deletion_completed` | Deletion completed | User ID (anonymized after) |
-| `compliance.consent_updated` | A visitor or owner changed cookie consent | Consent type, new value, policy version (`server.privacy.consent.policy.version`); `actor.id` only when the visitor holds an owner cookie, otherwise `actor.type: anonymous` and no `actor.id`; `actor.ip` anonymized (last IPv4 octet or last 80 IPv6 bits zeroed) |
+| `compliance.data_deletion_completed` | Deletion completed | User ID (as written; audit entries are never rewritten) |
+| `compliance.consent_updated` | A visitor or owner changed cookie consent | Consent type, new value, policy version (`server.privacy.consent.policy.version`); `actor.id` only when the visitor holds an owner cookie, otherwise `actor.type: anonymous` and no `actor.id`; `actor.ip` anonymized (last IPv4 octet or last 80 IPv6 bits zeroed); for a Tor request `actor.ip` is the `tor:{circuit_id}` key, or the sentinel `tor` when circuit-ID export is off ("Tor Request Logging & Identity"), never an IP address |
 | `compliance.report_generated` | Compliance report generated | Report type, generated by |
 
 ### Data Protection
@@ -18386,6 +18387,8 @@ type ConsentConfig struct {
     Policy                struct {
         Text string `yaml:"text"`
         URL  string `yaml:"url"`
+        // Recorded in every compliance.consent_updated event; default "1"
+        Version string `yaml:"version"`
     } `yaml:"policy"`
     Buttons struct {
         Decline string `yaml:"decline"`
@@ -23523,6 +23526,36 @@ document.addEventListener('click', function(e) {
 **All components use these CSS variables for consistent theming:**
 
 ```css
+/* Spacing (4px base): the ONE canonical scale, identical in every template; no other spacing tokens exist */
+:root {
+  --space-0:  0;
+  --space-px: 1px;
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-7:  1.75rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+
+  /* Border radius: the ONE canonical scale, identical in every template */
+  --radius-none: 0;
+  --radius-sm:   0.125rem;
+  --radius-base: 0.25rem;
+  --radius-md:   0.375rem;
+  --radius-lg:   0.5rem;
+  --radius-xl:   0.75rem;
+  --radius-2xl:  1rem;
+  --radius-3xl:  1.5rem;
+  --radius-full: 9999px;
+}
+
 html.theme-dark {
   /* Backgrounds — dark palette */
   --color-bg: #282a36;
@@ -26472,14 +26505,9 @@ src/server/static/
   --font-family: system-ui, -apple-system, sans-serif;
   --font-size-base: 1rem;
 
-  /* Spacing */
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 2rem;
+  /* Spacing: use the --space-* scale from the CSS Variable Reference; never define another scale here */
 
-  /* Borders */
-  --border-radius: 0.25rem;
+  /* Borders: use the --radius-* scale from the CSS Variable Reference; never define another scale here */
 }
 ```
 
@@ -26653,16 +26681,15 @@ partial/
 
 | Element | Position | Purpose | Contents |
 |---------|----------|---------|----------|
-| `<nav>` | TOP | Navigation | Links to app sections, user menu |
+| `<nav>` | TOP | Navigation | Links to app sections and, while signed out, the Login link |
 | Header `.header-actions` | TOP | Cross-cutting UI state | Profile/preferences zone (Guest Header when no session, Profile dropdown when signed in — see above), then theme toggle — in that order, right of the centered nav links |
 | `<footer>` | BOTTOM | Information | About, Privacy, Help, Preferences, GitHub, version (never the report form) |
 
 **Nav contains (app navigation):**
 - Home link
 - App-specific sections (project-defined)
-- Session menu (right side):
-  - If signed in: Username dropdown → Theme, Preferences, Help, Logout
-  - If signed out: Login link
+- Login link, only while nobody is signed in (a plain `<a>` link as the last nav item)
+- No session menu in the nav: a signed-in user gets the User Menu (Username → Theme, Preferences, Help, Logout) in `.header-actions`
 
 **Nav does NOT contain:**
 - API link (users access via `/server/docs/swagger` if needed)
@@ -28539,7 +28566,7 @@ Admin-panel-only (PART 28) — not rendered unless the admin panel is enabled.
 **Admin Footer CSS:**
 ```css
 .admin-footer {
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--space-2) var(--space-4);
   background: var(--color-bg-secondary);
   border-top: 1px solid var(--color-border);
   text-align: center;
@@ -28551,7 +28578,7 @@ Admin-panel-only (PART 28) — not rendered unless the admin panel is enabled.
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--space-2);
   flex-wrap: wrap;
 }
 
@@ -28965,6 +28992,8 @@ func trackingScript(r *http.Request) template.HTML {
 
 **Every page under `/server/*` — and every sub-page of `/server/preferences/` and `/server/help/` — belongs to one family: the same chrome, the same page shell, the same components. A page that looks or behaves differently from its siblings is a defect, not a design choice.**
 
+**The admin tree `/server/{admin_path}/**` is the one exception to the shared chrome.** "Admin Panel Isolation" is about routes, authentication and sessions, and the admin panel keeps its own layout (`admin.tmpl`, with the admin header and footer, "Admin Layout"): the public header, its navigation and the public footer are not rendered there, and "Header and Navigation Conformance" does not apply to the admin header. Inside `<main>` the page shell, the shared components and classes and the accessibility rules apply unchanged: `.page-header` with one `<h1 class="page-title">`, `.section-card`, skip links as the first focusable elements, no inline style or script, and a page usable without JavaScript.
+
 ### Page Shell (one markup for every `/server/*` page)
 
 ```html
@@ -28993,6 +29022,14 @@ func trackingScript(r *http.Request) template.HTML {
 | **Cards** | Content lives in `.section-card`, one concern per card, each labelled by its `<h2>` (`aria-labelledby`). No bare `<h2>` sections on the page background, no card inside a card, no card without a heading |
 | **Classes** | Only the shared theme classes (see "Shared Theme Classes"). A page never borrows a wrapper class from another page type (a help page is not a `search-section`, a preferences page is not a `paste-view`) and never invents a page-specific wrapper |
 | **Frontend rules** | The "HTML5 & CSS Over JavaScript", "CSS Rules", "JavaScript Rules", "Template Rules" and "CSRF" sections apply unchanged: semantic HTML5 first, no inline `style`, executable `<script>` body (the `application/ld+json` data block is the one exception) or `on*` handler, every state-changing form is a `POST` with the CSRF token, and the page is fully usable without JavaScript |
+
+**Interactive API documentation pages (`/server/docs/swagger`, `/server/docs/graphql`).** These two pages follow the shell above: the shared chrome, `<h1 class="page-title">`, `.page-lead`, and the interactive tool mounted inside one `.section-card`. The tool itself (Swagger UI, GraphiQL) is a JavaScript application and is the one place a page may require JavaScript, so the "usable without JavaScript" rule applies to everything around it, not to the tool:
+
+| Rule | Detail |
+|------|--------|
+| **Assets** | The tool's JavaScript and CSS are served from the project's own static files (`'self'`, never a CDN) and its start-up code lives in a static file (no inline script, no inline style, no `on*` handler), so the Content Security Policy of PART 11 holds unchanged |
+| **Theme** | The tool follows the project-wide theme through the project's Swagger and GraphiQL theme modules and the shared CSS custom properties; no hardcoded colors |
+| **Without JavaScript** | A `<noscript>` card states that the interactive view needs JavaScript and links to the plain endpoints: the OpenAPI JSON (`/api/{api_version}/server/swagger`) or the GraphQL endpoint (`/api/{api_version}/server/graphql`) |
 | **Same chrome everywhere** | The same header, footer, consent banner and skip links on every page, error pages included. A page never adds, removes or reorders header or footer elements |
 
 **Shared shell CSS (in `components.css`, tokens only, no pixel literals except the width caps):**
@@ -29025,7 +29062,7 @@ func trackingScript(r *http.Request) template.HTML {
 | Markdown text | Any text that comes from configuration, the registry or an OpenAPI description (tool descriptions, branding content, help content) is rendered from Markdown to sanitized HTML; literal backticks or Markdown markers never reach the page |
 | Icons | Header icons are inline SVG using `currentColor`, with the accessible name on the control (`aria-label`); the hamburger is the `☰` glyph or an SVG; an emoji is never a header control |
 
-**Polish standard (what "uniform and professional" means, all measurable):** spacing only from the `--space-*` tokens and corners from `--radius`; one type scale; prose lines at most `70ch`; the same card padding, border and radius everywhere; destructive actions visually separate from safe ones and always behind a confirmation popover; sentence-case labels without trailing punctuation; the same word for the same thing on every page ("token", "revoke", "sync"); no layout shift on load; visible focus rings; contrast from the token pairs only; phone, tablet and desktop layouts defined per page type (one column on phones, content never wider than its container modifier).
+**Polish standard (what "uniform and professional" means, all measurable):** spacing only from the `--space-*` tokens and corners from the `--radius-*` tokens; one type scale; prose lines at most `70ch`; the same card padding, border and radius everywhere; destructive actions visually separate from safe ones and always behind a confirmation popover; sentence-case labels without trailing punctuation; the same word for the same thing on every page ("token", "revoke", "sync"); no layout shift on load; visible focus rings; contrast from the token pairs only; phone, tablet and desktop layouts defined per page type (one column on phones, content never wider than its container modifier).
 
 **Page conformance test (required, runs in CI).** For every registered page (see below) and every error page the test renders the HTML and asserts: exactly one `<main>` and one `<h1>`; the skip links come first; no inline `style` attribute, no `<style>` element, no executable `<script>` body (the one exception is the `<script type="application/ld+json">` structured-data block, which is data and is never executed), and no `on*` attribute; every `<img>` has `alt`; every form control has a label; every `POST` form carries `csrf_token`; every `<table>` has a `<thead>` and sits in `.table-wrapper`; every internal link resolves; the header contains only the elements allowed by "Header and Navigation Conformance"; a sub-page has exactly one breadcrumb link to its hub and a hub has none.
 
@@ -29083,8 +29120,8 @@ These rules tighten "Header Layout" above. A header that breaks one of them is a
 
 | No. | Rule |
 |-----|------|
-| 1 | **Allowed elements, in this order, and nothing else:** the brand link, `<nav class="nav-links">`, the hamburger label (below the desktop breakpoint), then `.header-actions` containing exactly: the Guest Header (the preferences link, then the theme-toggle form) when there is no session; otherwise the User Menu alone, whose dropdown holds the theme toggle ("Theme Toggle", "User Menu"). No language selector, no search box (a project's search lives in `<main>`), no install button, no sign-in or sign-up buttons, no sponsor or social icons, no second preferences link for mobile. The one addition is the operator's `branding.content.header` fragment ("Page Content"): when the operator sets it, it is rendered as the last child of `<header>`, after `.header-actions`; with the entry unset nothing is rendered. The conformance test renders every page with it unset, and one more render with it set asserts the fragment is the last child and that nothing else in the header changed. This list is the content of `<header>`: the `nav-toggle` checkbox, the drawer panel and the scrim are not header elements but siblings of `<header>` in `<body>` (as in the example), and the `~` selectors need only those three to share that parent |
-| 2 | **Nav is application sections only:** Home plus the project's own sections, labels of one or two words, plain `<a>` elements, no dropdowns. About, Help, Privacy, Terms, Preferences and API or documentation links belong to the footer; the Contact form is linked nowhere (see "/server/contact" → "Who can reach the form"). The current page carries `aria-current="page"` and `.active`. A project with many sections groups them behind a landing page instead of growing the bar |
+| 1 | **Allowed elements, in this order, and nothing else:** the brand link, `<nav class="nav-links">`, the hamburger label (below the desktop breakpoint), then `.header-actions` containing exactly: the Guest Header (the preferences link, then the theme-toggle form) when there is no session; otherwise the User Menu alone, whose dropdown holds the theme toggle ("Theme Toggle", "User Menu"). No language selector, no search box (a project's search lives in `<main>`), no install button, no sign-in or sign-up buttons in `.header-actions` (the Login link is a nav link, rule 2), no sponsor or social icons, no second preferences link for mobile. The one addition is the operator's `branding.content.header` fragment ("Page Content"): when the operator sets it, it is rendered as the last child of `<header>`, after `.header-actions`; with the entry unset nothing is rendered. The conformance test renders every page with it unset, and one more render with it set asserts the fragment is the last child and that nothing else in the header changed. This list is the content of `<header>`: the `nav-toggle` checkbox, the drawer panel and the scrim are not header elements but siblings of `<header>` in `<body>` (as in the example), and the `~` selectors need only those three to share that parent |
+| 2 | **Nav is application sections only:** Home plus the project's own sections, plus the Login link (and Register when registration is open) while nobody is signed in and Multi-User is on; labels of one or two words, plain `<a>` elements, no dropdowns. About, Help, Privacy, Terms, Preferences and API or documentation links belong to the footer; the Contact form is linked nowhere (see "/server/contact" → "Who can reach the form"). The current page carries `aria-current="page"` and `.active`. A project with many sections groups them behind a landing page instead of growing the bar |
 | 3 | **Mobile:** one hamburger (checkbox plus label, no JavaScript) opens the drawer; the preferences link and the theme toggle stay in the bar and never move into the drawer; the drawer holds exactly the nav links |
 | 4 | **No JavaScript required:** the theme toggle is a form `POST` whose target is the server-computed next mode; no `<noscript>` copy of a control; option and button labels come from the value enum (`dark`, `light`, `auto` → their translated names), never by position |
 | 5 | **Brand:** the branding logo (with `alt` equal to the application name) or the application name as text, linking to `/`; one brand element |
@@ -41253,11 +41290,11 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 
 ```yaml
 site_name: {PROJECT_NAME}
-# site_url: Use whichever RTD URL format matches your project:
+# site_url: the predictable default is the org-project form below; change it only when the RTD dashboard shows another URL (then update the badge and links in one commit):
 #   https://{project_org}-{project_name}.readthedocs.io  (org-project)
 #   https://{project_name}.readthedocs.io               (project only)
 #   https://{custom_rtd_address}                       (custom domain)
-site_url: https://{RTD_URL}
+site_url: https://{project_org}-{project_name}.readthedocs.io
 site_description: "{Project description}"
 site_author: {project_org}
 
