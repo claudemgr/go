@@ -129,7 +129,7 @@ AI reads AI.md for the first time
 
 **See `IDEA.md` for features, data models, and business rules.**
 
-IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH for the template baseline; only a SPEC.md override can differ from it.
+IDEA.md is the project PLAN. AI.md (this file) is the authoritative template baseline. The order of authority is: a project's SPEC.md (optional overrides) > AI.md > global CLAUDE.md; IDEA.md never overrides any of them.
 
 | File | Role | Update When |
 |------|------|-------------|
@@ -4713,6 +4713,8 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 | `--maintenance token revoke <prefix>` | 🔐 Auth | Requires `server.token` OR root, plus typed confirmation | N/A |
 | `--maintenance data <export\|delete> (--user <username> \| --owner <prefix>)` | 🔐 Auth | Requires `server.token` OR root | N/A |
 | `--maintenance compliance report` | 🔐 Auth | Requires `server.token` OR root | N/A |
+| `--maintenance scheduler list`, `show <id>`, `history <id>` | 🔐 Auth | Requires `server.token` OR root | N/A |
+| `--maintenance scheduler run <id>`, `enable <id>`, `disable <id>` | 🔐 Auth | Requires `server.token` OR root; each run, enable and disable is audited | N/A |
 | (normal start) | ❌ No | Adapts paths to current user | N/A |
 
 **Key insight:** After service install, the `{internal_name}` user owns all data directories. However, sensitive operations require AUTHORIZATION, not just file access.
@@ -7660,7 +7662,7 @@ NO_COLOR=1 {project_name} --status | grep -E '✅|❌|⚠️|🚀'
 --color {auto|yes|no}
 # Language for output (default: auto, from LANG env)
 --lang {code}
---maintenance {backup,restore,update,mode,setup,pgp,security,secret,token,data,compliance,--help} [optional-file-or-setting-or-action]
+--maintenance {backup,restore,update,mode,setup,pgp,security,secret,token,data,compliance,scheduler,--help} [optional-file-or-setting-or-action]
 # Check/perform updates
 --update [check|yes|branch {stable|beta|devel}|--help]
 # Shell integration
@@ -7867,19 +7869,22 @@ func isOurProcessDarwin(pid int) bool {
 // +build windows
 
 // isProcessRunning checks if a process with given PID exists (Windows)
+// stillActive is the exit code GetExitCodeProcess reports for a running process (STILL_ACTIVE, 259);
+// golang.org/x/sys/windows does not export it
+const stillActive = 259
+
 func isProcessRunning(pid int) bool {
-    // On Windows, FindProcess succeeds for any valid PID
-    // Use OpenProcess with PROCESS_QUERY_LIMITED_INFORMATION to check
-    process, err := os.FindProcess(pid)
+    // OpenProcess takes the PID and returns a real process handle (a PID is NOT a handle)
+    handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
     if err != nil {
         return false
     }
-    // Try to get exit code - fails if process doesn't exist or no permission
-    // But for our own processes, this should work
+    defer windows.CloseHandle(handle)
     var exitCode uint32
-    handle := windows.Handle(uintptr(process.Pid))
-    err = windows.GetExitCodeProcess(handle, &exitCode)
-    return err == nil && exitCode == windows.STILL_ACTIVE
+    if err := windows.GetExitCodeProcess(handle, &exitCode); err != nil {
+        return false
+    }
+    return exitCode == stillActive
 }
 
 // isOurProcess verifies the process is actually our binary (Windows)
@@ -8007,7 +8012,8 @@ PHASE 3: Handle maintenance commands (NO startup)
    ├─ --maintenance secret     → rotate a project secret, exit
    ├─ --maintenance token      → manage API tokens, exit
    ├─ --maintenance data       → data maintenance operations, exit
-   └─ --maintenance compliance → compliance report, exit
+   ├─ --maintenance compliance → compliance report, exit
+   └─ --maintenance scheduler  → list, show, run, enable, disable or history a task, exit
 
 PHASE 4: Handle update commands (NO startup)
 ────────────────────────────────────────────
@@ -9359,7 +9365,7 @@ POST /pastes
 ```
 The server generates the token, stores `SHA-256(token)` in `api_tokens` with `resource_type="paste"` and `resource_id="abc123"`, then returns the raw token **once**. It is never retrievable again. API clients store it themselves (config file, env var). Browsers get **dual delivery**: the web-form create response shows the token once (copy button) AND sets an `owner_token` cookie (HttpOnly + Secure + SameSite=Strict + Path=/, Max-Age matching the token lifetime), so web management works with JS disabled; JS may additionally save it to `localStorage` as a convenience copy — never load-bearing.
 
-**Naming:** the JSON response field `owner_token` is fixed across all projects — never rename it. Browser storage names are project-unique: both the cookie and the localStorage key are `{project_name}_owner_token_XXXXXX`, where `XXXXXX` is a random suffix generated once at project creation and recorded verbatim in IDEA.md (e.g. `owner_token: pastebin_owner_token_5qvQQyc5`) — fixed for the project's lifetime so the server always knows which cookie to read, and unique so apps, forks, or sibling deployments on one domain never collide. The suffix is not a secret (cookie names are visible); HttpOnly protects the value. Spec text uses `owner_token` as shorthand for that cookie.
+**Naming:** the JSON response field `owner_token` is fixed across all projects — never rename it. Browser storage names are project-unique: both the cookie and the localStorage key are `{project_name}_owner_token_XXXXXXXX`, where `XXXXXXXX` is 8 random LOWERCASE letters (a-z only: no digits, no capitals) generated once at project creation and recorded verbatim in IDEA.md (e.g. `owner_token: pastebin_owner_token_qwhzkfta`) — fixed for the project's lifetime so the server always knows which cookie to read, and unique so apps, forks, or sibling deployments on one domain never collide. The suffix is not a secret (cookie names are visible); it is lowercase letters only so that credential and entropy scanners never read it as one, which makes it the ONE random-looking identifier IDEA.md may contain (the "credential-shaped string" ban of the secret-scanning rule does not apply to it); HttpOnly protects the value. Spec text uses `owner_token` as shorthand for that cookie.
 
 **Ownership check (every write/delete on a resource):**
 1. Extract `Authorization: Bearer own_...` header
@@ -10593,11 +10599,17 @@ update:
 
 **Why CLI download default is unauthenticated:** the CLI is the entry point for new users. Forcing auth on the download means they need a token before they can install the tool that obtains the token. Operators who run a private deployment can flip `cli.binary_download.require_auth` to `true`.
 
+**Autodiscover response.** `/api/autodiscover` follows the standard envelope like every JSON route (it is unversioned, not unenveloped): `{"ok": true, "data": {...}}`. `data.api.current_version` is the API version prefix the server serves (for example `v1`); `data.cli_versions` and `data.cli_min_version` are described below; the rest of `data` carries the server settings, config schema and options the CLI needs. A client, and every test helper, reads these fields under `data`.
+
+**CLI binaries: where they come from.** The binaries the server distributes live in `{data_dir}/cli/` (override: `cli.binary_download.dir`) and are provisioned by the OPERATOR, or by the image or package build, by copying the files of a release into it: `{project_name}-cli-{os}-{arch}[.exe]`, `version.txt` and `sha256.txt` (the release already produces all three: "Release Artifacts"). The server never builds, downloads or edits them. At start, and whenever the directory changes, it derives what it publishes itself: the platforms are the `{os}-{arch}` of the files present, `version` is the line of `version.txt`, and `sha256` is read from `sha256.txt` AND recomputed from the file; a file whose hash does not match is not published and a WARN names it. An empty or missing directory publishes `cli_versions: {}`, `/cli/binaries/*` answers `404 NOT_FOUND`, and the CLI reports that no update is available. `cli_min_version` comes only from `update.cli_min_version`.
+
 **Configuration (server `server.yml`):**
 
 ```yaml
 cli:
   binary_download:
+    # Directory holding the release files the server distributes (default {data_dir}/cli)
+    dir: "{data_dir}/cli"
     # false (default): the CLI binary download is public; true: it needs an Authorization: Bearer token
     require_auth: false
 ```
@@ -11156,7 +11168,7 @@ if env.IsAutoDetectDisplayModeGUI() {
 
 | DisplayMode | Priority | When Auto-Detected | CLI Binary Behavior |
 |-------------|----------|-------------------|---------------------|
-| **DisplayModeGUI** | 1 | Native display, no remote | Launch native GUI (`gogpu/ui`, pure Go) |
+| **DisplayModeGUI** | 1 | Native display, no remote | Launch native GUI (`gogpu/ui`) in the separate `gui` build; the default static client uses the TUI ("GUI build separation") |
 | **DisplayModeTUI** | 2 | Interactive terminal | Launch bubbletea TUI |
 | **DisplayModeCLI** | 3 | Command provided or piped | Text output with colors |
 | **DisplayModeHeadless** | 4 | No display, no TTY | Error (CLI requires interaction) |
@@ -11469,10 +11481,12 @@ func EnsureConfigured() error {
 
 | Platform | Toolkit | Notes |
 |----------|---------|-------|
-| **Linux** | `github.com/gogpu/ui` + `github.com/gogpu/gogpu` | Pure Go, zero CGO — `goffi` `dlopen`s `libX11`/`libwayland-client` at runtime, no link-time C dependency; native Wayland, not XWayland compat |
+| **Linux** | `github.com/gogpu/ui` + `github.com/gogpu/gogpu` | Pure Go, zero CGO — `goffi` `dlopen`s `libX11`/`libwayland-client` at runtime, no link-time C dependency; native Wayland, not XWayland compat. The binary still needs the system loader, so it is the separate `gui` build only |
 | **macOS** | `github.com/gogpu/ui` + `github.com/gogpu/gogpu` | Pure Go, no cgo — Metal access via the Objective-C runtime through `goffi` |
 | **Windows** | `github.com/gogpu/ui` + `github.com/gogpu/gogpu` | Pure Go, no cgo — DX12 via `goffi` |
 | **BSD** | none | `gogpu/gogpu`'s windowing layer does not implement BSD yet (stubbed via build tags). Compile GUI support out on `freebsd`/`netbsd`/`openbsd` (`caps.GUISupported == false`); falls back to TUI, or CLI if no TTY (see APPLICATION.md's Smart Detect Rules) |
+
+**GUI build separation (REQUIRED).** `gogpu` loads the platform's graphics libraries through `goffi`, so a binary that contains it depends on the system dynamic loader even with `CGO_ENABLED=0` (built in the Alpine toolchain on Linux, that is the musl loader): it is NOT a static, cross-distribution binary and it would not even start in a Debian test container. The GUI is therefore compiled out of every default build. The default client `{project_name}-cli-{os}-{arch}` (and the server and the TUI) is built WITHOUT the `gui` build tag: fully static, runs on every distribution, and `caps.GUISupported` is `false`, so a request for GUI mode resolves to the TUI. The GUI is a separate, OPTIONAL artifact `{project_name}-cli-gui-{os}-{arch}`, built with `-tags gui` for Linux, macOS and Windows only; it is documented as dynamically linked (on Linux it needs the loader of the toolchain that built it) and desktop-only, and the update flow of the static client never replaces it.
 
 **One toolkit, one implementation, every platform GUI is supported on.** `gogpu/ui` (+ `gogpu/gogpu` for windowing) is cross-platform in a single codebase for Linux/macOS/Windows — there is no per-OS launcher file and no `runtime.GOOS` dispatch. `gioui.org` (Gio) and `fyne.io/fyne/v2` are **NOT compliant** — both require cgo on Linux (Gio's own install docs list `libwayland-dev`/`libx11-dev`/`libxkbcommon-x11-dev`/etc.; Fyne is built on `go-gl`/`glfw`) and are therefore banned project-wide, not just discouraged.
 
@@ -18854,19 +18868,23 @@ type TorInfo struct {
     Enabled  bool   `json:"enabled"`
     // Hidden service active
     Running  bool   `json:"running"`
-    // "disabled", "starting", "healthy" or "unavailable" - never free text
+    // Full lifecycle for operators: "disabled", "no_provider", "starting", "building", "running" or "error" (the CLI --status values)
+    State    string `json:"state"`
+    // The normalized four-word contract for clients, mapped from State: "disabled", "starting", "healthy" or "unavailable" - never free text
     Status   string `json:"status"`
     // "abc123...xyz.onion" (56 chars, v3)
     Hostname string `json:"hostname"`
 }
 
-// I2PInfo - from I2P manager (PART 27.2). Every field is always present; disabled means enabled false, running false, status "disabled", empty hostname and provider "none".
+// I2PInfo - from I2P manager (PART 27.2). Every field is always present, `state` (the lifecycle, for operators) and `status` (the four-word contract, for clients, mapped from `state`) alike; clients branch on `status`, never on `state`; disabled means enabled false, running false, status "disabled", empty hostname and provider "none".
 type I2PInfo struct {
     // features.i2p.enabled (true by default in a container, false elsewhere unless opted in)
     Enabled  bool   `json:"enabled"`
     // Eepsite active
     Running  bool   `json:"running"`
-    // "disabled", "starting", "healthy" or "unavailable" - never free text
+    // Full lifecycle for operators: "disabled", "no_provider", "starting", "building", "running" or "error" (the CLI --status values)
+    State    string `json:"state"`
+    // The normalized four-word contract for clients, mapped from State: "disabled", "starting", "healthy" or "unavailable" - never free text
     Status   string `json:"status"`
     // "abc...uv.b32.i2p" (empty when disabled)
     Hostname string `json:"hostname"`
@@ -20654,6 +20672,7 @@ func renderNoJSHTML(w http.ResponseWriter, data interface{}) {
 | **Auto-generated** | Both specs generated from code (annotations, comments, or schema) |
 | **Never manual** | NEVER manually edit OpenAPI JSON or GraphQL schema |
 | **Build-time generation** | Specs regenerated on every build |
+| **Optional routes** | The embedded build-time spec is the full SUPERSET of routes, and every route that depends on a flag or a setting (the `/debug/*` routes, `/metrics`, the root aliases, optional well-known files) carries `x-mounted-when` naming its condition (for example `--debug` or `server.metrics.root.enabled`). At startup the server derives the SERVED spec from the embedded one by removing every operation whose condition is false for this run, so the spec a client reads always matches the routes that are actually mounted. The drift test compares the superset with the route table |
 | **JSON only** | OpenAPI spec uses JSON format only (NO YAML) |
 | **Source of truth** | AI.md defines the TEMPLATE routes and the `### API routes` inventory in IDEA.md defines EVERY project-defined route, including any native or compatibility API of the project; together they are the API CONTRACT: routes, methods, auth and shapes. AI.md never enumerates project routes. The code and its annotations implement that contract, and the specs are GENERATED from the code, so they are artifacts, never edited by hand. Drift is detected by a test with three legs: the generated OpenAPI route and method list, the router's registered routes, and the union of the AI.md template routes and the IDEA.md `### API routes` inventory. A route present in one leg and missing from another fails the build, naming the route and the missing place; a project whose IDEA.md has no `### API routes` subsection fails with that message instead of passing vacuously. A deliberate change is made in AI.md or IDEA.md first, then the code, then the specs are regenerated |
 | **Match site theme** | Both UIs styled to match site theme (light/dark/auto) |
@@ -30803,7 +30822,7 @@ External schedulers (cron, Task Scheduler, etc.) are not supported
 because the built-in scheduler provides:
 - Automatic catch-up for missed runs
 - State tracking and logging
-- Visibility via `{project_name} scheduler list` CLI command
+- Visibility via `{project_name} --maintenance scheduler list` CLI command
 ```
 
 ### Exceptions (NONE)
@@ -31031,7 +31050,7 @@ Execute task
 
 The scheduler status is available via the server status API. Task execution can be triggered or toggled via CLI commands.
 
-**CLI - Scheduler Overview** (`{project_name} scheduler list`):
+**CLI - Scheduler Overview** (`{project_name} --maintenance scheduler list`):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -31053,7 +31072,7 @@ The scheduler status is available via the server status API. Task execution can 
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**CLI - Task Detail** (`{project_name} scheduler show backup`):
+**CLI - Task Detail** (`{project_name} --maintenance scheduler show backup_daily`):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -31129,14 +31148,16 @@ With `max_backups: 1` the previous full also stays on disk until the next run, b
 
 ### CLI Commands
 
+These are `--maintenance` verbs: the server binary has no top-level subcommands and its top-level flag set is closed (PART 8), so the scheduler commands use the same dispatch, authorization and exit codes as every other `--maintenance` verb.
+
 | Command | Description |
 |---------|-------------|
-| `{project_name} scheduler list` | List all tasks and status |
-| `{project_name} scheduler show <id>` | Get task details |
-| `{project_name} scheduler run <id>` | Run task immediately |
-| `{project_name} scheduler enable <id>` | Enable task |
-| `{project_name} scheduler disable <id>` | Disable task |
-| `{project_name} scheduler history <id>` | Get execution history |
+| `{project_name} --maintenance scheduler list` | List all tasks and status |
+| `{project_name} --maintenance scheduler show <id>` | Get task details |
+| `{project_name} --maintenance scheduler run <id>` | Run task immediately |
+| `{project_name} --maintenance scheduler enable <id>` | Enable task |
+| `{project_name} --maintenance scheduler disable <id>` | Disable task |
+| `{project_name} --maintenance scheduler history <id>` | Get execution history |
 
 ### Shutdown Behavior
 
@@ -37482,7 +37503,7 @@ jobs:
 |------|--------|
 | **Flag** | `--results=verified,unknown` or `--results=verified`, always with `--exclude-paths=.github/trufflehog-exclude.txt`. The old `--only-verified` flag is not used. `unknown` means verification was attempted and could not complete; `unverified` (checked and found inactive) is reported and does not fail the job |
 | **Never `default_branch`** | `base` is never `repository.default_branch`: after a push it equals the pushed commit and truffleHog skips the scan ("BASE and HEAD commits are the same") |
-| **Documentation examples** | `AI.md`, `IDEA.md`, `README.md` and `docs/` never contain a credential-shaped string. Connection strings use `{user}:{password}` placeholders; a flagged example is rewritten, not allowlisted, because a copied spec file is read-only in the projects that receive it |
+| **Documentation examples** | `AI.md`, `IDEA.md`, `README.md` and `docs/` never contain a credential-shaped string (the one identifier allowed to look random is the `owner_token` cookie-name suffix: 8 lowercase letters, PART 8). Connection strings use `{user}:{password}` placeholders; a flagged example is rewritten, not allowlisted, because a copied spec file is read-only in the projects that receive it |
 | **Excluded paths** | `.github/trufflehog-exclude.txt` (the same path on every provider), passed as `--exclude-paths=.github/trufflehog-exclude.txt`. One regex per line, no comments (it is a data file). It lists ONLY files that are not production code: `^go\.sum$` (dependency hashes), `(^|/)testdata/` (test fixtures) and `^AI\.md$` (the read-only copy of this specification, which carries example values; the template repository scans the original itself). Source, test code, docs, configuration and the exclude file itself are never listed. Adding a path needs a reason in the commit message. Everything else is handled by the placeholder rule or the allowlist below |
 | **Test fixtures** | Fixtures live ONLY in `testdata/` (the one directory the exclude file lists). Their values are obviously fake (`EXAMPLE`, `xxxx`, `{placeholder}`) and never a real credential, because that directory is not scanned. A test that needs a credential-shaped string builds it at run time in the test code, which IS scanned |
 | **Allowlist** | Only a reviewed true false positive in project code or a test fixture, with truffleHog's inline `trufflehog:ignore` comment on that line. There is no root config file for it |
@@ -41186,6 +41207,7 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 2. Organization accounts typically use `{project_org}-{project_name}`
 3. Standalone projects may use just `{project_name}`
 4. Custom domains require RTD paid plan or manual DNS setup
+5. **Before the RTD project exists:** set `site_url` to the predictable default `https://{project_org}-{project_name}.readthedocs.io` and create the RTD project under the name `{project_org}-{project_name}` so the two match. When the dashboard later shows a different URL (name taken, custom domain), correct `site_url`, the README badge and the links in ONE commit. Never commit an empty `site_url` or a placeholder such as `{RTD_URL}`
 
 ### Required Files
 
