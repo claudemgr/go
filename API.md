@@ -5474,18 +5474,18 @@ curl -L https://api.example.com/server/healthz
 | **Sane Defaults** | Everything has sensible default values |
 | **No AI/ML** | Smart logic only, no machine learning |
 | **Concise Responses** | Short, descriptive, and helpful |
-| **Everything Configurable** | ALL settings MUST be configurable via `server.yml` |
+| **Everything Configurable** | ALL settings MUST be configurable in the configuration files (`server.yml`, the `yaml.d/` area files and `secrets.yml`) |
 | **Live Reload** | Configuration changes apply without restart (file-watch hot-reload), except the restart-required settings of "Smart Config Reload" (listen port and address, `ssl.*`, `database.*`, `server.daemonize`, `tor.*`), which are logged as a warning and apply at the next start |
 | **Built-in Scheduler** | NEVER use cron, Task Scheduler, or external schedulers (PART 18) |
 
 ### File-Only Configuration
 
-**ALL configuration is via `server.yml`. There is no admin web UI, no runtime config mutation via API.**
+**ALL configuration is file-based: `server.yml`, the `yaml.d/` area files and `secrets.yml`. There is no admin web UI, no runtime config mutation via API.**
 
 | Rule | Description |
 |------|-------------|
 | **Files are the source of truth** | `server.yml`, the `yaml.d/` drop-ins and `secrets.yml` are the only places settings are changed; page content lives in `branding.yml` and branding images in `assets/` |
-| **Hot-reload** | Server watches `server.yml` for changes and reloads immediately |
+| **Hot-reload** | The server watches `server.yml`, `yaml.d/`, `secrets.yml` and `assets/` and re-merges everything immediately after any change (PART 5 → "Drop-in Config Directory") |
 | **No runtime API config** | No endpoints that write to or mutate server configuration |
 | **Sane defaults** | Every setting has a working default; `server.yml` is optional for basic operation |
 
@@ -7613,11 +7613,9 @@ server:
       disk_threshold: 90
       # Delete logs older than 7 days during cleanup
       log_retention_days: 7
-      # Keep last 5 backups during cleanup
-      # Retention and disk-pressure cleanup scan the backup directory
-      # resolved and cached at startup step 7 — the same directory
-      # backups are written to. Never re-resolve the path at cleanup time.
-      backup_keep_count: 5
+      # How many backups are kept is server.backup.retention (PART 21), the only place;
+      # disk-pressure cleanup applies that policy and scans the backup directory resolved and cached
+      # at startup step 7 (the directory backups are written to; never re-resolve it at cleanup time)
 
     # Notifications
     notify:
@@ -7890,7 +7888,7 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 | `PORT` | Server port |
 | `LISTEN` | Listen address |
 | `APPLICATION_NAME` | Application title |
-| `APPLICATION_TAGLINE` | Application description |
+| `APPLICATION_TAGLINE` | Application description. Like `APPLICATION_NAME`, it is written ONCE, on the first run and only when set, to `yaml.d/branding.yml` (`server.branding`). The first-run init variables are one of the named workflows that may create an area file, so a fresh install without them still writes only `server.yml` |
 | `DATABASE_DRIVER` | First run: the database driver when `DATABASE_URL` is not set (`sqlite` (+ `sqlite2`, `sqlite3`), `libsql` (+ `turso`)) |
 | `DATABASE_URL` | First run: the full database connection string, saved to `secrets.yml` (when it carries a credential) or `server.yml`; ignored afterwards ("Connection Strings") |
 | `CACHE_URL` | First run: the full cache connection string (`valkey://`, `redis://`), saved the same way |
@@ -7946,7 +7944,7 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 
 | File | Holds |
 |------|-------|
-| `server.yml` | This node only: `server.port`, `server.address`, `server.fqdn`, `server.mode`, `server.api_version`, `server.baseurl`, `server.pidfile`, `server.daemonize`, `server.debug`, `server.database`, `server.cache`, `server.ssl`, `server.trusted_proxies` |
+| `server.yml` | This node only: `server.port`, `server.address`, `server.fqdn`, `server.mode`, `server.api_version`, `server.baseurl`, `server.pidfile`, `server.daemonize`, `server.debug.*` (the debug SETTINGS; the debug flag itself has no config key), `server.database`, `server.cache`, `server.ssl`, `server.trusted_proxies` |
 | `yaml.d/branding.yml` | `server.branding`, `server.seo`, `web.ui` ("Branding File") |
 | `yaml.d/web.yml` | `web.*` except `web.ui`; `server.cors`, `server.csrf`, `server.url_detection`, `server.compression`, `server.healthz`, `server.i18n` |
 | `yaml.d/pages.yml` | `server.pages` (the report form and its antispam, the help pages) |
@@ -8012,10 +8010,10 @@ Wherever this specification says a setting is set "in `server.yml`", it means th
 | `server.admin.password`, `.token`, `.username`, `.two_factor.*` | removed (the operator token is `server.token`; there are no admin passwords) |
 | `server.https_port` | when `server.port` is a single number and `https_port` is greater than 0, folded into `server.port` as the quoted string `"{port},{https_port}"` ("Dual Port Support"); otherwise removed. An already-dual `server.port` is kept as written, and `server.ssl.enabled` is never changed by the migration |
 | `server.ssl.dns01.*`, `server.ssl.letsencrypt.provider`, `.credentials_encrypted` | `server.ssl.letsencrypt.dns_provider`, `server.ssl.letsencrypt.dns_credentials` (`validated_at`, `domain` and `domains` are removed) |
-| `server.security.installation_secret`, `.installation_secret_previous`, `.installation_secret_previous_expires`, `.encryption_key_previous`, `.encryption_key_previous_expires` | imported into the database `app_secrets` row of the same name when that row is missing, then removed from the file (PART 11 → "Rotation contract") |
+| `server.security.installation_secret`, `.installation_secret_previous`, `.installation_secret_previous_expires`, `.encryption_key_previous`, `.encryption_key_previous_expires` | imported into the database `app_secrets` row of the same name when that row is missing (the legacy `..._previous_expires` keys become the canonical `{name}_previous_until` rows), then removed from the file (PART 11 → "Rotation contract") |
 | Settings that no longer exist | removed: `web.llms.enabled`, `server.privacy.content.*`, `server.mcp`, `server.rate_limit.enabled`, `server.rate_limit.requests`, `server.rate_limit.window`, `server.scheduler.enabled`, `server.maintenance_mode`, `server.i18n.auto_detect`, `.rtl_languages`, `.show_selector`, `.translations_dir`, `server.geoip.dir`, `.databases`, `.country_mode`, `server.database.sqlite`, `server.metrics.endpoint`, `server.notifications.email_enabled`, `.webhook_enabled`, `server.secret_key`, `web.permissions_policy`, `web.honor_dnt`, `web.robots.ai_bots` |
 
-**Scheduler tasks.** A task under `server.scheduler.tasks` has exactly the keys `enabled`, `schedule`, `retry_on_fail` and `retry_delay` (and `retention` for `backup`). Any other per-task key is removed by the migration, and a built-in task that still has its default values is not written at all.
+**Scheduler tasks.** A task under `server.scheduler.tasks` has exactly the keys `enabled`, `schedule`, `retry_on_fail` and `retry_delay` (backup retention is NOT a task key: it lives only in `server.backup.retention`, PART 21). Any other per-task key is removed by the migration, and a built-in task that still has its default values is not written at all.
 
 **Layout.** Sections and keys are written in the order this specification lists them, so a rewrite never reshuffles a file and diffs stay small.
 
@@ -8034,7 +8032,7 @@ Wherever this specification says a setting is set "in `server.yml`", it means th
 | **Migration** | At start, if `server.token` or `server.security.encryption_key` is found in `server.yml` and `secrets.yml` does not hold it, the server writes `secrets.yml` first (atomic, `0600`, fsynced) and only then rewrites `server.yml` without those keys, so a secret is never in both files and never lost |
 | **Early read** | The early config read (PART 8 startup, step 8e) never opens `secrets.yml`: it needs only `server.port`, `server.address` and `server.daemonize` |
 | **Permissions** | Always `0600` (PART 8 → "Directory Validation Rules": private paths); a wrong mode is fixed at start |
-| **Reload** | The file watcher watches it with `server.yml` and `yaml.d/`; a change re-merges everything and an invalid result keeps the last good config |
+| **Reload** | The file watcher watches it with `server.yml`, `yaml.d/` and `assets/`; a change re-merges everything and an invalid result keeps the last good config |
 | **Backup** | Included in every backup whenever it exists (PART 21 → "Backup Contents"), so a restore brings back the same token and encryption key |
 | **Never exposed** | Secret values are never logged, never printed by `--config` (shown as `********`), and never returned by any API response (PART 11) |
 ### Connection Strings (database and cache)
@@ -8911,13 +8909,11 @@ server:
         enabled: true
         # Every 15 minutes
         schedule: "*/15 * * * *"
-      backup:
+      backup_daily:
         enabled: true
         # Daily: 2:00 AM
         schedule: "0 2 * * *"
-        # Keep max 5 backups (storage management, matches
-        # maintenance backup_keep_count)
-        retention: 5
+        # How many backups are kept is server.backup.retention (PART 21), never a task key
 
       # SSL certificate management (only when app manages certs)
       ssl_renewal:
@@ -10773,6 +10769,8 @@ func EnsurePIDFile(path string, isRoot bool) error {
 
 **Stale PID detection is REQUIRED.** A crash or kill -9 leaves stale PID files.
 
+**Two PID files, never one:** the server's OWN PID file is `/var/run/{internal_org}/{internal_name}/{internal_name}.pid` (steps 11-12 of the startup). A service manager that needs a PID file of its own (OpenRC `pidfile` with `command_background=true`, FreeBSD `daemon -P`, SysV `start-stop-daemon --make-pidfile`) uses a DIFFERENT path, `/var/run/{internal_org}-{internal_name}.pid`; sharing the path makes the server read the supervisor's PID as its own and exit "already running".
+
 **Containers: no PID file.** When `isContainer()` is true, skip PID file creation and checking entirely (the `pidfile: true` config default is ignored). The container runtime supervises the process, and PIDs are namespace-local - a PID file on a mounted volume read from the host or another container points at the wrong process or produces a false "already running".
 
 ```go
@@ -11054,7 +11052,7 @@ PHASE 5: Server startup (actual server start)
       │   └─ Second port = HTTPS
       ├─ No --port? → check PORT env var (same format)
       ├─ No env var? → EARLY CONFIG PEEK: read ONLY `server.port`, `server.address` and `server.daemonize` from the merged view of {config_dir}/server.yml and the ordered {config_dir}/yaml.d/* drop-ins (same file selection, order and replace-whole-value rule as PART 5 → "Drop-in Config Directory"; read-only, as root, after the step 8d permission fix; no other key is read or validated here, and a file that does not parse is skipped for these three keys, its error is reported by the full load at step 13)
-      └─ No file, or no `server.port` in it? → random port in 64000-64999 range (single, HTTP); step 13 writes it to the new config
+      └─ No file, or no `server.port` in it? → the default for the context: port `80` in an application container (it starts as root, so step 8f binds it before the drop), otherwise a random port in 64000-64999 (a system container or any host; single, HTTP); step 13 writes it to the new config
       Listen address (resolved in the same early step): `--address` flag > `LISTEN` env > the early peek of `server.address` > default `[::]` (IPv4 `0.0.0.0` fallback when the kernel has no IPv6, logged once as a warning). `[::]` and `::` are both accepted for `--address`, `LISTEN` and `server.address`; the brackets are stripped before the value is parsed as an IP. Privileged sockets are bound to THIS address and never to a broader one; step 13 never rebinds (`server.address` needs a restart, PART 12)
    e2. Daemonize (manual start only; never for `--service start` or in a container, see "Daemonization"): when `--daemon` was given, or the early peek found `server.daemonize: true`, re-execute now (marker `_DAEMON_CHILD=1`) and exit the parent with 0. This happens BEFORE any privileged socket is bound, so the child repeats steps 6-8e (all idempotent) and binds the ports itself; a bound socket never has to cross the re-execute.
    f. Bind ALL privileged ports (< 1024) NOW while still root:
@@ -11093,7 +11091,7 @@ PHASE 5: Server startup (actual server start)
     │   ├─ --port CLI flag → use specified
     │   ├─ PORT env var → use specified
     │   ├─ Config file server.port → use specified
-    │   └─ Default → random 64000-64999
+    │   └─ Default → the context default of step 8e (80 in an application container, otherwise random 64000-64999)
     ├─ If MISSING (first run):
     │   ├─ Generate default server.yml
     │   ├─ Save determined port(s) to config
@@ -12067,6 +12065,7 @@ server:
 
     # Local SQLite cache for fast reads and offline resilience
     cache:
+      # Default: false (opt-in); this example turns it on
       enabled: true
       path: ${DATA_DIR}/db/cache.db
       # Sync from remote
@@ -12076,6 +12075,8 @@ server:
       # Max cache age before forcing remote
       max_age: 1h
 ```
+
+**Default:** `server.database.cache.enabled` is `false`: the local cache is opt-in.
 
 When enabled:
 - Reads check local cache first
@@ -14177,10 +14178,10 @@ server:
 
     # Connection pool settings. SQLite: max_open sizes the READ pool only; the write pool is always exactly 1 connection (see "SQLite Concurrency Contract"). libsql: adjust as needed
     pool:
-      # SQLite: 1 writer + readers; libsql: adjust as needed
-      max_open: 5
-      # Max idle connections
-      max_idle: 2
+      # Default 25 open for SQLite readers and libsql alike (SQLite always has exactly 1 writer on top)
+      max_open: 25
+      # Default 5 idle connections
+      max_idle: 5
       # Max connection lifetime
       max_lifetime: 5m
       # Max idle time before close
@@ -15723,7 +15724,7 @@ CREATE TABLE IF NOT EXISTS security_thanks (
 |--------|-----|----------|
 | **Generate** | `--maintenance pgp generate` | Generates an Ed25519 (signing) + Curve25519 (encryption) keypair. Identity is `{app_name} Security <{security_contact}>`. Expires 2 years from generation. Private key is encrypted with a key derived from `installation_secret` and stored in `{config_dir}/security/pgp.priv.asc.enc`. Public key stored at `{config_dir}/security/pgp.pub.asc` (also served at `/.well-known/pgp-key.asc`). |
 | **Rotate** | `--maintenance pgp rotate` | Generates a new keypair, signs the new pubkey with the old key, publishes the rotation to configured keyservers. In ONE database transaction, taken under the same lock the submission step uses, it re-encrypts every stored `body_enc` whose `body_alg` is `pgp` to the new key (decrypt with the old private key, encrypt to the new public key). If any row fails, the transaction rolls back and the old key stays active, so no retained report is ever left readable only by a discarded key. After a successful rotation every stored body is readable with the current key for its whole retention period. The old private key is kept encrypted at `{config_dir}/security/pgp.priv.old.asc.enc` for 30 days, only for items already in transit (notifications sent to the old key, researchers who fetched the old public key); the daily `security_cleanup` task then deletes it. |
-| **Publish to keyservers** | `--maintenance pgp publish` | POST the public key to each entry in `web.security.keyservers`. Each entry is a keyserver host name and the host decides the submission form. `keys.openpgp.org` (VKS): `POST https://keys.openpgp.org/vks/v1/upload` with the JSON body `{"keytext": "<ASCII-armored public key>"}`; success is `200` with a JSON body holding `key_fpr` and `status`. Any other host, for example `keyserver.ubuntu.com` (HKP): `POST https://{host}/pks/add` with `Content-Type: application/x-www-form-urlencoded` and the field `keytext=<URL-encoded armored key>`; success is `200`. Triggered automatically on generate/rotate; manually via `--maintenance pgp publish`. A network error, `5xx` or `429` is logged and retried with exponential backoff: 1 minute, doubling each time up to 6 hours, at most 8 attempts per keyserver and key, durable across restarts (the attempt count and the next time are kept in `keyservers.state`). Any other `4xx` is final: logged once and never retried. A keyserver that `keyservers.state` already lists for this fingerprint is skipped. |
+| **Publish to keyservers** | `--maintenance pgp publish` | POST the public key to each entry in `web.security.keyservers`. Each entry is a keyserver host name and the host decides the submission form. `keys.openpgp.org` (VKS): `POST https://keys.openpgp.org/vks/v1/upload` with the JSON body `{"keytext": "<ASCII-armored public key>"}`; success is `200` with a JSON body holding `key_fpr` and `status`. Any other host, for example `keyserver.ubuntu.com` (HKP): `POST https://{host}/pks/add` with `Content-Type: application/x-www-form-urlencoded` and the field `keytext=<URL-encoded armored key>`; success is `200`. Triggered automatically on generate/rotate; manually via `--maintenance pgp publish`. A network error, `5xx` or `429` is logged and retried with exponential backoff: 1 minute, doubling each time up to 6 hours, at most 8 attempts per keyserver and key, durable across restarts (the attempt count and the next time are kept in `keyservers.state`, and the scheduler task `keyserver_retry` submits again whenever a stored time has passed). Any other `4xx` is final: logged once and never retried. A keyserver that `keyservers.state` already lists for this fingerprint is skipped. |
 | **Export public key** | `--maintenance pgp export public [path]` | Use the public URL `/.well-known/pgp-key.asc`, copy `{config_dir}/security/pgp.pub.asc` directly, or write it to `[path]` (stdout if omitted) via the CLI. |
 | **Export private key** | `--maintenance pgp export private <path>` | **Full export, ASCII-armored, decrypted after operator token confirmation.** Triggers a sensitive-operation flow (PART 5 → "Sensitive Operations"): re-prompt for the operator token, log to `audit.log` as `security.private_key_exported`, write the key to `<path>` with mode 0600. **The export is rate-limited to 1 per hour per operator and the audit entry includes operator IP and reason text the operator must type.** |
 | **Import private key** | `--maintenance pgp import <file>` | Import an existing `pgp.priv.asc` from a local file (e.g., restoring from backup, migrating from another instance). Same sensitive-operation gate. Validates the key's identity matches the project's expected identity (warns on mismatch — operator can override). |
@@ -16037,7 +16038,7 @@ server:
 | `security.report_received` | Security vulnerability report received | tracking_id, severity, sanitized affected-component |
 | `security.private_key_exported` | PGP private key exported | Operator IP, reason |
 | `security.csrf_failure` | CSRF token validation failed | IP, endpoint, reason |
-| `security.audit_chain_broken` | Audit log hash chain failed verification | File name, line number (never entry content) |
+| `security.audit_chain_broken` | Audit log hash chain failed verification | File name, line number or `reason` (`anchor_mismatch`, `anchor_missing`); never entry content |
 
 ### Backup & System Events
 
@@ -16096,7 +16097,7 @@ server:
 | `event` | String | Event type (e.g., `config.updated`) |
 | `category` | String | Event category (e.g., `authentication`) |
 | `severity` | String | `info`, `warn`, `error`, `critical` |
-| `actor` | Object | Who performed the action |
+| `actor` | Object | Who performed the action: `type` (`owner`, `operator`, `visitor` or `system`), `id` (the owner id, or `server` or `scheduler`) and `ip` when the event arrived over the network. Autonomous events (startup, shutdown, backups, scheduler tasks) have `type: system` and no `ip` |
 | `result` | String | `success` or `failure` |
 | `prev` | String | Lowercase hex SHA-256 of the previous entry's line (hash chain, see "Audit Log Integrity") |
 
@@ -16181,8 +16182,8 @@ server:
 
 **ALWAYS Log:**
 - ✓ Timestamp in UTC with milliseconds
-- ✓ IP address for all events
-- ✓ Actor identity (who did it)
+- Client IP address for every event that arrives over the network (`web`, `api`, `mcp`); autonomous events have `actor.type: system` and no IP
+- Actor identity on every event (`actor.type` and `actor.id`; `system` for startup, shutdown, backups and scheduler tasks)
 - ✓ Event result (success/failure)
 - ✓ Unique event ID
 
@@ -16219,6 +16220,7 @@ server:
 | No truncate | Application cannot truncate the log file |
 | Rotation only | Only log rotation can remove old entries |
 | Hash chain | REQUIRED. Every entry has a `prev` field: the lowercase hex SHA-256 of the previous entry's exact line (without the newline). The first entry ever uses 64 zeros; the first entry of a rotated file carries the hash of the last line of the file it follows. One writer appends entries in order under a lock, so the chain never forks |
+| Anchor | `{log_dir}/audit.anchor` (mode `0600`) holds the hash of the last line of the file that was just closed. It is written at every rotation BEFORE the old file is deleted and is kept whatever `keep` says, so `keep: none` never breaks the chain. At start the first `prev` of the current file must equal the anchor; no anchor and a first `prev` of 64 zeros is a new log. A mismatch, or a missing anchor with a non-zero first `prev`, is reported once as `security.audit_chain_broken` with `reason: anchor_mismatch` or `anchor_missing`. Deleting the anchor together with every audit file is an operator reset: the chain restarts at 64 zeros and one `info` line says so |
 | Verification | The server re-computes the chain of the current file at start and of the closed file at every rotation. A mismatch (an edited, removed or reordered entry) is reported once as `security.audit_chain_broken` (severity `critical`; file name and line number, never entry content); the server keeps running and keeps appending |
 | Limit | Tamper-evident, not tamper-proof: someone who can rewrite the whole file can recompute every hash. Forward the log to another host if that case matters |
 
@@ -16241,7 +16243,7 @@ Group: audit group (if configured)
 
 **Rotation Schedule:**
 - Daily rotation at midnight UTC
-- If `keep: none`: Old log deleted immediately after rotation
+- If `keep: none`: Old log deleted immediately after rotation (its last hash lives on in `audit.anchor`, so the chain stays verifiable)
 - If `keep: Nd`: Rotated files named `audit.log.2025-01-15.gz`, deleted after N days
 - Current day's log always available until next rotation
 
@@ -20964,6 +20966,8 @@ Before proceeding, confirm you understand:
 | HTTP-01 | HTTP-based challenge (default, requires port 80) |
 | TLS-ALPN-01 | TLS-based challenge (requires port 443) |
 | DNS-01 | DNS TXT record challenge (wildcard certs, no port requirements) |
+
+**Challenge listeners:** the server never opens a socket of its own for a challenge. HTTP-01 is answered on the server's HTTP listener and TLS-ALPN-01 on its HTTPS listener, so both are bound by the startup steps that determine and bind the server's ports (only `server.port`, `server.address` and `server.daemonize` are read early). The CA reaches them on ports 80 and 443, so the usual setup is `server.port: "80,443"` (the privileged ports are bound while root, before the drop), or a reverse proxy or port mapping that forwards 80 and 443 to the listener; on any other arrangement use DNS-01.
 
 ### DNS-01 Provider Configuration
 
@@ -30516,6 +30520,7 @@ Every project MUST include these scheduled tasks:
 | `geoip_update` | Weekly (Sunday 03:00) | Download/update ip-location-db GeoIP databases | Yes |
 | `blocklist_update` | Daily at 04:00 | Download/update IP/domain blocklists | Yes |
 | `security_cleanup` | Daily at 03:30 | Delete closed security reports `server.security.reports.retention_days` (default `365`) after `closed_at`, and delete the retired PGP private key (`pgp.priv.old.asc.enc`) 30 days after a rotation | No |
+| `keyserver_retry` | Every 15 minutes | Submit the public key again to each keyserver whose persisted `next_attempt` in `keyservers.state` has passed (PGP publishing, PART 11); does nothing when no attempt is due | No |
 | `cve_update` | Daily at 05:00 | Download/update CVE (NVD) and Trivy vulnerability databases — trivy has no separate scheduled task despite its own directory/config; this task owns it too | Yes |
 | `update_check` | Daily at 06:00 | Check release channel for a newer version — notify-only unless `update.auto_install: true` (default false); honors `update.defer_days` | Yes |
 | `token_cleanup` | Every 15 minutes | Delete used or expired simple-captcha challenges and apply the owner idle purge (`server.tokens.idle_purge_days`, PART 8). Expired linked tokens are NOT deleted: they stay listed as expired until the owner revokes them or changes their expiry | No |
@@ -30585,6 +30590,11 @@ server:
         schedule: "@every 15m"
         enabled: true
 
+      # Every 15 minutes: keyserver submissions whose next_attempt has passed
+      keyserver_retry:
+        schedule: "@every 15m"
+        enabled: true
+
       # Daily at midnight
       log_rotation:
         schedule: "0 0 * * *"
@@ -30599,19 +30609,7 @@ server:
         # Creates: {project_name}_backup_YYYY-MM-DD.tar.gz[.enc] (full)
         #          {project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz[.enc] (manual)
         #          {project_name}-daily.tar.gz[.enc] (incremental)
-        retention:
-          # 1-365: daily full backups to keep
-          max_backups: 1
-          # 0-52: Sunday backups (0 = disabled)
-          keep_weekly: 0
-          # 0-12: 1st of month backups (0 = disabled)
-          keep_monthly: 0
-          # 0-10: January 1st backups (0 = disabled)
-          keep_yearly: 0
-          # Hard size cap: percent of backup volume (e.g. "10%") or absolute
-          # (e.g. "50G"). 0 = disabled. Size cap overrides all count limits —
-          # oldest files deleted first until total is under the cap.
-          max_total_size: "10%"
+        # Retention is NOT a task key: it lives only in server.backup.retention (PART 21)
 
       # Hourly incremental backup (disabled by default)
       backup_hourly:
@@ -30803,6 +30801,8 @@ The scheduler status is available via the server status API. Task execution can 
 |------|----------|---------|-------------|
 | `backup_daily` | 02:00 daily | Enabled | Full backup + daily incremental |
 | `backup_hourly` | Hourly | Disabled | Hourly incremental |
+
+Retention is configured ONLY at `server.backup.retention.*` (PART 21); a scheduler task has no retention key. The defaults:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
@@ -32550,11 +32550,14 @@ groups:
 | `{config_dir}/yaml.d/` | ✓ If exists | Drop-in config files |
 | `{config_dir}/secrets.yml` | ✓ If exists | Secrets (token, encryption key, credentials) |
 | `{config_dir}/assets/` | ✓ If exists | Branding image files |
-| `server.db` | ✓ Always | Main database (settings, rate limits, audit log) |
+| `server.db` | ✓ When the local file exists | The local SQLite database: the main database with the SQLite driver (settings, rate limits, audit log); with the libSQL driver, the local cache file when `server.database.cache.enabled` is true. A remote database is never part of a backup (see below) |
 | `{config_dir}/template/` | ✓ If exists | Custom email templates |
 | `{config_dir}/ssl/` | Optional | SSL certificates (flag: `--include-ssl`) |
 | Connection TLS files | ✓ Always, when referenced | The files named by `tls_ca`, `tls_cert`, `tls_key` (cache), even without `--include-ssl`; only those files, not the whole `ssl/` directory ("Connection Strings") |
+| External TLS files | ✓ Always, when referenced | The files named by `server.ssl.cert` and `server.ssl.key` that lie OUTSIDE `{config_dir}/ssl/` (a manually supplied certificate), even without `--include-ssl`: only those two files, stored under `ssl-external/` in the archive. On restore they are written into `{config_dir}/ssl/` (the key with mode `0600`) and `server.ssl.cert` and `server.ssl.key` are rewritten to those paths, so the restored config never points at a file the archive lacks |
 | `{data_dir}/` | Optional | Data files (flag: `--include-data`) |
+
+**Remote database (libSQL/Turso driver):** the remote database itself is never part of a backup, and that is neither an error nor a warning (a remote database is backed up by its own provider; the backup writes one `info` line naming the driver). On restore with a remote driver configured, the restored `server.db` seeds the remote database ONLY when that database is empty, exactly as a new setup initializes it; a remote database that already holds data is left untouched.
 
 ### What Is in server.db
 
@@ -34075,6 +34078,15 @@ useradd --system --uid {id} --gid {id} \
   {internal_name}
 ```
 
+**Alpine Linux and other BusyBox systems (no `shadow` package):** `groupadd` and `useradd` are absent, so the binary uses the BusyBox tools:
+
+```bash
+addgroup -S -g {id} {internal_name}
+adduser -S -D -H -u {id} -G {internal_name} -h /var/lib/{internal_org}/{internal_name} -s /sbin/nologin -g "{internal_name} service account" {internal_name}
+```
+
+**Selection:** the binary uses the account tools of the platform it runs on (`useradd`/`groupadd` when present, otherwise BusyBox `adduser`/`addgroup`, `dscl` on macOS, `pw` on FreeBSD). These tools are part of each platform's base system, not a dependency of the project, so the "no runtime dependencies" rule is unaffected; a platform with none of them gets exit `69` and a reason on stderr, never a silent skip.
+
 **Default rule:** create and use a dedicated service user/group.
 
 **Exception:** skip dedicated user creation only when the project is explicitly approved to run permanently as root/Administrator in IDEA.md.
@@ -34429,7 +34441,8 @@ command="/usr/local/bin/{project_name}"
 command_args=""
 # No command_user: the service starts as root so the binary can bind privileged ports, then drops to
 # {internal_name}:{internal_name} in-process (PART 8). start_pre creates the pid and log directories for that user.
-pidfile="/var/run/{internal_org}/{internal_name}/{internal_name}.pid"
+# OpenRC's own supervisor pid file. It must NOT be the server's own PID file (/var/run/{internal_org}/{internal_name}/{internal_name}.pid): OpenRC would write its supervisor PID there and the server would find it and exit "already running"
+pidfile="/var/run/{internal_org}-{internal_name}.pid"
 command_background=true
 output_log="/var/log/{internal_org}/{internal_name}/server.log"
 error_log="/var/log/{internal_org}/{internal_name}/error.log"
@@ -34485,7 +34498,8 @@ sudo rc-update del {internal_name} default
 NAME={internal_name}
 DAEMON=/usr/local/bin/{project_name}
 DAEMON_USER={internal_name}
-PIDFILE=/var/run/{internal_org}/{internal_name}/{internal_name}.pid
+# The supervisor's pid file (start-stop-daemon --make-pidfile): NOT the server's own PID file (/var/run/{internal_org}/{internal_name}/{internal_name}.pid)
+PIDFILE=/var/run/{internal_org}-{internal_name}.pid
 LOGFILE=/var/log/{internal_org}/{internal_name}/server.log
 
 case "$1" in
@@ -34617,7 +34631,8 @@ The `run` script ends in `exec`, so the server itself is the supervised process,
 
 name="{internal_name}"
 rcvar="{internal_name}_enable"
-pidfile="/var/run/{internal_org}/{internal_name}/{internal_name}.pid"
+# daemon(8)'s supervisor pid file: NOT the server's own PID file (/var/run/{internal_org}/{internal_name}/{internal_name}.pid), or the server would find the supervisor's PID there and exit "already running"
+pidfile="/var/run/{internal_org}-{internal_name}.pid"
 # daemon(8) backgrounds and supervises the foreground server and writes the supervisor pid to ${pidfile}
 command="/usr/sbin/daemon"
 command_args="-P ${pidfile} -r -f /usr/local/bin/{project_name}"
