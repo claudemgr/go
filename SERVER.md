@@ -1456,7 +1456,7 @@ For complete details, see AI.md PART 0, 1
 |------|----------------|
 | /server/about | IDEA.md → name, tagline, description, features, links |
 | /server/help | IDEA.md → real endpoints, real curl examples, real FAQ |
-| /server/privacy | Built-in privacy text (project data), extended by `server.branding.content.privacy`; `server.privacy.*` only switches behavior (consent, `data.sold`) |
+| /server/privacy | Built-in privacy text (project data), extended by `server.branding.content.privacy`; `server.privacy.*` holds the behavior switches (consent, `data.sold`) AND the deployment facts the page shows (`data.sharing`, `retention`, `cookies`, `third_party`); the other sections are built-in text |
 | /server/terms | Config → customizable, default template |
 | /server/contact | Config → `server.contact.general.*` + `server.pages.contact.*` settings |
 
@@ -8632,7 +8632,7 @@ Wherever this specification says a setting is set "in `server.yml`", it means th
 | Rule | Behavior |
 |------|----------|
 | **Keys** | Only these, for every one the project has: `server.token`; `server.security.encryption_key` and `server.security.encryption_key_version`; `server.notifications.email.smtp.password`; `server.cache.password`; `server.database.password` and `server.database.token`; `server.database.url` and `server.cache.url` (each only while the URL carries a credential); `server.pages.contact.captcha_secret_key`; `server.ssl.letsencrypt.dns_credentials`; `data.cve.api_key`; `server.backup.encryption_password`; `server.metrics.auth.tokens.*`; every webhook URL and its `_secret` under `server.contact.{role}.webhooks`; `server.auth.ldap.providers[].bind_password`; `server.auth.oidc.providers[].client_secret` (each written as an entry that holds the provider's `name` and the secret field; "Drop-in Config Directory" → Merge joins it to the provider by `name`). `server.tokens.*` is token policy, not a secret. Every other key stays in its area file |
-| **Generated** | When one of these keys is empty or missing at start, the server generates it BEFORE it serves anything, writes it to `secrets.yml` (atomic, `0600`) and records `config.secret_generated` (the key name only) in `audit.log`: `server.token`; `server.security.encryption_key` (with `encryption_key_version: 1`); `server.metrics.auth.tokens.prometheus`, `.grafana` and `.loki`; and a `webhooks.<name>_secret` whenever its webhook URL is set. `server.token` is an `adm_` token and each metrics token an `mtr_` token, each plus 32 random base62 characters ("Token Catalogue") and the encryption key is 32 random bytes. Only `server.token` is printed, once, at first creation; every other value is read from `secrets.yml` |
+| **Generated** | When one of these keys is empty or missing at start, the server generates it BEFORE it serves anything, writes it to `secrets.yml` (atomic, `0600`) and records `config.secret_generated` (the key name only) in `audit.log`: `server.token`; `server.security.encryption_key` (with `encryption_key_version: 1`); `server.metrics.auth.tokens.prometheus`, `.grafana` and `.loki`; and a `webhooks.<name>_secret` whenever its webhook URL is set. `server.token` is an `adm_` token and each metrics token an `mtr_` token, each plus 32 random base62 characters ("Token Catalogue") and the encryption key is 32 random bytes. Only `server.token` is printed, once, to the console at first creation ("First-start disclosure") and never logged; every other value is read from `secrets.yml` |
 | **Never generated** | Credentials that someone else issues stay empty until the operator sets them: `server.notifications.email.smtp.password`, `server.cache.password`, `server.database.password` and `server.database.token`, `server.database.url` and `server.cache.url` with a credential in them, `server.pages.contact.captcha_secret_key`, `server.ssl.letsencrypt.dns_credentials`, `data.cve.api_key`, `server.backup.encryption_password`, the LDAP bind password, the OIDC client secret and the webhook URLs |
 | **Rotation** | Blank a generated key in `secrets.yml` and restart: a new value is generated. `--maintenance secret rotate {name}` rotates the encryption key and the HMAC secrets with their grace periods (PART 11) |
 | **Written by** | The server writes generated, rotated and moved secrets to `secrets.yml` and ONLY there, never to `server.yml` and never to a drop-in (this limits what the server writes; an operator may still hand-write a value elsewhere, see "Operator-set values"): the first-run `server.token`, `server.security.encryption_key` with its version, and every rotation (`--maintenance secret rotate encryption_key`) |
@@ -9695,7 +9695,7 @@ Before proceeding, confirm you understand:
 |---------|----------|
 | Logging | `debug` level, maximum verbosity |
 | Sanitization | Minimal — internals, dumps, and stack traces may be exposed |
-| Credentials | Keys, tokens, passwords, secrets ALWAYS redacted — no exceptions |
+| Credentials | Keys, tokens, passwords, secrets ALWAYS redacted in logs, responses, dumps and errors; the only exception is the single first-start console print of `server.token` ("First-start disclosure") |
 | Security checks | Never disabled — authentication and authorization fully enforced |
 | Everything else | As Development Mode |
 
@@ -16175,9 +16175,9 @@ Cross-Origin-Embedder-Policy: <see "Cross-Origin Isolation" below — default un
 Cross-Origin-Resource-Policy: <see "Cross-Origin Isolation" below — default cross-origin>
 Content-Security-Policy: <see "Content Security Policy" below>
 Permissions-Policy: <built from the project's declared features — see "Permissions-Policy" below>
-Reporting-Endpoints: default="https://{fqdn}/api/{api_version}/server/reports/default"
-Report-To: {"group":"default","max_age":10886400,"endpoints":[{"url":"https://{fqdn}/api/{api_version}/server/reports/default"}]}
-NEL: {"report_to":"default","max_age":2592000,"include_subdomains":true}
+Reporting-Endpoints: default="https://{fqdn}/api/{api_version}/server/reports/default", nel="https://{fqdn}/api/{api_version}/server/reports/nel"
+Report-To: {"group":"default","max_age":10886400,"endpoints":[{"url":"https://{fqdn}/api/{api_version}/server/reports/default"}]}, {"group":"nel","max_age":10886400,"endpoints":[{"url":"https://{fqdn}/api/{api_version}/server/reports/nel"}]}
+NEL: {"report_to":"nel","max_age":2592000,"include_subdomains":true}
 X-Request-ID: <per-request UUID — also echoed back in JSON error envelopes>
 ```
 
@@ -16313,9 +16313,11 @@ web:
 
 **`Sec-GPC` is the load-bearing one.** When received, the binary MUST:
 1. Set the request's `gpc_opt_out=true` flag throughout the request lifecycle.
-2. Skip personalization, behavioral analytics, and any cookie not strictly required.
+2. Skip personalization, behavioral analytics, and any cookie not strictly required (the theme and language preference cookies are not strictly required, so they are not set until the visitor explicitly accepts them).
 3. Surface in the audit log so the compliance officer can prove honoring.
 4. Echo back a `Sec-GPC` notice on the privacy/preferences page indicating the signal was received.
+
+**`DNT: 1` (only when `web.headers.honor_dnt: true`)** is treated like `Sec-GPC: 1` for steps 1, 2, 3 and 4 above (no personalization, no behavioral analytics, no non-essential cookie, an audit entry with `signal: dnt`, a notice on the preferences page). It is NOT a CCPA "sale or sharing" opt-out: that remains `Sec-GPC` or the visitor's own toggle. With `honor_dnt: false` (the default) the header is ignored.
 
 ## Sec-Fetch-* Request Validation
 
@@ -16333,12 +16335,12 @@ web:
 
 ## Reporting API (Modern + Legacy)
 
-**The spec emits BOTH the modern `Reporting-Endpoints` header (RFC draft, supported in Chrome/Edge/Firefox) AND the legacy `Report-To` header (deprecated but still used by Safari and some embedded WebViews). Same endpoint, two delivery mechanisms.**
+**The spec emits BOTH the modern `Reporting-Endpoints` header (RFC draft, supported in Chrome/Edge/Firefox) AND the legacy `Report-To` header (deprecated but still used by Safari and some embedded WebViews). Same endpoints, two delivery mechanisms. NEL has its OWN reporting group `nel` (endpoint `/api/{api_version}/server/reports/nel`); every other report type uses the `default` group.**
 
 ```
-Reporting-Endpoints: default="https://{fqdn}/api/{api_version}/server/reports/default"
-Report-To: {"group":"default","max_age":10886400,"endpoints":[{"url":"https://{fqdn}/api/{api_version}/server/reports/default"}]}
-NEL: {"report_to":"default","max_age":2592000,"include_subdomains":true}
+Reporting-Endpoints: default="https://{fqdn}/api/{api_version}/server/reports/default", nel="https://{fqdn}/api/{api_version}/server/reports/nel"
+Report-To: {"group":"default","max_age":10886400,"endpoints":[{"url":"https://{fqdn}/api/{api_version}/server/reports/default"}]}, {"group":"nel","max_age":10886400,"endpoints":[{"url":"https://{fqdn}/api/{api_version}/server/reports/nel"}]}
+NEL: {"report_to":"nel","max_age":2592000,"include_subdomains":true}
 ```
 
 **Network Error Logging (NEL — RFC draft, Chrome/Edge):** browser POSTs `application/reports+json` to `/api/{api_version}/server/reports/nel` for TLS handshake failures, DNS failures, TCP resets, HTTP errors. Sample rate `1.0` by default — drop to `0.1` on busy sites via `web.headers.nel.sample_rate`.
@@ -18234,65 +18236,67 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 
 ### Compliance-Specific Behaviors
 
+**This section is a controls map, not a feature list.** Every control of a standard is one of two kinds: **Server** (the product provides or enforces it, and the detail names the setting, command or event) or **Operator** (a procedure the operator runs outside the product: the server has no feature, record, form or notification for it, and this specification defines none). An Operator control is a reminder of what the standard expects of the operator, never behavior to implement. A control that does not apply to a project that does not process the named data is simply not relevant to it.
+
 #### GDPR (gdpr: true)
 
-| Feature | Behavior |
+| Control | Kind and detail |
 |---------|----------|
-| Cookie consent | Required popup before any tracking |
-| Data export | `/users/data/export` endpoint enabled |
-| Data deletion | `/users/data/delete` endpoint enabled |
-| Consent tracking | All consents logged with timestamp |
-| Data residency | Configurable allowed regions |
-| Privacy policy | Required, must specify data processing |
-| DPO contact | Displayed in privacy policy |
-| Breach notification | 72-hour automated alert system |
+| Cookie consent | **Server:** the consent banner; nothing non-essential runs before the visitor accepts |
+| Data export | **Server:** `/users/data/export` endpoint enabled |
+| Data deletion | **Server:** `/users/data/delete` endpoint enabled |
+| Consent tracking | **Server:** every consent change is logged as `compliance.consent_updated`; consent itself lives in the visitor's `cookie_consent` cookie |
+| Data residency | **Operator:** Configurable allowed regions (the server has no feature for it) |
+| Privacy policy | **Server:** the `/server/privacy` page |
+| DPO contact | **Server:** `server.contact.dpo.*`, shown on `/server/dpo` and in the privacy policy |
+| Breach notification | **Operator:** 72-hour automated alert system; the server supplies the tamper-evident audit log and its `security.*` events as evidence (the server has no feature for it) |
 
 #### HIPAA (hipaa: true)
 
-| Feature | Behavior |
+| Control | Kind and detail |
 |---------|----------|
-| PHI encryption | All health data encrypted with per-record keys |
-| Audit trail | 6-year minimum retention, tamper-evident |
-| Access controls | Role-based with minimum necessary access |
-| Session timeout | 15 minutes maximum idle |
-| MFA | Required for all users |
-| BAA tracking | Business Associate Agreements logged |
-| Breach notification | 60-day notification system |
+| PHI encryption | **Server:** sensitive fields are encrypted at rest with `server.security.encryption_key` (AES-256-GCM); there are no per-record keys |
+| Audit trail | **Server:** the tamper-evident audit log; the strictest enabled standard sets the minimum retention (6 years with HIPAA) |
+| Access controls | **Server:** Role-based with minimum necessary access |
+| Session timeout | **Server:** 15 minutes maximum idle |
+| MFA | **Server:** Required for all users |
+| BAA tracking | **Operator:** Business Associate Agreements logged (the server has no feature for it) |
+| Breach notification | **Operator:** 60-day notification system; the server supplies the tamper-evident audit log and its `security.*` events as evidence (the server has no feature for it) |
 
 #### SOC2 (soc2: true)
 
-| Feature | Behavior |
+| Control | Kind and detail |
 |---------|----------|
-| Change management | All config changes require approval workflow |
-| Access reviews | Quarterly access review reminders |
-| Vulnerability management | Integration with security scanners |
-| Incident response | Defined escalation paths |
-| Vendor management | Third-party risk tracking |
-| Availability monitoring | Uptime SLA tracking |
+| Change management | **Operator:** All config changes require approval workflow (the server has no feature for it) |
+| Access reviews | **Operator:** Quarterly access review reminders (the server has no feature for it) |
+| Vulnerability management | **Server:** the `cve_update` task keeps the CVE and Trivy data current; acting on findings is the operator's |
+| Incident response | **Operator:** Defined escalation paths (the server has no feature for it) |
+| Vendor management | **Operator:** Third-party risk tracking (the server has no feature for it) |
+| Availability monitoring | **Server:** `/server/healthz` and `/server/metrics`; SLA targets and their tracking are the operator's |
 
 #### PCI-DSS (pci_dss: true)
 
-| Feature | Behavior |
+| Control | Kind and detail |
 |---------|----------|
-| Cardholder data | Never stored (use tokenization) |
-| Network segmentation | Cardholder environment isolated |
-| Password policy | 12+ chars, complexity, 90-day rotation |
-| Session timeout | 15 minutes maximum |
-| Audit logging | All access to cardholder data logged |
-| Vulnerability scanning | Quarterly scans required |
-| Penetration testing | Annual requirement tracking |
+| Cardholder data | **Server:** never stored and never logged: the product handles no card data |
+| Network segmentation | **Operator:** Cardholder environment isolated (the server has no feature for it) |
+| Password policy | **Server:** 12+ chars, complexity, 90-day rotation |
+| Session timeout | **Server:** 15 minutes maximum |
+| Audit logging | **Server:** the tamper-evident audit log (retention from the matrix) |
+| Vulnerability scanning | **Operator:** Quarterly scans required (the server has no feature for it) |
+| Penetration testing | **Operator:** Annual requirement tracking (the server has no feature for it) |
 
 #### CCPA (ccpa: true)
 
-| Feature | Behavior |
+| Control | Kind and detail |
 |---------|----------|
-| Data disclosure | `/users/data/export` - what data is collected (we do not sell data) |
-| Opt-out of sale | Dynamic: if `data.sold=false` shows notice; if `data.sold=true` shows opt-out toggle |
-| Right to delete | `/users/data/delete` endpoint enabled |
-| Non-discrimination | Cannot deny service for exercising rights |
-| Privacy notice | Dynamic based on `server.privacy.data.sold` setting |
-| Verification | Identity verification before data requests |
-| Response time | 45 days to fulfill requests (90 with extension) |
+| Data disclosure | **Server:** `/users/data/export` - what data is collected (we do not sell data) |
+| Opt-out of sale | **Server:** Dynamic: if `data.sold=false` shows notice; if `data.sold=true` shows opt-out toggle |
+| Right to delete | **Server:** `/users/data/delete` endpoint enabled |
+| Non-discrimination | **Operator:** Cannot deny service for exercising rights (the server has no feature for it) |
+| Privacy notice | **Server:** Dynamic based on `server.privacy.data.sold` setting |
+| Verification | **Server:** Identity verification before data requests |
+| Response time | **Operator:** 45 days to fulfill requests (90 with extension) (the server has no feature for it) |
 
 **CCPA "Do Not Sell" Implementation (based on `server.privacy.data.sold`):**
 
@@ -18303,87 +18307,87 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 
 #### ISO27001 (iso27001: true)
 
-| Feature | Behavior |
+| Control | Kind and detail |
 |---------|----------|
-| Risk assessment | Documented risk register required |
-| Asset inventory | All data assets tracked |
-| Access control | Role-based, principle of least privilege |
-| Cryptography | Encryption policy enforced |
+| Risk assessment | **Operator:** Documented risk register required (the server has no feature for it) |
+| Asset inventory | **Operator:** All data assets tracked (the server has no feature for it) |
+| Access control | **Server:** Role-based, principle of least privilege |
+| Cryptography | **Server:** AES-256-GCM at rest, TLS in transit, SHA-256 token hashes |
 | Physical security | N/A (cloud-native, document controls) |
-| Operations security | Change management, capacity planning |
-| Incident management | Defined response procedures |
-| Business continuity | Backup and recovery procedures |
-| Audit logging | 3-year minimum retention |
+| Operations security | **Operator:** Change management, capacity planning (the server has no feature for it) |
+| Incident management | **Operator:** Defined response procedures (the server has no feature for it) |
+| Business continuity | **Server:** `--maintenance backup` and `restore`, plus the scheduled backups |
+| Audit logging | **Server:** the tamper-evident audit log; the strictest enabled standard sets the retention (3 years with ISO27001) |
 
 #### FedRAMP (fedramp: true)
 
-| Feature | Behavior |
+| Control | Kind and detail |
 |---------|----------|
-| Authorization level | Low/Moderate/High impact configurable |
-| Continuous monitoring | Automated security scanning |
-| FIPS 140-2 | Cryptographic module compliance |
-| Data residency | US-only data centers required |
-| Personnel security | Background check tracking |
-| Incident response | US-CERT notification procedures |
-| Vulnerability scanning | Monthly automated scans |
-| Penetration testing | Annual third-party testing |
-| POA&M tracking | Plan of Action & Milestones dashboard |
+| Authorization level | **Operator:** Low/Moderate/High impact configurable (the server has no feature for it) |
+| Continuous monitoring | **Operator:** Automated security scanning (the server has no feature for it) |
+| FIPS 140-2 | **Operator:** Cryptographic module compliance (the server has no feature for it) |
+| Data residency | **Operator:** US-only data centers required (the server has no feature for it) |
+| Personnel security | **Operator:** Background check tracking (the server has no feature for it) |
+| Incident response | **Operator:** US-CERT notification procedures (the server has no feature for it) |
+| Vulnerability scanning | **Operator:** Monthly automated scans (the server has no feature for it) |
+| Penetration testing | **Operator:** Annual third-party testing (the server has no feature for it) |
+| POA&M tracking | **Operator:** Plan of Action & Milestones dashboard (the server has no feature for it) |
 
 #### LGPD (lgpd: true)
 
-| Feature | Behavior |
+| Control | Kind and detail |
 |---------|----------|
-| Legal basis | Consent or legitimate interest tracking |
-| Data subject rights | Access, correction, deletion, portability |
-| DPO requirement | Data Protection Officer contact displayed |
-| International transfer | Adequacy or safeguards required |
-| Breach notification | ANPD notification within reasonable time |
-| Privacy notice | Clear, accessible privacy policy in Portuguese |
-| Consent | Granular, specific, freely given |
-| Children's data | Parental consent for under 18 |
+| Legal basis | **Operator:** Consent or legitimate interest tracking (the server has no feature for it) |
+| Data subject rights | **Server:** access and portability through `data export`, deletion through `data delete`; correction is the owner editing their own resources |
+| DPO requirement | **Server:** `server.contact.dpo.*`, shown on `/server/dpo` |
+| International transfer | **Operator:** Adequacy or safeguards required (the server has no feature for it) |
+| Breach notification | **Operator:** ANPD notification within reasonable time; the server supplies the tamper-evident audit log and its `security.*` events as evidence (the server has no feature for it) |
+| Privacy notice | **Server:** the `/server/privacy` page, localized by the i18n rules |
+| Consent | **Server:** granular categories in the consent banner |
+| Children's data | **Operator:** Parental consent for under 18 (the server has no feature for it) |
 
 #### PIPEDA (pipeda: true)
 
-| Feature | Behavior |
+| Control | Kind and detail |
 |---------|----------|
-| Consent | Meaningful consent for collection/use/disclosure |
-| Purpose limitation | Data used only for stated purposes |
-| Access rights | Users can access their personal information |
-| Accuracy | Users can challenge and correct data |
-| Retention limits | Data kept only as long as necessary |
-| Safeguards | Appropriate security for sensitivity level |
-| Openness | Privacy policies publicly available |
-| Accountability | Designated privacy officer |
-| Breach notification | OPC notification for significant breaches |
+| Consent | **Server:** the consent banner, opt-in for everything non-essential |
+| Purpose limitation | **Operator:** Data used only for stated purposes (the server has no feature for it) |
+| Access rights | **Server:** `data export` |
+| Accuracy | **Server:** owners edit or delete their own resources with their token |
+| Retention limits | **Server:** the retention periods in the privacy text and the cleanup tasks (`token_cleanup`, `security_cleanup`) |
+| Safeguards | **Server:** encryption at rest and in transit, hashed tokens, the audit log |
+| Openness | **Server:** the public `/server/privacy` page |
+| Accountability | **Operator:** Designated privacy officer (the server has no feature for it) |
+| Breach notification | **Operator:** OPC notification for significant breaches; the server supplies the tamper-evident audit log and its `security.*` events as evidence (the server has no feature for it) |
 
 #### APPI (appi: true)
 
-| Feature | Behavior |
+| Control | Kind and detail |
 |---------|----------|
-| Purpose specification | Clear purpose before collection |
-| Use limitation | No use beyond specified purpose |
-| Proper acquisition | No deceptive collection practices |
-| Accuracy | Keep data accurate and up-to-date |
-| Security control | Appropriate safeguards required |
-| Third-party oversight | Supervise data handling by processors |
-| Disclosure restrictions | User consent for third-party sharing |
-| Cross-border transfer | Consent or equivalent protection required |
-| Breach notification | PPC and affected individuals notified |
+| Purpose specification | **Operator:** Clear purpose before collection (the server has no feature for it) |
+| Use limitation | **Operator:** No use beyond specified purpose (the server has no feature for it) |
+| Proper acquisition | **Operator:** No deceptive collection practices (the server has no feature for it) |
+| Accuracy | **Operator:** Keep data accurate and up-to-date (the server has no feature for it) |
+| Security control | **Server:** encryption at rest and in transit, hashed tokens, the audit log |
+| Third-party oversight | **Operator:** Supervise data handling by processors (the server has no feature for it) |
+| Disclosure restrictions | **Server:** analytics and any third-party sharing only after the visitor accepts |
+| Cross-border transfer | **Operator:** Consent or equivalent protection required (the server has no feature for it) |
+| Breach notification | **Operator:** PPC and affected individuals notified; the server supplies the tamper-evident audit log and its `security.*` events as evidence (the server has no feature for it) |
 
 #### PDPA (pdpa: true)
 
-| Feature | Behavior |
+| Control | Kind and detail |
 |---------|----------|
-| Consent | Consent required before collection |
-| Purpose limitation | Data used only for notified purposes |
-| Notification | Inform users of purposes at collection |
-| Access and correction | Users can access and correct data |
-| Accuracy | Reasonable efforts to ensure accuracy |
-| Protection | Reasonable security arrangements |
-| Retention limitation | Delete when no longer needed |
-| Transfer limitation | Adequate protection for overseas transfers |
-| DPO requirement | Data Protection Officer for certain orgs |
-| Breach notification | PDPC notification within 3 days |
+| Consent | **Server:** the consent banner, opt-in for everything non-essential |
+| Purpose limitation | **Operator:** Data used only for notified purposes (the server has no feature for it) |
+| Notification | **Server:** the consent banner and the privacy page state the purposes |
+| Access and correction | **Server:** `data export`; owners edit their own resources |
+| Accuracy | **Operator:** Reasonable efforts to ensure accuracy (the server has no feature for it) |
+| Protection | **Server:** encryption at rest and in transit, hashed tokens, the audit log |
+| Retention limitation | **Server:** the cleanup tasks and owner deletion |
+| Transfer limitation | **Operator:** Adequate protection for overseas transfers (the server has no feature for it) |
+| DPO requirement | **Operator:** Data Protection Officer for certain orgs (the server has no feature for it) |
+| Breach notification | **Operator:** PDPC notification within 3 days; the server supplies the tamper-evident audit log and its `security.*` events as evidence (the server has no feature for it) |
 
 ### Compliance Routes
 
@@ -18442,11 +18446,6 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 | `compliance.data_deletion_requested` | User requested deletion | User ID, request ID |
 | `compliance.data_deletion_completed` | Deletion completed | User ID (anonymized after) |
 | `compliance.consent_updated` | User updated consents | User ID, consent type, new value |
-| `compliance.breach_reported` | Data breach reported | Breach ID, severity, reporter |
-| `compliance.breach_notified` | Breach notification sent | Breach ID, notification type |
-| `compliance.breach_investigation_started` | Investigation began | Breach ID, investigator |
-| `compliance.breach_investigation_completed` | Investigation closed | Breach ID, outcome |
-| `compliance.breach_escalated` | Breach escalated to authorities | Breach ID, authority |
 | `compliance.report_generated` | Compliance report generated | Report type, generated by |
 
 ### Data Protection
@@ -20205,9 +20204,17 @@ server:
 
 ```
 
+**Which `server.privacy.*` keys do what:**
+
+| Keys | Role |
+|------|------|
+| `consent.*` (banner message, buttons, position, `show_preferences`), `cookies.*.enabled` | Behavior only: they change what the server does, they do not add page text |
+| `data.sold` | Behavior AND page: picks the banner message, the CCPA opt-out and the Data Usage text |
+| `data.stored_on_server`, `data.sharing`, `retention.*`, `cookies.*.description`, `third_party.services` | Page content only: they fill the Data Storage, Data Retention, Cookie Policy and Third Parties sections of `/server/privacy` |
+
 ### Built-in privacy text (not configurable)
 
-**The privacy page text below is project data, not configuration: it is never read from `server.yml`.** `data_usage` is shown when `server.privacy.data.sold` is false and `data_usage_if_sold` when it is true. An operator adds to the page with `server.branding.content.privacy` ("Page Content"); a project replaces these defaults in its own source.
+**The BUILT-IN sections below (`data_collection`, `data_usage`, `data_security`) are project data, never read from `server.yml`; the page's other sections show deployment facts that only the operator knows and come from `server.privacy` (table above).** `data_usage` is shown when `server.privacy.data.sold` is false and `data_usage_if_sold` when it is true. An operator adds to the page with `server.branding.content.privacy` ("Page Content"); a project replaces these defaults in its own source.
 
 #### `data_collection`
 
@@ -20274,7 +20281,7 @@ server:
 
 - All data is stored on our servers (not third-party cloud services unless specified)
 - Passwords are hashed using Argon2id (industry-standard, memory-hard algorithm)
-- All connections are encrypted (HTTPS/TLS)
+- Connections are encrypted with HTTPS/TLS when the site is served that way; the page says "This site is currently served without TLS" instead when the request did not arrive over TLS (as URL detection sees it, trusted reverse proxy headers included)
 - Regular security audits and updates
 - Access controls and audit logging for admin actions
 ```
@@ -22362,8 +22369,9 @@ func getAPIResponseFormat(r *http.Request) string {
         return "text"
     }
 
-    // 4. Check if non-interactive client (uses same detection as frontend)
-    if isNonInteractiveClient(r) {
+    // 4. HTTP tools AND text browsers get plain text on /api/**: a text browser has no JavaScript and cannot
+    // render JSON usefully (on FRONTEND routes it still gets the no-JS HTML)
+    if isNonInteractiveClient(r) || isTextBrowser(r) {
         return "text"
     }
 
@@ -22623,7 +22631,8 @@ func isHttpTool(r *http.Request) bool {
 
 // isNonInteractiveClient detects clients that need pre-formatted text
 // ONLY HTTP tools are non-interactive
-// Our client and text browsers are INTERACTIVE (handle their own rendering)
+// Our client and text browsers are INTERACTIVE on frontend routes (handle their own rendering);
+// on /api/** a text browser is sent plain text (see getAPIResponseFormat)
 func isNonInteractiveClient(r *http.Request) bool {
     // Our client is INTERACTIVE - receives JSON
     if isOurCliClient(r) {
@@ -35950,6 +35959,8 @@ Do not reply to this email.
 | Empty subject | `Subject cannot be empty` |
 | Empty body | `Body cannot be empty` |
 | Invalid syntax | `Invalid template syntax at line 5` |
+
+Every row of this table is a BLOCKING error: the template is not loaded (the embedded default stays in use) and `--dry-run` exits `65`. Only the warnings below never block.
 
 **Warnings (non-blocking):**
 - Using deprecated variables
