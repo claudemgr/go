@@ -8480,7 +8480,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 | `--maintenance mode` | Changes server behavior | `server.token` OR root |
 | `--maintenance pgp export private` / `import` / `delete` | Exposes, replaces, or destroys the security private key | `server.token` OR root + typed confirmation |
 | `--maintenance secret rotate installation_secret` / `encryption_key` | Rotates a root secret or the at-rest encryption key | `server.token` OR root + typed confirmation |
-| `--maintenance token revoke <prefix>` | Revokes one token, or a primary token's whole owner with its linked tokens | `server.token` OR root + typed confirmation (the operator types the prefix; `--yes` skips the prompt for scripts) |
+| `--maintenance token revoke <prefix>` | Revokes one linked token, or deletes a primary token's whole owner with its tokens and resources | `server.token` OR root + typed confirmation (a linked token: the operator types the prefix; a primary: the owner id; `--yes` skips the prompt for scripts) |
 
 **Setup authorization flow:**
 
@@ -12214,7 +12214,7 @@ CREATE TABLE IF NOT EXISTS api_tokens (
     last_used_at  INTEGER,
     -- NULL = active
     revoked_at    INTEGER,
-    -- e.g., "tos_violation", "operator_action", "owner_revoked"
+    -- e.g., "tos_violation", "operator_action" (a linked token; revoking a primary deletes the whole owner)
     revoked_reason TEXT
 );
 
@@ -12289,8 +12289,8 @@ server:
 
 | Rule | Detail |
 |------|--------|
-| Ownership | Resources store `owner_id`. Tokens resolve to an `owner_id`. A resource is never bound to a token hash, so rotating or revoking a token never touches resource rows |
-| One primary per owner | Created with the owner; **never expires and never disappears** — not when resources expire or are deleted, not when the owner has none left. It ends only by owner rotation (replaced in place), operator revocation, or the optional idle purge below |
+| Ownership | Resources store `owner_id`. Tokens resolve to an `owner_id`. A resource is never bound to a token hash, so rotating a token, or revoking a linked token, never touches resource rows (revoking a primary deletes the whole owner: see "Revoking a primary token") |
+| One primary per owner | Created with the owner; **never expires and never disappears** — not when resources expire or are deleted, not when the owner has none left. It ends only by owner rotation (replaced in place), operator revocation (which deletes the whole owner), or the optional idle purge below |
 | Reuse | A caller presenting a valid token (Bearer header, or cookie on web forms) creates new resources under the same owner and receives no new token. The `owner_token` response field is present only when a NEW owner was issued |
 | Cookie | `{project_name}_owner_token_XXXXXX` holds the primary token (HttpOnly + Secure + SameSite=Strict + Path=/). Max-Age `server.tokens.cookie_max_age` (default `1y`), **sliding** — refreshed on every valid use. An invalid or revoked cookie is cleared on the next response |
 | Lost cookie / new device | Paste the primary token into "Use an existing token" on `/server/preferences/tokens` (restore). Valid → cookie set, identity restored. Linked tokens cannot restore an identity |
@@ -12342,7 +12342,7 @@ The server creates the owner and its primary token (hash + encrypted copy), stor
 | **Linked tokens** (list) | Name, masked token, created, last used, expires, status (active / expired / revoked) |
 | **Create linked token** | Name (required, 1–64 chars, unique per owner) and expiry: `never` (default), `7d`, `30d`, `90d`, `1y`, or a chosen date. Maximum `server.tokens.max_linked` (default `25`) active per owner. The new token is displayed and stays viewable |
 | **Per linked token** | Reveal, Copy, Rotate (in place, keeps name and expiry), Rename, Change expiry, Revoke (immediate, permanent) |
-| **Revoke primary** | Not offered — rotate instead. Only the operator can revoke a primary, which revokes the whole owner |
+| **Revoke primary** | Not offered — rotate instead. Only the operator can revoke a primary, which DELETES the whole owner with its tokens and resources (see "Revoking a primary token") |
 
 **Authority rules:**
 
@@ -12355,7 +12355,7 @@ The server creates the owner and its primary token (hash + encrypted copy), stor
 | Expiry | A linked token past `expires_at` is rejected like a revoked one; it stays listed (marked expired) until the owner revokes it or changes its expiry |
 | Never a preferences row | Tokens are credentials in `api_tokens`, not preferences. UI preferences stay cookie-only (see "Client-Side Preferences") |
 | Never in lists or logs | List/detail responses return prefix, name, dates, status — never the token. Only the reveal action decrypts, and it writes an audit event |
-| Audit | `token.created`, `token.rotated`, `token.revealed`, `token.revoked`, `token.restored`, each with owner id and token prefix — never the token |
+| Audit | `token.created`, `token.rotated`, `token.revealed`, `token.revoked`, `token.restored`, each with owner id and token prefix — never the token; an operator revoke of a primary writes ONE `token.revoked` for the whole owner (see "Revoking a primary token") |
 | Rate limiting | Reveal, rotate, restore and issue use the `strict` limiter (`server.rate_limit.strict`, PART 12); every attempt, valid or not, consumes it, and a restore with an invalid token also counts as a failed authentication |
 
 **Routes** (web forms are cookie-authenticated `POST`s with CSRF; the API mirror accepts the primary token's `Authorization` header only, except issuing a token, which needs none):
@@ -12447,10 +12447,21 @@ server:
 ```
 # prefix, kind, owner, name, created, last used, status
 {project_name} --maintenance token list
-# revoke one token; a primary revokes its whole owner (linked tokens included)
+# revoke one linked token; a primary DELETES its whole owner (see "Revoking a primary token")
 {project_name} --maintenance token revoke <prefix>
 ```
-The CLI shows prefixes only — there is no operator path that prints a raw owner token. Both commands need `server.token` OR root ("Sensitive Operations"), and `revoke` asks the operator to type the prefix to confirm (`--yes` skips the prompt for scripts).
+The CLI shows prefixes only — there is no operator path that prints a raw owner token. Both commands need `server.token` OR root ("Sensitive Operations"). `revoke` of a linked token asks the operator to type the prefix; `revoke` of a primary asks for the owner id (below). `--yes` skips either prompt for scripts.
+
+**Revoking a primary token deletes the owner:**
+
+| Rule | Detail |
+|------|--------|
+| Effect | The same deletion as `--maintenance data delete --owner` (PART 11 → "Data Subject Commands"), including its rule for a kind that IDEA.md declares retained: in ONE transaction the owner's resources are deleted, then the owner row, and its tokens (primary and linked) go with it through `ON DELETE CASCADE`. On any error nothing changes |
+| Confirmation | The operator sees the owner id, the number of tokens and the number of resources, and types the owner id (`--yes` skips the prompt) |
+| The holder | The owner's tokens no longer exist, so every one gets the same response as a missing token (no existence hint, "Ownership check"), the owner cookie is cleared on the next response, and MCP callers get the same. There is no `TOKEN_REVOKED` for a deleted owner: that answer belongs to a revoked linked token |
+| Resources | Gone with the owner; their public links answer like any deleted resource. Backups keep them until their normal retention |
+| No re-issue | A deleted owner cannot be restored or re-created. "New token", or a creation without a token, starts a NEW owner with none of the old resources; only restoring an older backup brings the old owner back |
+| Audit | ONE `token.revoked` event: the owner id as it is (not anonymized: it is a random identifier and the event records an operator action, unlike an erasure request), `details.scope` = `owner`, the counts of tokens and resources deleted, and `details.source` = `cli`. No per-resource events |
 
 **Config Priority :**
 
