@@ -473,7 +473,7 @@ docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -
 make test
 
 # Phase 2: Binary validation — shell scripts run against the compiled binary
-# Basic tier: Docker (Incus only as the fallback)
+# Basic tier: Docker
 ./tests/run_tests.sh
 
 # 5. Production test (before release)
@@ -4387,7 +4387,7 @@ make build
 make test
 
 # CORRECT - Integration tests
-# Basic tier: Docker (Incus only as the fallback)
+# Basic tier: Docker
 ./tests/run_tests.sh
 # Full OS test with systemd (PREFERRED)
 ./tests/incus.sh
@@ -34737,6 +34737,7 @@ func (ws *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, s c
 
 - Single-line version for local Makefile builds (see PART 13); optional, empty or missing means the devel rule
 - Semantic versioning: `MAJOR.MINOR.PATCH` (e.g., `1.2.3`)
+- `make release` accepts ONLY a stable `X.Y.Z` here (`release-check` fails the run with an `ERROR:` on stderr for a devel commit id or a prerelease such as `-beta`; `make` itself reports exit `2` for a failed recipe); it tags `v{version}` and marks the release `--latest`. Devel and beta releases come from CI, never from `make release`
 - Read only by the Makefile for local testing and debugging, when present and non-empty; empty or missing means the devel rule (short commit id); CI/CD never reads it; an explicitly set `VERSION` env var overrides it (user only, AI never sets it)
 
 ### Official Site File: `site.txt` (Optional)
@@ -34973,7 +34974,7 @@ GO_DOCKER_RUN := timeout -k 30 $(DOCKER_TIMEOUT) docker run --rm --no-healthchec
 GO_DOCKER := $(GO_DOCKER_RUN) casjaysdev/go:latest
 # CGO_ENABLED=0 and GOFLAGS=-buildvcs=false are casjaysdev/go:latest defaults; set explicitly for clarity
 
-.PHONY: build local release docker test dev clean
+.PHONY: build local release release-check docker test dev clean
 
 # =============================================================================
 # BUILD - Build all platforms + local binary (via Docker with cached modules)
@@ -35028,7 +35029,11 @@ local: clean
 # =============================================================================
 # RELEASE - Manual local release (stable only)
 # =============================================================================
-release: build
+# Stable SemVer only: a devel version (short commit id or "devel") and any prerelease (-beta, -rc) are published by CI, never by this target
+release-check:
+	@echo "$(VERSION)" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$$' >/dev/null || { echo "ERROR: make release needs a stable SemVer X.Y.Z in release.txt (got '$(VERSION)')" >&2; exit 78; }
+
+release: release-check build
 	@mkdir -p $(RELDIR)
 	@echo "Preparing release $(VERSION)..."
 
@@ -35266,7 +35271,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 3. No `-ldflags` (version info not embedded)
 4. Outputs to `{tempdir}/{project_org}/{internal_name}-XXXXXX/` (isolated, org-identifiable)
 5. Uses Docker (`casjaysdev/go:latest`) - keeps local machine clean
-6. Easy cleanup: `rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}"/${INTERNAL_NAME}-*/` or auto-deleted on reboot
+6. Cleanup: `rm -rf "$BUILD_DIR"` for the directory this run printed; other directories expire with the OS temp cleaner (never a wildcard over the org directory)
 
 ### `make local`
 
@@ -35317,7 +35322,7 @@ docker run --rm \
 
 | Script | Container | Best For |
 |--------|-----------|----------|
-| `./tests/run_tests.sh` | Docker (Incus fallback) | The basic tier: runs `docker.sh`; `incus.sh`, `virt.sh` and `e2e.sh` are run explicitly |
+| `./tests/run_tests.sh` | Docker | The basic tier: runs `docker.sh`; `incus.sh`, `virt.sh` and `e2e.sh` are run explicitly |
 | `./tests/docker.sh` | Docker `alpine:latest` | Quick binary validation |
 | `./tests/incus.sh [systemd\|openrc\|all]` | Incus CONTAINERS: `debian/trixie` (with systemd) and `alpine/{latest_stable}` (without it, OpenRC) | **PREFERRED** for the whole app - both init systems, service lifecycle, reboot, Tor and I2P |
 | `./tests/virt.sh [systemd\|openrc\|all]` | Incus VMs (`--vm`): `debian/trixie` and `alpine/{latest_stable}` | OPTIONAL - a clean OS with its own kernel and a real boot, only when a container cannot show it (PART 28) |
@@ -35332,7 +35337,7 @@ make dev
 make test
 
 # Before commit
-# Basic tests (Docker; Incus only as the fallback)
+# Basic tests (Docker)
 ./tests/run_tests.sh
 
 # Before release
@@ -35394,7 +35399,7 @@ The **only** times binaries are copied are the CI/CD release process, the `make 
 
 **This is handled by CI/CD, not manual commands.**
 
-**Disposable test containers (the third exception).** `tests/*.sh` may push the binary into a Docker or Incus test container, and may copy it under another name inside that container for the rename test (PART 28). That copy exists only inside the container, the file in `binaries/` is never modified, and the container is removed when the test ends. Copies on the host (`/tmp`, `/usr/local/bin`, `releases/` by hand) stay prohibited.
+**Disposable test containers (the third exception).** `tests/*.sh` may push the binary into a Docker or Incus test container, and may copy it under another name inside that container for the rename test (PART 28). That copy exists only inside the container, the file in `binaries/` is never modified, and the container is removed when the test ends. Copies on the host (`/tmp`, `/usr/local/bin`, `releases/` by hand) stay prohibited, with ONE allowance: a test script may stage the binary it tests in its own `{tempdir}/{project_org}/{internal_name}-XXXXXX/` directory (to pick the musl build), and its `trap` removes that directory.
 
 ## Release Artifacts
 
@@ -35575,7 +35580,7 @@ docker/
 | Meta labels | All OCI labels (see below) |
 | Required packages | git, curl, bash, tini, tor, i2pd, tzdata, ca-certificates |
 | Image contract | EVERY image the project ships (release, `:devel`, the all-in-one Debian image, any variant) installs `bash`, `curl`, `tor`, `i2pd`, `tini`, `tzdata` and `ca-certificates` in its FINAL stage. `tor` and `i2pd` are installed even though I2P is opt-in: a missing package is an image bug, never a runtime fallback. A project may ADD packages and never remove these |
-| Image check | After every build, CI and `tests/docker.sh` run `docker run --rm --entrypoint sh {image} -c 'for c in bash curl tor i2pd tini; do command -v "$c" || exit 1; done'` and fail on any missing command; the container's `/server/healthz` must then report `features.tor.status` `healthy` (never `unavailable`) within `server.tor.bootstrap_timeout` (default 180 seconds): it is `starting` while Tor bootstraps and becomes `healthy` only once the hidden service address exists, so the check waits for the bootstrap timeout, not the shorter `startup_timeout` |
+| Image check | After every build, CI and `tests/docker.sh` run `docker run --rm --entrypoint sh {image} -c 'for c in bash curl tor i2pd tini; do command -v "$c" || exit 1; done'` and fail on any missing command; the container's `/server/healthz` must then report `features.tor.status` `healthy` within `server.tor.bootstrap_timeout` (default 180 seconds): it is `starting` while Tor bootstraps and becomes `healthy` only once the hidden service address exists, so the check waits for the bootstrap timeout, not the shorter `startup_timeout`. The image contract assumes outbound network access, because Tor cannot bootstrap without it: on a runner with none, the check accepts `starting` or `unavailable` (never `error`), prints `SKIP: no outbound network` on stderr and does not fail, and `REQUIRE_OVERLAY=1` makes `healthy` mandatory |
 | Tor handling | Installed but **binary controls** (see PART 31) |
 | Binary location | `/usr/local/bin/{project_name}` |
 | Entrypoint script | `/usr/local/bin/entrypoint.sh` |
@@ -40158,6 +40163,8 @@ When a test or debug step requires `reboot`, `systemctl`, `iptables`, `mount`, p
 
 **The project directory is for SOURCE CODE ONLY. All runtime/test data goes to the OS temp directory.**
 
+**Build artifacts are not runtime or test data.** `make` writes them to `binaries/` and `releases/` in the project root (the Makefile's `BINDIR` and `RELDIR`, both gitignored), and the test scripts read the binaries from there; each script takes the directory from `BINDIR` (default `binaries`) and passes it to the Makefile (`make build BINDIR="$BIN_DIR"`), so a project that overrides it stays consistent. Everything a test or a running binary WRITES (configs, databases, logs, volumes) stays in the temp directory.
+
 ## AI Docker Compose Rules
 
 **AI assistants have STRICT rules about docker-compose usage:**
@@ -40308,12 +40315,14 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 
 ### Cleanup
 
+Remove ONLY the directory this run created, by the exact path saved when it was made. The org directory is shared by every project and every session of the organization: listing it is fine, deleting it or any other entry in it never is. `make clean` removes `BINDIR` and `RELDIR` only and never touches the temp directory. Directories left by other runs expire with the OS temp cleaner.
+
 ```bash
-# Find all temp dirs for this org
+# List what exists for this org (read-only)
 ls -la "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
 
-# Clean all temp dirs for this org
-rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
+# Remove the directory THIS run created (the path saved from mktemp)
+rm -rf "$TEST_DIR"
 ```
 
 ### Correct vs Incorrect
@@ -40355,7 +40364,7 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECT_ORG}/"
 
 **Why this structure:**
 - Prevents conflicts between projects
-- Makes cleanup easy (`rm -rf /tmp/{project_org}/`)
+- Makes cleanup exact: each run removes the one directory it created
 - Identifies which project created temp files
 - Prevents pollution of root `/tmp` directory
 - Multiple projects can run simultaneously
@@ -40754,7 +40763,8 @@ curl -q -LSsf /links/abc123
 
 **What NOT to test in unit tests:**
 - ✗ Full HTTP requests (use integration tests)
-- ✗ Database operations (use integration tests)
+- ✗ A remote or shared database (libSQL/Turso, any server you do not start inside the test): use integration tests
+- ✓ A local SQLite database that the test creates itself (in-memory or a file in `t.TempDir()`): this IS a unit test, runs in `make test` and counts toward the coverage gate
 - ✗ External services (use integration tests)
 - ✗ Authentication flows (use integration tests)
 
@@ -41043,7 +41053,7 @@ fi
 
 | Script | Purpose | Container | Tests |
 |--------|---------|-----------|-------|
-| `tests/run_tests.sh` | Run the basic tier | Docker (Incus only when Docker is absent) | Runs docker.sh; the full-app, clean-OS and browser scripts are explicit |
+| `tests/run_tests.sh` | Run the basic tier | Docker | Runs docker.sh; the full-app, clean-OS and browser scripts are explicit |
 | `tests/docker.sh` | Basic tier: the binary-validation suite in Docker | `alpine:latest` | Does it start and answer: version, help, endpoints, CLI; no init system, no service lifecycle |
 | `tests/incus.sh` | Full-app testing in Incus CONTAINERS (`[systemd\|openrc\|all]`) | `debian/trixie` (with systemd) + `alpine/{latest_stable}` (without it, OpenRC) | The same suite plus the whole service lifecycle under a real init, reboot persistence, Tor and I2P |
 | `tests/virt.sh` | Clean-OS testing in real VMs (`[systemd\|openrc\|all]`, OPTIONAL) | Incus VMs: `debian/trixie` + `alpine/{latest_stable}` | The same suite on a pristine OS with its own kernel, plus VM-only checks and a cold power cycle |
@@ -41080,25 +41090,27 @@ set -eo pipefail
 # Detect project info
 PROJECT_NAME=$(basename "$PWD")
 PROJECT_ORG=$(basename "$(dirname "$PWD")")
+# The build output directory is the Makefile's BINDIR (default binaries)
+BIN_DIR="${BINDIR:-binaries}"
 
 # Build — use Makefile if present (standard for all bootstrapped projects)
 # Output always lands in binaries/
 if [ -f "Makefile" ]; then
     echo "Building with make build..."
-    make build
+    make build BINDIR="$BIN_DIR"
 else
     # No Makefile yet — fallback to direct docker run
     echo "Building in Docker (no Makefile)..."
     GO_CACHE="${GO_CACHE:-$HOME/go/pkg/mod}"
     GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build/${PROJECT_NAME}}"
-    mkdir -p "$GO_CACHE" "$GO_BUILD" binaries
+    mkdir -p "$GO_CACHE" "$GO_BUILD" "$BIN_DIR"
     docker run --rm \
       --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
       -v $PWD:/app \
       -v $GO_CACHE:/usr/local/share/go/pkg/mod \
       -v $GO_BUILD:/usr/local/share/go/cache \
       -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
-      casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/binaries/${PROJECT_NAME} ./src
+      casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/${BIN_DIR}/${PROJECT_NAME} ./src
     if [ -d "src/client" ]; then
         docker run --rm \
           --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
@@ -41106,14 +41118,14 @@ else
           -v $GO_CACHE:/usr/local/share/go/pkg/mod \
           -v $GO_BUILD:/usr/local/share/go/cache \
           -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
-          casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/binaries/${PROJECT_NAME}-cli ./src/client
+          casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/${BIN_DIR}/${PROJECT_NAME}-cli ./src/client
     fi
 fi
 
 echo "Testing in Docker (Alpine)..."
 docker run --rm \
   --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
-  -v "$PWD/binaries:/app" \
+  -v "$PWD/$BIN_DIR:/app" \
   alpine:latest sh -c "
     set -e
 
@@ -41282,26 +41294,29 @@ cleanup() {
     local c
     for c in "${CONTAINERS[@]}"; do incus delete "$c" --force 2>/dev/null || true; done
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
+
+# The build output directory is the Makefile's BINDIR (default binaries); every build below passes it on
+BIN_DIR="${BINDIR:-binaries}"
 
 # Build — use Makefile if present (standard for all bootstrapped projects)
-# Output always lands in binaries/
+# Output always lands in $BIN_DIR
 if [ -f "Makefile" ]; then
     echo "Building with make build..."
-    make build
+    make build BINDIR="$BIN_DIR"
 else
     # No Makefile yet — fallback to direct docker run
     echo "Building in Docker (no Makefile)..."
     GO_CACHE="${GO_CACHE:-$HOME/go/pkg/mod}"
     GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build/${PROJECT_NAME}}"
-    mkdir -p "$GO_CACHE" "$GO_BUILD" binaries
+    mkdir -p "$GO_CACHE" "$GO_BUILD" "$BIN_DIR"
     docker run --rm \
       --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
       -v $PWD:/app \
       -v $GO_CACHE:/usr/local/share/go/pkg/mod \
       -v $GO_BUILD:/usr/local/share/go/cache \
       -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
-      casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/binaries/${PROJECT_NAME} ./src
+      casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/${BIN_DIR}/${PROJECT_NAME} ./src
     if [ -d "src/client" ]; then
         docker run --rm \
           --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
@@ -41309,11 +41324,9 @@ else
           -v $GO_CACHE:/usr/local/share/go/pkg/mod \
           -v $GO_BUILD:/usr/local/share/go/cache \
           -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
-          casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/binaries/${PROJECT_NAME}-cli ./src/client
+          casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/${BIN_DIR}/${PROJECT_NAME}-cli ./src/client
     fi
 fi
-
-BIN_DIR="binaries"
 
 REMOTE_LIB=$(cat <<'REMOTE_LIB_EOF'
 INTERNAL_NAME="${INTERNAL_NAME:-$PROJECT_NAME}"
@@ -41327,9 +41340,11 @@ wait_for() { local n="$1" i; shift; for i in $(seq 1 "$n"); do "$@" >/dev/null 2
 
 # A native service listens on the port the server saved in server.yml (a random 64xxx port; 80 is only the container default), so read it there
 CONFIG_FILE="/etc/${INTERNAL_ORG}/${INTERNAL_NAME}/server.yml"
-port() { sed -n 's/^  port: *"\{0,1\}\([0-9]\{1,5\}\).*/\1/p' "$CONFIG_FILE" 2>/dev/null | head -1; }
+# server.port is read inside the server: section at ANY indentation; a dual port such as "8090,8443" yields its first number
+port() { awk '/^server:/ {s=1; next} /^[^[:space:]#]/ {s=0} s && /^[[:space:]]+port:/ {v=$2; gsub(/[^0-9,]/, "", v); sub(/,.*/, "", v); print v; exit}' "$CONFIG_FILE" 2>/dev/null; }
 api() { echo "http://localhost:$(port)/api/{api_version}/server/healthz"; }
-healthz() { curl -q -LSsf --max-time 10 "$(api)"; }
+# The health helper asks for JSON: without an Accept header a curl client gets plain text and every jq check below would fail
+healthz() { curl -q -LSsf --max-time 10 -H 'Accept: application/json' "$(api)"; }
 healthz_up() { healthz | jq -e '.status' >/dev/null; }
 overlay() { healthz | jq -r ".features.$1.$2"; }
 
@@ -41372,7 +41387,7 @@ echo "=== [$INIT_MODE] Service install (--service --install also enables and sta
 ${PROJECT_NAME} --service --install
 check "service file installed at ${UNIT_FILE}" test -f "$UNIT_FILE"
 if [ "$INIT_MODE" = "openrc" ]; then
-    check "init script starts with #!/sbin/openrc-run" sh -c "head -1 '$UNIT_FILE' | grep -q '^#!/sbin/openrc-run'"
+    check "init script starts with #!/sbin/openrc-run" sh -c "head -1 '$UNIT_FILE' | grep '^#!/sbin/openrc-run' >/dev/null"
     check "init script is executable" test -x "$UNIT_FILE"
     check_not "init script is not a SysV script" grep -q 'BEGIN INIT INFO' "$UNIT_FILE"
 fi
@@ -41418,8 +41433,8 @@ echo "=== Project-Specific Endpoint Tests ==="
 #
 # Example for jokes frontend (smart detection, no .txt - test with text for simplicity):
 #   JOKE=$(curl -q -LSsf http://localhost:$(port)/jokes/random)
-#   if echo "$JOKE" | grep -q "Why"; then pass "Frontend text works"; else fail "Frontend text"; fi
-#   curl -q -LSsfI -H 'Accept: text/html' http://localhost:$(port)/jokes/random | grep -q 'text/html' || fail "Frontend HTML"
+#   if echo "$JOKE" | grep "Why" >/dev/null; then pass "Frontend text works"; else fail "Frontend text"; fi
+#   curl -q -LSsfI -H 'Accept: text/html' http://localhost:$(port)/jokes/random | grep 'text/html' >/dev/null || fail "Frontend HTML"
 #
 # Example for open data CRUD (full test suite):
 #   curl -q -LSsf http://localhost:$(port)/api/{api_version}/items || fail "LIST items API"
@@ -41432,13 +41447,13 @@ echo "=== Project-Specific Endpoint Tests ==="
 
 echo "=== Open API Smoke Test ==="
 # No token needed for the public endpoints; MCP, metrics and token routes are checked separately (a missing token answers 401)
-if curl -q -LSsf http://localhost:$(port)/server/healthz | grep -q '"status"'; then pass "Health endpoint works"; else fail "Health endpoint"; fi
+if curl -q -LSsf http://localhost:$(port)/server/healthz | grep '"status"' >/dev/null; then pass "Health endpoint works"; else fail "Health endpoint"; fi
 
 echo "=== Binary Rename Tests ==="
 # Binaries show the ACTUAL name in --help/--version (not hardcoded)
 cp /usr/local/bin/${PROJECT_NAME} /tmp/renamed-server
 chmod +x /tmp/renamed-server
-if /tmp/renamed-server --help 2>&1 | grep -q 'renamed-server'; then pass "Server binary rename works (--help shows actual name)"; else fail "Server --help does not show renamed binary name"; fi
+if /tmp/renamed-server --help 2>&1 | grep 'renamed-server' >/dev/null; then pass "Server binary rename works (--help shows actual name)"; else fail "Server --help does not show renamed binary name"; fi
 
 echo "=== Client Tests (if exists) ==="
 if [ -f /usr/local/bin/${PROJECT_NAME}-cli ]; then
@@ -41447,7 +41462,7 @@ if [ -f /usr/local/bin/${PROJECT_NAME}-cli ]; then
 
     cp /usr/local/bin/${PROJECT_NAME}-cli /tmp/renamed-cli
     chmod +x /tmp/renamed-cli
-    if /tmp/renamed-cli --help 2>&1 | grep -q 'renamed-cli'; then pass "CLI binary rename works"; else fail "CLI --help does not show renamed binary name"; fi
+    if /tmp/renamed-cli --help 2>&1 | grep 'renamed-cli' >/dev/null; then pass "CLI binary rename works"; else fail "CLI --help does not show renamed binary name"; fi
 
     echo '--- CLI Full Functionality Tests ---'
     if [ -n "${API_TOKEN:-}" ]; then
@@ -41507,10 +41522,22 @@ mv "${TOR_BIN}.hidden" "$TOR_BIN"
 ${PROJECT_NAME} --service restart
 wait_for 60 healthz_up
 
-echo "=== [$INIT_MODE] I2P (default ON in a container, i2pd is installed) ==="
+echo "=== [$INIT_MODE] I2P (off by default in a system container, i2pd is installed) ==="
 check "i2pd binary is installed" command -v i2pd
 check "server.yml is 0600 after start" test "$(stat -c %a "${CONF_ROOT}/server.yml")" = "600"
-check "features.i2p.enabled is true by default in a container" test "$(overlay i2p enabled)" = "true"
+check "features.i2p.enabled is false by default in a system container" test "$(overlay i2p enabled)" = "false"
+check "status is disabled by default" test "$(overlay i2p status)" = "disabled"
+check "checks.i2p is omitted by default" test "$(healthz | jq '(.checks | has("i2p"))')" = "false"
+
+echo "=== [$INIT_MODE] I2P enabled by a drop-in (opt-in, i2pd is installed) ==="
+mkdir -p "${CONF_ROOT}/yaml.d"
+printf 'server:\n  i2p:\n    enabled: true\n' > "${CONF_ROOT}/yaml.d/50-i2p.yml"
+chown "${INTERNAL_NAME}:${INTERNAL_NAME}" "${CONF_ROOT}/yaml.d" "${CONF_ROOT}/yaml.d/50-i2p.yml"
+chmod 0700 "${CONF_ROOT}/yaml.d"
+chmod 0600 "${CONF_ROOT}/yaml.d/50-i2p.yml"
+${PROJECT_NAME} --service restart
+wait_for 60 healthz_up
+check "features.i2p.enabled is true after opting in" test "$(overlay i2p enabled)" = "true"
 check "features.i2p.provider is i2pd" test "$(overlay i2p provider)" = "i2pd"
 case "$(overlay i2p status)" in
     starting|healthy|unavailable) pass "features.i2p.status is a contract word for an enabled network" ;;
@@ -41521,7 +41548,7 @@ if [ "$(overlay i2p status)" = "healthy" ]; then
     if [[ "$(overlay i2p hostname)" =~ ^[a-z2-7]{52}\.b32\.i2p$ ]]; then pass "i2p hostname is a .b32.i2p address"; else fail "i2p hostname is not a .b32.i2p address"; fi
     check "features.i2p.running is true" test "$(overlay i2p running)" = "true"
     check "checks.i2p is ok" test "$(healthz | jq -r '.checks.i2p')" = "ok"
-    check "destination key persisted" sh -c "find '${DATA_ROOT}/i2p/site' -type f -size +0 | grep -q ."
+    check "destination key persisted" sh -c "find '${DATA_ROOT}/i2p/site' -type f -size +0 | grep . >/dev/null"
 elif [ "${REQUIRE_OVERLAY:-0}" = "1" ]; then
     fail "I2P did not become healthy within ${I2P_WAIT:-600}s"
 else
@@ -41529,22 +41556,7 @@ else
 fi
 if healthz | grep -Eq '/(etc|var|home|config|data)/'; then fail "health response leaks a filesystem path"; else pass "health response carries no filesystem path"; fi
 
-echo "=== [$INIT_MODE] I2P opt-out (an explicit config value beats the container default) ==="
-mkdir -p "${CONF_ROOT}/yaml.d"
-printf 'server:\n  i2p:\n    enabled: false\n' > "${CONF_ROOT}/yaml.d/50-i2p.yml"
-chown "${INTERNAL_NAME}:${INTERNAL_NAME}" "${CONF_ROOT}/yaml.d" "${CONF_ROOT}/yaml.d/50-i2p.yml"
-chmod 0700 "${CONF_ROOT}/yaml.d"
-chmod 0600 "${CONF_ROOT}/yaml.d/50-i2p.yml"
-${PROJECT_NAME} --service restart
-wait_for 60 healthz_up
-check "features.i2p.enabled is false after opt-out" test "$(overlay i2p enabled)" = "false"
-check "status is disabled after opt-out" test "$(overlay i2p status)" = "disabled"
-check "checks.i2p is omitted after opt-out" test "$(healthz | jq '(.checks | has("i2p"))')" = "false"
-rm -f "${CONF_ROOT}/yaml.d/50-i2p.yml"
-${PROJECT_NAME} --service restart
-wait_for 60 healthz_up
-
-echo "=== [$INIT_MODE] I2P missing provider (default on, no i2pd: disabled, never an error) ==="
+echo "=== [$INIT_MODE] I2P missing provider (enabled by the drop-in, no i2pd: disabled, never an error) ==="
 I2PD_BIN=$(command -v i2pd)
 mv "$I2PD_BIN" "${I2PD_BIN}.hidden"
 ${PROJECT_NAME} --service restart
@@ -41594,9 +41606,11 @@ REMOTE_AFTER_EOF
 )
 
 # Run a script inside the container with the init mode and project names
+# Every script fragment is its own argument: printf puts a newline after each one, because $(cat <<EOF) strips the trailing newline of a heredoc
 remote() {
-    local container="$1" init="$2" script="$3"
-    printf '%s\n' "$script" | incus exec "$container" -- env INIT_MODE="$init" PROJECT_NAME="$PROJECT_NAME" PROJECT_ORG="$PROJECT_ORG" \
+    local container="$1" init="$2"
+    shift 2
+    printf '%s\n' "$@" | incus exec "$container" -- env INIT_MODE="$init" PROJECT_NAME="$PROJECT_NAME" PROJECT_ORG="$PROJECT_ORG" \
         INTERNAL_NAME="$INTERNAL_NAME" INTERNAL_ORG="$INTERNAL_ORG" REQUIRE_OVERLAY="${REQUIRE_OVERLAY:-0}" \
         TOR_WAIT="${TOR_WAIT:-300}" I2P_WAIT="${I2P_WAIT:-600}" bash -s
 }
@@ -41615,7 +41629,7 @@ wait_boot() {
     else
         for i in $(seq 1 60); do incus exec "$container" -- test -d /run/openrc 2>/dev/null && break; sleep 1; done
     fi
-    for i in $(seq 1 60); do incus exec "$container" -- sh -c 'ip route | grep -q "^default"' 2>/dev/null && break; sleep 1; done
+    for i in $(seq 1 60); do incus exec "$container" -- sh -c 'ip route | grep "^default" >/dev/null' 2>/dev/null && break; sleep 1; done
 }
 
 run_mode() {
@@ -41647,12 +41661,12 @@ run_mode() {
     fi
 
     echo "=== [$init] Running tests in Incus ==="
-    remote "$container" "$init" "${REMOTE_LIB}${REMOTE_MAIN}"
+    remote "$container" "$init" "$REMOTE_LIB" "$REMOTE_MAIN"
 
     echo "=== [$init] Restarting the container (boot persistence) ==="
     incus restart "$container"
     wait_boot "$container" "$init"
-    remote "$container" "$init" "${REMOTE_LIB}${REMOTE_AFTER}"
+    remote "$container" "$init" "$REMOTE_LIB" "$REMOTE_AFTER"
 }
 
 # One container per init system, run one after the other (never in parallel)
@@ -41688,6 +41702,7 @@ echo "Incus tests completed successfully ($MODES)"
 | I2P enabled (the shipped default in `tests/docker.sh`, the drop-in in `tests/incus.sh`), once bootstrapped | `enabled: true`, `provider: i2pd`; within `I2P_WAIT` seconds (default 600) it becomes `healthy` with a `.b32.i2p` hostname, `checks.i2p: ok` and a persisted destination key |
 | I2P opted out through a `yaml.d/50-i2p.yml` drop-in (`enabled: false`) | `enabled: false`, `status: disabled`, no `checks.i2p` key |
 | I2P default ON, `i2pd` removed | `enabled: false`, `status: disabled`, `provider: none`, no `checks.i2p` key |
+| I2P enabled by the `yaml.d/50-i2p.yml` drop-in in an Incus system container, `i2pd` removed (`tests/incus.sh`) | `enabled: false`, `status: disabled`, `provider: none`, no `checks.i2p` key |
 | Any state | the health response never contains a filesystem path |
 
 Bootstrapping Tor and I2P needs outbound network access from the container. When the network is missing, the `healthy` checks print `SKIP` and the contract checks still run; `REQUIRE_OVERLAY=1` turns a missing bootstrap into a failure (use it for the release run). The script exits non-zero when any check failed; a failure is never printed and then ignored.
@@ -41751,7 +41766,9 @@ detect_backend
 
 # Detect project info
 PROJECT_NAME=$(basename "$PWD")
-BIN_DIR="${BIN_DIR:-binaries}"
+# The build output directory is the Makefile's BINDIR (default binaries)
+BIN_DIR="${BINDIR:-binaries}"
+make build BINDIR="$BIN_DIR"
 VM_PREFIX="${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
 VMS=()
 
@@ -41827,12 +41844,12 @@ run_mode() {
     vm_exec "$vm" chmod +x "/usr/local/bin/${PROJECT_NAME}"
 
     echo "=== [$init] Running the shared guest-side steps ==="
-    remote "$vm" "$init" "${REMOTE_LIB}${REMOTE_MAIN}"
+    remote "$vm" "$init" "$REMOTE_LIB" "$REMOTE_MAIN"
 
     echo "=== [$init] Cold power cycle (power off, then on) ==="
     vm_cycle "$vm"
     vm_wait "$vm"
-    remote "$vm" "$init" "${REMOTE_LIB}${REMOTE_AFTER}"
+    remote "$vm" "$init" "$REMOTE_LIB" "$REMOTE_AFTER"
 }
 
 # One VM per init system, one after the other (never in parallel)
@@ -41855,24 +41872,19 @@ echo "VM tests completed successfully ($MODES on $BACKEND)"
 
 #### tests/run_tests.sh
 
-**Purpose:** Runs the basic tier: `tests/docker.sh`. `tests/incus.sh` (the whole app), `tests/virt.sh` (a clean OS) and `tests/e2e.sh` (the browser) are never started automatically; a developer runs them explicitly. When Docker is absent it falls back to `tests/incus.sh`
+**Purpose:** Runs the basic tier: `tests/docker.sh`. `tests/incus.sh` (the whole app), `tests/virt.sh` (a clean OS) and `tests/e2e.sh` (the browser) are never started automatically; a developer runs them explicitly. Docker is required, because every test script builds with `casjaysdev/{lang}:latest` in Docker: without it the script exits `69` with the reason on stderr (there is no Incus fallback, `tests/incus.sh` builds with Docker too)
 
 ```bash
 #!/usr/bin/env bash
 set -eo pipefail
 
-# Basic tier is Docker; Incus is only the fallback when Docker is absent
+# The basic tier is Docker, and every test script builds in Docker, so a host without Docker cannot run any of them
 if command -v docker &>/dev/null; then
     echo "Docker detected - running the basic tests..."
     exec "$(dirname "$0")/docker.sh"
-elif command -v incus &>/dev/null; then
-    echo "Docker not found - falling back to the Incus container tests..."
-    exec "$(dirname "$0")/incus.sh"
 else
-    echo "ERROR: Neither docker nor incus found" >&2
-    echo "Please install one of the following:" >&2
-    echo "  - Docker (basic tests): https://docker.com/" >&2
-    echo "  - Incus (fallback): https://linuxcontainers.org/incus/" >&2
+    echo "ERROR: docker not found: every test script builds with Docker" >&2
+    echo "Install Docker: https://docker.com/" >&2
     exit 69
 fi
 ```
@@ -41900,6 +41912,7 @@ fi
 | **Cleanup** | ALWAYS use `trap` for cleanup |
 | **Exit codes** | `0` every check passed, `1` one or more checks failed (run every check, then exit `1` naming the count), `2` usage, `69` the script cannot run here (missing Docker, Incus, hypervisor or `/dev/kvm`; the reason is on stderr). A `curl ... \|\| echo FAILED` that only prints is a spec violation: use `fail` (see "Output Streams & Exit Codes") |
 | **Output** | Clear progress messages with `echo` on stdout; every error, warning and `SKIP:` on stderr (`>&2`) |
+| **Pipes under `pipefail`** | Never end a pipeline in `grep -q`: grep exits at the first match, the producer then receives SIGPIPE, and `pipefail` reports a failure for a healthy result. Use `grep PATTERN >/dev/null` (it reads everything) or capture the output first |
 | **Error handling** | `set -eo pipefail` for bash/zsh; `set -e` for POSIX sh |
 | **License** | All shell scripts are WTFPL — `# @@License : WTFPL` in header |
 
@@ -42030,7 +42043,7 @@ sleep 3
 
 # 1. Health check
 echo "Testing health endpoint..."
-curl -q -LSsf http://localhost:64580/server/healthz | grep -q '"status"' \
+curl -q -LSsf http://localhost:64580/server/healthz | grep '"status"' >/dev/null \
     && echo '✓ Health endpoint works' \
     || { echo '✗ FAILED: Health endpoint' >&2; kill $SERVER_PID; exit 1; }
 
