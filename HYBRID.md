@@ -7618,7 +7618,7 @@ NO_COLOR=1 {project_name} --status | grep -E '✅|❌|⚠️|🚀'
 --color {auto|yes|no}
 # Language for output (default: auto, from LANG env)
 --lang {code}
---maintenance {backup,restore,update,mode,setup,pgp,secret,token,data,compliance,--help} [optional-file-or-setting-or-action]
+--maintenance {backup,restore,update,mode,setup,pgp,security,secret,token,data,compliance,--help} [optional-file-or-setting-or-action]
 # Check/perform updates
 --update [check|yes|branch {stable|beta|devel}|--help]
 # Shell integration
@@ -16409,6 +16409,7 @@ server:
 | `security.report_received` | Security vulnerability report received | tracking_id, severity, sanitized affected-component |
 | `security.private_key_exported` | PGP private key exported | Operator IP, reason |
 | `security.csrf_failure` | CSRF token validation failed | IP, endpoint, reason |
+| `security.audit_chain_broken` | Audit log hash chain failed verification | File name, line number (never entry content) |
 
 ### Backup & System Events
 
@@ -16453,7 +16454,8 @@ server:
   "details": {
     "changed_keys": ["server.port"]
   },
-  "result": "success"
+  "result": "success",
+  "prev": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 }
 ```
 
@@ -16468,6 +16470,7 @@ server:
 | `severity` | String | `info`, `warn`, `error`, `critical` |
 | `actor` | Object | Who performed the action |
 | `result` | String | `success` or `failure` |
+| `prev` | String | Lowercase hex SHA-256 of the previous entry's line (hash chain, see "Audit Log Integrity") |
 
 **Optional Fields:**
 
@@ -16605,7 +16608,9 @@ server:
 | Append-only | Application can only append, never modify or delete entries |
 | No truncate | Application cannot truncate the log file |
 | Rotation only | Only log rotation can remove old entries |
-| Checksum | Optional: Include running checksum for tamper detection |
+| Hash chain | REQUIRED. Every entry has a `prev` field: the lowercase hex SHA-256 of the previous entry's exact line (without the newline). The first entry ever uses 64 zeros; the first entry of a rotated file carries the hash of the last line of the file it follows. One writer appends entries in order under a lock, so the chain never forks |
+| Verification | The server re-computes the chain of the current file at start and of the closed file at every rotation. A mismatch (an edited, removed or reordered entry) is reported once as `security.audit_chain_broken` (severity `critical`; file name and line number, never entry content); the server keeps running and keeps appending |
+| Limit | Tamper-evident, not tamper-proof: someone who can rewrite the whole file can recompute every hash. Forward the log to another host if that case matters |
 
 **File Permissions:**
 ```
@@ -17601,7 +17606,7 @@ Every outbound webhook POST includes these headers so the receiver can verify th
 
 | Header | Value |
 |--------|-------|
-| `X-Webhook-Signature` | `sha256=<hex_hmac>` where `hmac = HMAC-SHA256(per_webhook_secret, request_body_bytes)`. The `per_webhook_secret` is auto-generated when the webhook URL is first saved (random 32 bytes, persisted in `secrets.yml` next to the URL as `webhooks.<name>_secret`) and returned ONCE in the API response for the operator to configure on the receiving end. |
+| `X-Webhook-Signature` | `sha256=<hex_hmac>` where `hmac = HMAC-SHA256(per_webhook_secret, request_body_bytes)`. The `per_webhook_secret` is generated at start whenever the webhook URL is set and its secret is empty (random 32 bytes, persisted in `secrets.yml` as `webhooks.<name>_secret`). It is never returned by any API response and never printed: the operator reads it from `secrets.yml` (mode `0600`) to configure the receiving end, or writes a value of their own there before the first start. |
 | `X-Webhook-Timestamp` | Unix seconds — receiver SHOULD reject if delta exceeds `±5 min` to prevent replay |
 | `X-Webhook-ID` | UUID v7 (PART 11) — idempotency key the receiver can use to deduplicate retries |
 | `X-Webhook-Event` | The event type (e.g., `security.report_received`, `backup.failed`) |
@@ -32843,47 +32848,28 @@ server:
       # true if password was set
       enabled: true
       # The password itself is set with server.backup.encryption_password in secrets.yml (see below)
-  compliance:
-    # HIPAA, SOC2, etc.
-    enabled: false
-    # If true, backup.encryption.enabled MUST be true
 ```
+
+**Compliance mode has no setting of its own.** It is ON when ANY standard under `server.compliance` (see "Compliance Standards") is `true`, and OFF when all are `false` (the default). Every standard requires protecting personal data wherever it is stored, and a backup is a full copy of it, so the strictest rule applies as soon as one standard is on (see "Overlap Resolution"). The check runs at every backup.
 
 **Compliance Mode Enforcement:**
 
-When `server.compliance.enabled: true`:
+When compliance mode is on:
 - Backups will NOT run unless encryption password is set
-- WebUI shows mandatory password setup dialog
 - CLI shows error with instructions to set password
 - Scheduled backups skip with audit log warning
-
-```
-┌─────────────────────────────────────────┐
-│  ⚠️  Backup Password Required           │
-├─────────────────────────────────────────┤
-│  Compliance mode requires encrypted     │
-│  backups. Set a backup password.        │
-│                                         │
-│  Password:         [••••••••••••]       │
-│  Confirm Password: [••••••••••••]       │
-│  Hint (optional):  [______________]     │
-│                                         │
-│           [Cancel]  [Save & Enable]     │
-└─────────────────────────────────────────┘
-```
 
 **Setting/Changing Backup Password:**
 
 | Action | Location | Notes |
 |--------|----------|-------|
-| Set during initial config | `server.backup.encryption_password` in `secrets.yml` | Optional (unless compliance) |
+| Set during initial config | `server.backup.encryption_password` in `secrets.yml` | Optional (unless compliance mode is on) |
 | Set later | `server.backup.encryption_password` in config file | Hot-reloaded; no restart needed |
 | Change password | `server.backup.encryption_password` in config file | New backups use new password |
-| Remove encryption | Only if compliance disabled | Cannot remove if compliance enabled |
+| Remove encryption | Only while compliance mode is off | Cannot remove while compliance mode is on |
 
 **Important:**
 - Old backups encrypted with old password still need old password to restore
-- Password hint can be stored (optional): "Hint: First pet's name + year"
 - No password recovery - if lost, backups are unrecoverable
 - The Argon2id login-password hashing rule (PART 11) does not apply to this password: it is key material, and Argon2id is used here only to derive the encryption key
 
@@ -32899,7 +32885,7 @@ When `server.compliance.enabled: true`:
 # Prompts for password
 ```
 
-**Note:** A backup never prompts: it encrypts with the configured `server.backup.encryption_password` when one is set, and is unencrypted (with the warning below) when none is set; with compliance enabled and no password set the backup is refused with a message naming the setting. Only restore and `backup test` of an encrypted backup prompt for the password interactively. There is no password flag (passwords on the command line leak via shell history and process lists).
+**Note:** A backup never prompts: it encrypts with the configured `server.backup.encryption_password` when one is set, and is unencrypted (with the warning below) when none is set; with compliance mode on and no password set the backup is refused with a message naming the setting. Only restore and `backup test` of an encrypted backup prompt for the password interactively. There is no password flag (passwords on the command line leak via shell history and process lists).
 
 **Warning Shown if Encryption Not Enabled:**
 
@@ -32910,7 +32896,7 @@ When `server.compliance.enabled: true`:
 │  Your backups are NOT encrypted. If someone gains access to your    │
 │  backup files, they can read all data including server configuration.  │
 │                                                                      │
-│  [Set Encryption Password]  [Remind Me Later]  [Don't Show Again]   │
+│  Set server.backup.encryption_password in secrets.yml to fix this.  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
