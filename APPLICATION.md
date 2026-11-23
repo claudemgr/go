@@ -1678,7 +1678,7 @@ docker run --rm \
 - Panic behavior must be intentional and documented (`recover` used deliberately, not to swallow all errors)
 - GUI/TUI debug tooling must not leak into normal production UX by default
 
-**Standard exit codes (MUST):** `0` success · `1` general/runtime error (includes a recovered panic) · `2` usage error (bad flags/args — matches Go's own `flag` package behavior). `--help`/`--version` always exit `0` (see "Standard CLI Flags"). Never invent additional exit codes without documenting them in `--help` output.
+**Output streams and exit codes (MUST):** data and requested output go to stdout; every error message, usage error, warning and `SKIP:` reason goes to stderr, never stdout, and every non-zero exit is preceded by one line on stderr saying what failed. Exit codes follow one standard set: `0` success (`--help`, `--version`, a graceful shutdown included) · `1` general/runtime error (includes a recovered panic and a failed check) · `2` usage error (bad flags/args, matches Go's own `flag` package and Rust's `clap`) · `65` bad input data (`EX_DATAERR`) · `66` input or resource not found (`EX_NOINPUT`) · `69` a required service or capability is unavailable (`EX_UNAVAILABLE`) · `74` I/O error (`EX_IOERR`) · `75` temporary failure (`EX_TEMPFAIL`) · `77` permission denied or authentication failed (`EX_NOPERM`) · `78` invalid configuration (`EX_CONFIG`). `126`, `127` and `128+n` belong to the shell and are never returned on purpose. Use the most specific code and document every code above `2` in `--help`; never invent another one.
 
 **Top-level panic recovery (MUST, `main()`):** every binary's `main()` MUST install a top-level `recover` so an unhandled panic prints a clean, user-facing error on stderr and exits `1` instead of dumping a raw Go stack trace to a normal user — the stack trace is only for `--debug`/development mode (see above).
 
@@ -2940,7 +2940,7 @@ Example:
 
 Signal handling uses `os/signal` (`signal.NotifyContext` for shutdown, a dedicated channel for `SIGHUP`/`SIGUSR1`).
 
-**`--config-test` (`-t`) is REQUIRED:** parse and validate the full config, print errors to stderr, exit 0 (valid) or 1 (invalid) — mirrors `nginx -t`. It never touches sockets or running state.
+**`--config-test` (`-t`) is REQUIRED:** parse and validate the full config, print errors to stderr, exit 0 (valid) or 78 (invalid, `EX_CONFIG`) — mirrors `nginx -t`. It never touches sockets or running state.
 
 ## Sockets, Ports & Privileges
 
