@@ -150,7 +150,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the authoritative template bas
 | IDEA.md MAY | IDEA.md MAY NOT |
 |-------------|-----------------|
 | Define the product's features, data models, business rules and audience, and its API surface: the `### API routes` inventory of what callers can do (method, path, auth, purpose, request/response summary), never how a handler is written | Remove, weaken or waive a mandatory AI.md requirement (server baseline, configuration, security, health, build, CI/CD, i18n, accessibility, documentation, testing) |
-| Choose which of the template's explicitly OPTIONAL capabilities the project uses (the PARTs the template labels optional) | Change how a mandatory requirement is implemented |
+| Choose which of the template's explicitly OPTIONAL capabilities the project uses (the PARTs the template labels optional; PARTS 34-36 are activated in SPEC.md only, IDEA.md just describes the feature) | Change how a mandatory requirement is implemented |
 | State non-goals in product terms (for example "no user accounts") | Use a non-goal as a reason to skip a mandatory part |
 
 **Non-goal vs mandatory requirement:** a non-goal limits the product's FEATURES, never AI.md's baseline. "No accounts" is honored by not enabling the optional multi-user parts; it does not remove the health endpoint, the config file, the security headers or any other mandatory part, which are built exactly as AI.md defines them. If an IDEA.md line contradicts a mandatory AI.md requirement, fix the IDEA.md line (reword it as product scope) — never change the implementation to match it. Log a template defect only when AI.md itself is ambiguous or self-contradictory.
@@ -560,12 +560,12 @@ fi
 
 **Migration procedure (NEVER overwrite without confirmation):**
 1. **Detect** — run the check above; if all three sections exist exactly once, no migration needed
-2. **Backup** — `cp IDEA.md IDEA.md.preMigration.bak`; tell the user the backup path
+2. **Backup** — copy it into the project's temp directory, never the repository root (`mkdir -p "${TMPDIR:-/tmp}/{project_org}" && BAK=$(mktemp -d "${TMPDIR:-/tmp}/{project_org}/{internal_name}-XXXXXX")`, then `cp IDEA.md "$BAK/IDEA.md.preMigration.bak"`); tell the user the backup path
 3. **Read the whole file** before proposing anything — do NOT skim
 4. **Map old content to the new sections** — pitch/overview → `## Project description`; variables/config keys → `## Project variables`; features/data models/endpoints/business rules → `## Business logic`
 5. **Inject required variables** if missing — `project_name` from `basename "$PWD"` (confirm with user); `project_org` from `basename "$(dirname "$PWD")"` (confirm with user); `internal_name` initial value MUST equal `project_name` (stable after this)
 6. **Show the user the proposed rewrite** as a diff or full preview — wait for explicit approval before writing
-7. **Write the migrated file** only after approval; keep `.preMigration.bak` until the user confirms
+7. **Write the migrated file** only after approval; keep the backup until the user confirms
 
 **Rules:** migration is one-time per project — do not re-run once in the three-section format. If old content doesn't fit cleanly, ASK — never invent a fourth section or silently drop content. If `internal_name` already differed from `project_name`, KEEP the existing value (the freeze rule applies). Verify the new `## Project variables` section is complete after migration.
 
@@ -42424,7 +42424,8 @@ func LanguageMiddleware(next http.Handler) http.Handler {
                 MaxAge:   365 * 24 * 60 * 60,
                 SameSite: http.SameSiteLaxMode,
                 Secure:   r.TLS != nil,
-                HttpOnly: true,
+                // Not HttpOnly: preference cookies are read by JavaScript (PART 16, one visibility rule for theme, lang and the _pref_ cookies)
+                HttpOnly: false,
             })
         }
 
