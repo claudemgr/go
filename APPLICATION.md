@@ -1244,12 +1244,15 @@ GO_BUILD  ?= $(HOME)/.cache/go-build/$(PROJECTNAME)
 DOCKER_MEM  ?= 4g
 DOCKER_CPUS ?= 2
 
+# CPU weight under contention (Docker's default is 1024): a build never starves the host's other work
+DOCKER_CPU_SHARES ?= 256
+
 # Hard ceiling in seconds for ONE container run, so a hung step can never hold a container for hours (raise it for a very long cross-compile)
 DOCKER_TIMEOUT ?= 3600
 
 GO_DOCKER := timeout -k 30 $(DOCKER_TIMEOUT) docker run --rm --no-healthcheck \
 	--name $(PROJECTNAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
-	--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) \
+	--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) --cpu-shares=$(DOCKER_CPU_SHARES) \
 	-v $(PWD):/app \
 	-v $(GO_CACHE):/usr/local/share/go/pkg/mod \
 	-v $(GO_BUILD):/usr/local/share/go/cache \
