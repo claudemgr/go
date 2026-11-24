@@ -1277,7 +1277,7 @@ test:
 		mkdir -p \"\$${TMPDIR:-/tmp}/$(PROJECTORG)\" && \
 		COVDIR=\$$(mktemp -d \"\$${TMPDIR:-/tmp}/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX\") && \
 		go test -v -cover -coverprofile=\$$COVDIR/coverage.out ./... && \
-		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep total | awk '{print \$$3}' | sed 's/%//') && \
+		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep '^total:' | awk '{print \$$3}' | sed 's/%//') && \
 		echo \"Coverage: \$$COVERAGE%\" && \
 		if [ \$$(echo \"\$$COVERAGE < 60\" | bc -l) -eq 1 ]; then \
 			echo \"ERROR: Coverage is \$$COVERAGE%, must be >= 60%\"; exit 1; \
