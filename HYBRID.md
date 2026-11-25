@@ -37400,7 +37400,7 @@ jobs:
 
 ## Post-Push CI Verification
 
-`act --list` and a local `make test` pass only prove the workflow's syntax/job graph is valid and the code works in the local environment — they are not the real CI build. Every push (normal feature-branch push or an emergency direct push to the default branch) triggers a real CI run on the provider's infrastructure with real secrets, real matrix jobs, and the real `casjaysdev/go:latest` toolchain image; any of those can fail even when every local check passed. Treating "local checks passed" as equivalent to "the build is green" is itself a bug.
+`act --list` and a local `make test` pass only prove the workflow's syntax/job graph is valid and the code works in the local environment — they are not the real CI build. Every push to `main` triggers a real CI run on the provider's infrastructure with real secrets, real matrix jobs, and the real `casjaysdev/go:latest` toolchain image; any of those can fail even when every local check passed. Treating "local checks passed" as equivalent to "the build is green" is itself a bug.
 
 After every push, check the triggered run's status:
 - **GitHub**: `gh run list --branch {branch} --commit {sha} --limit 1` then `gh run watch {run-id}` (or `gh run view {run-id} --json status,conclusion`)
