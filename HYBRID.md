@@ -1259,7 +1259,9 @@ There is deliberately no application-level multi-user account system, no organiz
 **Recommended path structure:** `~/Projects/{gitprovider}/{project_org}/{internal_name}` (but works with any location)
 
 ```bash
-# Method 1: Infer from git remote (PREFERRED - works regardless of directory location)
+# Resolution order for EVERY method below: IDEA.md `## Project variables` first; only when it has no value yet (before setup)
+# does a method below apply.
+# Method 1: Infer from git remote (first fallback - works regardless of directory location)
 # github.com/cloudops/echoip.git → PROJECT_ORG=cloudops, PROJECT_NAME=echoip
 PROJECT_NAME=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)$|\1|; s|\.git$||')
 PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$|\1|')
@@ -4151,6 +4153,8 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 | `NO_COLOR` | Disable ANSI color output when set and non-empty (see PART 8) |
 | `TERM` | Terminal type; `TERM=dumb` disables ALL ANSI escapes and forces CLI mode (see PART 4) |
 | `DOMAIN` | FQDN override (highest priority for hostname resolution) |
+| `PORT` | Listen port, read at EVERY startup (same format as `--port`): precedence is the `--port` flag, then `PORT`, then the early config peek of `server.port`, then the context default. In a container this is the one listener override |
+| `LISTEN` | Listen address, read at EVERY startup: precedence is the `--address` flag, then `LISTEN`, then the early config peek of `server.address`, then `[::]` |
 | `MODE` | `production` (default; shortcut `prod`) · `development` (shortcuts `dev`, `devel`) · `debug` (explicit opt-in only — see MODE vs DEBUG in PART 6) |
 | `DEBUG` | Truthy value turns the debug flag on (`--debug` wins; precedence and the `/debug/*` endpoints are defined in PART 6 → Debug Flag). Independent of `MODE`: `MODE=debug` only defaults the flag on |
 | `SMTP_HOST` | SMTP server hostname (if set, skips autodetect) |
@@ -4185,8 +4189,6 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 
 | Variable | Description |
 |----------|-------------|
-| `PORT` | Server port |
-| `LISTEN` | Listen address |
 | `APPLICATION_NAME` | Application title |
 | `APPLICATION_TAGLINE` | Application description. Like `APPLICATION_NAME`, it is written ONCE, on the first run and only when set, to `yaml.d/branding.yml` (`server.branding`). The first-run init variables are one of the named workflows that may create an area file, so a fresh install without them still writes only `server.yml` |
 | `DATABASE_DRIVER` | First run: the database driver when `DATABASE_URL` is not set (`sqlite` (+ `sqlite2`, `sqlite3`), `libsql` (+ `turso`)) |
@@ -4307,7 +4309,7 @@ Wherever this specification says a setting is set "in `server.yml`", it means th
 | `web.favicon_url`, `web.ui.favicon`, `web.ui.logo` | `server.branding.favicon`, `server.branding.favicon`, `server.branding.logo` |
 | `web.footer.custom_html` | `server.branding.content.footer` (format `html`, body: the old value) |
 | `server.pages.about.content`, `.privacy.content`, `.terms.content` | `server.branding.content.about`, `.privacy`, `.terms` (format `md`, body: the old value) |
-| `server.admin.email`, `server.admin.path` | `server.contact.admin.email`, `server.admin_path` |
+| `server.admin.email`, `server.admin.path` (legacy keys; `server.admin_path` is the only canonical key) | `server.contact.admin.email`, `server.admin_path` |
 | `server.admin.password`, `.token`, `.username`, `.two_factor.*` | removed (the operator token is `server.token`; there are no admin passwords) |
 | `server.https_port` | when `server.port` is a single number and `https_port` is greater than 0, folded into `server.port` as the quoted string `"{port},{https_port}"` ("Dual Port Support"); otherwise removed. An already-dual `server.port` is kept as written, and `server.ssl.enabled` is never changed by the migration |
 | `server.ssl.dns01.*`, `server.ssl.letsencrypt.provider`, `.credentials_encrypted` | `server.ssl.letsencrypt.dns_provider`, `server.ssl.letsencrypt.dns_credentials` (`validated_at`, `domain` and `domains` are removed) |
@@ -7307,7 +7309,7 @@ jobs:
 - If `site.txt` and `IDEA.md` disagree, `site.txt` wins; update IDEA.md to match or remove the stale variable
 - If not present, users of the embedded client/CLI mode must always specify a `--server` flag or equivalent config value (self-hosted deployments have no default site)
 
-**Illustration only** (`example.com` is a reserved documentation domain; never write it into a project):
+**Illustration only** (`example.com` is a reserved documentation domain; never write it into a project as a value. The one exception is a reserved-name BLOCKLIST, such as the custom-domain `reserved:` list with `*.example`, `*.test`, `*.invalid`, which contains these names precisely to refuse them):
 ```
 https://api.example.com
 ```
@@ -7473,7 +7475,7 @@ Default config: /etc/apimgr/jokes/  # Hardcoded project name
 ```go
 func main() {
     fs := flag.NewFlagSet(filepath.Base(os.Args[0]), flag.ExitOnError)
-    configPath := fs.String("config", "", "Path to config file")
+    configDir := fs.String("config", "", "Configuration directory")
     dataDir := fs.String("data", "", "Data directory")
     port := fs.Int("port", 0, "Listen port")
     mode := fs.String("mode", "", "Application mode")
@@ -8192,7 +8194,7 @@ PHASE 5: Server startup (actual server start)
     ├─ If EXISTS:
     │   ├─ Parse YAML configuration
     │   └─ Validate all values (invalid → log WARN, use default)
-    └─ Apply remaining environment variable overrides ({PROJECT_NAME}_*)
+    └─ Apply the runtime environment variables of PART 5 (never a generic {PROJECT_NAME}_* override)
 
 14. Reconfigure logging from config:
     ├─ Set log level from server.logs.level when set, else from the mode (production info, development and debug debug)
@@ -8200,9 +8202,9 @@ PHASE 5: Server startup (actual server start)
     └─ Configure rotation (per-log rotate/keep policies)
 
 15. Initialize database:
-    ├─ Connect to database (SQLite: {data_dir}/db/server.db)
-    ├─ Create database file if missing
-    ├─ Run CREATE TABLE IF NOT EXISTS for all tables
+    ├─ Connect to the databases (SQLite: {data_dir}/db/server.db for server state, and {data_dir}/db/users.db for admins, users and tokens, PART 10)
+    ├─ Create each database file if missing
+    ├─ Run CREATE TABLE IF NOT EXISTS for all tables of each database
     ├─ Run schema migrations if needed
     └─ Verify database integrity
 
@@ -10053,7 +10055,7 @@ All templates, Swagger/OpenAPI, GraphQL, email links, etc. MUST use these resolv
 | 4 | **$HOSTNAME env var** | Shell fallback |
 | 5 | **Public IPv6** | First public IPv6 (excludes private/link-local) |
 | 6 | **Public IPv4** | First public IPv4 (excludes 10/8, 172.16/12, 192.168/16) |
-| 7 | **localhost** | Last resort |
+| 7 | **Unresolved** | Nothing resolved (no network, no host name): `{fqdn}` stays EMPTY, startup logs one WARN, and no URL is built from a guess. `localhost` is never a value of `{fqdn}`; it appears only in loopback self-checks such as `--status`, never in output, links, emails or docs |
 
 **`server.fqdn` is not a source.** The key records the host name detected at first run, for the operator's reference only; it never feeds `{fqdn}` and has no place in this order. To fix the public host name, set `DOMAIN`.
 
@@ -12688,7 +12690,7 @@ Flags:
 ...
 ```
 
-**Official site (`{official_site}`) is taken from `site.txt` when that file exists. Otherwise fall back to `IDEA.md ## Project variables` (`official_site`) and other compatibility sources.**
+**The operational official site (the CLI's compiled default server) is taken from `site.txt` when that file exists, otherwise from the `OFFICIAL_SITE` environment variable or CI secret (PART 26 -> "Official Site File"). `IDEA.md` `official_site` only resolves the `{official_site}` placeholder in README and docs; it is never a CLI default.**
 
 **What official site affects:**
 - README.md: Default production site URL in examples
@@ -12700,18 +12702,17 @@ Flags:
 - Build artifacts or binary metadata
 - Any runtime behavior (just a compiled default)
 
-Sources for official site (check in order):
+Sources for the operational official site (check in order):
 1. `site.txt`: single line URL `https://...`
-2. `IDEA.md ## Project variables`: `official_site: https://...`
-3. README.md: `Official site is: https://...` or `Site: https://...` (compatibility fallback only)
-4. AI asks user (if not found in canonical project files)
-5. If user selects "none", project has no default server
+2. `OFFICIAL_SITE` environment variable or CI secret
+3. AI asks the user, and when a URL is given the user creates `site.txt` (never written by AI)
+4. If the user selects "none", the project has no default server and the CLI requires `--server`
 
-**Conflict rule:** if both `site.txt` and `IDEA.md` exist and disagree, `site.txt` wins. Update `IDEA.md` to match or remove the stale `official_site` entry.
+**Conflict rule:** if `site.txt` and `IDEA.md` `official_site` both exist and disagree, `site.txt` wins; update `IDEA.md` to match (it documents the same value) or remove the stale `official_site` entry.
 
 **AI should ask if not defined:**
 ```
-Official site not found in site.txt, IDEA.md, or README.md.
+Official site not found in site.txt or OFFICIAL_SITE.
 What is the official site for this project?
 
 1) https://projectname.example.com
@@ -15370,8 +15371,10 @@ Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
 **On token-revocation responses, also include:**
 
 ```
-Clear-Site-Data: "cache", "cookies", "storage"
+Clear-Site-Data: "cache", "storage"
 ```
+
+The `"cookies"` directive is never used: it would erase the theme, language and consent cookies, which a token revocation keeps. The owner cookie itself is removed with an explicit `Set-Cookie` of the same name and attributes with `Max-Age=0`.
 
 **On consent-withdrawal responses (a decline, or a save that removes a category) include `Clear-Site-Data: "cache", "storage"` and never `"cookies"`:** the response itself stores the new `cookie_consent` value, and clearing cookies would erase that choice (the banner would come back) and the owner token cookie. The server expires the cookies of the withdrawn categories with their own `Set-Cookie` headers instead.
 
@@ -15486,7 +15489,7 @@ web:
 |--------|-----------|---------|----------|
 | `Sec-GPC: 1` (Global Privacy Control) | inbound | honored | When received, treat the request as opt-out of "sale or sharing of personal data" (CCPA/CPRA), opt-out of behavioral profiling (GDPR Art. 21), and skip non-essential cookies. Logged to audit (`compliance.gpc_honored`). |
 | `DNT: 1` (Do Not Track) | inbound | NOT honored by default | DNT was de-facto removed from Firefox/Chrome — honoring it now penalizes users on browsers that still emit it for legacy reasons. Operators with EU-only audiences can opt in via `web.headers.honor_dnt: true`. |
-| `Clear-Site-Data` | outbound | emitted on token-revocation | Sent on token-revocation responses with `"cache", "cookies", "storage"` and on consent-withdrawal responses with `"cache", "storage"` only (never `"cookies"`: it would erase the `cookie_consent` choice just stored). `"executionContexts"` opt-in only. Also sent on version-change purge (PART 9) with value `"cache", "storage"` only — never `"cookies"` there. |
+| `Clear-Site-Data` | outbound | emitted on token-revocation | Sent on token-revocation responses with `"cache", "storage"` (the owner cookie is cleared by its own `Set-Cookie`, never by `"cookies"`) and on consent-withdrawal responses with `"cache", "storage"` only (never `"cookies"`: it would erase the `cookie_consent` choice just stored). `"executionContexts"` opt-in only. Also sent on version-change purge (PART 9) with value `"cache", "storage"` only — never `"cookies"` there. |
 
 **`Sec-GPC` is the load-bearing one.** When received, the binary MUST:
 1. Set the request's `gpc_opt_out=true` flag throughout the request lifecycle.
@@ -16039,7 +16042,7 @@ web:
 
 | Rule | Detail |
 |------|--------|
-| Credential | The existing `Authorization: Bearer ...` header, exactly as for every other API route. **There is no MCP token, no MCP scope, and no MCP-specific setting that grants access** |
+| Credential | The existing `Authorization: Bearer ...` header, exactly as for every other API route. **There is no MCP token, no MCP-specific scope and no MCP-specific setting that grants access; the Bearer token's own `read`, `read-write` or `global` scope still filters which tools it may call** |
 | Token types | All existing tiers work unchanged: the operator `server.token`, resource owner tokens, and per-system-user `sys_` tokens each get exactly the access they have over REST |
 | Validation | Run through the SAME token validation function and middleware as the API — one code path, not a copy |
 | Cookies | Ignored. Like every `/api/...` route, the MCP endpoint accepts the `Authorization` header only — no ambient authority |
@@ -17760,7 +17763,7 @@ server:
 | Role | Resolution |
 |------|------------|
 | `admin` | Required, with NO default: the operator sets the real mailbox in `server.contact.admin.email`. Nothing is generated or filled in, because an invented address such as `admin@{fqdn}` could silently misroute operational and security messages. Empty → one startup warning and no email notifications until it is set. |
-| `security` | `server.contact.security.email` (default `security@{fqdn}` per RFC 2142). If explicitly set to `""`, falls back to `server.contact.admin.email`. Same fallback for each webhook transport (security.webhooks.telegram → admin.webhooks.telegram). |
+| `security` | `server.contact.security.email` (default `security@{fqdn}` per RFC 2142). If explicitly set to `""`, INTERNAL delivery (notifications, webhooks) falls back to `server.contact.admin.email`; security.txt and every public page then omit the `mailto:` line, so the admin address is never published. Same fallback for each webhook transport (security.webhooks.telegram → admin.webhooks.telegram). |
 | `abuse` | `server.contact.abuse.email` if set → else `server.contact.general.email` if set → else `server.contact.admin.email`. Same fallback chain for webhooks. Never defaults to `abuse@{fqdn}` automatically — RFC 2142 recommends that address, but the operator must opt in (an unprovisioned mailbox would bounce reports). |
 | `general` | `server.contact.general.email` if set → else `server.contact.admin.email`. Same fallback for webhooks. |
 
@@ -19641,7 +19644,7 @@ Same underlying health response as `/server/healthz`, but formatted using the st
 |-----------|------|
 | **Key order** | JSON keys follow the struct order of this specification, written by a custom marshaller. Alphabetical or map order is a bug. A golden-order test covers JSON and both text formats |
 | **Always present** | `project`, `status`, `version`, `go_version`, `build`, `uptime`, `mode`, `timestamp`, `features`, `checks` and `stats` are in every response. |
-| **`version`** | Exactly what `--version` prints as `{project_version}`: SemVer for a release, `YYYYMMDDHHMMSS-beta` for a beta, the short commit id for a devel build, `dev` only when the build has none of these. Never the word `devel` |
+| **`version`** | Exactly what `--version` prints as `{project_version}`: SemVer for a release, `YYYYMMDDHHMMSS-beta` for a beta, the short commit id for a devel build, `devel` only when the build has none of these. Never the word `devel` |
 | **`timestamp`, `build.date`** | RFC 3339, UTC, whole seconds, `Z` suffix (`2026-11-20T17:21:53Z`); never nanoseconds |
 | **`uptime` (JSON, API text)** | Compact `{d}d {h}h {m}m`: the leading zero units are dropped and seconds appear only under one minute. `45s`, `24m`, `2h 16m`, `1d 1h 4m`. Never `0h 10m 57s` |
 | **`uptime` (frontend)** | `format.Duration()`: `2 hours 16 minutes`, `1 day 1 hour` ("Frontend Human-Readable Rules") |
@@ -20799,7 +20802,7 @@ func renderNoJSHTML(w http.ResponseWriter, data interface{}) {
 | Rule | Description |
 |------|-------------|
 | **Sync with project** | Both MUST reflect current project API at all times |
-| **Sync with each other** | Both describe the same API: GraphQL is query-only (reads, per the route contract), so every read operation appears in both, while write operations (POST, PUT, PATCH, DELETE) exist in REST and Swagger only |
+| **Sync with each other** | Both describe the same API: GraphQL is query-only (reads, per the route contract), so every read operation a client may call appears in both, while write operations (POST, PUT, PATCH, DELETE) exist in REST and Swagger only. Not every read is a GraphQL field: a route declared `Binary` (an image or a file, which a GraphQL response cannot carry) appears as its metadata and URL only, and the `service`-auth and INTERNAL-ONLY routes (metrics, debug) are in neither GraphQL nor MCP |
 | **Auto-generated** | Both specs generated from code (annotations, comments, or schema) |
 | **Never manual** | NEVER manually edit OpenAPI JSON or GraphQL schema |
 | **Build-time generation** | Specs regenerated on every build |
@@ -20869,6 +20872,7 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 - Theme switching is synchronized across all components (no page reload)
 - BOTH light AND dark themes MUST be easy to read with no color conflicts
 - File locations: `src/swagger/theme.go` and `src/graphql/theme.go`
+- Every color below is the value of a `ThemePalette` role ("Unified Color Palette"): these swatches are the palette, never a second one, and the theme files read `theme.ThemePaletteDark` and `theme.ThemePaletteLight` instead of defining their own hex values
 
 ---
 
@@ -20878,10 +20882,10 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 ```css
 /* Dark Theme Colors */
 --dark-bg: #282a36;           /* Background */
---dark-bg-alt: #1e1f29;       /* Alternate background (topbar, etc.) */
+--dark-bg-alt: #21222c;       /* Alternate background (topbar, etc.) */
 --dark-bg-elevated: #44475a;  /* Elevated elements (inputs, buttons) */
 --dark-text: #f8f8f2;         /* Primary text */
---dark-text-muted: #6272a4;   /* Muted text, borders */
+--dark-text-muted: #939fcc;   /* Muted text, borders */
 --dark-accent-cyan: #8be9fd;  /* Links, GET methods */
 --dark-accent-green: #50fa7b; /* Success, POST methods */
 --dark-accent-orange: #ffb86c; /* Warning, PUT methods */
@@ -20910,7 +20914,7 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 }
 
 .swagger-ui.theme-dark .topbar {
-  background: #1e1f29;
+  background: #21222c;
 }
 
 .swagger-ui.theme-dark .info .title,
@@ -20967,7 +20971,7 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 }
 
 .graphiql-container.theme-dark .CodeMirror-gutters {
-  background: #1e1f29;
+  background: #21222c;
   border-right: 1px solid #44475a;
 }
 
@@ -20998,8 +21002,8 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 --light-bg-elevated: #e0e0e0;  /* Elevated elements, borders */
 --light-text: #1a1a1a;         /* Primary text */
 --light-text-muted: #666666;   /* Muted text */
---light-accent-blue: #0066cc;  /* Links, GET methods */
---light-accent-green: #008000; /* Success, POST methods */
+--light-accent-blue: #0969da;  /* Links, GET methods */
+--light-accent-green: #1a7f37; /* Success, POST methods */
 --light-accent-orange: #ff8c00; /* Warning, PUT methods */
 --light-accent-red: #cc0000;   /* Error, DELETE methods */
 --light-accent-purple: #6600cc; /* Primary accent */
@@ -21010,7 +21014,7 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 |---------|-------|
 | Background | `#ffffff` (--light-bg) |
 | Text | `#1a1a1a` (--light-text) |
-| Links/Accents | Blue `#0066cc`, Green `#008000`, Purple `#6600cc` |
+| Links/Accents | Blue `#0969da`, Green `#1a7f37`, Purple `#6600cc` |
 | Code blocks | Syntax highlighted with light theme colors |
 | Inputs | White background, dark text, visible borders `#cccccc` |
 | Buttons | Accent colors with sufficient contrast (4.5:1 minimum) |
@@ -21036,12 +21040,12 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 
 .swagger-ui.theme-light .opblock.opblock-get {
   background: rgba(0, 102, 204, 0.05);
-  border-color: #0066cc;
+  border-color: #0969da;
 }
 
 .swagger-ui.theme-light .opblock.opblock-post {
   background: rgba(0, 128, 0, 0.05);
-  border-color: #008000;
+  border-color: #1a7f37;
 }
 
 .swagger-ui.theme-light .opblock.opblock-put {
@@ -21063,7 +21067,7 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 }
 
 .swagger-ui.theme-light .btn {
-  background: #0066cc;
+  background: #0969da;
   color: #ffffff;
 }
 ```
@@ -21092,7 +21096,7 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 }
 
 .graphiql-container.theme-light .execute-button {
-  background: #008000;
+  background: #1a7f37;
   color: #ffffff;
 }
 
@@ -21340,7 +21344,7 @@ Need additional compatible endpoints?"
 | `/api/metrics[/{service}]` | GET | Bearer token (per-service) | Metrics — unversioned alias for current `{api_version}`; same handlers |
 | `/api/autodiscover` | GET | None | Discovery document for clients and the CLI (non-versioned): `name`, `version`, `api`, `urls`, `onion` and `i2p` (only when exposed), `cli_versions`, `cli_min_version` (see "CLI Auto-Update") |
 | `/api/swagger` | GET | None | OpenAPI JSON spec — direct alias for current `{api_version}` |
-| `/api/graphql` | POST | None | GraphQL queries — direct alias for current `{api_version}` |
+| `/api/graphql` | POST, GET | None | GraphQL queries — direct alias for current `{api_version}` (POST, and GET with `query` for queries only, exactly like the versioned route) |
 | `/api/mcp` | POST | Bearer (required) | MCP endpoint — direct alias for current `{api_version}`; same auth as the API |
 | `/mcp` | POST | Bearer (required) | MCP endpoint — root alias for current `{api_version}`; same handler, never a redirect |
 | `/api/healthz` | GET | None | Health check JSON — direct alias for current `{api_version}` |
@@ -21381,7 +21385,7 @@ Need additional compatible endpoints?"
 | **Compatibility** | Many CLI tools, language SDKs, and minimal HTTP clients do not follow redirects by default. A direct response works for everyone. |
 | **Latency** | Saves an extra round-trip on every cold call — matters most for `/api/swagger` (fetched on every SDK regen), `/api/graphql` (every introspection), and `/api/healthz` (frequent health probes). |
 | **Caching** | Caches and CDNs cache the alias body directly. A 301 forces clients to cache *both* the redirect and the target, doubling cache entries. |
-| **POST safety** | `/api/graphql` is POST. A 301/302 from POST may convert to GET on some clients (RFC ambiguity). Direct serving avoids this. |
+| **POST safety** | `/api/graphql` accepts POST (and GET for queries). A 301/302 from POST may convert to GET on some clients (RFC ambiguity). Direct serving avoids this. |
 | **Consistency** | The unversioned alias and versioned URL share one handler tree mounted at both paths — no duplicate code. |
 
 **What "no redirect" does NOT mean:**
@@ -22496,7 +22500,7 @@ at the appropriate level — a healthy server prints nothing.
 | Location | Manager | Renewal |
 |----------|---------|---------|
 | `/etc/letsencrypt/live/**` | **System** (certbot) | App does NOT renew |
-| `{config_dir}/ssl/letsencrypt/{fqdn}/` | **App** | Auto-renew 7 days before expiry |
+| `{config_dir}/ssl/letsencrypt/{fqdn}/` | **App** | Auto-renew when 30 days or fewer remain |
 | `{config_dir}/ssl/local/{fqdn}/` | **User** | No auto-renewal (manual) |
 
 **Rule: If cert is in `{config_dir}/ssl/**`, app manages. Subdirectory determines HOW.**
@@ -22532,7 +22536,7 @@ Startup (for configured FQDN)
 
 **Important:**
 - `/etc/letsencrypt/` → app uses but does NOT manage renewal
-- `{config_dir}/ssl/letsencrypt/{fqdn}/` → app manages, auto-renews 7 days before expiry
+- `{config_dir}/ssl/letsencrypt/{fqdn}/` → app manages, auto-renews when 30 days or fewer remain
 - `{config_dir}/ssl/local/{fqdn}/` → app uses but does NOT auto-renew (user manages)
 
 ---
@@ -25562,9 +25566,9 @@ function hideOfflineIndicator() {
   ],
   "shortcuts": [
     {
-      "name": "Dashboard",
-      "url": "/dashboard?source=shortcut",
-      "icons": [{ "src": "/static/icons/shortcut-dashboard.png", "sizes": "96x96" }]
+      "name": "Preferences",
+      "url": "/server/preferences?source=shortcut",
+      "icons": [{ "src": "/static/icons/shortcut-preferences.png", "sizes": "96x96" }]
     }
   ],
   "screenshots": [
@@ -26092,9 +26096,11 @@ type Route struct {
     OperationID string
     // One line; feeds Swagger and llms.txt
     Summary string
-    // none, owner or operator
+    // none, owner, operator, token (any valid Bearer token, owner or linked: the MCP endpoint) or service (a per-service metrics token)
     Auth string
-    // Listed in llms.txt and Swagger (public and authenticated routes; never operator-only ones)
+    // Listed in llms.txt and Swagger (public and authenticated routes; never operator-only or service ones). Listed does NOT limit MCP:
+    // the MCP tool list is generated from the registry for every route the caller's token may call, and the operator token also sees
+    // the operator-only tools (never the service and INTERNAL-ONLY routes)
     Listed bool
     // Request and response models; the response struct's declared field order is the text output order
     Request, Response any
@@ -26950,7 +26956,10 @@ Mobile:
           <a href="/server/preferences" class="dropdown-item" role="menuitem">Preferences</a>
           <a href="/server/help">Help</a>
           <hr />
-          <a href="/server/auth/logout">Logout</a>
+          <form action="/server/auth/logout" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+            <button type="submit" class="dropdown-item" role="menuitem">Logout</button>
+          </form>
         </div>
       </div>
     {{ else }}
@@ -27478,7 +27487,7 @@ var ThemePaletteDark = ThemePalette{
     Background: "#282a36", Foreground: "#f8f8f2",
     Primary: "#bd93f9", Secondary: "#50fa7b", Accent: "#ff79c6",
     Success: "#50fa7b", Warning: "#ffb86c", Error: "#ff5555", Info: "#8be9fd",
-    Surface: "#2b2d3a", SurfaceAlt: "#21222c", Border: "#44475a", Muted: "#6272a4",
+    Surface: "#2b2d3a", SurfaceAlt: "#21222c", Border: "#44475a", Muted: "#939fcc",
 }
 
 var ThemePaletteLight = ThemePalette{
@@ -28091,7 +28100,7 @@ When the admin panel is enabled (PART 28) these are also editable at `/server/{a
 - The 1200x630 OG variant is exactly that size: the source is scaled to cover it and center-cropped (the one exception to preserving the ratio, because social platforms require it)
 - Generate multiple sizes on upload/fetch
 - Cache scaled versions locally
-- Re-fetch remote URLs periodically (configurable, default: daily)
+- Re-fetch remote URLs every 24 hours (fixed, not configurable: the branding file accepts only the keys in its table)
 - Fallback to embedded default if remote URL fails
 
 ### Remote URL Fetching
@@ -28452,7 +28461,7 @@ When the admin panel is enabled (PART 28) these are also editable at `/server/{a
 | Request targets the backend: any `/api/**` route, or any compatibility-layer route (unless that layer's protocol expects CSRF — see "Scope") | CSRF is frontend-only; backend clients (CLI, agents, SDKs, webhooks, compat clients) never carry or need a token |
 | `Authorization: Bearer …` header present | Bearer auth — caller proves possession of a credential the browser cannot auto-attach. CSRF protects against forgery of *cookie* auth; this is a different auth model. |
 | Endpoint is public (no auth required) | Nothing to forge — the endpoint is open to anyone with no session to abuse. |
-| Method is `GET`, `HEAD`, or `OPTIONS` | Safe per RFC 9110. Must remain side-effect-free; if a `GET` mutates, that is a separate spec violation, not a CSRF problem. |
+| Method is `GET`, `HEAD`, or `OPTIONS` | Safe per RFC 9110. Must remain side-effect-free; if a `GET` mutates, that is a separate spec violation, not a CSRF problem. The ONLY sanctioned exceptions write the visitor's own preference cookies (theme, lang, `_pref_`) and nothing else: `GET /server/preferences/sync/import` with its API mirror, and a `?lang=` link. Both are idempotent, consent-gated (rule 18 of the preferences contract) and carry no credential or resource, because they must work as shareable links. |
 | `Origin` matches the app's own host AND session cookie is `SameSite=Strict` | The browser already blocked cross-site cookie attachment; the token is redundant. (Same-origin + Lax SameSite cookie still gets the token check on cross-site POST forms.) |
 | WebSocket upgrade request (`Upgrade: websocket`) | Auth happens at the connection level, then per-message; CSRF tokens don't fit the WS lifecycle. |
 | Endpoint is in the explicit `web.csrf.exempt_paths` allow-list | Operator-declared exception for FRONTEND endpoints only (e.g. a cross-site POST to a frontend callback). Backend routes are never subject to CSRF and need no entry. |
@@ -29334,7 +29343,7 @@ Language is detected automatically and changed in Preferences. It is never a hea
 |------|--------|
 | **Detection** | `?lang=` (a one-shot link that also pins the choice) → the `lang` cookie → the best match of `Accept-Language` against the supported set (quality values honored, a regional tag falls back to its base language, `fr-CA` → `fr`) → `en`. Detection never shows a banner, prompt or redirect |
 | **Change** | Only on `/server/preferences`, Language section: ONE `<select name="lang">` listing the supported languages by native name (each `<option lang="…">`), whose first option is **Automatic** and shows what detection picked (`Automatic (Français)`). Choosing Automatic deletes the cookie so detection applies again; choosing a language sets the cookie |
-| **Cookie** | `lang` is written only when the visitor picks a language (the Preferences select or a `?lang=` link) or applies a sync import. An autodetected language never writes a cookie |
+| **Cookie** | `lang` is written only when the visitor picks a language (the Preferences select or a `?lang=` link) or applies a sync import, AND the Preferences consent category is accepted (rule 18). Without consent a `?lang=` link still sets the language for that response but writes no cookie. An autodetected language never writes a cookie |
 | **Discoverability** | The footer shows the active language name as a plain link to `/server/preferences#language`. There is no language selector in the header or on any other page, and no flags |
 | **Document** | `<html lang="…" dir="…">` always reflects the resolved language; right-to-left languages set `dir="rtl"` |
 | **Why this UX** | Automatic detection is right for almost every visitor and needs no interaction. The explicit override covers the wrong guess (a shared computer, a multilingual visitor) and the footer link keeps it one click away without crowding the header |
@@ -31104,7 +31113,7 @@ Every project MUST include these scheduled tasks:
 
 | Task | Default Schedule | Purpose | Skippable |
 |------|-----------------|---------|-----------|
-| `ssl_renewal` | Daily at 03:00 | Renew `{config_dir}/ssl/letsencrypt/{fqdn}/` certs 7 days before expiry | No |
+| `ssl_renewal` | Daily at 03:00 | Renew `{config_dir}/ssl/letsencrypt/{fqdn}/` certs when 30 days or fewer remain (fixed, not configurable) | No |
 | `geoip_update` | Weekly (Sunday 03:00) | Download/update ip-location-db GeoIP databases | Yes |
 | `blocklist_update` | Daily at 04:00 | Download/update IP/domain blocklists | Yes |
 | `security_cleanup` | Daily at 03:30 | Delete closed security reports `server.security.reports.retention_days` (default `365`) after `closed_at`, and delete the retired PGP private key (`pgp.priv.old.asc.enc`) 30 days after a rotation | No |
@@ -31948,7 +31957,7 @@ server:
 | `tor_circuit_established` | Gauge | - | 1 if circuit established, 0 otherwise |
 | `tor_requests_total` | Counter | - | Total requests via Tor hidden service |
 
-### Rate Limiting Metrics (if rate limiting enabled)
+### Rate Limiting Metrics (always: rate limiting is always on)
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
@@ -31983,23 +31992,23 @@ server:
 
 # HELP {project_name}_http_requests_total Total number of HTTP requests
 # TYPE {project_name}_http_requests_total counter
-{project_name}_http_requests_total{method="GET",path="/api/v1/users",status="200"} 1523
-{project_name}_http_requests_total{method="GET",path="/api/v1/users/:id",status="200"} 892
-{project_name}_http_requests_total{method="GET",path="/api/v1/users/:id",status="404"} 23
-{project_name}_http_requests_total{method="POST",path="/api/v1/users",status="201"} 42
+{project_name}_http_requests_total{method="GET",path="/api/v1/items",status="200"} 1523
+{project_name}_http_requests_total{method="GET",path="/api/v1/items/:id",status="200"} 892
+{project_name}_http_requests_total{method="GET",path="/api/v1/items/:id",status="404"} 23
+{project_name}_http_requests_total{method="POST",path="/api/v1/items",status="201"} 42
 {project_name}_http_requests_total{method="GET",path="/server/healthz",status="200"} 8640
 
 # HELP {project_name}_http_request_duration_seconds HTTP request duration in seconds
 # TYPE {project_name}_http_request_duration_seconds histogram
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.001"} 120
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.005"} 890
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.01"} 1400
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.025"} 1500
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.05"} 1510
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.1"} 1520
-{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="+Inf"} 1523
-{project_name}_http_request_duration_seconds_sum{method="GET",path="/api/v1/users"} 12.456
-{project_name}_http_request_duration_seconds_count{method="GET",path="/api/v1/users"} 1523
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.001"} 120
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.005"} 890
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.01"} 1400
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.025"} 1500
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.05"} 1510
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="0.1"} 1520
+{project_name}_http_request_duration_seconds_bucket{method="GET",path="/api/v1/items",le="+Inf"} 1523
+{project_name}_http_request_duration_seconds_sum{method="GET",path="/api/v1/items"} 12.456
+{project_name}_http_request_duration_seconds_count{method="GET",path="/api/v1/items"} 1523
 
 # HELP {project_name}_http_active_requests Number of active HTTP requests
 # TYPE {project_name}_http_active_requests gauge
@@ -33191,7 +33200,7 @@ groups:
 ### Backup Format
 
 - Single `.tar.gz` file (or `.tar.gz.enc` if encrypted)
-- Filename: `{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz[.enc]` (manual/timestamped); scheduled daily fulls use `{project_name}_backup_YYYY-MM-DD.tar.gz[.enc]`
+- Filename: `{project_name}_backup_YYYY-MM-DD_HHMMSS.tar.gz[.enc]` (manual/timestamped); scheduled daily fulls use `{project_name}_backup_YYYY-MM-DD.tar.gz[.enc]`; a backup never overwrites a file, so a second full on the same date (the new full after a password change) takes the timestamped name
 - Includes manifest with version info
 - Encrypted if backup password was set during setup
 
@@ -33229,7 +33238,7 @@ groups:
 |--------|---------|
 | Algorithm | AES-256-GCM |
 | Key Derivation | Argon2id (password → encryption key) |
-| Encrypted archive format | A cleartext header, then the AES-256-GCM ciphertext. Header: magic `BKUP1`, `salt` (16 random bytes, new for every archive), the Argon2id parameters (`m`, `t`, `p`), the 12-byte `nonce` and `key_id`. The whole header is bound to the ciphertext as AES-GCM additional data, so any change to it fails decryption. It holds no password and no key material |
+| Encrypted archive format | A cleartext header, then the AES-256-GCM ciphertext. Header: magic `BKUP1`, `salt` (16 random bytes, new for every archive), the Argon2id parameters (`m`, `t`, `p`), the 12-byte `nonce`, `key_id` and, for an incremental, `base_backup` (the base file's name). Retention and base protection use only this header and the file names, never a password. The whole header is bound to the ciphertext as AES-GCM additional data, so any change to it fails decryption. It holds no password and no key material |
 | `key_id` | The first 8 hex characters of `HMAC-SHA256(derived_key, "key-id")`, where `derived_key` is Argon2id over the password with THAT archive's own salt and parameters. The same password gives the same `key_id` only when derived with the same salt, so comparing against another archive means re-deriving with that archive's salt and parameters |
 | File Extension | `.tar.gz` (unencrypted) or `.tar.gz.enc` (encrypted) |
 | Password Storage | Held only as the `server.backup.encryption_password` config value, so scheduled backups can run unattended. Never written to the database, a log, a manifest or an archive; never returned by any API; never hashed (it is key material, not a login verifier). Restore never reads it: the operator supplies the password |
@@ -33614,13 +33623,13 @@ on a Sunday counts as daily + weekly + monthly + yearly — uses highest priorit
 | **Base** | The most recent full on disk before this run. Hourly incremental: the newest full (including today's) |
 | **Cumulative** | An incremental holds EVERY change since its base's `snapshot_at`, not since the previous incremental; each new run replaces the old one |
 | **Manifest fields** | `manifest.json` of every archive: `type` (`full`/`incremental`), `snapshot_at` (UTC ISO 8601), `sha256`; incrementals add `base_backup` (file name), `base_sha256`, `deleted` (list of paths removed since the base) |
-| **Changed-file detection** | Compare each file's size + mtime + SHA-256 against the base manifest's file list (the full's manifest lists `path`, `size`, `sha256` for every file). Changed or new files go in the archive, removed ones in `deleted` |
+| **Changed-file detection** | Compare each file's size + mtime + SHA-256 against the base manifest's file list (the full's manifest lists `path`, `size`, `mtime` (Unix seconds) and `sha256` for every file). Changed or new files go in the archive, removed ones in `deleted` |
 | **Database** | A SQLite database that changed is stored whole in the incremental (no page-level delta) |
 | **Archive format** | Same `tar.gz[.enc]` and encryption as a full; contains only changed/new files plus `manifest.json` |
 | **Base protection** | Retention never deletes a full that is the `base_backup` of a retained incremental |
 | **Verification** | An incremental is verified like a full, plus: base file exists and its SHA-256 equals `base_sha256` |
 | **First run** | No previous full: skip the daily incremental |
-| **Password change** | The base full's `key_id` is read from its cleartext header ("Encrypted archive format", PART 21), never from the encrypted manifest, so it is readable whatever password is configured. The run re-derives a key from the CURRENT password with the base's own salt and Argon2id parameters, computes `key_id` and compares: equal = same password, different = the password changed. A header that does not parse (bad magic or parameters) is a corrupt base, not a change. Either way the run skips the daily incremental (as on the first run), creates a new full under the current password and logs it (INFO for a change, WARN for a corrupt base); the integrity of the old base is the job of `--maintenance backup test`. A restorable pair is one full plus the incremental based on it, and a pair always shares ONE password. After a change there are two pairs: the old full with its old incremental (old password) until the old full ages out of retention, and the new full (new password) alone until the next run writes an incremental based on it, which then replaces the old incremental |
+| **Password change** | The base full's `key_id` is read from its cleartext header ("Encrypted archive format", PART 21), never from the encrypted manifest, so it is readable whatever password is configured. The run re-derives a key from the CURRENT password with the base's own salt and Argon2id parameters, computes `key_id` and compares: equal = same password, different = the password changed. A header that does not parse (bad magic or parameters) is a corrupt base, not a change. Either way the run skips the daily incremental (as on the first run), creates a new full under the current password and logs it (INFO for a change, WARN for a corrupt base); the integrity of the old base is the job of `--maintenance backup test`. A restorable pair is one full plus the incremental based on it, and a pair always shares ONE password. The server stores only the CURRENT password, so verifying (`--maintenance backup test`) or restoring an archive made under an older password needs the operator to supply that password. After a change there are two pairs: the old full with its old incremental (old password) until the old full ages out of retention, and the new full (new password) alone until the next run writes an incremental based on it, which then replaces the old incremental |
 
 **Restore (`--maintenance restore <file>`):**
 
@@ -35183,7 +35192,7 @@ rm -rf "$TEST_DIR"
 | Phase | Files | Run With | Tests |
 |-------|-------|----------|-------|
 | **Phase 1 — Toolchain Gate** | `*_test.go` | `make test` | Source-code logic via `go test`; pre-commit gate |
-| **Phase 2 — Binary Validation** | `./tests/*.sh` | `./tests/run_tests.sh` | Compiled binary behavior — routes, auth, debugging — **manual, developer-initiated** |
+| **Phase 2 — Binary Validation** | `./tests/*.sh` | `./tests/run_tests.sh` (basic tier); the other scripts are run explicitly | Compiled binary behavior — routes, auth, debugging — **manual, developer-initiated** |
 
 **Phase 1 — Toolchain Gate (`*_test.go`):**
 - Tests individual functions and packages via `go test` inside Docker
@@ -35197,7 +35206,7 @@ rm -rf "$TEST_DIR"
 - Tests API endpoints, .txt extension, Accept headers
 - Tests authentication, API token validation
 - Tests project-specific functionality (from IDEA.md)
-- Run with `./tests/run_tests.sh`
+- Run the basic tier with `./tests/run_tests.sh` (it runs `docker.sh` only); `incus.sh`, `virt.sh` and `e2e.sh` are separate, explicit runs by the developer
 - `./tests/*` means executable shell scripts in the repository-root `tests/` directory
 - Minimum required scripts: `./tests/run_tests.sh`, `./tests/docker.sh`, `./tests/incus.sh`, `./tests/e2e.sh` (browser E2E — see "Browser E2E Testing" below; standalone entry point, not invoked by `./tests/run_tests.sh`). `./tests/virt.sh` is OPTIONAL (a project adds it only when a clean OS in a real VM is needed) and is also standalone
 - Additional helper scripts are allowed (for example `./tests/test_content_negotiation.sh`)
@@ -35286,7 +35295,7 @@ curl -q -LSsf /api/v1/jokes/random.txt
 
 # ALL API endpoints that support .txt MUST be tested with .txt
 # User profile as text
-curl -q -LSsf /api/v1/users/john.txt
+curl -q -LSsf /api/v1/items/john.txt
 # Weather as text
 curl -q -LSsf /api/v1/weather/Chicago.txt
 ```
@@ -37597,7 +37606,7 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 - Use explicit `go build` commands with all flags visible
 - Use CI-native caching (NOT local host paths)
 - Set VERSION, COMMIT_ID, BUILD_DATE, BUILD_EPOCH explicitly
-- Build all platforms in matrix
+- Build all platforms in matrix: the Release, Beta and Devel workflows build every target; the CI workflow's `build` job is a compile gate for the container's own platform
 - Auto-cancel older in-progress runs for the same ref on push workflows targeting `main`, `master`, or `beta`
 
 **CI/CD workflows MUST NOT:**
@@ -40957,6 +40966,21 @@ pipeline {
             }
         }
 
+        stage('Lint') {
+            agent { label 'amd64' }
+            steps {
+                sh '''
+                    docker run --rm \
+                        -v ${WORKSPACE}:/app \
+                        -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
+                        -v ${GO_BUILD}:/usr/local/share/go/cache \
+                        -w /app \
+                        casjaysdev/go:latest \
+                        sh -c 'go vet ./... && staticcheck ./...'
+                '''
+            }
+        }
+
         stage('Test') {
             agent { label 'amd64' }
             steps {
@@ -40969,6 +40993,15 @@ pipeline {
                         -w /app \
                         casjaysdev/go:latest \
                         go test -v -cover ./...
+                '''
+                // Coverage gate, the same 60% as the other providers: the profile goes to a temp dir, never into the workspace
+                sh '''
+                    mkdir -p "/tmp/${PROJECT_ORG}"
+                    COVDIR=$(mktemp -d "/tmp/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
+                    docker run --rm -v ${WORKSPACE}:/app -v ${COVDIR}:/cov -v ${GO_CACHE}:/usr/local/share/go/pkg/mod -v ${GO_BUILD}:/usr/local/share/go/cache -w /app casjaysdev/go:latest go test -coverprofile=/cov/coverage.out ./...
+                    PCT=$(docker run --rm -v ${WORKSPACE}:/app -v ${COVDIR}:/cov -w /app casjaysdev/go:latest go tool cover -func=/cov/coverage.out | awk '/^total:/ {gsub("%","",$3); print int($3)}')
+                    rm -rf "$COVDIR"
+                    [ "$PCT" -ge 60 ] || { echo "coverage ${PCT}% < 60%"; exit 1; }
                 '''
             }
         }
@@ -41844,7 +41877,7 @@ pymdown-extensions>=10.0
   --dark-bg: #282a36;
   --dark-bg-alt: #44475a;
   --dark-text: #f8f8f2;
-  --dark-text-muted: #6272a4;
+  --dark-text-muted: #939fcc;
   --dark-accent-cyan: #8be9fd;
   --dark-accent-green: #50fa7b;
   --dark-accent-orange: #ffb86c;
@@ -42030,8 +42063,8 @@ pymdown-extensions>=10.0
   --light-bg-elevated: #e0e0e0;
   --light-text: #1a1a1a;
   --light-text-muted: #666666;
-  --light-accent-blue: #0066cc;
-  --light-accent-green: #008000;
+  --light-accent-blue: #0969da;
+  --light-accent-green: #1a7f37;
   --light-accent-orange: #ff8c00;
   --light-accent-red: #cc0000;
   --light-accent-purple: #6600cc;
@@ -42212,10 +42245,12 @@ server:
 
 ## Environment Variables
 
-All settings can be overridden via environment:
+Only the variables listed in PART 5 -> "Environment Variables" are read from the environment:
 
 ```bash
-{PROJECT_NAME}_SERVER_PORT=8080
+# Only the variables listed in PART 5 (runtime, directory and init-only) are read; there is no generic
+# {PROJECT_NAME}_{SECTION}_{KEY} override for server settings (that pattern belongs to the CLI client, PART 33)
+PORT=8080
 DATABASE_DRIVER=sqlite
 ```
 
@@ -42403,7 +42438,7 @@ make test
 | **Web Frontend** | All UI text: navigation, headings, labels, buttons, tooltips, placeholders, footers, legal pages |
 | **API Responses** | Error messages, validation messages, status descriptions |
 | **Swagger/OpenAPI** | Endpoint descriptions, parameter descriptions, schema descriptions, error examples |
-| **GraphQL** | Type descriptions, field descriptions, query/mutation descriptions |
+| **GraphQL** | Type descriptions and field descriptions of the query-only schema (a project that ever exposes mutations adds their descriptions here) |
 | **Email Templates** | Subject lines, body text, headings, CTAs, regulatory/compliance notices |
 | **Server CLI Output** | Help text, status messages, error messages, startup banners |
 | **Client CLI Output** | Help text, command descriptions, error messages, TUI labels, operator output |
@@ -42450,7 +42485,7 @@ make test
 
 ### Language Selection via Query Parameter
 
-**`?lang=` sets the language and persists it via cookie.** No URL path prefixes (avoids route conflicts).
+**`?lang=` sets the language for the response and, once the Preferences consent category is accepted, persists it via cookie.** No URL path prefixes (avoids route conflicts).
 
 ```
 GET /dashboard?lang=es
@@ -45905,7 +45940,7 @@ Address: I2P-base64-decode `PRIV`, take the first `387 + certlen` bytes (`certle
 
 | Scenario | Behavior |
 |----------|----------|
-| I2P disabled (default) | No provider contacted, no port, no config — eepsite off |
+| I2P disabled (the default outside a container; in a container the default is enabled) | No provider contacted, no port, no config — eepsite off |
 | Enabled, i2pd found | Model A: i2pd spawned with its own `i2pd.conf`, SAM session + `STREAM FORWARD`, `.b32.i2p` derived from `site-keys.dat` |
 | Enabled, no i2pd, SAM reachable | Model B: SAM session + STREAM FORWARD to backend port |
 | Enabled, no provider | Log WARN, continue without I2P (not an error) |
