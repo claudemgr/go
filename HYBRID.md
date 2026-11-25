@@ -4194,7 +4194,7 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 | `DATABASE_URL` | First run: the full database connection string, saved to `secrets.yml` (when it carries a credential) or `server.yml`; ignored afterwards ("Connection Strings") |
 | `CACHE_URL` | First run: the full cache connection string (`valkey://`, `redis://`), saved the same way |
 
-**Init-only variables are used ONCE during first run to seed `server.yml` (and `secrets.yml` for a credential), then ignored.** The database and cache connection variables are init-only because the saved connections belong to the installation's setup: a database changed in the files, by the CLI or in the admin panel must not be reverted by an environment variable at the next start.
+**Init-only variables are used ONCE during first run to seed the file that owns each setting (`server.yml`; `secrets.yml` for a credential; `yaml.d/branding.yml` for `APPLICATION_NAME` and `APPLICATION_TAGLINE`), then ignored.** The database and cache connection variables are init-only because the saved connections belong to the installation's setup: a database changed in the files, by the CLI or in the admin panel must not be reverted by an environment variable at the next start.
 
 ---
 
@@ -5231,7 +5231,7 @@ server:
         # when 30 days or fewer remain (Let's Encrypt certificates last 90 days)
 
       # Health checks
-      health_check:
+      healthcheck_self:
         enabled: true
         # Every 5 minutes
         schedule: "*/5 * * * *"
@@ -5614,7 +5614,7 @@ binaries/
 
 ## Makefile
 
-**Seven targets total: the six core targets (`dev`, `local`, `build`, `test`, `release`, `docker`) plus `clean` and the internal helper `release-check` (the first prerequisite of `release`: it validates the version and builds nothing). DO NOT ADD MORE.**
+**Seven core targets (`dev`, `local`, `build`, `test`, `release`, `beta`, `docker`) plus the helpers `clean` and `release-check` (the first prerequisite of `release`: it validates the version and builds nothing). DO NOT ADD MORE.**
 
 | Target | Purpose | Output Location | When to Use |
 |--------|---------|-----------------|-------------|
@@ -9308,7 +9308,7 @@ CREATE TABLE IF NOT EXISTS scheduler_tasks (
     last_run    INTEGER,
     -- Unix timestamp
     next_run    INTEGER,
-    -- success, failed, running, skipped
+    -- success, failed, running, skipped, interrupted
     last_status TEXT,
     -- Error message if failed
     last_error  TEXT,
@@ -11303,7 +11303,7 @@ if env.IsAutoDetectDisplayModeGUI() {
 | Environment | Banner Type |
 |-------------|-------------|
 | **Terminal** | Console banner (ASCII art, URLs, status) |
-| **DE (has display)** | GUI status window (system tray, clickable URLs) |
+| **DE (has display)** | Console banner (the server binary has no GUI mode, window or tray, PART 7; a desktop session changes nothing) |
 | **Remote (SSH/Mosh)** | Console banner |
 | **Container** | Log output only |
 | **Headless/daemon** | Log to file |
@@ -11367,11 +11367,13 @@ Why CLI needs a setup wizard:
 
 | Environment | Server | CLI |
 |-------------|--------|-----|
-| **Local display** | GUI status window | Full GUI app |
+| **Local display** (and `TERM` is not `dumb`) | Console banner (never a window) | Full GUI app |
 | **Terminal** | Console banner | Full TUI app |
 | **Remote (SSH/Mosh)** | Console banner | Full TUI app |
 | **Container** | Log output | Requires flags |
 | **Headless** | Daemon/service | Error |
+
+`TERM=dumb` is an explicit request for plain output and wins over a local display: the CLI binary then runs in CLI mode (PART 7), never GUI or TUI.
 
 #### CLI First-Run Flow
 
@@ -14613,6 +14615,8 @@ func (p *Paste) SetSlug(slug string) {
 ### Canonical Column Renames (names this specification defines)
 
 **When this specification renames one of its own columns to the canonical name (for example the scheduler tables: `task_id` becomes `id`, `task_name` becomes `name`, `ran_at` becomes `started_at`), a database created with the old name is upgraded in place by the schema step.** The step runs `ALTER TABLE ... RENAME COLUMN old TO new` only when the table's column list shows the old name and not the new one, so it is idempotent. SQLite and libSQL both support `RENAME COLUMN`, and the column list comes from `PRAGMA table_info`. Data is kept, nothing is dropped and no alias or duplicate column remains, so "Never destructive" holds. A column that is missing after the rename (for example `finished_at` on an old history table) is added with the plain `ADD COLUMN` rule. This exception covers only columns whose canonical name this specification defines; a project's own columns follow "Handling Column Renames".
+
+**A primary key is never converted by the schema step.** `admins.id` is `INTEGER PRIMARY KEY AUTOINCREMENT` from the first release of a project built on this template, so there is no type to migrate; the schema step never rebuilds a table, which keeps "Never destructive" true. An existing table keeps its key, and code treats `admins.id` as an opaque value it only compares. An installation that predates this template adopts the canonical key through one project-written migration made while adopting the template: a backup first, then one transaction that creates the new table, copies every row with its references remapped, swaps the tables and re-checks the foreign keys (`PRAGMA foreign_key_check`).
 
 ### Remote Database Updates
 
@@ -24676,7 +24680,7 @@ if ('serviceWorker' in navigator) {
 > - **Every `respondWith()` branch ends in a guaranteed `Response`** — a terminal `.catch()` returning a real `Response` (a synthesized 503 offline page for navigations, a 504 for subresources). Never end a chain on `cached || caches.match('/offline…')`: that link can itself miss and resolve `undefined`.
 > - **Only intercept same-origin GET.** Let API calls, cross-origin requests, and non-GET methods fall through untouched — never call `respondWith()` for them.
 > - **The wait for the network is bounded** — a navigation `fetch` races an 8 s timer (`NAV_TIMEOUT_MS`); on timeout the worker falls back to the cached public page, then the synthesized offline page. A server that is restarting, updating or hung never leaves a tab on a blank page with a stuck load bar.
-> - **Never cache or replay a redirect or an error** — only `response.ok && !response.redirected` (and, for a page, `X-Offline-Cache: public`) is put in the cache, and a URL that redirects (the age gate, a login redirect, `/` behind a redirect) is never precached. A `redirected` response handed to a navigation is a network error (blank page).
+> - **Never cache or replay a redirect or an error** — only `response.ok && !response.redirected` (and, for a page, `X-Offline-Cache: public`) is put in the cache, and a URL that redirects (the age gate, a login redirect, `/` behind a redirect) is never precached. A live redirect from the network is returned to the navigation unchanged and the browser follows it; a cached or rebuilt `redirected` response handed to a navigation is a network error (blank page), which is why none is ever cached.
 > - **A user never has to clear cache, cookies or local storage to recover.** Every state the worker or the page can reach after an update must self-heal: bounded waits, a build-stamped cache name, old caches deleted in `activate`, and the update prompt below that always ends in a reload. Telling a user to clear site data is a defect in the template or the app, never a fix.
 > - **The service worker is an enhancement, never a dependency** — the site stays fully usable if it never installs (the No-JS-first rule above).
 
@@ -25032,7 +25036,7 @@ async function subscribeToPush() {
   });
 
   // Send subscription to server
-  await fetch('/api/push/subscribe', {
+  await fetch('/api/{api_version}/users/push/subscriptions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(subscription)
@@ -25393,7 +25397,7 @@ Preferences aren't tied to identity — any two guests who set the same `theme`/
 | 15 | **Page layout and buttons** | `/server/preferences` is ONE `<form method="POST" action="/server/preferences">` carrying the CSRF token and every section: appearance (`theme`), language (`lang`), cookie-consent and CCPA controls, every `{project_name}_pref_{key}` control — all sections always visible, none collapsed or revealed by a button. A **More preferences** card, outside the form, links every registered preferences page (see "Preferences and Help Hubs"). The form has exactly three action buttons (the header theme toggle is a separate mini-form on other pages and is not part of this page's form): **Save** (submit; applies every changed field, then `303` per rules 9–10), **Cancel** (a link to the rule 10 redirect target; discards unsaved edits, sends no write) and **Reset** (a `type="button"` with `popovertarget` that opens a native HTML `popover` — no JS; the popover holds the warning, an **Erase everything** submit with `action=reset`, and a dismiss control using `popovertargetaction="hide"`; those two belong to Reset, not to the page's button set; forgets the visitor completely: every noncredential cookie this app set — `theme`, `lang`, `{project_name}_pref_*`, `cookie_consent`, `ccpa_opt_out`, `{project_name}_build`, plus any other noncredential cookie the project defines (announcement dismissals, flash messages, age-verification or content-acknowledgment cookies, forwarding preferences) — is deleted (`Max-Age=0`, same `Path`/attributes as rule 8), and the `303` carries `Clear-Site-Data: "storage"` to wipe localStorage/sessionStorage/IndexedDB without JS. Defaults apply and the consent banner returns on the next page. Never deletes session, CSRF or other credential cookies — signing out is a separate action. The popover warning states exactly what is erased. Only Reset confirms — Save and Cancel never ask for confirmation. The popover is styled with CSS, and a direct `POST action=reset` behaves identically on the server). No per-section save buttons and no "Sync", "Export", "Import" or "Show" buttons: sync has its own page. Every other preferences page (`/server/preferences/sync`, `/server/preferences/tokens` where the project has owner tokens, and project pages) is NOT part of this form: each lives on its own page, reached from the More preferences card, and those pages' own forms are exempt from this button limit. Reset never deletes credential cookies: session, CSRF and, when the project defines owner tokens, the owner-token cookie |
 | 16 | **Web save never `400`** | `400 VALIDATION_FAILED` (rule 11) is API-only. A web `POST /server/preferences` or `POST /server/preferences/sync` always answers `303` (rule 9) — including empty submits, unchecked checkboxes (absent fields), invalid values (dropped) and a bad `code`. The only `4xx` is a missing/invalid CSRF token (`403`), so every preferences form MUST always render the token and post only to the canonical route, never to the `/api/{api_version}/…` mirror |
 | 17 | **Consent and CCPA controls** | The page form's cookie-consent toggles (`consent_preferences`, `consent_analytics`; `essential` is always on and not a field) and the CCPA opt-out toggle (`ccpa_opt_out`, rendered only when `server.privacy.data.sold` is `true`; otherwise absent and never written) are web-form-only controls handled by `POST /server/preferences`, with a hidden `consent_form=1` marker rendered inside the form. They are applied only when `consent_form=1` is present — an unchecked checkbox then means off, while a POST without the marker (the header theme toggle) never touches consent or CCPA. Applying writes `cookie_consent` (JSON per PART 15 consent state, with a fresh timestamp in Unix seconds) and `ccpa_opt_out` with the rule 8 attributes. Import and the API mirror never write them, Reset deletes them (rule 15), and they are never exported (rule 1). The privacy page's own CCPA form is the one other writer of `ccpa_opt_out` (`POST /server/ccpa`), as the cookie banner is the other writer of `cookie_consent` (`POST /server/consent`) |
-| 18 | **Consent gate** | An explicit preference action (Save, Import, an API write) is not itself consent to the Preferences cookie category, and a visitor who has taken no consent action has the category off. `theme`, `lang` and every `{project_name}_pref_{key}` cookie belong to the **Preferences** cookie category, not to the essential one, so import, save and sync set them only on a device whose `cookie_consent` has `preferences: true` (the same per-device consent that is never exported, rule 1). The gate sits in the one shared implementation, after validation and before any cookie is written, for the web routes and the API mirror alike. When the category is not accepted (no `cookie_consent` cookie, or `preferences: false`): nothing is written, `applied` is empty, every valid value is reported in `ignored`, and the API `data` carries `"consent_required": true`. The web route still answers `303` (rules 9 and 16), never a `4xx`, and the redirect carries `consent_required=1` as a query parameter that the landing page reads, never stores, and turns into a notice pointing at the cookie-consent toggle of rule 17. An import link opened on a new device therefore applies nothing until that device's visitor accepts Preferences and opens the link again; the server keeps no pending state. While the cookies are absent the page renders with the defaults (the language detected from `Accept-Language`). **The header toggles are gated too.** The no-JavaScript header theme POST and the language switcher are preference writes like any other: with no consent they write nothing, answer `303` with `consent_required=1` (the notice of rule 17 appears) and the theme or language does not change. Only the JS instant preview (`static/js/theme.js`) may change the `<html>` class for the CURRENT page view, and it stores nothing. **Cookie visibility is one rule for every preference cookie** (`theme`, `lang`, `{project_name}_pref_{key}`): not HttpOnly, because the preview script reads them, and set only after consent; `owner_token` is the one HttpOnly cookie in this family |
+| 18 | **Consent gate** | An explicit preference action (Save, Import, an API write) is not itself consent to the Preferences cookie category, and a visitor who has taken no consent action has the category off. `theme`, `lang` and every `{project_name}_pref_{key}` cookie belong to the **Preferences** cookie category, not to the essential one, so import, save and sync set them only on a device whose `cookie_consent` has `preferences: true` (the same per-device consent that is never exported, rule 1). The gate sits in the one shared implementation, after validation and before any cookie is written, for the web routes and the API mirror alike. When the category is not accepted (no `cookie_consent` cookie, or `preferences: false`): nothing is written, `applied` is empty, every valid value is reported in `ignored`, and the API `data` carries `"consent_required": true`. The web route still answers `303` (rules 9 and 16), never a `4xx`, and the redirect carries `consent_required=1` as a query parameter that the landing page reads, never stores, and turns into a notice pointing at the cookie-consent toggle of rule 17. An import link opened on a new device therefore applies nothing until that device's visitor accepts Preferences and opens the link again; the server keeps no pending state. While the cookies are absent the page renders with the defaults (the language detected from `Accept-Language`). **The header toggles are gated too.** The no-JavaScript header theme POST and the language switcher are preference writes like any other: with no consent they write nothing, answer `303` with `consent_required=1` (the notice of rule 17 appears) and the theme or language does not change. Only the JS instant preview (the theme block of `static/js/app.js`) may change the `<html>` class for the CURRENT page view, and it stores nothing. **Cookie visibility is one rule for every preference cookie** (`theme`, `lang`, `{project_name}_pref_{key}`): not HttpOnly, because the preview script reads them, and set only after consent; `owner_token` is the one HttpOnly cookie in this family |
 
 **Page layout (`/server/preferences`) — one form, one Save, always visible, then the More preferences card:**
 ```
@@ -26654,7 +26658,7 @@ document.querySelectorAll('.theme-toggle-form').forEach((form) => {
 | Partial | Public | Admin | Purpose |
 |---------|:------:|:-----:|---------|
 | `partial/public/header.tmpl` | ✓ | | Brand, top nav and `.header-actions` (the Guest Header, or the User Menu), then `branding.content.header` ("Page Content") |
-| `partial/public/nav.tmpl` | ✓ | | Horizontal navigation links |
+| `partial/public/nav.tmpl` | ✓ | | Horizontal navigation links, included by `header.tmpl` inside the header row |
 | `partial/public/footer.tmpl` | ✓ | | About, Privacy links (never the report form) |
 | `partial/admin/header.tmpl` | | ✓ | Logo + search + bell + admin menu |
 | `partial/admin/sidebar.tmpl` | | ✓ | Collapsible sidebar navigation |
@@ -26805,7 +26809,7 @@ function confirmDelete(form, dialogId = 'confirm-modal') {
 layout/public.tmpl
   └── includes partial/head.tmpl
   └── includes partial/public/header.tmpl
-  └── includes partial/public/nav.tmpl
+        └── includes partial/public/nav.tmpl (inside the header row; the mobile drawer is rendered after the header)
   └── yields to page content
   └── includes partial/public/footer.tmpl
   └── includes partial/scripts.tmpl
@@ -26851,9 +26855,7 @@ partial/
 
 ```
 ┌─────────────────────────────────────────┐
-│              <header>                   │  ← public/header.tmpl
-├─────────────────────────────────────────┤
-│               <nav>                     │  ← public/nav.tmpl (TOP)
+│       <header> (brand, nav, actions)     │  ← public/header.tmpl, which includes public/nav.tmpl
 ├─────────────────────────────────────────┤
 │                                         │
 │              <main>                     │  ← Page content
@@ -28108,7 +28110,7 @@ When the admin panel is enabled (PART 28) these are also editable at `/server/{a
 - The 1200x630 OG variant is exactly that size: the source is scaled to cover it and center-cropped (the one exception to preserving the ratio, because social platforms require it)
 - Generate multiple sizes on upload/fetch
 - Cache scaled versions locally
-- Re-fetch remote URLs every 24 hours (fixed, not configurable: the branding file accepts only the keys in its table)
+- Re-fetch remote URLs every 24 hours (fixed, not configurable: the branding file accepts only the keys in its table). This refresh is the branding code's own fetch, not a scheduler task, so `server.scheduler.tasks` has no entry for it and the scheduler configuration cannot change it
 - Fallback to embedded default if remote URL fails
 
 ### Remote URL Fetching
@@ -41541,7 +41543,7 @@ REGISTRY = "ghcr.io/${PROJECT_ORG}/${INTERNAL_NAME}"
 
 Before proceeding, confirm you understand:
 - [ ] Docker uses tini as init, Alpine base
-- [ ] Makefile has exactly 6 build targets (dev, local, build, test, release, docker) plus the `clean` housekeeping target; no `all`
+- [ ] Makefile has exactly 7 build targets (dev, local, build, test, release, beta, docker) plus the `clean` and `release-check` helpers; no `all`
 - [ ] Binary naming: NEVER include -musl suffix
 - [ ] All 8 platform builds required (4 OS x 2 arch)
 - [ ] CLI builds (if src/client/ exists): 8 additional binaries with `-cli` suffix
@@ -42669,7 +42671,10 @@ func LanguageMiddleware(next http.Handler) http.Handler {
         lang := ""
 
         // 1. Query parameter (highest priority); the cookie is written only with Preferences consent
-        if q := r.URL.Query().Get("lang"); q != "" && isSupported(q) {
+        if q := r.URL.Query().Get("lang"); q != "" && !isSupported(q) {
+            // An unsupported ?lang= resolves to English for this response: no error, no cookie
+            lang = "en"
+        } else if q != "" {
             lang = q
             if CanSetPreferenceCookie(r) {
                 http.SetCookie(w, &http.Cookie{
@@ -43336,7 +43341,7 @@ func tf(r *http.Request, key string, args map[string]string) string {
 // Falls back to "en" if unsupported. Never returns an invalid language.
 // Priority: ?lang= query param → lang cookie → Accept-Language header → "en"
 func LangFromRequest(r *http.Request) string {
-    // 1. Query param (also sets cookie for future requests)
+    // 1. Query param (the middleware writes the cookie only with Preferences consent)
     if lang := r.URL.Query().Get("lang"); lang != "" {
         if IsSupported(lang) {
             return lang
