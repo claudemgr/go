@@ -28933,7 +28933,7 @@ message := cfg.Privacy.GetConsentMessage()
 <!-- Cookie Consent Banner - server renders it ONLY when no cookie_consent cookie exists -->
 <!-- No hidden-by-default + JS reveal: the server decides, so it works without JS -->
 <!-- {message} is dynamically selected based on server.privacy.data.sold -->
-{{ if not .HasConsentCookie }}
+{{ if and (not .HasConsentCookie) (not .IsPreferencesPage) }}
 <div id="cookie-consent" class="cookie-banner" data-sold="{data_sold}">
   <div class="cookie-banner-content">
     <span class="cookie-message">
