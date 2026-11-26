@@ -1342,7 +1342,7 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 | `~/Projects/` | Base projects directory (recommended) | Can be `~/Projects/`, `~/Documents/`, `/opt/`, etc. |
 | `{gitprovider}` | Git hosting provider or `local` | `github`, `gitlab`, `bitbucket`, `private`, `local` |
 | `{project_org}` | Organization/username (inferred) | `apimgr`, `casjay`, `myorg` |
-| `{project_name}` | Project name (inferred) | `jokes`, `icons`, `myproject` |
+| `{internal_name}` | Stable on-disk project name (inferred) | `jokes`, `icons`, `myproject` |
 
 **Examples of recommended structure:**
 ```
@@ -5725,7 +5725,7 @@ DOCKER_TIMEOUT ?= 3600
 # --rm: never leave an exited container behind; --no-healthcheck: the toolchain image's service HEALTHCHECK must not poll a one-shot build container;
 # timeout: a hung run is stopped after DOCKER_TIMEOUT seconds (the signal is forwarded to the container, which stops)
 GO_DOCKER_RUN := timeout -k 30 $(DOCKER_TIMEOUT) docker run --rm --no-healthcheck \
-	--name $(PROJECT_NAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
+	--name $(PROJECT_NAME)-$$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8) \
 	--memory=$(DOCKER_MEM) --cpus=$(DOCKER_CPUS) --cpu-shares=$(DOCKER_CPU_SHARES) \
 	-v $(PWD):/app \
 	-v $(GO_CACHE):/usr/local/share/go/pkg/mod \
@@ -5830,6 +5830,9 @@ release: release-check build
 		--exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
 		-czf $(RELDIR)/$(PROJECT_NAME)-$(VERSION)-source.tar.gz .
 
+	# Generate checksums
+	@cd $(RELDIR) && FILES="$$(ls)" && sha256sum $$FILES > sha256.txt && sha512sum $$FILES > sha512.txt
+
 	# Delete existing release/tag if exists
 	# Tag and release name are v{version}; version.txt stays unprefixed (numeric SemVer)
 	@gh release delete v$(VERSION) --yes 2>/dev/null || true
@@ -5859,7 +5862,7 @@ docker:
 	@docker buildx create --name multiarch-builder --use 2>/dev/null || \
 		docker buildx use multiarch-builder
 
-	# Build multi-arch and push (buildx multi-arch images must be pushed; set REGISTRY first)
+	# Build multi-arch locally (no push — pushing is CI/CD's responsibility)
 	@docker buildx build \
 		-f docker/Dockerfile \
 		--platform linux/amd64,linux/arm64 \
@@ -5922,7 +5925,7 @@ dev:
 			if [ -d src/client ]; then go build -buildvcs=false -o /build/$(PROJECT_NAME)-cli ./src/client; fi' && \
 		echo "Built: $$BUILD_DIR/$(PROJECT_NAME)" && \
 		if [ -d "src/client" ]; then echo "Built: $$BUILD_DIR/$(PROJECT_NAME)-cli"; fi && \
-		echo "Test:  docker run --rm --name $(PROJECT_NAME)-$$(tr -dc a-z0-9 </dev/urandom | head -c8) -v $$BUILD_DIR:/app alpine:latest /app/$(PROJECT_NAME) --help"
+		echo "Test:  docker run --rm --name $(PROJECT_NAME)-$$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8) -v $$BUILD_DIR:/app alpine:latest /app/$(PROJECT_NAME) --help"
 
 # =============================================================================
 # CLEAN - Remove build artifacts
@@ -6012,7 +6015,7 @@ clean:
 # After make dev, test in Docker with debug tools
 BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-*/ 2>/dev/null | head -1)
 docker run --rm \
-  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v "$BUILD_DIR:/app" \
   alpine:latest sh -c "
     apk add --no-cache curl bash file jq tor i2pd tzdata ca-certificates
@@ -6577,13 +6580,13 @@ Every `docker run` invocation in this project (CI, scripts, docs, examples) MUST
 
 ```bash
 docker run --rm \
-  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   ...
 ```
 
 - `--rm` — self-remove on exit (no orphaned containers)
 - `-it` — interactive-capable for log streaming and signal handling
-- `--name "${PROJECT_NAME}-XXXX"` — traceable name; `XXXX` is the 8-char lowercase-alphanumeric random suffix produced by `tr -dc 'a-z0-9' </dev/urandom | head -c8` (Makefile form: `$$(tr -dc 'a-z0-9' </dev/urandom | head -c8)`)
+- `--name "${PROJECT_NAME}-XXXX"` — traceable name; `XXXX` is the 8-char lowercase-alphanumeric random suffix produced by `head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8` (Makefile form: `$$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)`)
 
 There is no opt-out. Unnamed or persistent build/test containers are a spec violation.
 
@@ -6622,7 +6625,7 @@ GUI and display-aware test runs use the `gui` compose service (or equivalent `do
 xhost +SI:localuser:$(id -un)
 
 docker run --rm \
-  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -e DISPLAY="$DISPLAY" \
   -e XAUTHORITY=/tmp/.docker.xauth \
   -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
@@ -6639,7 +6642,7 @@ xhost -SI:localuser:$(id -un)
 
 ```bash
 docker run --rm \
-  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -e WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
   -e XDG_RUNTIME_DIR=/tmp/xdg \
   -e QT_QPA_PLATFORM=wayland \
@@ -6884,7 +6887,7 @@ services:
       - ./volumes/config:/config:z
       - ./volumes/data:/data:z
     ports:
-      - "172.17.0.1:64580:80"
+      - "172.17.0.1:{port}:80"
     healthcheck:
       test: ["CMD", "/usr/local/bin/{project_name}", "--status"]
       interval: 10s
@@ -9984,7 +9987,7 @@ services:
       - data:/data
     ports:
       # Random 64xxx host port → container port 80 (prod pattern)
-      - "172.17.0.1:64580:80"
+      - "172.17.0.1:{port}:80"
 
 volumes:
   config:
@@ -10002,7 +10005,7 @@ services:
       - {project_name}-data:/data
     ports:
       # Random 64xxx host port → container default port 80
-      - "172.17.0.1:64580:80"
+      - "172.17.0.1:{port}:80"
 
 volumes:
   {project_name}-data:
@@ -10799,14 +10802,14 @@ func SaveIfEmptyOrInvalid(current, flagValue string, validate func(string) bool)
     }
 
     // Current is empty - save new value
-    if current == "" {
-        // Save to config
+    if current == "" || !validate(current) {
+        // Save to config (empty or invalid current is replaced)
         return flagValue
     }
 
     // Current is invalid - replace with valid flag value
     if !validate(current) {
-        // Save to config
+        // Save to config (empty or invalid current is replaced)
         return flagValue
     }
 
@@ -14827,6 +14830,7 @@ func isBusy(err error) bool {
 | Simple SELECT | 5 seconds | Fast reads |
 | Complex SELECT (JOIN) | 15 seconds | More processing |
 | INSERT/UPDATE/DELETE | 10 seconds | Write operations |
+| Transactions (multi-statement) | 30 seconds | Bounds the whole `BeginTx`...`Commit`/`Rollback` span, not per-statement. On SQLite the `Write` helper's 10-second deadline bounds the whole write transaction instead ("SQLite Concurrency Contract"), so the 30 seconds apply to remote drivers only |
 | Bulk operations | 60 seconds | Large data sets |
 | Migrations | 5 minutes | Schema changes |
 | Reports | 2 minutes | Aggregations |
@@ -17210,7 +17214,7 @@ type IPBlock struct {
 
 **IP blocks and allowlists are managed via config file (`server.security.blocked_ips`, `server.security.allowlist`).**
 
-**`server.security.blocked_ips` schema** (same shape as the allowlist; each entry becomes a permanent `IPBlock` with `CIDR` set and `AutoBlocked: false`):
+**`server.security.blocked_ips` schema** (the same entry shape as the allowlist, `cidr` plus an optional `description`; each entry becomes a permanent `IPBlock` with `CIDR` set and `AutoBlocked: false`):
 
 ```yaml
 server:
@@ -17218,12 +17222,12 @@ server:
     blocked_ips:
       # IPv4 or IPv6 CIDR; a bare address is treated as /32 or /128
       - cidr: 198.51.100.0/24
-        reason: "Scraper network"
+        description: "Scraper network"
       - cidr: "2001:db8::/32"
-        reason: "Abusive range"
+        description: "Abusive range"
 ```
 
-**Validation:** every entry needs a valid `cidr` (and `reason` is optional text). An invalid entry is skipped with ONE warning naming the entry index and field (PART 12 → "Invalid → default"); the rest of the allowlist applies, and neither startup nor a hot reload ever fails. When a blocked entry overlaps an allowlist entry, the allowlist wins.
+**Validation:** every entry needs a valid `cidr` (and `description` is optional text). An invalid entry is skipped with ONE warning naming the entry index and field (PART 12 → "Invalid → default"); the rest of the allowlist applies, and neither startup nor a hot reload ever fails. When a blocked entry overlaps an allowlist entry, the allowlist wins.
 
 **Allowlist (Trusted IPs):**
 
@@ -22023,7 +22027,7 @@ func printServerBannerPlain(appName, version, appMode string, urls []string, lan
 }
 
 func printServerBannerFull(appName, version, appMode string, urls []string, useColors bool, lang string) {
-    // Full ASCII art logo
+    // Full ASCII art logo (useColors gates ANSI styling of the art/labels)
     fmt.Println(getASCIIArt(appName))
     fmt.Println()
     fmt.Printf("🚀 %s v%s\n", appName, version)
@@ -22036,7 +22040,7 @@ func printServerBannerFull(appName, version, appMode string, urls []string, useC
 }
 
 func printServerBannerCompact(appName, version, appMode string, urls []string, useColors bool, lang string) {
-    // No ASCII art, just icons and text
+    // No ASCII art, just icons and text (useColors gates ANSI styling)
     fmt.Printf("🚀 %s v%s\n", appName, version)
     printServerBannerAppModeLine(appMode, true, lang)
     for _, url := range urls {
@@ -22976,7 +22980,7 @@ fi
 | IPv6 address | 39 chars | `2001:0db8:85a3:0000:0000:8a2e:0370:7334` |
 | Tor v3 .onion | 62 chars | `duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion` |
 | I2P .b32.i2p | 60 chars | `ukeu3k5oycgaauneqgtnvselmt4yemvoilkln7jpvamvfx7dnkdq.b32.i2p` |
-| API token | 32-64 chars | `own_EXAMPLE1234567890abcdefghij...` |
+| API token | 36 chars | `own_EXAMPLE1234567890abcdefghij...` |
 | SHA-256 hash | 64 chars | `e3b0c44298fc1c149afbf4c8996fb924...` |
 | UUID | 36 chars | `550e8400-e29b-41d4-a716-446655440000` |
 | Base64 data | Variable | Long encoded strings |
@@ -33062,7 +33066,7 @@ groups:
 
 ```json
 {
-  "title": "{PROJECT_NAME} Metrics",
+  "title": "{project_name} Metrics",
   "panels": [
     {
       "title": "Request Rate",
@@ -34832,7 +34836,7 @@ All gates execute inside the project Docker container (PART 6 → "Docker Rule")
 # Example (Docker-wrapped) — fails if total coverage < threshold
 THRESHOLD="${COVERAGE_MIN:-60}"
 docker run --rm \
-  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v "$PWD":/work -w /work -e GOFLAGS=-buildvcs=false "$PROJECT_IMAGE" \
   sh -c 'mkdir -p /tmp/cov && go test -cover ./... -args -test.gocoverdir=/tmp/cov &&
     go tool covdata textfmt -i=/tmp/cov -o=/tmp/cov/coverage.out &&
@@ -34886,7 +34890,7 @@ When a test or debug step requires `reboot`, `systemctl`, `iptables`, `mount`, p
 | Run or test the compiled binary | `docker run --rm -v "$BUILD_DIR:/app" alpine:latest /app/{project_name}` or `./tests/docker.sh` / `./tests/incus.sh` |
 | Test systemd service install/start/stop | `incus exec {instance_name} -- systemctl ...` (Debian container) |
 | Test OpenRC service install/start/stop | `incus exec {instance_name} -- rc-service ...` (Alpine container) |
-| Test firewall integration | `docker run --rm --name "{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" --cap-add=NET_ADMIN ...` |
+| Test firewall integration | `docker run --rm --name "{project_name}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" --cap-add=NET_ADMIN ...` |
 | Test network interface behavior | `ip netns exec {ns} ...` or inside Incus |
 | Test package install / dependency setup | Inside the build container or test container |
 | Test reboot / service restart behavior | `incus restart {instance_name}` |
@@ -35095,7 +35099,7 @@ rm -rf "$TEST_DIR"
 **Breaking it down:**
 - `/tmp/` or `$TMPDIR` - OS temp directory base
 - `{project_org}/` - Organization directory (cloudops, acmesoft, etc.)
-- `{project_name}-XXXXXX` - Project directory with random suffix
+- `{internal_name}-XXXXXX` - Project directory with random suffix
 
 **Examples of CORRECT paths:**
 - `/tmp/cloudops/echoip-aB3xY9/` ✓
@@ -35741,7 +35745,7 @@ make build
 GO_CACHE="${GO_CACHE:-$HOME/go/pkg/mod}"
 GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build/${PROJECT_NAME}}"
 mkdir -p "$GO_CACHE" "$GO_BUILD"
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app \
+docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" -v $PWD:/app -w /app \
   -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/binaries/{project_name} ./src
 
@@ -35750,7 +35754,7 @@ if command -v incus &>/dev/null; then
   # PREFERRED: Full OS test in Incus (debian + systemd)
   # Use latest Debian stable (currently 13/trixie)
   echo "Testing with Incus (Debian + systemd)..."
-  INSTANCE="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
+  INSTANCE="{project_name}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)"
   trap 'incus delete --force "$INSTANCE" 2>/dev/null || true' EXIT INT TERM
   incus launch images:debian/trixie "$INSTANCE" -c limits.cpu=2 -c limits.memory=4GiB -c limits.cpu.priority=2
   incus file push binaries/{project_name} ${INSTANCE}/usr/local/bin/
@@ -35762,7 +35766,7 @@ if command -v incus &>/dev/null; then
 else
   # FALLBACK: Quick test in Docker (alpine, no systemd)
   echo "Incus not available, testing with Docker..."
-  docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD/binaries:/app alpine:latest \
+  docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" -v $PWD/binaries:/app alpine:latest \
     /app/{project_name} --help
 fi
 ```
@@ -35842,7 +35846,7 @@ else
     GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build/${PROJECT_NAME}}"
     mkdir -p "$GO_CACHE" "$GO_BUILD" "$BIN_DIR"
     docker run --rm \
-      --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+      --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
       -v $PWD:/app \
       -v $GO_CACHE:/usr/local/share/go/pkg/mod \
       -v $GO_BUILD:/usr/local/share/go/cache \
@@ -35850,7 +35854,7 @@ else
       casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/${BIN_DIR}/${PROJECT_NAME} ./src
     if [ -d "src/client" ]; then
         docker run --rm \
-          --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+          --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
           -v $PWD:/app \
           -v $GO_CACHE:/usr/local/share/go/pkg/mod \
           -v $GO_BUILD:/usr/local/share/go/cache \
@@ -35861,7 +35865,7 @@ fi
 
 echo "Testing in Docker (Alpine)..."
 docker run --rm \
-  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v "$PWD/$BIN_DIR:/app" \
   alpine:latest sh -c "
     set -e
@@ -36014,7 +36018,7 @@ PROJECT_NAME=$(basename "$PWD")
 PROJECT_ORG=$(basename "$(dirname "$PWD")")
 INTERNAL_NAME="${INTERNAL_NAME:-$PROJECT_NAME}"
 INTERNAL_ORG="${INTERNAL_ORG:-$PROJECT_ORG}"
-CONTAINER_PREFIX="${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
+CONTAINER_PREFIX="${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)"
 CONTAINERS=()
 
 # Incus images, one per init system: systemd uses the latest Debian stable, OpenRC uses the
@@ -36055,7 +36059,7 @@ else
     GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build/${PROJECT_NAME}}"
     mkdir -p "$GO_CACHE" "$GO_BUILD" "$BIN_DIR"
     docker run --rm \
-      --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+      --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
       -v $PWD:/app \
       -v $GO_CACHE:/usr/local/share/go/pkg/mod \
       -v $GO_BUILD:/usr/local/share/go/cache \
@@ -36063,7 +36067,7 @@ else
       casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/${BIN_DIR}/${PROJECT_NAME} ./src
     if [ -d "src/client" ]; then
         docker run --rm \
-          --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+          --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
           -v $PWD:/app \
           -v $GO_CACHE:/usr/local/share/go/pkg/mod \
           -v $GO_BUILD:/usr/local/share/go/cache \
@@ -36520,7 +36524,7 @@ PROJECT_NAME=$(basename "$PWD")
 # The build output directory is the Makefile's BINDIR (default binaries)
 BIN_DIR="${BINDIR:-binaries}"
 make build BINDIR="$BIN_DIR"
-VM_PREFIX="${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
+VM_PREFIX="${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)"
 VMS=()
 
 # One image per init system: Incus pulls these itself; libvirt and VirtualBox read VIRT_IMAGE_SYSTEMD and VIRT_IMAGE_OPENRC
@@ -36663,7 +36667,7 @@ fi
 | **Cleanup** | ALWAYS use `trap` for cleanup |
 | **Exit codes** | `0` every check passed, `1` one or more checks failed (run every check, then exit `1` naming the count), `2` usage, `69` the script cannot run here (missing Docker, Incus, hypervisor or `/dev/kvm`; the reason is on stderr). A `curl ... \|\| echo FAILED` that only prints is a spec violation: use `fail` (see "Output Streams & Exit Codes") |
 | **Output** | Clear progress messages with `echo` on stdout; every error, warning and `SKIP:` on stderr (`>&2`) |
-| **Pipes under `pipefail`** | Never end a pipeline in `grep -q`: grep exits at the first match, the producer then receives SIGPIPE, and `pipefail` reports a failure for a healthy result. Use `grep PATTERN >/dev/null` (it reads everything) or capture the output first |
+| **Pipes under `pipefail`** | Never end a pipeline in a consumer that can exit before it has read all its input: `grep -q`, `head`, `head -c`, `sed -n 1p`, `awk '{exit}'`. The producer then receives SIGPIPE (exit 141) and `pipefail` reports a failure for a healthy result. Use `grep PATTERN >/dev/null` (it reads everything), read from a FILE instead of a pipe (`head -c6 /dev/urandom`), or capture the output first. The random 8-character suffix of a container, instance or temp name is `$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)`: a finite producer and consumers that read everything. The form `tr -dc 'a-z0-9' </dev/urandom | head -c8` is forbidden: `head` exits first and `tr` receives SIGPIPE |
 | **Error handling** | `set -eo pipefail` for bash/zsh; `set -e` for POSIX sh |
 | **License** | All shell scripts are WTFPL — `# @@License : WTFPL` in header |
 
@@ -36787,7 +36791,7 @@ mkdir -p "$GO_CACHE" "$GO_BUILD"
 
 # Common docker run for Go commands
 GO_DOCKER="docker run --rm \
-  --name \"${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)\" \
+  --name \"${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)\" \
   -v $PROJECT_PATH:/app \
   -v $GO_CACHE:/usr/local/share/go/pkg/mod \
   -v $GO_BUILD:/usr/local/share/go/cache \
@@ -36818,7 +36822,7 @@ $GO_DOCKER casjaysdev/go:latest go vet ./...
 
 # Interactive shell (for debugging)
 docker run --rm \
-  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v $PROJECT_PATH:/app \
   -v ${GO_CACHE:-$HOME/go/pkg/mod}:/usr/local/share/go/pkg/mod \
   -v ${GO_BUILD:-$HOME/.cache/go-build/${PROJECT_NAME}}:/usr/local/share/go/cache \
@@ -36926,7 +36930,7 @@ GO_CACHE="${GO_CACHE:-$HOME/go/pkg/mod}"
 GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build/${PROJECT_NAME}}"
 mkdir -p "$GO_CACHE" "$GO_BUILD"
 docker run --rm \
-  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v $PWD:/app \
   -v $GO_CACHE:/usr/local/share/go/pkg/mod \
   -v $GO_BUILD:/usr/local/share/go/cache \
@@ -36934,14 +36938,14 @@ docker run --rm \
   casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/binaries/{project_name} ./src
 
 # Test in Docker (quick) - install tools first
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD/binaries:/app alpine:latest sh -c "
+docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" -v $PWD/binaries:/app alpine:latest sh -c "
   apk add --no-cache curl bash file jq tor i2pd tzdata ca-certificates >/dev/null
   /app/{project_name} --help
 "
 
 # Test in Incus (full OS with systemd) - PREFERRED
 # Use latest Debian stable (currently 13/trixie)
-INSTANCE="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
+INSTANCE="{project_name}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)"
 trap 'for i in "$INSTANCE" "${INSTANCE}-openrc"; do incus delete --force "$i" 2>/dev/null || true; done' EXIT INT TERM
 incus launch images:debian/trixie "$INSTANCE" -c limits.cpu=2 -c limits.memory=4GiB -c limits.cpu.priority=2
 incus file push binaries/{project_name} ${INSTANCE}/usr/local/bin/
@@ -36965,7 +36969,7 @@ make build
 # If no Makefile exists yet (bootstrap or manual equivalent)
 # GO_CACHE="${GO_CACHE:-$HOME/go/pkg/mod}"; GO_BUILD="${GO_BUILD:-$HOME/.cache/go-build/${PROJECT_NAME}}"
 # mkdir -p "$GO_CACHE" "$GO_BUILD" binaries
-# docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -v $GO_CACHE:/usr/local/share/go/pkg/mod \
+# docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" -v $PWD:/app -v $GO_CACHE:/usr/local/share/go/pkg/mod \
 #   -v $GO_BUILD:/usr/local/share/go/cache -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
 #   casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/binaries/{project_name} ./src
 
@@ -36975,7 +36979,7 @@ TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT_ORG}/${INTERNAL_NAME}-XXXXXX")
 mkdir -p $TEST_DIR/{config,data,logs}
 
 # Quick test in Docker (install tools first)
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD/binaries:/app alpine:latest sh -c "
+docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" -v $PWD/binaries:/app alpine:latest sh -c "
   apk add --no-cache curl bash file jq tor i2pd tzdata ca-certificates >/dev/null
   /app/{project_name} --help
   /app/{project_name} --version
@@ -36983,7 +36987,7 @@ docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -
 
 # Full test with config/data in Docker
 docker run --rm \
-  --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+  --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v $PWD/binaries:/app \
   -v $TEST_DIR:/test \
   alpine:latest /app/{project_name} \
@@ -37010,11 +37014,11 @@ mkdir -p $TEST_DIR/{config,data,logs}
 # → binaries/{project_name}
 make build
 # If no Makefile exists yet:
-# docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -v $PWD:/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+# docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" -v $PWD:/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
 #   casjaysdev/go:latest go build -buildvcs=false -trimpath -ldflags "-s -w" -o /app/binaries/{project_name} ./src
 
 # Launch Incus container (use latest Debian stable)
-INSTANCE="{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)"
+INSTANCE="{project_name}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)"
 trap 'incus delete --force "$INSTANCE" 2>/dev/null || true' EXIT INT TERM
 incus launch images:debian/trixie "$INSTANCE" -c limits.cpu=2 -c limits.memory=4GiB -c limits.cpu.priority=2
 
@@ -37409,7 +37413,7 @@ jobs:
         if: hashFiles('go.mod') != ''
         run: |
           docker run --rm -i \
-            --name "${{ github.event.repository.name }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+            --name "${{ github.event.repository.name }}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
             -v "$PWD":/work -w /work -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false casjaysdev/go:latest govulncheck ./...
 
   image-scan:
@@ -37496,25 +37500,25 @@ Every `actions/upload-artifact` step MUST set a finite `retention-days`:
 mkdir -p binaries
 
 # Run quality gates inside casjaysdev/go:latest
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest gofmt -l .
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest golangci-lint run ./...
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest go test ./...
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest go vet ./...
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest govulncheck ./...
 
 # License enumeration and attribution-drift check:
 # Regenerate the GENERATED region and compare to committed.
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest go-licenses report ./... > LICENSE.generated.md
 sed -n '/<!-- GENERATED:/,$p' LICENSE.md > LICENSE.committed-generated.md
@@ -37530,7 +37534,7 @@ for TARGET in "linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows
   ARTIFACT="{project_name}-${GOOS}-${GOARCH}${EXT}"
 
   docker run --rm \
-    --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+    --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
     -v "$PWD":/app -w /app \
     -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false -e GOOS="$GOOS" -e GOARCH="$GOARCH" \
     casjaysdev/go:latest \
@@ -37540,7 +37544,7 @@ for TARGET in "linux/amd64" "linux/arm64" "darwin/amd64" "darwin/arm64" "windows
 
   # Verify static linkage on Linux
   if [ "$GOOS" = "linux" ]; then
-    docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+    docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
       -v "$PWD":/app -w /app casjaysdev/go:latest \
       sh -c "ldd binaries/$ARTIFACT 2>&1 | grep -qE 'not a dynamic executable|statically linked'"
   fi
@@ -37553,7 +37557,7 @@ done
 ( cd binaries && FILES="$(ls)" && sha256sum $FILES > sha256.txt && sha512sum $FILES > sha512.txt )
 
 # Generate the SBOM (CycloneDX JSON) — published alongside the release artifacts.
-docker run --rm --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+docker run --rm --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
   -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
   casjaysdev/go:latest cyclonedx-gomod app -json -output "binaries/{project_name}-bom.json"
 ```
@@ -37637,7 +37641,7 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 | Aspect | Local Development | CI/CD Workflows |
 |--------|-------------------|-----------------|
 | **Go installation** | Docker `casjaysdev/go:latest` | Docker `casjaysdev/go:latest` |
-| **Caching** | Host cache dirs (`GO_CACHE`/`GO_BUILD`) bind-mounted into container | CI-native cache mounted into `casjaysdev/go:latest` |
+| **Caching** | Host cache dirs (`GO_CACHE`/`GO_BUILD`) bind-mounted | Never host paths; a provider-native cache MAY be mounted into `casjaysdev/go:latest` (a cold cache only costs time) |
 | **Build command** | `make dev`, `make local`, `make build` | Direct `go build` with explicit flags |
 | **Testing** | Docker/Incus containers | `casjaysdev/go:latest` job container or explicit `docker run` |
 | **Makefile** | ALWAYS use Makefile targets | NEVER use Makefile (explicit commands) |
@@ -37645,7 +37649,7 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 **CI/CD workflows MUST:**
 - Use explicit `go build` commands with all flags visible
 - Never use local host paths for caches; a provider-native cache (`actions/cache` on GitHub, Gitea and Forgejo, `cache:` on GitLab) is optional, and no template workflow is required to define one
-- Set VERSION, COMMIT_ID, BUILD_DATE, BUILD_EPOCH explicitly
+- Set VERSION, COMMIT_ID, BUILD_EPOCH explicitly in every workflow that builds an artifact or an image (release, beta, devel, docker); the `ci.yml` compile gate builds nothing that ships and needs none of them (BUILD_DATE is derived from BUILD_EPOCH for Docker OCI labels only — it is not an ldflag)
 - Build all platforms in matrix: the Release, Beta and Devel workflows build every target; the CI workflow's `build` job is a compile gate for the container's own platform
 - Auto-cancel older in-progress runs for the same ref on push workflows targeting `main`
 
@@ -37954,8 +37958,8 @@ jobs:
           echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
           BUILD_EPOCH="$(date -u +%s)"
-          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -38084,7 +38088,7 @@ jobs:
 
       - name: Generate SBOM
         run: |
-          docker run --rm --name "${{ env.PROJECT_NAME }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+          docker run --rm --name "${{ env.PROJECT_NAME }}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
             -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
             casjaysdev/go:latest cyclonedx-gomod app -json -output "binaries/${{ env.PROJECT_NAME }}-bom.json"
 
@@ -38187,8 +38191,8 @@ jobs:
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
           BUILD_EPOCH="$(date -u +%s)"
-          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -38285,7 +38289,7 @@ jobs:
 
       - name: Generate SBOM
         run: |
-          docker run --rm --name "${{ env.PROJECT_NAME }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+          docker run --rm --name "${{ env.PROJECT_NAME }}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
             -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
             casjaysdev/go:latest cyclonedx-gomod app -json -output "binaries/${{ env.PROJECT_NAME }}-bom.json"
 
@@ -38392,8 +38396,8 @@ jobs:
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
           BUILD_EPOCH="$(date -u +%s)"
-          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -38490,7 +38494,7 @@ jobs:
 
       - name: Generate SBOM
         run: |
-          docker run --rm --name "${{ env.PROJECT_NAME }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+          docker run --rm --name "${{ env.PROJECT_NAME }}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
             -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
             casjaysdev/go:latest cyclonedx-gomod app -json -output "binaries/${{ env.PROJECT_NAME }}-bom.json"
 
@@ -38577,7 +38581,6 @@ concurrency:
 env:
   PROJECT_NAME: {project_name}
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-standard:
@@ -38605,6 +38608,8 @@ jobs:
 
       - name: Set build info
         run: |
+          # ghcr.io requires a lowercase image path
+          echo "IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           if [ -f site.txt ]; then
@@ -38622,8 +38627,8 @@ jobs:
             echo "IS_TAG=false" >> $GITHUB_ENV
           fi
           BUILD_EPOCH="$(date -u +%s)"
-          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 
       - name: Determine tags (standard)
         id: tags
@@ -38709,6 +38714,8 @@ jobs:
 
       - name: Set build info
         run: |
+          # ghcr.io requires a lowercase image path
+          echo "IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITHUB_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           if [ -f site.txt ]; then
@@ -38717,8 +38724,8 @@ jobs:
             echo "OFFICIAL_SITE=${{ secrets.OFFICIAL_SITE }}" >> $GITHUB_ENV
           fi
           BUILD_EPOCH="$(date -u +%s)"
-          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITHUB_ENV
-          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
 
       - name: Build and push (devel)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
@@ -38798,7 +38805,7 @@ Key differences from GitHub Actions:
 
 | Setting | Value |
 |---------|-------|
-| Gitea version | 1.19+ (Actions support) |
+| Gitea version | 1.22+ with act_runner 0.2.12+ (Actions support) |
 | Enable Actions | Site Administration → Actions → Enable Actions |
 | Runner | Register runner via `act_runner` |
 | Container Registry | Enable in Site Administration → Packages |
@@ -39037,8 +39044,8 @@ jobs:
           echo "VERSION=${GITEA_REF_NAME#v}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
           BUILD_EPOCH="$(date -u +%s)"
-          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -39165,7 +39172,7 @@ jobs:
 
       - name: Generate SBOM
         run: |
-          docker run --rm --name "${{ env.PROJECT_NAME }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+          docker run --rm --name "${{ env.PROJECT_NAME }}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
             -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
             casjaysdev/go:latest cyclonedx-gomod app -json -output "binaries/${{ env.PROJECT_NAME }}-bom.json"
 
@@ -39261,8 +39268,8 @@ jobs:
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
           BUILD_EPOCH="$(date -u +%s)"
-          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -39357,7 +39364,7 @@ jobs:
 
       - name: Generate SBOM
         run: |
-          docker run --rm --name "${{ env.PROJECT_NAME }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+          docker run --rm --name "${{ env.PROJECT_NAME }}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
             -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
             casjaysdev/go:latest cyclonedx-gomod app -json -output "binaries/${{ env.PROJECT_NAME }}-bom.json"
 
@@ -39458,8 +39465,8 @@ jobs:
           echo "VERSION=${{ needs.version.outputs.version }}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
           BUILD_EPOCH="$(date -u +%s)"
-          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
@@ -39554,7 +39561,7 @@ jobs:
 
       - name: Generate SBOM
         run: |
-          docker run --rm --name "${{ env.PROJECT_NAME }}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+          docker run --rm --name "${{ env.PROJECT_NAME }}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
             -v "$PWD":/app -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
             casjaysdev/go:latest cyclonedx-gomod app -json -output "binaries/${{ env.PROJECT_NAME }}-bom.json"
 
@@ -39615,7 +39622,6 @@ env:
   PROJECT_NAME: {project_name}
   # Registry auto-detected from Gitea instance (works with self-hosted)
   # Format: {gitea-server}/owner/repo -> extracts server for registry
-  IMAGE_NAME: ${{ gitea.repository }}
 
 jobs:
   build-standard:
@@ -39652,6 +39658,8 @@ jobs:
 
       - name: Set build info
         run: |
+          # ghcr.io requires a lowercase image path
+          echo "IMAGE_NAME=$(echo "${{ gitea.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           if [ -f site.txt ]; then
@@ -39670,8 +39678,8 @@ jobs:
             echo "IS_TAG=false" >> $GITEA_ENV
           fi
           BUILD_EPOCH="$(date -u +%s)"
-          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
 
       - name: Determine tags (standard)
         id: tags
@@ -39767,6 +39775,8 @@ jobs:
 
       - name: Set build info
         run: |
+          # ghcr.io requires a lowercase image path
+          echo "IMAGE_NAME=$(echo "${{ gitea.repository }}" | tr '[:upper:]' '[:lower:]')" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short=7 HEAD)" >> $GITEA_ENV
           # OFFICIAL_SITE (optional): site.txt wins; otherwise use repository secrets or leave empty
           if [ -f site.txt ]; then
@@ -39775,8 +39785,8 @@ jobs:
             echo "OFFICIAL_SITE=${{ secrets.OFFICIAL_SITE }}" >> $GITEA_ENV
           fi
           BUILD_EPOCH="$(date -u +%s)"
-          echo "BUILD_EPOCH=${BUILD_EPOCH}" >> $GITEA_ENV
-          echo "BUILD_DATE=$(date -u -d @${BUILD_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
+          echo "BUILD_EPOCH=$BUILD_EPOCH" >> $GITEA_ENV
+          echo "BUILD_DATE=$(date -u -d @$BUILD_EPOCH +"%Y-%m-%dT%H:%M:%SZ")" >> $GITEA_ENV
 
       - name: Build and push (devel)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
@@ -40855,7 +40865,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -40873,7 +40883,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -40892,7 +40902,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -40910,7 +40920,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -40929,7 +40939,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -40947,7 +40957,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -40966,7 +40976,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -40984,7 +40994,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41011,7 +41021,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41029,7 +41039,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41047,7 +41057,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41065,7 +41075,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41083,7 +41093,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41101,7 +41111,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41119,7 +41129,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41137,7 +41147,7 @@ pipeline {
                     steps {
                         sh '''
                             docker run --rm \
-                                --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                                --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                                 -v ${WORKSPACE}:/app \
                                 -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                                 -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41188,7 +41198,7 @@ pipeline {
             steps {
                 sh '''
                     docker run --rm \
-                        --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                        --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                         -v ${WORKSPACE}:/app \
                         -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                         -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41285,7 +41295,7 @@ pipeline {
                 '''
                 sh '''
                     docker run --rm \
-                        --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                        --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                         -v ${WORKSPACE}:/app \
                         -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                         -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41326,7 +41336,7 @@ pipeline {
                 '''
                 sh '''
                     docker run --rm \
-                        --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                        --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                         -v ${WORKSPACE}:/app \
                         -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                         -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41367,7 +41377,7 @@ pipeline {
                 '''
                 sh '''
                     docker run --rm \
-                        --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
+                        --name "${PROJECT_NAME}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" \
                         -v ${WORKSPACE}:/app \
                         -v ${GO_CACHE}:/usr/local/share/go/pkg/mod \
                         -v ${GO_BUILD}:/usr/local/share/go/cache \
@@ -41588,6 +41598,7 @@ REGISTRY = "ghcr.io/${PROJECT_ORG}/${INTERNAL_NAME}"
 | Beta | `beta.yml` (`*-beta` tag) | `BUILD_TYPE == 'beta'` (`*-beta` tag) |
 | Devel | `devel.yml` (schedule + main) | `BUILD_TYPE == 'devel'` (cron + main) |
 | Docker | `docker.yml` (main, version and beta tags) | Docker stage (main and tags) |
+| Docker devel | `docker.yml` `build-devel` job (`main` + daily schedule) | "Docker: Devel" stage (`main` only) + 4am cron |
 | Docker Devel | `docker.yml` `build-devel` job (`main` + daily schedule) | Docker Devel stage (`main` only, plus 4am cron) |
 
 ---
@@ -42352,7 +42363,7 @@ pymdown-extensions>=10.0
 
 ```bash
 # Docker
-docker run -d --name "{project_name}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" -p 172.17.0.1:64580:80 {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
+docker run -d --name "{project_name}-$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)" -p 172.17.0.1:64580:80 {PLATFORM_CONTAINER_REGISTRY}/{project_org}/{internal_name}:latest
 
 # Binary
 ./{project_name}-linux-amd64 --config server.yml
@@ -43573,8 +43584,9 @@ func sendOperatorAlert(recipient, alertType, lang string) {
 |----------|--------|---------|
 | 1 | `--lang` flag | `--lang es` |
 | 2 | Config file | `lang: es` (in `server.yml` or `cli.yml`) |
-| 3 | `LANG` / `LC_ALL` env var (system locale) | `LANG=es_ES.UTF-8` |
-| 4 | Default | `en` (English) |
+| 3 | `LANG` / `LC_ALL` env var | `LANG=es_ES.UTF-8` |
+| 4 | Auto-detect | System locale |
+| 5 | Default | `en` (English) |
 
 ```go
 func getLanguage(flagLang string) string {
@@ -45458,8 +45470,9 @@ No impact on binary size - Tor is external. Application binary remains small and
 | Tor config directory | `{config_dir}/tor/` | Server creates with 0700 |
 | Tor config file | `{config_dir}/tor/torrc` | Server generates with 0600 |
 | Tor data directory | `{data_dir}/tor/` | Server creates with 0700 |
+| Control connection | TCP `127.0.0.1:auto` | All OSes - no socket file on disk |
 | Hidden service keys | `{data_dir}/tor/site/` | Server creates with 0700 |
-| Vanity candidate keys | `{data_dir}/tor/vanity/{address}/` | Server creates with 0700 (see "Vanity Onion Address Search") |
+| Vanity candidate keys | `{data_dir}/tor/vanity/{address}/` | Server creates with 0700 (see "Vanity Address Generation") |
 | Tor process PID | `{data_dir}/tor/tor.pid` | |
 | Tor log file | `{log_dir}/tor.log` | |
 
@@ -45654,7 +45667,7 @@ func enforcePrivate(path string, mode os.FileMode) error {
 - **Method mismatch** returns `404` like any non-loopback request, not `405` — the endpoint stays undiscoverable (see "Loopback-gated" above)
 - **Secret key material never appears** in any request or response body; only addresses and file paths do
 
-### Vanity Onion Address Search
+### Vanity Address Generation
 
 `tor vanity start` brute-forces v3 onion keypairs in-process until one derives an address beginning with the requested prefix — the same approach as `mkp224o`, with no external tool dependency: each worker generates a random ed25519 keypair, derives the v3 onion address per rend-spec-v3 (`base32(pubkey ‖ checksum ‖ 0x03)` where `checksum = SHA3-256(".onion checksum" ‖ pubkey ‖ 0x03)[0:2]`), compares the prefix, and repeats until a worker finds a match. A vanity key is an ordinary random ed25519 keypair merely *selected* by its address — the search does not weaken key security.
 
