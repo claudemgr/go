@@ -1278,7 +1278,9 @@ test:
 	@$(GO_DOCKER) sh -c " \
 		mkdir -p \"\$${TMPDIR:-/tmp}/$(PROJECTORG)\" && \
 		COVDIR=\$$(mktemp -d \"\$${TMPDIR:-/tmp}/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX\") && \
-		go test -v -cover -coverprofile=\$$COVDIR/coverage.out ./... && \
+		mkdir -p \$$COVDIR/data && \
+		go test -v -cover ./... -args -test.gocoverdir=\$$COVDIR/data && \
+		go tool covdata textfmt -i=\$$COVDIR/data -o=\$$COVDIR/coverage.out && \
 		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep '^total:' | awk '{print \$$3}' | sed 's/%//') && \
 		echo \"Coverage: \$$COVERAGE%\" && \
 		if [ \$$(echo \"\$$COVERAGE < 60\" | bc -l) -eq 1 ]; then \
@@ -1651,7 +1653,7 @@ All gates execute inside the project Docker container (PART 5 → "Docker Rule")
 
 `ci.yml` MUST enforce a minimum test coverage threshold. The threshold is declared in `IDEA.md ## Business logic` (free-form prose — e.g., "minimum test coverage: 75%"). If `IDEA.md` does not specify a value, the **default is 60%**. The `test:` Makefile target already enforces a hardcoded 60% floor (PART 6 → "Build Metadata"); when `IDEA.md` declares a different threshold, update that hardcoded value to match — the Makefile check and the CI gate below must never disagree.
 
-- Use `go test -cover ./...` to compute per-package coverage and `go tool cover -func=coverage.out` to get a total percentage — both pre-installed in `casjaysdev/go:latest`
+- Use `go test -cover ./...` to compute per-package coverage and `go tool cover -func=<profile>` to get a total percentage (the profile is built with `go test -cover ./... -args -test.gocoverdir=DIR` then `go tool covdata textfmt -i=DIR -o=<profile>`, never `-coverprofile`) — both pre-installed in `casjaysdev/go:latest`
 - CI MUST fail when coverage drops below the threshold; a passing build with uncovered code is a silent regression
 - Coverage is computed against `go test ./...` output, run inside the toolchain image
 
@@ -1661,8 +1663,9 @@ THRESHOLD="${COVERAGE_MIN:-60}"
 docker run --rm \
   --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
   -v "$PWD":/work -w /work "$PROJECT_IMAGE" \
-  sh -c "go test -coverprofile=coverage.out ./... && \
-    COVERAGE=\$(go tool cover -func=coverage.out | tail -1 | awk '{print \$3}' | tr -d '%') && \
+  sh -c "mkdir -p /tmp/cov && go test -cover ./... -args -test.gocoverdir=/tmp/cov && \
+    go tool covdata textfmt -i=/tmp/cov -o=/tmp/cov/coverage.out && \
+    COVERAGE=\$(go tool cover -func=/tmp/cov/coverage.out | tail -1 | awk '{print \$3}' | tr -d '%') && \
     awk -v c=\"\$COVERAGE\" -v t=\"$THRESHOLD\" 'BEGIN { exit !(c >= t) }'"
 ```
 

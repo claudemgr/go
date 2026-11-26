@@ -1374,8 +1374,8 @@ PROJECT_ORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+
 │       ├── beta.yml        # Beta releases
 │       ├── devel.yml       # Devel builds
 │       └── docker.yml      # Docker images
-├── CLAUDE.md               # Project memory - critical rules (REQUIRED, primary location)
-├── AGENTS.md               # identical copy of CLAUDE.md, for non-Claude agents
+├── CLAUDE.md               # Short loader that points to AI.md (REQUIRED, primary location)
+├── AGENTS.md               # identical copy of the CLAUDE.md loader, for non-Claude agents
 ├── CLAUDE.local.md         # Personal project preferences (gitignored)
 ├── .claude/                # Claude Code configuration
 │   ├── CLAUDE.md           # Project memory (alternate location)
@@ -2887,7 +2887,7 @@ adduser -S -D -H -u {id} -G {internal_name} -h /var/lib/{internal_org}/{internal
 
 **Default rule:** create and use a dedicated service user/group.
 
-**Exception:** skip dedicated user creation only when the project is explicitly approved to run permanently as root/Administrator in IDEA.md.
+**Exception:** skip dedicated user creation only when the project is explicitly approved to run permanently as root/Administrator in SPEC.md (the product reason is stated in IDEA.md).
 
 ### macOS Service Account
 
@@ -3388,9 +3388,10 @@ func SafePath(input string) (string, error) {
 var validFileSegment = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // SafeResourcePath validates a relative FILE or RESOURCE path (static files, downloads, an API file parameter).
-// It does not lowercase or rewrite the name; it only accepts or rejects it
+// It does not lowercase or rewrite the name; it only accepts or rejects it.
+// Traversal is rejected per segment: a segment of exactly . or .. fails validFileSegment (no leading dot), while dots inside a name (report..pdf) are legal
 func SafeResourcePath(input string) (string, error) {
-    if len(input) > 2048 || strings.Contains(input, "..") || strings.Contains(input, "\\") {
+    if len(input) > 2048 || strings.Contains(input, "\\") {
         return "", ErrPathTraversal
     }
     var kept []string
@@ -4434,7 +4435,7 @@ Wherever this specification says a setting is set "in `server.yml`", it means th
 
 **Default rule:** server/service processes MUST run as a dedicated system user/group whenever the project supports privilege drop.
 
-**Project-specific exception:** a project may run permanently as root/Administrator only when its core function requires ongoing OS-level privileges and privilege drop would break the app. This exception MUST be explicitly justified in IDEA.md.
+**Project-specific exception:** a project may run permanently as root/Administrator only when its core function requires ongoing OS-level privileges and privilege drop would break the app. This exception MUST be declared in SPEC.md, with the product reason that makes a privilege drop impossible stated in IDEA.md.
 
 ```bash
 # Unix-like (Linux, macOS, FreeBSD)
@@ -4485,7 +4486,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 # USER {internal_name}
 
 # WRONG: Hardcode permanent root when the project could run unprivileged
-# and has no documented IDEA.md exception
+# and has no SPEC.md exception
 #
 # WRONG in projects that need privileged startup: prevents privileged port binding
 # USER {internal_name}
@@ -5864,7 +5865,9 @@ test:
 		mkdir -p \"\$${TMPDIR:-/tmp}/$(PROJECT_ORG)\" && \
 		COVDIR=\$$(mktemp -d \"\$${TMPDIR:-/tmp}/$(PROJECT_ORG)/$(INTERNAL_NAME)-XXXXXX\") && \
 		go mod download && \
-		go test -v -cover -coverprofile=\$$COVDIR/coverage.out ./... && \
+		mkdir -p \$$COVDIR/data && \
+		go test -v -cover ./... -args -test.gocoverdir=\$$COVDIR/data && \
+		go tool covdata textfmt -i=\$$COVDIR/data -o=\$$COVDIR/coverage.out && \
 		COVERAGE=\$$(go tool cover -func=\$$COVDIR/coverage.out | grep '^total:' | awk '{print \$$3}' | sed 's/%//') && \
 		echo \"Coverage: \$$COVERAGE%\" && \
 		if [ \$$(echo \"\$$COVERAGE < 60\" | bc -l) -eq 1 ]; then \
@@ -7829,7 +7832,7 @@ Run '{project_name} <flag> --help' (for example `--service --help`) for detailed
 | **Private path enforcement** | `enforcePrivate` runs on every private path at every start, BEFORE the first read of `server.yml` and BEFORE any child process (tor, i2pd) is spawned. A wrong mode is FIXED, never reported as a config load failure; only a path that is neither private nor fixable stops the start, with an error naming the path and its mode (never any content). The unit test builds the tree at `0755`/`0644` and asserts every private path ends `0700`/`0600`, `tor/site` and `server.yml` included |
 | **PID directory (root)** | `/var/run/{internal_org}/{internal_name}/`, one directory per service, `0755`, owned by `{internal_name}:{internal_name}`, created in the root phase (PART 8 startup step 8b) or by the init script before the start. Never a directory shared between services of one org: a service account can then remove only its own PID file on shutdown and can never touch another service's |
 | **Parent dirs** | Create parent directories as needed (`mkdir -p` equivalent) |
-| **Validate writable** | Fail fast if directory is not writable |
+| **Validate writable** | Fail fast if a directory is not writable, EXCEPT `{backup_dir}`: at startup it is warning-only (step 8j logs one error and the server starts), and a backup operation fails closed when it cannot use it (PART 22), writing nothing elsewhere |
 | **Log on create** | Log directory creation at INFO level |
 
 ### Implementation
@@ -14628,7 +14631,7 @@ func (p *Paste) SetSlug(slug string) {
 
 **When this specification renames one of its own columns to the canonical name (for example the scheduler tables: `task_id` becomes `id`, `task_name` becomes `name`, `ran_at` becomes `started_at`), a database created with the old name is upgraded in place by the schema step.** The step runs `ALTER TABLE ... RENAME COLUMN old TO new` only when the table's column list shows the old name and not the new one, so it is idempotent. SQLite and libSQL both support `RENAME COLUMN`, and the column list comes from `PRAGMA table_info`. Data is kept, nothing is dropped and no alias or duplicate column remains, so "Never destructive" holds. A column that is missing after the rename (for example `finished_at` on an old history table) is added with the plain `ADD COLUMN` rule. This exception covers only columns whose canonical name this specification defines; a project's own columns follow "Handling Column Renames".
 
-**A primary key is never converted by the schema step.** `admins.id` is `INTEGER PRIMARY KEY AUTOINCREMENT` from the first release of a project built on this template, so there is no type to migrate; the schema step never rebuilds a table, which keeps "Never destructive" true. An existing table keeps its key, and code treats `admins.id` as an opaque value it only compares. An installation that predates this template adopts the canonical key through one project-written migration made while adopting the template: a backup first, then one transaction that creates the new table, copies every row with its references remapped, swaps the tables and re-checks the foreign keys (`PRAGMA foreign_key_check`).
+**A primary key is never converted by the schema step.** `admins.id` is `INTEGER PRIMARY KEY AUTOINCREMENT` from the first release of a project built on this template, so there is no type to migrate; the schema step never rebuilds a table, which keeps "Never destructive" true. An existing table keeps its key, and code treats `admins.id` as an opaque value it only compares. The ONLY exception to "No migration files" is a one-time adoption step for an installation that predates this template: the adopting project writes it in its own code (never in this template), the maintainer runs it ONCE, by hand, before the first start on the new binary (it is not part of startup, not versioned and never repeated), and it adopts the canonical key like this: a backup first, then one transaction that creates the new table, copies every row with its references remapped, swaps the tables and re-checks the foreign keys (`PRAGMA foreign_key_check`).
 
 ### Remote Database Updates
 
@@ -17564,7 +17567,7 @@ Tor hidden services are always plain `http://` — the `.onion` address is itsel
 | **`Strict-Transport-Security` (HSTS)** | Never sent — HSTS would make the browser refuse the `http://` onion, taking the site offline. |
 | **CSP `upgrade-insecure-requests`** | Omitted from the CSP for Tor responses — it would rewrite same-origin `http://{onion}` references to a nonexistent `https://{onion}`. |
 | **Clearnet HTTPS-only mode** | Never inherited — a clearnet port-443 / HTTPS-only configuration does NOT propagate to the onion; the onion stays `http://` regardless. |
-| **`Secure` cookie flag** | Still set — a `.onion` is a W3C "potentially trustworthy" secure context in Tor Browser, so `Secure` cookies are stored and sent normally; `secure: auto` treats a matched Tor request as a secure context. |
+| **`Secure` cookie flag** | Still set — a `.onion` is a W3C "potentially trustworthy" secure context in Tor Browser, so `Secure` cookies are stored and sent normally; `secure: auto` treats a matched Tor request as a secure context. **I2P differs:** a `.b32.i2p` site is plain HTTP and browsers do NOT treat it as a secure context, so they drop a `Secure` cookie. On a matched I2P request no cookie (session, CSRF, owner token, preference) is set with `Secure`, whatever `secure` says; `HttpOnly`, `SameSite` and the host-only scope stay. |
 | **Canonical / `Location` / absolute links** | Built via `BuildURL(r, path)` → `http://{onion_address}`; never `https://`, never the clearnet host. |
 
 These rules apply only to requests detected as Tor requests. Clearnet requests keep full HTTPS enforcement (redirect, HSTS, upgrade-insecure-requests) unchanged.
@@ -17582,7 +17585,7 @@ These are concrete cases of parity-principle point 2 — features that cannot wo
 | **Third-party clearnet embeds** — external CDNs, fonts, scripts, remote images, analytics | Loading a clearnet URL from a `.onion` page either fails or deanonymizes the user by forcing a non-Tor request. | Serve every asset same-origin from the onion; ship fonts/scripts/images locally; disable third-party analytics for Tor requests. |
 | **Third-party OAuth / SSO login** | Many providers reject `.onion` redirect URIs and will not federate to a hidden service. | Offer local or onion-native auth for Tor; if an external provider is required and unavailable, show a clear "not available over Tor" message — never redirect to a clearnet callback. |
 | **CAPTCHA (reCAPTCHA, hCaptcha) and other clearnet security services** | These are clearnet endpoints; calling them from a `.onion` leaks the request off Tor and usually fails. | Use a self-hosted / Tor-friendly challenge or a proof-of-work / rate-limit alternative. |
-| **Payment gateways, webhooks, outbound callbacks to clearnet** | The target is a clearnet URL; an onion-origin request to it defeats anonymity or is rejected. | Route through a Tor-aware integration if one exists; otherwise fail loudly and tell the user the action isn't available over Tor. **Exception:** a notification webhook (the contact and security-report copy) is optional, never the action itself: over Tor or I2P it is skipped with one WARN log, and the submission is still accepted and stored, with the same response the caller would get otherwise. |
+| **Payment gateways, webhooks, outbound callbacks to clearnet** | The target is a clearnet URL; an onion-origin request to it defeats anonymity or is rejected. | Route through a Tor-aware integration if one exists; otherwise fail loudly and tell the user the action isn't available over Tor. **Exception:** a notification webhook (the contact and security-report copy) is optional, never the action itself: over Tor or I2P it is skipped with one WARN log, and the submission is still accepted and processed exactly as it would be without the webhook (a security report is stored as PART 11 defines; any other contact message follows its normal email routing), with the same response the caller would get otherwise. The webhook is only an extra copy, never the delivery path and never a storage mechanism. |
 | **Absolute / cross-network links and email links** | A link to the clearnet FQDN pushes the user off Tor and leaks the clearnet identity. | Build every absolute URL (canonical tags, redirects, webhook/callback URLs, reset/verification email links) from `tor.onion_address` for Tor requests. |
 
 ### Tor Request Logging & Identity
@@ -33382,7 +33385,7 @@ server:
 ```
 0. Ensure {backup_dir} exists and is writable: EnsureDir (PART 8; it is created again when missing, for example removed or an unmounted external disk; 0755 as root, 0700 as user), then a write probe.
    A failure aborts the run with ONE error naming the path, its owner and mode and the running user (backup.failed); nothing is created elsewhere
-1. Run retention sweep on backup dir (resolved and cached at startup step 7)
+1. Pre-run sweep of the backup dir (resolved and cached at startup step 7): removes ONLY leftovers (partial or unverified files from an earlier failed run) and NEVER a valid backup; retention deletion happens only in step 7, after the new backups verify
 2. Check free space: if free < 2× size of most recent backup, OR disk usage
    > disk_threshold (default 90%), log backup.skipped_disk_full (level=error)
    and abort — do NOT create the backup
@@ -33636,7 +33639,7 @@ Note: A single backup can satisfy multiple retention types (e.g., Jan 1st 2025
 on a Sunday counts as daily + weekly + monthly + yearly — uses highest priority)
 ```
 
-**Daily incremental is NOT counted** in retention - it's always exactly 1 file that gets replaced. A full backup that is the `base_backup` of a retained incremental is exempt from pruning until that incremental is replaced (at most one extra full on disk).
+**Daily incremental is NOT counted** in retention - it's always exactly 1 file that gets replaced. A full backup that is the `base_backup` of a retained incremental is exempt from pruning until that incremental is replaced (at most one extra full on disk). Lifetime: the next run replaces the incremental with one based on the newest full; from then on the former base is a plain full, restorable alone at its own snapshot, and it ages out by the normal retention rules. Only the newest incremental and its base form a point-in-time pair, there is never a second incremental on disk, and the fixed file name `{project_name}-daily.tar.gz[.enc]` names no pair (its manifest's `base_backup` does).
 
 ## Incremental Backup Contract
 
@@ -34437,7 +34440,7 @@ func verifyChecksum(filePath, expectedHash string) error {
 
 This allows any port configuration without service file changes.
 
-**Exception:** if IDEA.md explicitly requires permanent root, the service file and documentation MUST say so and explain why privilege drop is not possible.
+**Exception:** if the project's SPEC.md declares permanent root (the product reason is stated in IDEA.md), the service file and documentation MUST say so and explain why privilege drop is not possible.
 
 **HYBRID exception (spec-level, no IDEA.md declaration needed):** when the service starts the server persona as root, the server enters System Service Mode (PART 4 → "System Service Mode") — a single/dual shared port bind serving every system user through their per-user socket registries. In that mode the listener retains root for its lifetime (sshd model; PART 4 defines the privilege rules and security invariants) — the post-bind drop to `{internal_name}` described above applies to per-user/single-user deployments, not to System Service Mode.
 
@@ -34815,7 +34818,7 @@ All gates execute inside the project Docker container (PART 6 → "Docker Rule")
 
 `ci.yml` MUST enforce a minimum test coverage threshold. The threshold is declared in `IDEA.md ## Business logic` (free-form prose — e.g., "minimum test coverage: 75%"). If `IDEA.md` does not specify a value, the **default is 60%**.
 
-- Use `go test -coverprofile` + `go tool cover -func` — built into the Go toolchain in `casjaysdev/go:latest`, no extra tooling required
+- Use `go test -cover ./... -args -test.gocoverdir=DIR`, then `go tool covdata textfmt` and `go tool cover -func` — built into the Go toolchain in `casjaysdev/go:latest`, no extra tooling required
 - CI MUST fail when coverage drops below the threshold; a passing build with uncovered code is a silent regression
 - Coverage is computed against `go test ./...` output, run inside the toolchain image
 
@@ -34825,8 +34828,9 @@ THRESHOLD="${COVERAGE_MIN:-60}"
 docker run --rm \
   --name "${PROJECT_NAME}-$(tr -dc 'a-z0-9' </dev/urandom | head -c8)" \
   -v "$PWD":/work -w /work -e GOFLAGS=-buildvcs=false "$PROJECT_IMAGE" \
-  sh -c 'go test -coverprofile=/tmp/coverage.out ./... &&
-    COVERAGE=$(go tool cover -func=/tmp/coverage.out | grep '^total:' | awk "{print \$3}" | sed "s/%//") &&
+  sh -c 'mkdir -p /tmp/cov && go test -cover ./... -args -test.gocoverdir=/tmp/cov &&
+    go tool covdata textfmt -i=/tmp/cov -o=/tmp/cov/coverage.out &&
+    COVERAGE=$(go tool cover -func=/tmp/cov/coverage.out | grep '^total:' | awk "{print \$3}" | sed "s/%//") &&
     awk -v c="$COVERAGE" -v t="$THRESHOLD" "BEGIN { exit (c+0 < t+0) }"'
 ```
 
@@ -35108,6 +35112,8 @@ rm -rf "$TEST_DIR"
 ## Container Usage
 
 **⚠️ NEVER RUN BINARIES DIRECTLY ON THE LOCAL MACHINE. ALWAYS USE CONTAINERS. ⚠️**
+
+**Scope:** this rule covers development, build and test execution by an AI or a developer. The END-USER install steps of the production README (download, `chmod +x`, run) are the product's own install path and run the binary directly on the user's machine, as they must.
 
 **See also: PART 0 → "No Host Toolchain or Binary Execution".**
 
@@ -35546,6 +35552,8 @@ make test
 | **Edge cases** | Empty data, invalid input, rate limits |
 
 ### Coverage Enforcement
+
+**Coverage data is collected with `-test.gocoverdir` and converted with `go tool covdata textfmt`; `-coverprofile` is not used.** Every test process writes its own file into the coverage directory, so no profile file is shared between processes (a shared one can end up malformed, `expected "mode: set"`). The directory is the project-scoped temp directory of the Test Output rule, never the project tree.
 
 **In CI/CD Pipeline (REQUIRED):** the coverage gate runs as part of the `ci.yml` `test` job. Do **not** duplicate the job YAML here — PART 24 → "ci.yml" is the single source for the actual workflow (checkout SHA, Docker-wrapped `go test -cover`, and the ≥60% threshold check). Editing coverage CI means editing that spec, not this section.
 
@@ -37754,7 +37762,9 @@ jobs:
           mkdir -p "/tmp/${{ github.repository_owner }}"
           COVDIR=$(mktemp -d "/tmp/${{ github.repository_owner }}/$(basename "${{ github.repository }}")-XXXXXX")
           echo "COVDIR=$COVDIR" >> "$GITHUB_ENV"
-          go test -cover -coverprofile="$COVDIR/coverage.out" ./...
+          mkdir -p "$COVDIR/data"
+          go test -cover ./... -args -test.gocoverdir="$COVDIR/data"
+          go tool covdata textfmt -i="$COVDIR/data" -o="$COVDIR/coverage.out"
       - name: Enforce coverage threshold
         run: |
           THRESHOLD=60
@@ -38862,7 +38872,9 @@ jobs:
           mkdir -p "/tmp/${{ gitea.repository_owner }}"
           COVDIR=$(mktemp -d "/tmp/${{ gitea.repository_owner }}/$(basename "${{ gitea.repository }}")-XXXXXX")
           echo "COVDIR=$COVDIR" >> "$GITEA_ENV"
-          go test -cover -coverprofile="$COVDIR/coverage.out" ./...
+          mkdir -p "$COVDIR/data"
+          go test -cover ./... -args -test.gocoverdir="$COVDIR/data"
+          go tool covdata textfmt -i="$COVDIR/data" -o="$COVDIR/coverage.out"
       - name: Enforce coverage threshold
         run: |
           THRESHOLD=60
@@ -40128,13 +40140,15 @@ test:
   script:
     - mkdir -p "/tmp/${CI_PROJECT_NAMESPACE}"
     - COVDIR=$(mktemp -d "/tmp/${CI_PROJECT_NAMESPACE}/${CI_PROJECT_NAME}-XXXXXX")
-    - go test -v -cover -coverprofile="$COVDIR/coverage.out" ./...
+    - mkdir -p "$COVDIR/data"
+    - go test -v -cover ./... -args -test.gocoverdir="$COVDIR/data"
+    - go tool covdata textfmt -i="$COVDIR/data" -o="$COVDIR/coverage.out"
     - PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
     - if [ "$PCT" -lt 60 ]; then echo "coverage ${PCT}% is below the 60% threshold"; exit 1; fi
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
-    - if: $CI_COMMIT_TAG =~ /-beta$/
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 # =============================================================================
 # RELEASE (GitLab Release)
@@ -40262,7 +40276,7 @@ build:beta:
       dotenv: release.env
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG =~ /-beta$/
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 release:beta:
   stage: release
@@ -40325,7 +40339,7 @@ release:beta:
         - name: "${PROJECT_NAME}-freebsd-arm64"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:beta"
   rules:
-    - if: $CI_COMMIT_TAG =~ /-beta$/
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 # =============================================================================
 # DEVEL BUILDS (Scheduled + main/master push) - All 8 platforms
@@ -40489,7 +40503,7 @@ sbom:beta:
       - ${PROJECT_NAME}-bom.json
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG =~ /-beta$/
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 sbom:devel:
   stage: package
@@ -40578,7 +40592,7 @@ docker:build:
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
-    - if: $CI_COMMIT_TAG =~ /-beta$/
+    - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
 # =============================================================================
 # DOCKER DEVEL BUILD (`:devel` tag — main/master push + daily schedule, never docker:build)
@@ -40782,7 +40796,7 @@ pipeline {
             steps {
                 script {
                     // Determine build type and version
-                    if (env.TAG_NAME?.endsWith('-beta')) {
+                    if ((env.TAG_NAME ?: '') ==~ /^\d{14}-beta$/) {
                         // Beta build (tag YYYYMMDDHHMMSS-beta) - matches beta.yml
                         env.BUILD_TYPE = 'beta'
                         env.VERSION = env.TAG_NAME
@@ -41167,7 +41181,7 @@ pipeline {
                 sh '''
                     mkdir -p "/tmp/${PROJECT_ORG}"
                     COVDIR=$(mktemp -d "/tmp/${PROJECT_ORG}/${PROJECT_NAME}-XXXXXX")
-                    docker run --rm -v ${WORKSPACE}:/app -v ${COVDIR}:/cov -v ${GO_CACHE}:/usr/local/share/go/pkg/mod -v ${GO_BUILD}:/usr/local/share/go/cache -w /app casjaysdev/go:latest go test -coverprofile=/cov/coverage.out ./...
+                    docker run --rm -v ${WORKSPACE}:/app -v ${COVDIR}:/cov -v ${GO_CACHE}:/usr/local/share/go/pkg/mod -v ${GO_BUILD}:/usr/local/share/go/cache -w /app casjaysdev/go:latest sh -c 'mkdir -p /cov/data && go test -cover ./... -args -test.gocoverdir=/cov/data && go tool covdata textfmt -i=/cov/data -o=/cov/coverage.out'
                     PCT=$(docker run --rm -v ${WORKSPACE}:/app -v ${COVDIR}:/cov -w /app casjaysdev/go:latest go tool cover -func=/cov/coverage.out | awk '/^total:/ {gsub("%","",$3); print int($3)}')
                     rm -rf "$COVDIR"
                     [ "$PCT" -ge 60 ] || { echo "coverage ${PCT}% < 60%"; exit 1; }
@@ -41567,7 +41581,7 @@ Before proceeding, confirm you understand:
 | Feature | GitHub Actions | Gitea/Forgejo | GitLab CI | Jenkins |
 |---------|----------------|---------------|-----------|---------|
 | Stable release | `release.yml` | `release.yml` | `rules: tag` | `BUILD_TYPE == 'release'` |
-| Beta release | `beta.yml` | `beta.yml` | `rules: beta` | `BUILD_TYPE == 'beta'` |
+| Beta release | `beta.yml` | `beta.yml` | `rules: if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/` | `BUILD_TYPE == 'beta'` |
 | Devel release | `devel.yml` | `devel.yml` | `rules: schedule` | `BUILD_TYPE == 'devel'` |
 | Docker images | `docker.yml` | `docker.yml` | `docker:build` | Docker stage |
 | Self-hosted | No | Yes | Yes | Yes |
@@ -42425,7 +42439,7 @@ DATABASE_DRIVER=sqlite
 
 ## Server Administration
 
-All settings are configurable via `server.yml` or CLI.
+All settings are configurable in the configuration files (`server.yml`, the `yaml.d/` area files and `secrets.yml`). The command line has controls only for the flags PART 8 lists; there is no generic CLI override for a server setting.
 
 Document:
 - well-known namespace settings and optional entries if enabled
