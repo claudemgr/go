@@ -153,6 +153,8 @@ IDEA.md is the project PLAN. AI.md (this file) is the authoritative template bas
 
 **A feature IDEA.md defines that AI.md has no contract for** (for example operator-level billing or federation) is built from IDEA.md under the full AI.md baseline: security, authentication, database, API conventions, configuration, audit, i18n and every PART the feature touches. AI.md defines no protocol for it and forbids nothing about it. The project's SPEC.md states the feature's technical contract (data, endpoints, signatures, retries, conflict handling) and is the only place that does; the feature never loosens a baseline rule, and a baseline rule it cannot meet is a SPEC.md exception (PART 0).
 
+**Billing** (plans, subscriptions, payment providers, invoices, dunning, usage metering, tax) is such a feature. When IDEA.md defines it, the reference for the SPEC.md billing contract is `~/.claude/TEMPLATES/BILLING.md`, and the `billing-builder` agent implements it. CAVEAT: that file is an optional, machine-level reference outside this specification: it may be absent, it is never copied into a project, it only informs the SPEC.md contract and never overrides AI.md (AI.md wins every conflict), and when it is absent the project's SPEC.md states the billing contract itself. A project that defines no billing ignores it.
+
 | IDEA.md MAY | IDEA.md MAY NOT |
 |-------------|-----------------|
 | Define the product's features, data models, business rules and audience, and its API surface: the `### API routes` inventory of what callers can do (method, path, auth, purpose, request/response summary), never how a handler is written | Remove, weaken or waive a mandatory AI.md requirement (server baseline, configuration, security, health, build, CI/CD, i18n, accessibility, documentation, testing) |
@@ -33226,9 +33228,14 @@ groups:
   ],
   "encrypted": true,
   "encryption_method": "AES-256-GCM",
-  "checksum": "sha256:abc123..."
+  "type": "full",
+  "snapshot_at": "2025-01-15T10:30:00Z",
+  "files": [{"path": "server.yml", "size": 4096, "mtime": 1736937000, "sha256": "def456..."}],
+  "sha256": "abc123..."
 }
 ```
+
+**The one canonical checksum field is `sha256`.** It is the SHA-256 (hex) of the lines `{file sha256}  {path}` of `files`, one per line, sorted by path. It covers the content files and never `manifest.json` itself, so there is no self-reference. In an encrypted archive the manifest is inside the ciphertext: decrypt first (a wrong password fails the GCM tag), then read the manifest and verify; the integrity of the encrypted file itself is the GCM tag. An incremental's `base_sha256` is the `sha256` field of its base's manifest.
 
 ### Backup Encryption
 
