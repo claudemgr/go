@@ -31233,6 +31233,7 @@ server:
 | `@monthly` | `@monthly` | First day of month at 00:00 |
 | `@every Xm` | `@every 5m` | Every X minutes |
 | `@every Xh` | `@every 2h` | Every X hours |
+| `@every Xs` | `@every 30s` | Every X seconds (10 or more): the cluster heartbeat and other pollers that run more often than every minute |
 
 ### Scheduler State (Persistent)
 
