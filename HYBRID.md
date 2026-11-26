@@ -30441,7 +30441,7 @@ server:
 | Feature | Behavior |
 |---------|----------|
 | Security alerts | Not sent, not attempted |
-| All notifications | Not sent, not attempted |
+| All email notifications | Not sent, not attempted (in-app notifications are unaffected: they are stored in the database, not sent by email) |
 
 **DO NOT:**
 - ❌ Attempt to send emails without valid SMTP
@@ -46885,7 +46885,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 **Rules:**
 - Account email is set during setup (required)
 - Notification email is optional (defaults to account email if not set)
-- Both emails must be verified before use
+- Both emails must be verified before use, while email verification is in effect (`server.users.registration.require_email_verification` is `true` AND SMTP works); otherwise they are auto-verified (PART 18)
 - Account email changes require re-authentication with the admin token + 2FA (if enabled)
 - Notification email changes only require current session
 - **All email features require working SMTP** - if SMTP unavailable, no emails sent
