@@ -6276,7 +6276,7 @@ format_version_tag() {
 | Beta | CI/CD only | `20251205143022-beta` | Unlimited |
 | Devel | CI/CD only | `20251218060432` | **1** (rolling) |
 
-**Note:** `make release` is for manual local releases only. All automated releases use CI/CD (GitHub Actions, Gitea Actions, or GitLab CI depending on git provider).
+**Note:** `make release` is for manual local releases only. All automated releases use CI/CD: GitHub Actions, Gitea Actions, Forgejo Actions, GitLab CI or Jenkins, depending on the git provider (every provider has the same release equivalence, see the CI/CD Equivalence table).
 
 ## Docker Rule
 
