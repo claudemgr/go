@@ -17250,8 +17250,8 @@ server:
 type AllowlistEntry struct {
     // IP or CIDR (e.g., "192.168.1.0/24", "2001:db8::1")
     CIDR        string    `yaml:"cidr" json:"cidr"`
-    // Human-readable label (required for clarity)
-    Description string    `yaml:"description" json:"description"`
+    // Human-readable label. Optional: an omitted or empty value is stored as "(no description)", never rejected
+    Description string    `yaml:"description,omitempty" json:"description,omitempty"`
     AddedAt     time.Time `json:"added_at"`
     // "operator" or "config" if from YAML
     AddedBy     string    `json:"added_by"`
