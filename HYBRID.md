@@ -593,13 +593,29 @@ Every piece of user-facing text (UI labels, error messages shown to users, email
 
 `AI.md` is read-only in every project session and is never hand-edited. A project records deviations in `SPEC.md` and project values in `IDEA.md ## Project variables`; spec changes are made only in the template source repository and re-copied.
 
+## TODO Hygiene
+
+**A committed TODO file must be true at the moment of the commit. A list that still shows finished work, or already hides unfinished work, is misleading, so the list changes in the same commit as the work.**
+
+| Rule | Requirement |
+|------|-------------|
+| **Same commit** | The item is deleted from `TODO.AI.md` in the same change that completes it, BEFORE `COMMIT_MESS` is written. The commit that resolves a task never leaves that task in the committed file |
+| **Fail closed** | The removal lands only with a SUCCESSFUL commit. If a gate, hook or push fails, the task is not done: put the item back, fix the cause, repeat. An item never disappears while its work is uncommitted or failing |
+| **Partly done** | An item that is only partly done is rewritten to the REMAINING work in that commit: never deleted, never left unchanged |
+| **Already satisfied** | An item found already satisfied (the code already does it) is removed in the commit that verifies it, and the message names it |
+| **New work** | A task discovered while working is added in the commit that discovers it (or fixed immediately), never held back for later |
+| **Removed, not marked** | A completed item in `TODO.AI.md` is deleted, never struck through or checked off; the ✅ last-item commit leaves the file empty. In the human-owned `TODO.md` the item is marked done IN PLACE in that same commit, never deleted |
+| **Before every commit** | Re-read `TODO.AI.md`, `TODO.md` and `PLAN.AI.md` (when they exist) and confirm: nothing this commit completes is still open, nothing is listed done that is not implemented, and nothing was removed whose work is not in the commit. `git diff -- TODO.AI.md` shows each removal next to the code that justifies it |
+| **Shared defect inbox** | The template-maintainers' inbox (`TODO.{TEMPLATE}.md` of the parent directory, below) is appended to by a project and cleared by the maintainers: a fixed entry is removed when its fix lands, so the inbox never lists a defect that is already fixed |
+| **Subagents** | A subagent never edits or commits a TODO file; the parent does, after reviewing the diff |
+
 ## Where Findings Are Tracked
 
 **Every finding lives in exactly one place. Never duplicate it, and never leave it only in conversation.**
 
 | Kind of item | Owner | Rule |
 |--------------|-------|------|
-| Planned implementation backlog (3+ tasks) | `TODO.AI.md` | AI-owned; remove each item once it is resolved and committed |
+| Planned implementation backlog (3+ tasks) | `TODO.AI.md` | AI-owned; remove each item in the commit that resolves it ("TODO Hygiene") |
 | Human-owned tasks | `TODO.md` | Never emptied or deleted by AI; mark items done in place |
 | Defects found while doing other work, including the exploratory pass | Fixed immediately, otherwise `TODO.AI.md` | Never left only in conversation |
 | Findings from an explicit audit (the user said "audit") with more than 5 issues | Temporary `AUDIT.AI.md` | Not `TODO.AI.md`; deleted when every issue is resolved. Five or fewer are fixed directly with no tracking file |
@@ -982,7 +998,7 @@ Structure (PART 3) · Core app + server features (PART 2, 4, 8, 9, 10, 12–21 a
 
 **Subagents:** do not write COMMIT_MESS or call gitcommit — complete your edits and report back to the parent instance to handle the commit. Subagents also never run `make`, tests, lint, or any build/test gate — the parent runs them once after reviewing the full diff.
 
-1. **Remove each completed item from TODO.AI.md** only after the commit that resolved it succeeded (see "Commit sequence" below); never truncate the whole file at once
+1. **Remove each completed item from TODO.AI.md** in the same change that resolves it (see "TODO Hygiene"); never truncate the whole file at once
 2. **Write COMMIT_MESS** with the following format:
 
 **Title Format:**
@@ -1019,7 +1035,7 @@ Implemented core application and server functionality.
 - The ✅ emoji MUST be used for todo completion commits
 - Title is EXACTLY: `✅ all todo items have been completed ✅`
 - Body MUST summarize what was accomplished
-- **Commit sequence (one order, no alternatives):** (1) implement a task and commit it normally; its item is still in TODO.AI.md. (2) After that commit succeeds, delete the item from TODO.AI.md. (3) The deletion is committed together with the next task. (4) The commit that deletes the LAST item uses the ✅ title and body above, so the file is empty only in that commit and an item never disappears before the commit that resolved it
+- **Commit sequence (one order, no alternatives):** (1) implement the task. (2) Delete its item from TODO.AI.md in that same change, before `COMMIT_MESS` is written, so the committed file never lists work the commit completes. (3) Run `gitcommit`. (4) If the commit fails (a gate, a hook, the push), the task is not done: put the item back, fix the cause, repeat. (5) The commit that deletes the LAST item uses the ✅ title and body above, so the file is empty only in that commit. An item never disappears while its work is uncommitted or failing ("TODO Hygiene")
 
 **Format Rules:**
 - Title line: max 64 characters (including emojis)
