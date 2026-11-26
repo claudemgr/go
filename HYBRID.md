@@ -4417,7 +4417,7 @@ Wherever this specification says a setting is set "in `server.yml`", it means th
 |------|------------------|
 | `80` | Enable Let's Encrypt HTTP-01 challenge |
 | `443` | Enable Let's Encrypt TLS-ALPN-01 challenge, auto-enable SSL |
-| `0` | Let OS assign any available port |
+| `0` | Not valid: replaced like any invalid port (a random port in 64000-64999) with a warning; there is no OS-assigned mode |
 | `64000-64999` | Default range for random selection |
 
 ### Privileged Port Binding (<1024)
@@ -5112,7 +5112,7 @@ server:
   # - Omit or empty: Random port in 64000-64999 range
   # - Single number: Use that exact port
   # - Dual (HTTP,HTTPS): "8090,8443" format
-  # - 0: Let OS assign any available port
+  # - 0: not valid, replaced by a random port in 64000-64999 with a warning
   port: 64580
 ```
 
@@ -47447,7 +47447,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 
 **Comment lines** (starting with `#`) and blank lines are ignored in all formats.
 
-**Config:**
+**Config** (`auto_update`, `action`, `reject_message` and `log_blocked` are keys of `server.security.blocklists` itself and apply to every source; each `extra_sources` entry has only `id`, `type`, `url` and `enabled`, PART 19):
 
 ```yaml
 server:
@@ -47482,7 +47482,7 @@ server:
 
 **Built-in and suggested sources:** the built-in source `firehol_level1` is a constant: it is always active, is never written to `server.yml`, and is listed first and read-only in the admin panel (no Remove, no disable; `PATCH` or `DELETE` on it returns `403 FORBIDDEN`). These sources are NOT shipped and NOT written to `server.yml`; an operator adds the ones they want:
 
-| Name | URL | Format |
+| `id` | URL | Format (detected from the content, informational) |
 |------|-----|--------|
 | `spamhaus_drop` | `https://www.spamhaus.org/drop/drop.txt` | `cidr` |
 | `blocklist_de` | `https://lists.blocklist.de/lists/all.txt` | `plain` |
