@@ -1090,6 +1090,20 @@ Identify dependency licenses with `go-licenses` (run in-container). Use a compac
 
 Update `LICENSE.md` attribution whenever a dependency is added, removed, or changes license. Automate verification with a CI workflow (SHA-pinned third-party actions per global rules) running a `scripts/verify-licenses.sh` check that fails the build on an unattributed or disallowed license.
 
+### Embedded Datasets and Content (Provenance Before Embedding)
+
+**Any third-party dataset or content a project embeds or ships (word lists, quote or joke collections, place and postal data, images, fonts, icons, translations, GeoIP-style databases) needs documented provenance BEFORE it is embedded.**
+
+| Required | Rule |
+|----------|------|
+| **Source** | The exact origin: URL or publisher, version, and retrieval date |
+| **Terms** | The license or terms of use. They MUST allow redistribution inside a project released under the project's license, checked against the project license and its dependencies' licenses |
+| **Attribution** | The notice the terms require (author, license, link, changes made) |
+| **Record** | In the project's third-party notices (`LICENSE.md`, "Third-Party Licenses") and on the attribution surface (`/server/about`, or the README when the project has no web page) |
+| **Per-record provenance** | When records come from several sources, every record or file carries a `source` key that names its entry in the third-party notices |
+| **Unknown or unusable terms** | Content with no stated license, a license that forbids redistribution, a site that forbids scraping, or an unknown origin is NOT embedded. The project asks the user instead of guessing |
+| **Generated content** | It counts as the project's own only when the user says so, and is never presented with an invented source |
+
 ### README.md License Badge
 
 Every `{project_name}` README carries a license badge reflecting the MIT license (see PART 25 for full README section ordering and badge rules).
@@ -1106,7 +1120,7 @@ OCI image annotation `org.opencontainers.image.licenses=MIT` set via `docker bui
 
 Forgetting to update attribution after adding a dependency; using a GPL-licensed dependency without an explicit `IDEA.md` exception; omitting a required non-endorsement clause from a BSD-3-Clause attribution.
 
-### License Compatibility Matrix
+## License Compatibility Matrix
 
 MIT projects may depend on: MIT, Apache-2.0, BSD, ISC, Public Domain. MIT projects may NOT depend on: GPL, AGPL, LGPL (without an explicit, documented `IDEA.md` exception).
 
@@ -9141,18 +9155,7 @@ Every project supports two database modes, one at a time: local SQLite (the defa
 CREATE TABLE IF NOT EXISTS app_secrets (
     name       TEXT PRIMARY KEY,
     value      TEXT NOT NULL,
-    -- monotonic: bumped by every rotation; the cluster heartbeat compares it (PART 10)
-    version    INTEGER NOT NULL DEFAULT 1,
     updated_at TEXT NOT NULL
-);
-
--- audit history only: one row per secret version a removed node had loaded
-CREATE TABLE IF NOT EXISTS app_secret_revocations (
-    name       TEXT NOT NULL,
-    version    INTEGER NOT NULL,
-    node_id    TEXT NOT NULL,
-    revoked_at TEXT NOT NULL,
-    PRIMARY KEY (name, version, node_id)
 );
 ```
 
@@ -16318,8 +16321,6 @@ CREATE TABLE IF NOT EXISTS security_thanks (
 | `{config_dir}/security/pgp.priv.asc.enc` | Always | Encrypted private key. The decryption KDF input is `installation_secret`, which is also part of the backup — so a backup is sufficient to restore. |
 | Security reports DB rows | Always | Tracking metadata. The encrypted report bodies are restored too (encrypted at rest with the same PGP key). |
 | `{config_dir}/security/keyservers.state` | Always | Per-keyserver publish state, so a restore doesn't double-submit. |
-
-**Cluster Mode.** All nodes serve the same keypair (one fingerprint in `security.txt`). The primary stores the encrypted private key and the public key as the `app_secrets` rows `pgp_priv_enc` and `pgp_pub` (the private key stays encrypted with the key derived from `installation_secret`), every node writes its `{config_dir}/security/pgp.priv.asc.enc` and `pgp.pub.asc` files from those rows at start and whenever the row version changes, and a joining node receives them in the bootstrap payload with every other `app_secrets` row. Files are never copied between nodes, and a rotation updates the rows in one transaction with the version bump.
 
 **Restore behavior:** restoring a backup re-installs the keypair and `keyservers.state`, then submits the public key only to the configured keyservers that the restored state does not already list for this fingerprint (a keyserver added since the backup, or a different fingerprint). A keyserver already listed is not contacted again, and a submission that does happen is idempotent because keyservers de-duplicate by fingerprint. The `installation_secret` is restored from the same backup, so the encrypted private key decrypts correctly.
 
@@ -31266,7 +31267,7 @@ server:
 | `@monthly` | `@monthly` | First day of month at 00:00 |
 | `@every Xm` | `@every 5m` | Every X minutes |
 | `@every Xh` | `@every 2h` | Every X hours |
-| `@every Xs` | `@every 30s` | Every X seconds (10 or more): the cluster heartbeat and other pollers that run more often than every minute |
+| `@every Xs` | `@every 30s` | Every X seconds (10 or more): pollers that run more often than every minute |
 
 ### Scheduler State (Persistent)
 
@@ -40176,6 +40177,7 @@ test:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
+    - if: $CI_PIPELINE_SOURCE == "schedule"
 
 # =============================================================================
 # RELEASE (GitLab Release)
@@ -43584,9 +43586,8 @@ func sendOperatorAlert(recipient, alertType, lang string) {
 |----------|--------|---------|
 | 1 | `--lang` flag | `--lang es` |
 | 2 | Config file | `lang: es` (in `server.yml` or `cli.yml`) |
-| 3 | `LANG` / `LC_ALL` env var | `LANG=es_ES.UTF-8` |
-| 4 | Auto-detect | System locale |
-| 5 | Default | `en` (English) |
+| 3 | `LANG` / `LC_ALL` env var (the system locale) | `LANG=es_ES.UTF-8` |
+| 4 | Default | `en` (English) |
 
 ```go
 func getLanguage(flagLang string) string {
