@@ -40000,6 +40000,21 @@ image-scan:
         - docker/Dockerfile
 
 # =============================================================================
+# BUILD GATE (every main push and merge request: explicit go build, nothing published)
+# =============================================================================
+
+build:check:
+  <<: *go-build
+  stage: build
+  script:
+    - go build -buildvcs=false -trimpath -o /dev/null ./src
+    - if [ -d "src/client" ]; then go build -buildvcs=false -trimpath -o /dev/null ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -buildvcs=false -trimpath -o /dev/null ./src/agent; fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# =============================================================================
 # RELEASE BUILDS (Tag Push: v* or semver)
 # =============================================================================
 
