@@ -1245,6 +1245,14 @@ LDFLAGS := -s -w \
   -X 'main.BuildEpoch=$(BUILD_EPOCH)' \
   -X main.OfficialSite=$(SITE)
 
+# Debug builds (make build): symbols and DWARF kept, optimizer and inlining off, same embedded build info
+DEBUG_LDFLAGS := \
+  -X main.Version=$(VERSION) \
+  -X main.CommitID=$(COMMIT_ID) \
+  -X 'main.BuildEpoch=$(BUILD_EPOCH)' \
+  -X main.OfficialSite=$(SITE)
+DEBUG_GCFLAGS := all=-N -l
+
 GO_CACHE  ?= $(HOME)/go/pkg/mod
 GO_BUILD  ?= $(HOME)/.cache/go-build/$(PROJECTNAME)
 
@@ -1272,11 +1280,12 @@ PLATFORMS        ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/am
 DOCKER_PLATFORMS ?= linux/amd64,linux/arm64
 REGISTRY         ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
 
-.PHONY: build release docker test dev clean
+.DEFAULT_GOAL := help
+.PHONY: build release docker test clean help
 
 build:
 	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
-	$(GO_DOCKER) go build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(BINDIR)/$(PROJECTNAME) ./src
+	$(GO_DOCKER) go build -buildvcs=false -gcflags "$(DEBUG_GCFLAGS)" -ldflags "$(DEBUG_LDFLAGS)" -o $(BINDIR)/$(PROJECTNAME) ./src
 
 test:
 	@mkdir -p $(GO_CACHE) $(GO_BUILD)
@@ -1293,18 +1302,19 @@ test:
 		fi && \
 		echo \"Tests complete - Coverage: \$$COVERAGE% (>= 60% required) ✓\""
 
+# Builds only: it never tags, pushes or publishes (CI/CD does); production build: stripped, -trimpath, version embedded
 release:
-	@mkdir -p $(BINDIR) $(RELDIR) $(GO_CACHE) $(GO_BUILD)
+	@mkdir -p $(RELDIR) $(GO_CACHE) $(GO_BUILD)
+	@rm -rf $(RELDIR)/*
 	@for platform in $(PLATFORMS); do \
 		OS=$${platform%/*}; ARCH=$${platform#*/}; \
-		OUTPUT=$(BINDIR)/$(PROJECTNAME)-$$OS-$$ARCH; \
+		OUTPUT=$(RELDIR)/$(PROJECTNAME)-$$OS-$$ARCH; \
 		[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 		echo "Building $$OS/$$ARCH..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
 			go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" \
 			-o $$OUTPUT ./src" || exit 1; \
 	done
-	@cp $(BINDIR)/$(PROJECTNAME)-* $(RELDIR)/
 	@echo "$(VERSION)" > $(RELDIR)/version.txt
 	@cd $(RELDIR) && FILES="$$(ls)" && sha256sum $$FILES > sha256.txt && sha512sum $$FILES > sha512.txt
 
@@ -1318,15 +1328,17 @@ docker:
 		-t $(REGISTRY):$(VERSION) -t $(REGISTRY):latest \
 		-f docker/Dockerfile .
 
-dev: build
-	docker run --rm -it \
-		--name $(PROJECTNAME)-dev-$$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8) \
-		-v $(PWD):/app -w /app \
-		casjaysdev/go:latest \
-		$(BINDIR)/$(PROJECTNAME)
-
 clean:
 	rm -rf $(BINDIR) $(RELDIR)
+
+help:
+	@echo "Targets:"
+	@echo "  build    Debug binary to $(BINDIR)/"
+	@echo "  test     Unit tests with coverage"
+	@echo "  release  Production binaries for all platforms and checksums to $(RELDIR)/"
+	@echo "  docker   Container image (no push)"
+	@echo "  clean    Remove $(BINDIR)/ and $(RELDIR)/"
+	@echo "  help     This list"
 ```
 
 ---
