@@ -2761,7 +2761,7 @@ Shell integration commands:
 
   completions [SHELL]   Print shell completion script
                         Auto-detects shell if SHELL omitted
-                        Supported: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
+                        Supported: bash, zsh, fish, powershell, pwsh (sh, dash and ksh have no programmable completion: exit 2)
 
   init [SHELL]          Print shell init command for eval
                         Auto-detects shell if SHELL omitted
@@ -2825,7 +2825,7 @@ Current:
 
 **Legacy macOS accounts.** Earlier implementations created the macOS account as `_{internal_name}` (the underscore convention). Startup never renames, deletes or edits it. When it exists, startup still creates the canonical `{internal_name}` account and group as above, re-owns the application directories (`{config_dir}`, `{data_dir}`, `{log_dir}`, `{cache_dir}`) once from the legacy user to the canonical one, and logs one `warn` naming the legacy account, which the operator removes by hand when it is no longer needed. The server never runs as the legacy account.
 
-**Existing account with the same name.** An account named `{internal_name}` that already exists (for example the stock `mail` account when `internal_name` is `mail`) is reused exactly as it is: the 200-899 range and the equal UID/GID rule apply only to an account the application creates, and startup never changes an existing account's IDs, shell or home. It is reused only when it is a system account (UID below 1000 and a `nologin` or `false` shell); an existing human account (UID 1000 or higher, or a login shell) is never taken over: startup fails with one error naming the account and the conflict.
+**Existing account with the same name.** An account named `{internal_name}` that already exists (for example the stock `mail` account when `internal_name` is `mail`) is reused exactly as it is: the 200-899 range and the equal UID/GID rule apply only to an account the application creates, and startup never changes an existing account's IDs, shell or home. It is reused only when it is a system account (UID from 1 to 999, a primary GID from 1 to 999, never 0, and a `nologin` or `false` shell, so root identity or root group access is never kept after the privilege drop); an existing human account (UID 1000 or higher, or a login shell) is never taken over: startup fails with one error naming the account and the conflict.
 
 ### UID/GID Selection Logic
 
@@ -4251,6 +4251,8 @@ func (req *CreateResourceRequest) Parse() (*Resource, error) {
 | `CACHE_DIR` | (none) | Cache directory (precedence: the environment variable, then the platform default; PART 4) |
 
 **Directory variables are applied on EVERY startup, never "once".** Precedence: flag, then environment variable, then the platform default (PART 4). They locate `server.yml` and the rest of the app's files, so they cannot live inside `server.yml` and are never written to it.
+
+**`DATABASE_DIR` locates the SQLite files.** `{db_dir}` is `DATABASE_DIR` when it is set, otherwise `{data_dir}/db`; the default SQLite file is `{db_dir}/server.db` (and `{db_dir}/users.db` where the project has it). Every path in this specification written as `{data_dir}/db/server.db` is that default with `DATABASE_DIR` unset; the container image sets `DATABASE_DIR=/data/db/sqlite`, so the same file is `/data/db/sqlite/server.db` there. A configured `server.database.url` always wins over the default path.
 
 ### Init-Only Variables (First Run Only)
 
@@ -9702,7 +9704,7 @@ func buildHealthResponse() *HealthResponse {
         },
 
         // Basic status
-        // "healthy", "unhealthy", "degraded"
+        // "healthy", "degraded", "unhealthy", "restart_required", "maintenance", "shutting_down"
         Status:    getOverallStatus(),
         Version:   version.Version,
         // "production", "development", or "debug"
@@ -13196,7 +13198,7 @@ Flags:
 
   {project-specific flags listed here}
 
-Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
+Shells: completions for bash, zsh, fish, powershell, pwsh; init for those and also sh, dash, ksh (sh, dash and ksh have no programmable completion, so `completions` with them is a usage error, exit 2)
 
 Run without arguments for interactive TUI mode.
 Run '{project_name}-cli <flag> --help' (for example `--shell --help`) for detailed help on any command flag.
@@ -15915,6 +15917,25 @@ func extractContextFromPath(path string) (*Context, error) {
 
 **Required entry details.** `security.txt` is the RFC 9116 file described in "security.txt (RFC 9116)" (`Contact`, `Expires` and `Policy` are mandatory fields); `llms.txt` is the generated AI-discovery file described in "llms.txt (AI Discovery)". Both are served with `GET` and `HEAD`, carry no authentication, resolve every URL per request with `BuildURL`, and over Tor use the onion host. A path in the matrix that is not enabled for the project, and any path not in the matrix, answers `404`.
 
+**Drift-test reading of this matrix.** The matrix has no method column, so the drift test reads it with its own fixed rule instead of the generic inventory parser: every row is a `GET` route (`HEAD` follows), the path cell lists one path or two joined by `and`, `{token}` and `{hash}` are path parameters, and the `x-mounted-when` value of each row is this exact mapping:
+
+| Path | `x-mounted-when` |
+|------|------------------|
+| `security.txt`, `llms.txt` | always mounted (no condition) |
+| `pgp-key.asc` | `web.security.publish_pgp_key` is true AND the security keypair exists |
+| `acme-challenge/{token}` | `server.ssl.letsencrypt.enabled` with `challenge: http-01` |
+| `change-password` | the auth routes are mounted (the project has accounts) |
+| `webfinger` | `web.well_known.webfinger.enabled` |
+| `nodeinfo` | `web.well_known.nodeinfo.enabled` |
+| `oauth-protected-resource` | `web.well_known.oauth_protected_resource.enabled` |
+| `oauth-authorization-server` | `web.well_known.oauth_authorization_server.enabled` |
+| `gpc.json` | `web.well_known.gpc.enabled` |
+| `openpgpkey/hu/{hash}`, `openpgpkey/policy` | `web.well_known.openpgpkey.enabled` |
+| `openid-configuration` | `web.well_known.openid_configuration.enabled` |
+| `assetlinks.json` | `web.well_known.assetlinks.enabled` |
+| `apple-app-site-association` | `web.well_known.apple_app_site_association.enabled` |
+| `mta-sts.txt` | `web.well_known.mta_sts.enabled` |
+
 **Optional-entry rule:** optional well-known endpoints MUST be enabled only when the matching product feature, platform integration, or mail/domain ownership is explicitly defined in `IDEA.md` or project config. Do NOT invent or auto-enable them.
 
 ### Well-Known Directory Support
@@ -16983,7 +17004,7 @@ When GDPR/CCPA (right to erasure) conflicts with HIPAA/SOC2 (retention requireme
 
 | Control | Kind and detail |
 |---------|----------|
-| PHI encryption | **Server:** sensitive fields are encrypted at rest with `server.security.encryption_key` (AES-256-GCM); there are no per-record keys |
+| PHI encryption | **Server:** sensitive fields are encrypted at rest as an `enc:v1:` value (AES-256-GCM under `server.security.encryption_key`, PART 11 "Encryption at rest"); there are no per-record keys |
 | Audit trail | **Server:** the tamper-evident audit log; the strictest enabled standard sets the minimum retention (6 years with HIPAA) |
 | Access controls | **Server:** operator, owner and linked tokens; a token reaches only the resources it owns (there are no roles) |
 | Session timeout | **Operator:** 15 minutes maximum idle (the server has no feature for it) |
@@ -17662,7 +17683,7 @@ These rules apply to **all responses** when the request is detected as a Tor req
 | **Email** | Show `server.tor.contact_email` only; if unset, omit email entirely from all responses (security.txt, contact pages, error pages, footers). Never fall back to the clearnet contact email. |
 | **URLs** | All absolute URLs in responses must use `tor.onion_address`. Never embed clearnet FQDN. Applies to: `security.txt`, `llms.txt`, OpenAPI `servers[0].url`, GraphQL endpoint, OAuth redirect URIs, email verification links, pagination links. |
 | **Clearnet links** | Any link that would normally point to the clearnet site must use the onion address or be omitted entirely. |
-| **Third-party and user-authored links** | An operator-authored external link (a privacy-policy URL, a Markdown link) is rendered as plain text without a link, so a Tor visitor's browser never contacts a clearnet host. `/api/autodiscover` answers a Tor request with the onion origin only, never a clearnet origin. |
+| **Third-party and user-authored links** | An operator-authored external link (a privacy-policy URL, a Markdown link) is rendered as plain text without a link, so a Tor visitor's browser never contacts a clearnet host. `/api/autodiscover` answers a Tor request with an empty `urls` (never a clearnet origin) and the onion address only in its dedicated `onion` field: overlay addresses are never in `urls`. |
 | **CORS** | The onion address is added to the CORS allow-list automatically when `tor.onion_address` is set. The clearnet origin must NOT appear in Tor response CORS headers. |
 | **OAuth / external auth** | Redirect URIs must use the onion address. If the OAuth provider does not support `.onion` redirect URIs, that provider is disabled for Tor requests with a `503` error. |
 | **`Preferred-Languages`** | Omitted from `security.txt` served over Tor — locale selection leaks fingerprinting information. |
@@ -18991,7 +19012,7 @@ type HealthResponse struct {
     Project ProjectInfo `json:"project"`
 
     // 2. Overall status
-    // "healthy", "unhealthy", "degraded"
+    // "healthy", "degraded", "unhealthy", "restart_required", "maintenance", "shutting_down"
     Status         string   `json:"status"`
     // true if restart needed
     PendingRestart bool     `json:"pending_restart,omitempty"`
@@ -21650,7 +21671,7 @@ Before proceeding, confirm you understand:
 | Rule | Detail |
 |------|--------|
 | YAML shape | `server.ssl.letsencrypt.dns_provider` is the lego provider name (the lowercase identifier on the lego DNS provider list, e.g. `cloudflare`). `dns_credentials` is ONE flat map of that provider's lego environment variable names to string values, e.g. `CF_DNS_API_TOKEN: "..."`; no nesting |
-| Encryption at rest | A plaintext value an operator writes is accepted at load and rewritten in place, in `secrets.yml` (where the automatic migration has already moved it), atomically and `0600` (PART 8 private paths), as `enc:v1:{base64 of nonce + AES-256-GCM ciphertext}` under `server.security.encryption_key`. A value that starts with `enc:v1:` is decrypted in memory only. A value is never logged, never returned by the API, and shown as `********` in every view and bundle |
+| Encryption at rest | The same `enc:v1:` representation protects `server.backup.encryption_password` (PART 22): a plaintext value, including one left by an earlier install, is migrated at the next start exactly as below, and an `enc:v1:` value that cannot be decrypted (the encryption key was lost) makes scheduled backups fail closed with `backup.password_unreadable` instead of writing an unencrypted archive. A plaintext value an operator writes is accepted at load and rewritten in place, in `secrets.yml` (where the automatic migration has already moved it), atomically and `0600` (PART 8 private paths), as `enc:v1:{base64 of nonce + AES-256-GCM ciphertext}` under `server.security.encryption_key`. A value that starts with `enc:v1:` is decrypted in memory only. A value is never logged, never returned by the API, and shown as `********` in every view and bundle |
 | Field discovery | The server hardcodes no field list for VALIDATION (lego decides what is missing); the table below only prefills the form. For one `dns.NewDNSChallengeProviderByName` call it sets the map as the provider's environment (under a mutex), then restores the environment. lego's error names a missing or invalid variable; the server reports the variable NAME only, never a value |
 | Passing to lego | Only through that constructor call: the resulting provider object is given to the ACME client as its DNS-01 solver. Credentials are never written to a file or kept in the process environment |
 | Validation | At startup and before every certificate request the provider is constructed (no DNS record is touched). A failure makes the request fail with the variable name and logs at ERROR; no other challenge type is tried silently. Real proof of the credentials is a successful issuance |
@@ -27854,7 +27875,7 @@ server:
 | Rule | Behavior |
 |------|----------|
 | **Format** | `md` is Markdown, rendered by the project's Markdown renderer with every heading level shifted down by two (`#` renders as `<h3>`, `##` as `<h4>`, capped at `<h6>`), because each card already has its one `<h2>` and the page its one `<h1>`; the same shift applies to the headings of an `html` body. `html` is a fragment (no `<html>`, `<head>` or `<body>`). `txt` is plain text: HTML-escaped, a blank line starts a paragraph. `header` and `footer` are `html` only |
-| **Sanitizing** | Every body is sanitized before it renders; nothing the operator writes can run script. `header` and `footer` use the strict policy of "Footer Customization → Custom HTML Validation". `about`, `privacy` and `terms` (after Markdown rendering) use the same policy plus `table`, `thead`, `tbody`, `tr`, `th`, `td`, `pre`, `code`, `blockquote`, `hr`, `dl`, `dt`, `dd`, `sup`, `sub`, so ordinary documents keep their tables and code blocks. No policy allows `<h1>`: the page title is the page's one `<h1>`, so a heading in any operator body is `<h2>` or lower (a Markdown `#` heading renders as `<h2>`) |
+| **Sanitizing** | Every body is sanitized before it renders; nothing the operator writes can run script. `header` and `footer` use the strict policy of "Footer Customization → Custom HTML Validation". `about`, `privacy` and `terms` (after Markdown rendering) use the same policy plus `table`, `thead`, `tbody`, `tr`, `th`, `td`, `pre`, `code`, `blockquote`, `hr`, `dl`, `dt`, `dd`, `sup`, `sub`, so ordinary documents keep their tables and code blocks. No policy allows `<h1>`: the page title is the page's one `<h1>`, and the card already has its one `<h2>`, so a heading in any operator body, Markdown or HTML, is `<h3>` or lower (the two-level shift of the Format row: `#` and an HTML `<h1>` become `<h3>`, `<h2>` becomes `<h4>`, capped at `<h6>`) |
 | **Language** | A `body` map picks the request's resolved language (PART 26 → "I18N & A11Y"), then its `default` key, then the built-in content. A plain string is used for every language |
 | **Variables** | The placeholders of "Footer Customization → Available Footer Variables" work in every body |
 | **Links** | A body MUST NOT link `/server/contact` (PART 15 → "Who can reach the form"). Scripts, styles, forms and frames are stripped by the sanitizer |
@@ -31450,7 +31471,7 @@ Execute task
 
 ### Scheduler Status
 
-The scheduler status is read-only through the server status API. A task's schedule and enabled state are configuration: they live in the `yaml.d/maintenance.yml` area file (`server.scheduler.tasks.{id}`) and no API route changes them. Task execution can be triggered, and a task enabled or disabled (which writes its `enabled` key in `yaml.d/maintenance.yml`), only through the CLI commands below.
+The scheduler status is read-only through the CLI commands below (there is no API route for it). A task's schedule and enabled state are configuration: they live in the `yaml.d/maintenance.yml` area file (`server.scheduler.tasks.{id}`) and no API route changes them. Task execution can be triggered, and a task enabled or disabled (which writes its `enabled` key in `yaml.d/maintenance.yml`), only through the CLI commands below.
 
 **CLI - Scheduler Overview** (`{project_name} --maintenance scheduler list`):
 
@@ -35676,7 +35697,7 @@ make test
 
 ### How to Achieve 60% Coverage
 
-**0. Keep the process entry thin and testable.** The unit gate counts every package, the root `src` package included, so orchestration left in `main()` drags the percentage down while only the compiled binary can reach it. `src/main.go` holds only `main()`: it parses flags, builds the configuration (copying the build metadata `Version`, `CommitID`, `BuildEpoch` and `OfficialSite` from `src/version.go` into it) and calls `app.Run(ctx, cfg) error`, where `cfg` is the `config.Config` value and `app` is the package `github.com/{project_org}/{internal_name}/src/app`, which never imports `main`. `app.Run` (startup, signal handling, graceful shutdown) is in that package, which unit tests reach: the test calls `run` with a cancelable context and a listener on `127.0.0.1:0`, waits for the ready signal, makes one request, cancels the context and asserts a clean return. Phase 2 still tests the compiled binary; its coverage never counts toward the Phase 1 percentage.
+**0. Keep the process entry thin and testable.** The unit gate counts every package, the root `src` package included, so orchestration left in `main()` drags the percentage down while only the compiled binary can reach it. `src/main.go` holds only `main()`: it calls `config.Load(os.Args[1:])` (flag parsing and configuration building live in `src/config`, which unit tests reach), copying the build metadata `Version`, `CommitID`, `BuildEpoch` and `OfficialSite` from `src/version.go` into the result, and then calls `app.Run(ctx, cfg) error`, where `cfg` is the `config.ServerConfig` value (the server configuration type of `src/config`, the naming rule's `ServerConfig`) and `app` is the package `github.com/{project_org}/{internal_name}/src/app`, which never imports `main`. `app.Run` (startup, signal handling, graceful shutdown) is in that package, which unit tests reach: the test calls `run` with a cancelable context and a listener on `127.0.0.1:0`, waits for the ready signal, makes one request, cancels the context and asserts a clean return. Phase 2 still tests the compiled binary; its coverage never counts toward the Phase 1 percentage.
 
 **1. Test All Code Paths:**
 ```go
@@ -37789,7 +37810,7 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 | `beta.yml` | Push of a `*-beta` tag | Beta releases |
 | `devel.yml` | Daily at 3am UTC + push to main | Devel builds |
 | `docker.yml` | Push to `main`, version tags, `*-beta` tags and the daily schedule | Docker images (`build-standard` + `build-devel` jobs) |
-> **Note:** `ci.yml` and `release.yml` are required on every project. Go projects never have `build-toolchain.yml` — `casjaysdev/go:latest` is maintained externally. `beta.yml`, `devel.yml`, and `docker.yml` are project-specific optional workflows — include only when the project requires them.
+> **Note:** `ci.yml` and `release.yml` are required on every project. Go projects never have `build-toolchain.yml` — `casjaysdev/go:latest` is maintained externally. `beta.yml`, `devel.yml` and `docker.yml` are required on every project as well (all five providers ship the same set, PART 27): beta and devel are tag, push and schedule triggered as the table shows, and every workflow may also carry `workflow_dispatch` for a manual run without changing its other triggers.
 
 **Branch push auto-cancel policy:** Any workflow triggered by pushes to `main` MUST use workflow concurrency to cancel older in-progress runs for the same ref. This applies to branch-based CI (for example `devel.yml`, `docker.yml`, and any project-specific branch-push workflow; `release.yml` and `beta.yml` run on tags and need none).
 
@@ -40878,7 +40899,7 @@ Jenkins provides equivalent functionality to GitHub Actions, Gitea Actions, and 
 | Beta tag | `when { tag '*-beta' }` | `beta.yml` |
 | Main | `when { branch 'main' }` | `devel.yml` |
 | Scheduled | `triggers { cron('0 3 * * *') }` | `devel.yml` schedule |
-| All branches | Default (no `when`) | `docker.yml` |
+| Docker stages | `when { anyOf { branch 'main'; buildingTag() } }` | `docker.yml` (main pushes and version/beta tags; never other branches) |
 | `main` + daily schedule | `when { branch 'main' }` + `triggers { cron('0 4 * * *') }` | `docker.yml` `build-devel` job |
 
 ## Jenkinsfile
