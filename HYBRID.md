@@ -6027,7 +6027,7 @@ clean:
 7. Uses `gh` CLI — **manual local release only**
 
 **`make docker`**
-1. Uses `docker buildx` for multi-arch builds
+1. Uses `docker buildx` for one local build of the host platform
 2. Multi-stage Dockerfile handles Go compilation (no pre-built binaries)
 3. Context is project root, Dockerfile at `docker/Dockerfile`
 4. Builds the host platform only (`--load`), so the image check can run it; multi-arch publishing is CI/CD's job
@@ -6413,7 +6413,7 @@ CI workflows reference this image directly: `container: image: casjaysdev/go:lat
 | Meta labels | All OCI annotations (see below) — never Dockerfile `LABEL` blocks |
 | Required packages | git, curl, bash, tini, tor, i2pd, tzdata, ca-certificates |
 | Image contract | EVERY image the project ships (release, `:devel`, the all-in-one Debian image, any variant) installs `bash`, `curl`, `tor`, `i2pd`, `tini`, `tzdata` and `ca-certificates` in its FINAL stage. `tor` and `i2pd` are installed even though I2P is opt-in: a missing package is an image bug, never a runtime fallback. A project may ADD packages and never remove these |
-| Image check | After every image build (`make docker`) and in CI, run `docker run --rm --entrypoint sh {image} -c 'for c in bash curl tor i2pd tini; do command -v "$c" || exit 1; done'` and fail on any missing command; the container's `/server/healthz` must then report `features.tor.status` `healthy` within `server.tor.bootstrap_timeout` (default 180 seconds): it is `starting` while Tor bootstraps and becomes `healthy` only once the hidden service address exists, so the check waits for the bootstrap timeout, not the shorter `startup_timeout`. The image contract assumes outbound network access, because Tor cannot bootstrap without it: on a runner with none, the check accepts `starting` or `unavailable` (never `error`), prints `SKIP: no outbound network` on stderr and does not fail, and `REQUIRE_OVERLAY=1` makes `healthy` mandatory |
+| Image check | After every image build (`make docker`) and in CI, run `docker run --rm --entrypoint sh {image} -c 'for c in bash curl tor i2pd tini; do command -v "$c" || exit 1; done'` and fail on any missing command; the container's `/api/{api_version}/server/healthz` (the JSON health object; `/server/healthz` is the HTML page) must then report `features.tor.status` `healthy` (the status does not depend on `server.tor.expose`: only the `hostname` is withheld while `expose` is `false`, so the check never requires a hostname) within `server.tor.bootstrap_timeout` (default 180 seconds): it is `starting` while Tor bootstraps and becomes `healthy` only once the hidden service address exists, so the check waits for the bootstrap timeout, not the shorter `startup_timeout`. The image contract assumes outbound network access, because Tor cannot bootstrap without it: on a runner with none, the check accepts `starting` or `unavailable` (never `error`), prints `SKIP: no outbound network` on stderr and does not fail, and `REQUIRE_OVERLAY=1` makes `healthy` mandatory |
 | Tor handling | Installed but **binary controls** it (see PART 27) |
 | Binary location | `/usr/local/bin/{project_name}` |
 | Entrypoint script | `/usr/local/bin/entrypoint.sh` |
@@ -8584,6 +8584,16 @@ func detectServiceManager() string {
         return "openrc"
     }
 
+    // PPID 1 with a running systemd or OpenRC: a system container whose init is one of them is a host
+    if os.Getppid() == 1 {
+        if _, err := os.Stat("/run/systemd/system"); err == nil {
+            return "systemd"
+        }
+        if _, err := os.Stat("/run/openrc"); err == nil {
+            return "openrc"
+        }
+    }
+
     // Check for container environment
     if isContainer() {
         return "container"
@@ -9296,6 +9306,7 @@ When enabled:
 - Writes go to remote, then update local cache
 - If the remote is unavailable and `offline_mode` is `true` (the default once the cache is enabled), serve reads from the cache (read-only mode); with `offline_mode: false` there is no cache fallback and the server enters `maintenance` until the remote returns
 - **Freshness and scope:** the cache keeps one `cache_meta` row per cached table (`table_name`, `synced_at` in UTC written inside the batch transaction of a successful sync, and `watermark`, the highest `updated_at` already applied); `max_age` is measured from `synced_at`, so an older table is read from the remote while it is reachable. The cached set is every table of the standard schema except `app_secrets`, the audit tables and per-request tables (rate-limit counters); a table without an `updated_at` column is re-read in full each sync. A cache that has never completed a sync is never served: with no cache and no remote the server starts in `maintenance`. The default path is `{data_dir}/db/cache.db`, the file is `0600` and its directory `0700`
+- **Start with the remote down:** the generated secrets (`app_secrets`) live in the remote database and are never cached or generated locally, so a node that starts while the remote is unreachable starts in `maintenance` and serves cached reads only for routes that need no secret; every route or feature that needs a secret (signed cookies, token reveal and decryption, anything encrypted at rest) and every write answers `503` until the remote returns, when secret initialization completes and the server leaves `maintenance`
 - Background sync keeps cache fresh
 - The cache is a separate SQLite file opened with the SQLite driver, never through the libSQL driver (remote-only, PART 2)
 - **Write contract:** the remote write decides the response. When it succeeds and the local cache update then fails, the response is still a success, the cached row is deleted (best effort), one WARN is logged, and when even the delete fails the cache is marked dirty so reads bypass it until the next sync completes. A failed remote write changes nothing locally and answers the error.
@@ -17603,7 +17614,7 @@ All of these headers are supported regardless of proxy vendor (Nginx, Caddy, HAP
 | `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` | RFC 1918 IPv4 private |
 | `fc00::/7` | RFC 4193 IPv6 unique-local |
 | `169.254.0.0/16`, `fe80::/10` | Link-local |
-| Same `/24` as the configured listen address (containerized deployments) | Reverse-proxy sidecar pattern |
+| Same `/24` (IPv4) or `/64` (IPv6) as the configured listen address (containerized deployments) | Reverse-proxy sidecar pattern |
 
 **`additional` allow-list:** add public IPs / CIDRs of upstream proxies hosted on routable networks (CDN edge, cloud load balancer, public reverse proxy). Format is mixed `IP` / `CIDR` / DNS name (resolved at startup and refreshed every 5 minutes). Example:
 
@@ -17949,7 +17960,7 @@ if !subtle.ConstantTimeCompare([]byte(got), []byte(want)) {
 | `abuse` | Application-defined abuse events (user-flagged content, DMCA/takedown requests) and every `abuse` and `dmca` submission of the report form (`/server/contact`) | Sender name, sender email, subject, message body, and the reported resource URL when the application provides one. Spam-filtered before dispatch (PART 15 → "Contact antispam"). |
 | `general` | Fallback for `abuse`, `dmca` and `privacy` submissions of the report form (`/server/contact`) when the abuse or DPO address is empty | Sender name, sender email, subject, message body. Spam-filtered before dispatch (PART 15 → "Contact antispam"). |
 
-**Webhook payloads are always summaries.** A webhook is not encrypted end to end, so whichever role resolved, a security-role webhook included and a security -> admin fallback included, it carries only the summary (subject, severity, `tracking_id`, component and how to read it: Security -> Reports in the admin panel or `{project_name} --maintenance security <action> {tracking_id}`; no URL is sent, because the admin path is never published), never a report body or a contact. The full encrypted report goes by email only.
+**Webhook payloads are always summaries.** A webhook is not encrypted end to end, so whichever role resolved, a security-role webhook included and a security -> admin fallback included, it carries only the summary (subject, severity, `tracking_id`, component and how to read it: Security -> Reports in the admin panel or `{project_name} --maintenance security <action> {tracking_id}`; no URL is sent, because the admin path is never published), never a report body or a contact. The full encrypted report goes by email only, to the explicit `security` address. A security -> admin email FALLBACK (an explicitly empty `security` recipient) carries the summary only, never the encrypted report, and a webhook-only setup (no SMTP) satisfies the notification step with the summary: the report stays in the encrypted store and is read with `{project_name} --maintenance security <action> {tracking_id}`.
 
 ### Privacy & Public Exposure
 
@@ -21015,7 +21026,7 @@ See the **"Themes (NON-NEGOTIABLE - PROJECT-WIDE)"** section for the complete th
 - Theme switching is synchronized across all components (no page reload)
 - BOTH light AND dark themes MUST be easy to read with no color conflicts
 - File locations: `src/swagger/theme.go` and `src/graphql/theme.go`
-- Every color below is the value of a `ThemePalette` role ("Unified Color Palette"): these swatches are the palette, never a second one, and the theme files read `theme.ThemePaletteDark` and `theme.ThemePaletteLight` instead of defining their own hex values
+- Every color below is the value of a `ThemePalette` role ("Unified Color Palette") or of a page-only role of `common.css` (hover, active, code and tint backgrounds, `on-error`, elevated surfaces; PART 16 → "CSS Variable Reference"), and `common.css` is the authoritative file for the web values: these swatches are the palette, never a second one, and the theme files read `theme.ThemePaletteDark` and `theme.ThemePaletteLight` instead of defining their own hex values
 - Any value in the examples below that is not exactly a palette role (for example `#6272a4`, `#f1fa8c`, or a light-theme value that differs from `ThemePaletteLight`) is illustrative only: the real theme file takes the nearest role (`Border`, `Muted`, `Primary`, `Warning`) and never ships such a literal
 
 ---
@@ -30635,7 +30646,7 @@ server:
 | Feature | Behavior |
 |---------|----------|
 | Security alerts | Not sent, not attempted |
-| All email notifications | Not sent, not attempted (in-app notifications are unaffected: they are stored in the database, not sent by email) |
+| All email notifications | Not sent, not attempted (in-app notifications are unaffected: toasts and banners are shown live and never stored, PART 17 → "Notification Storage") |
 
 **DO NOT:**
 - ❌ Attempt to send emails without valid SMTP
@@ -31830,7 +31841,7 @@ it in a compliance-sensitive form.
 | Service | Content-Type | Body |
 |---------|--------------|------|
 | `prometheus` | `text/plain; version=0.0.4` | Full Prometheus text exposition — all required + project metrics |
-| `grafana` | `application/json` | A complete, importable Grafana dashboard definition (schema-current JSON) with panels covering every metric category this specification requires (HTTP, database, cache, scheduler, system, business); datasource left as a template variable so it imports against any Prometheus datasource |
+| `grafana` | `application/json` | A complete, importable Grafana dashboard definition (Classic dashboard-model JSON: every Grafana version imports it and upgrades it to its own schema) with panels covering every metric category this specification requires (HTTP, database, cache, scheduler, system, business); datasource left as a template variable so it imports against any Prometheus datasource |
 | `loki` | `application/json` | Recent structured log entries in Loki push-API stream format: `{"streams":[{"stream":{labels},"values":[["<ns-timestamp>","<line>"],...]}]}` — bounded by `loki.max_entries`/`loki.max_age`, same sanitization as log files (credentials ALWAYS redacted) |
 
 ## Access Control
@@ -33227,21 +33238,21 @@ groups:
   "panels": [
     {
       "title": "Request Rate",
-      "type": "graph",
+      "type": "timeseries",
       "targets": [
         {"expr": "sum(rate({project_name}_http_requests_total[5m]))"}
       ]
     },
     {
       "title": "Error Rate",
-      "type": "graph",
+      "type": "timeseries",
       "targets": [
         {"expr": "sum(rate({project_name}_http_requests_total{status=~\"5..\"}[5m])) / sum(rate({project_name}_http_requests_total[5m]))"}
       ]
     },
     {
       "title": "Latency (p50, p95, p99)",
-      "type": "graph",
+      "type": "timeseries",
       "targets": [
         {"expr": "histogram_quantile(0.50, rate({project_name}_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p50"},
         {"expr": "histogram_quantile(0.95, rate({project_name}_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p95"},
@@ -33257,7 +33268,7 @@ groups:
     },
     {
       "title": "Database Connections",
-      "type": "graph",
+      "type": "timeseries",
       "targets": [
         {"expr": "{project_name}_db_connections_open", "legendFormat": "open"},
         {"expr": "{project_name}_db_connections_in_use", "legendFormat": "in_use"}
@@ -33265,7 +33276,7 @@ groups:
     },
     {
       "title": "Cache Hit Rate",
-      "type": "graph",
+      "type": "timeseries",
       "targets": [
         {"expr": "sum(rate({project_name}_cache_hits_total[5m])) / (sum(rate({project_name}_cache_hits_total[5m])) + sum(rate({project_name}_cache_misses_total[5m])))"}
       ]
@@ -33279,7 +33290,7 @@ groups:
     },
     {
       "title": "Goroutines",
-      "type": "graph",
+      "type": "timeseries",
       "targets": [
         {"expr": "{project_name}_go_goroutines"}
       ]
@@ -33293,14 +33304,14 @@ groups:
     },
     {
       "title": "Scheduler Task Runs",
-      "type": "graph",
+      "type": "timeseries",
       "targets": [
         {"expr": "sum by (task, status) (rate({project_name}_scheduler_tasks_total[5m]))", "legendFormat": "{{task}} {{status}}"}
       ]
     },
     {
       "title": "Scheduler Task Duration (p95)",
-      "type": "graph",
+      "type": "timeseries",
       "targets": [
         {"expr": "histogram_quantile(0.95, sum by (task, le) (rate({project_name}_scheduler_task_duration_seconds_bucket[1h])))", "legendFormat": "{{task}}"}
       ]
@@ -33314,14 +33325,14 @@ groups:
     },
     {
       "title": "Seconds Since Last Task Run",
-      "type": "graph",
+      "type": "timeseries",
       "targets": [
         {"expr": "time() - {project_name}_scheduler_last_run_timestamp", "legendFormat": "{{task}}"}
       ]
     },
     {
       "title": "Items (total and active)",
-      "type": "graph",
+      "type": "timeseries",
       "targets": [
         {"expr": "{project_name}_items_total", "legendFormat": "total"},
         {"expr": "{project_name}_items_active", "legendFormat": "active in 24h"}
@@ -33364,7 +33375,7 @@ groups:
 | `{config_dir}/yaml.d/` | ✓ If exists | Drop-in config files |
 | `{config_dir}/secrets.yml` | ✓ If exists | Secrets (encryption key, credentials); `server.token` and `server.backup.encryption_password` are blanked in the backup copy (the backup password is never inside an archive) |
 | `{config_dir}/assets/` | If exists | Branding image files |
-| `server.db` | ✓ When the local file exists | The local SQLite database: the main database with the SQLite driver (settings, rate limits, audit log); with the libSQL driver, the local cache file when `server.database.cache.enabled` is true. A remote database is never part of a backup (see below) |
+| `server.db` | ✓ When the local file exists | The local SQLite database: the main database with the SQLite driver (settings, rate limits, audit log); with a remote driver there is no local `server.db`: the optional cache file `cache.db` is a derived replica, never part of a backup (the next sync rebuilds it from the remote). A remote database is never part of a backup (see below) |
 | `app_secrets.json` | ✓ Always | EVERY `app_secrets` row (`installation_secret`, `cookie_signing_key`, `csrf_token_secret`, and all `{name}_previous` and `{name}_previous_until` rows, including `encryption_key_previous` and `encryption_key_previous_until` during the 30-day grace period, so a restore inside it can still decrypt data that depends on the previous key), exported by the server whether the database is local or remote, so a restore can decrypt the PGP private key (PART 11) even when the database is remote with no local cache. A restore writes them back and replaces rows that exist |
 | `{config_dir}/template/` | ✓ If exists | Custom email templates |
 | `{config_dir}/ssl/` | Optional | SSL certificates (flag: `--include-ssl`) |
@@ -33372,7 +33383,7 @@ groups:
 | External TLS files | ✓ Always, when referenced | The files named by `server.ssl.cert` and `server.ssl.key` that lie OUTSIDE `{config_dir}/ssl/` (a manually supplied certificate), even without `--include-ssl`: only those two files, stored under `ssl-external/` in the archive. On restore they are written into `{config_dir}/ssl/` (the key with mode `0600`) and `server.ssl.cert` and `server.ssl.key` are rewritten to those paths, so the restored config never points at a file the archive lacks |
 | `{data_dir}/` | Optional | Data files (flag: `--include-data`) |
 
-**Remote database (libSQL/Turso driver):** the remote database itself is never part of a backup (its `app_secrets` rows are the one exception, exported as `app_secrets.json`), and that is neither an error nor a warning (a remote database is backed up by its own provider; the backup writes one `info` line naming the driver). On restore with a remote driver configured, the restored `server.db` seeds the remote database ONLY when that database is empty, exactly as a new setup initializes it; a remote database that already holds data is left untouched.
+**Remote database (libSQL/Turso driver):** the remote database itself is never part of a backup (its `app_secrets` rows are the one exception, exported as `app_secrets.json`), and that is neither an error nor a warning (a remote database is backed up by its own provider; the backup writes one `info` line naming the driver). On restore with a remote driver configured there is no `server.db` to restore: the archive's `app_secrets.json` is applied to the remote database ONLY when its `app_secrets` rows are absent (a new setup generates them exactly as at first start), and a remote database that already holds data is left untouched. An archive taken with the SQLite driver seeds an empty remote database from its `server.db`, exactly as a new setup initializes it.
 
 ### What Is in server.db
 
@@ -37469,7 +37480,7 @@ Go projects never have `build-toolchain.yml` — `casjaysdev/go:latest` is maint
 | Provider | Workflow location | Syntax |
 |----------|------------------|--------|
 | GitHub | `.github/workflows/ci.yml` / `release.yml` | GitHub Actions |
-| GitLab | `.gitlab-ci.yml` (stages: build, test, security, release) | GitLab CI |
+| GitLab | `.gitlab-ci.yml` (stages: lint, security, build, test, package, release, docker) | GitLab CI |
 | Gitea | `.gitea/workflows/ci.yml` / `release.yml` | GitHub Actions (act runner) |
 | Forgejo | `.forgejo/workflows/ci.yml` / `release.yml` | GitHub Actions (act runner) |
 | Jenkins | `Jenkinsfile` (parallel stages: Build / Test / Security / Release) | Declarative Pipeline |
