@@ -3711,8 +3711,8 @@ Operator edits server.yml directly (text editor or config-management tool)
 ### Maintenance Mode
 
 **Only TWO types of errors are truly critical:**
-1. Database connection error
-2. Cannot write to files (disk full, permissions, etc.)
+1. Database failure: connection errors and write failures
+2. File system failure: required files that cannot be read or written (disk full, permissions, etc.)
 
 **All other errors are recoverable. The server ALWAYS attempts self-healing.**
 
@@ -6218,7 +6218,7 @@ make build
 
 | Property | Value |
 |----------|-------|
-| Trigger | Git tag push with semver pattern (`v*`, `*.*.*`) |
+| Trigger | Git tag push with semver pattern (`v*`) |
 | Version format | Semantic (`X.Y.Z`) — NUMBERS only |
 | Git tag | `v1.2.3`, `v0.2.0`, or `1.2.3` (numeric versions) |
 | Release name | `v{version}` (always with v: `v1.2.3`, `v0.2.0`) |
@@ -13035,8 +13035,7 @@ defaults:
   expire: 24h
   # --syntax default
   syntax: auto
-  # --output default (json, table, plain)
-  output: table
+  # the --output default is output.format (see "Config precedence"), not a key of this block
   # --limit default
   limit: 20
 ```
@@ -16148,6 +16147,8 @@ web:
 ```
 
 **`custom_sections` shape and rendering.** Each item is `{ title, content }`: `title` is 1–80 characters, `content` is Markdown of at most 4096 characters. The sections follow the generated ones in list order, each as `## {title}` followed by its content. Content is rendered as Markdown text only: HTML tags are escaped, never interpreted, and links are limited to `https://` and relative paths. At most 10 sections; an item that breaks a limit is skipped with one warning.
+
+**Examples are illustrations.** Every `Authentication:` and endpoint line is generated from the project's actual routes and auth contract: the login and user-token lines above appear only when the project has accounts (PART 34); an API project names its owner-token route, and a product with no accounts or no authenticated routes names none (`Authentication: none` when every route is public).
 
 **Auto-Generation Rules:**
 - Project name and description from `IDEA.md` or config
@@ -28658,7 +28659,7 @@ When the admin panel is enabled (PART 28) these are also editable at `/server/{a
 |-----------|--------|
 | Method is `POST`, `PUT`, `PATCH`, or `DELETE` | Read-only methods (`GET`, `HEAD`, `OPTIONS`) cannot change state |
 | Request targets a frontend route (HTML page/form) — NOT `/api/**` and NOT a compatibility-layer route | CSRF is frontend-only; the backend never validates it (see "Scope") |
-| The request authenticates via session cookie (no `Authorization` header) | Bearer credentials are not auto-attached by browsers, so cross-site forgery has no vector |
+| The request is a browser request that carries cookies: it authenticates via session cookie, or it is a public FRONTEND form (no `Authorization` header either way) | Bearer credentials are not auto-attached by browsers, so cross-site forgery has no vector |
 | `Origin` (or `Referer` if `Origin` absent) indicates a cross-site or unknown source | Same-origin requests are inherently CSRF-safe under the browser's same-origin policy |
 
 **Bypass the CSRF check (no validation, no token needed) if ANY of these are true:**
@@ -28667,7 +28668,7 @@ When the admin panel is enabled (PART 28) these are also editable at `/server/{a
 |--------|--------|
 | Request targets the backend: any `/api/**` route, or any compatibility-layer route (unless that layer's protocol expects CSRF — see "Scope") | CSRF is frontend-only; backend clients (CLI, agents, SDKs, webhooks, compat clients) never carry or need a token |
 | `Authorization: Bearer …` header present | Bearer auth — caller proves possession of a credential the browser cannot auto-attach. CSRF protects against forgery of *cookie* auth; this is a different auth model. |
-| Endpoint is public (no auth required) | Nothing to forge — the endpoint is open to anyone with no session to abuse. |
+| Public BACKEND endpoint (no auth required, under `/api/**`) | Nothing to forge — the endpoint is open to anyone with no session to abuse. A public FRONTEND form (registration, contact, guest preferences) is NOT exempt: it carries the token. |
 | Method is `GET`, `HEAD`, or `OPTIONS` | Safe per RFC 9110. Must remain side-effect-free; if a `GET` mutates, that is a separate spec violation, not a CSRF problem. The ONLY sanctioned exceptions write the visitor's own preference cookies (theme, lang, `_pref_`) and nothing else: `GET /server/preferences/sync/import` with its API mirror, and a `?lang=` link. Both are idempotent, consent-gated (rule 18 of the preferences contract) and carry no credential or resource, because they must work as shareable links. |
 | `Origin` matches the app's own host AND session cookie is `SameSite=Strict` | The browser already blocked cross-site cookie attachment; the token is redundant. (Same-origin + Lax SameSite cookie still gets the token check on cross-site POST forms.) |
 | WebSocket upgrade request (`Upgrade: websocket`) | Auth happens at the connection level, then per-message; CSRF tokens don't fit the WS lifecycle. |
@@ -30098,7 +30099,7 @@ CREATE INDEX IF NOT EXISTS idx_captcha_challenges_expires ON captcha_challenges(
 
 #### Contact antispam
 
-**Antispam is layered, runs entirely on the server, needs no JavaScript and no third party, and runs BEFORE anything is delivered. The layers run cheapest first, and the first one that rejects ends the request.**
+**Antispam is layered, runs on the server, needs no JavaScript and no third party by default (the optional `recaptcha` and `hcaptcha` providers are the one explicit, opt-in exception: they need a third party and JavaScript, and are never offered on a Tor or I2P request), and runs BEFORE anything is delivered. The layers run cheapest first, and the first one that rejects ends the request.**
 
 | # | Layer | Rule | On failure |
 |---|-------|------|------------|
@@ -33865,7 +33866,16 @@ backup only: highest priority wins, and it consumes no monthly, weekly or daily 
 | An incremental | Look up `base_backup` in the same directory (same password), verify `base_sha256`, extract the base, then extract the incremental over it, then delete every path in `deleted`. Base missing or checksum mismatch = abort with `ERR_BASE_MISSING` / `ERR_BASE_CORRUPT`, nothing modified |
 | Daily vs hourly | The one with the later file modification time wins (an encrypted incremental's `snapshot_at` cannot be read before decryption); the operator may pick either file. Both are applied the same way |
 
-All restore limits (`server.restore.*`) apply to the combined base + incremental expansion.
+Restore limits (`server.restore`, in `yaml.d/maintenance.yml`) apply to the combined base + incremental expansion and are checked before any live file is touched; exceeding one aborts with `ERR_RESTORE_LIMIT` and nothing is modified:
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `server.restore.max_archive_size` | `20GB` | Size of one archive file (a size with a `KB`, `MB`, `GB` or `TB` suffix; a bare number is bytes) |
+| `server.restore.max_expanded_size` | `50GB` | Total size of the expanded base plus incremental |
+| `server.restore.max_files` | `1000000` | Total number of entries in the expansion |
+| `server.restore.max_path_length` | `4096` | Longest entry path, in bytes |
+
+An invalid value follows "Invalid → default" (a warning and the default); `0` and negative values are invalid.
 
 ## Restore Command
 
@@ -33908,6 +33918,8 @@ Restoring...
 {project_name} --maintenance restore backup_2025-01-15.tar.gz
 ```
 
+**Typed confirmation.** The confirmation value is the word `RESTORE` (case-sensitive): the CLI prompts for it, the WebUI dialog has a field for it and the API body carries it as `"confirm"`. A missing or different value is `400 VALIDATION_FAILED` and nothing is touched.
+
 **WebUI Restore:**
 
 ```
@@ -33918,6 +33930,7 @@ Restoring...
 │  Enter the backup password to restore.  │
 │                                         │
 │  Password: [••••••••••••]               │
+│  Type RESTORE to confirm: [_______]     │
 │                                         │
 │           [Cancel]  [Restore]           │
 └─────────────────────────────────────────┘
@@ -33993,7 +34006,7 @@ Restoring...
 
 | Branch | Release Type | Tag Pattern | Example |
 |--------|--------------|-------------|---------|
-| `stable` (default) | Release | `v*`, `*.*.*` | `v1.0.0` |
+| `stable` (default) | Release | `v*` | `v1.0.0` |
 | `beta` | Pre-release | `*-beta` | `202512051430-beta` |
 | `devel` | Rolling pre-release | `devel` (recreated nightly) | `devel` |
 
@@ -34041,7 +34054,7 @@ server:
 
 | Channel | Considers | Selection |
 |---------|-----------|-----------|
-| `stable` (default) | Full releases only (`v*`, `*.*.*`) | Newest stable |
+| `stable` (default) | Full releases only (`v*`) | Newest stable |
 | `beta` | Beta pre-releases (`*-beta`) + all stable releases | Newest of both — beta users are never stuck behind a stable release |
 | `devel` | Rolling `devel` release (rebuilt nightly) + beta + stable | Newest overall — a newer nightly is detected by comparing the release's `published_at` against the running binary's embedded `BUILD_EPOCH` |
 
@@ -35277,7 +35290,7 @@ rm -rf "$TEST_DIR"
 | `os.TempDir()` alone | `os.MkdirTemp(filepath.Join(os.TempDir(), projectOrg), projectName+"-")` | Must nest under org |
 | Hardcoded org name | Detect from git remote or path | Auto-detect, never hardcode |
 
-**Rule: ALL temp directories MUST be under `/tmp/{project_org}/{internal_name}-XXXXXX/` - no exceptions.**
+**Rule: ALL temp directories MUST be under `{temp_root}/{project_org}/{internal_name}-XXXXXX/` - no exceptions. `{temp_root}` is the OS temp root: `$TMPDIR` when set, else `/tmp` on Linux and BSD, the per-user temp directory on macOS and `%TEMP%` on Windows; the org/project prefix applies under it on every platform, and `/tmp` in the examples stands for it.**
 
 ### Summary: Temp Directory Rules
 
@@ -35287,7 +35300,7 @@ rm -rf "$TEST_DIR"
 ```
 
 **Breaking it down:**
-- `/tmp/` or `$TMPDIR` - OS temp directory base
+- `/tmp/` or `$TMPDIR` - the OS temp root (`$TMPDIR`, else `/tmp`; the per-user temp directory on macOS; `%TEMP%` on Windows); the prefix below applies under it on every platform
 - `{project_org}/` - Organization directory (cloudops, acmesoft, etc.)
 - `{internal_name}-XXXXXX` - Project directory with random suffix
 
@@ -37870,7 +37883,7 @@ If signing or attestation is required but keys/permissions are unavailable, stop
 | File | Trigger | Purpose |
 |------|---------|---------|
 | `ci.yml` | Push, PR to default branch; security jobs also run on weekly cron | Build + test + lint + coverage + secret scanning + image scanning + workflow-policy |
-| `release.yml` | Tag push (`v*`, `*.*.*`) + manual dispatch | Production releases |
+| `release.yml` | Tag push (`v*`) + manual dispatch | Production releases |
 | `beta.yml` | Push of a `*-beta` tag | Beta releases |
 | `devel.yml` | Daily at 3am UTC + push to main | Devel builds |
 | `docker.yml` | Push to `main`, version tags, `*-beta` tags and the daily schedule | Docker images (`build-standard` + `build-devel` jobs) |
@@ -38099,7 +38112,6 @@ on:
   push:
     tags:
       - 'v*'
-      - '[0-9]*.[0-9]*.[0-9]*'
   workflow_dispatch: {}
 
 concurrency:
@@ -38740,7 +38752,7 @@ jobs:
 |---------|------|
 | **Any push to main** | `{commit_id}` |
 | Push of a `*-beta` tag | `beta`, `{commit_id}` |
-| Version tag (`v*`, `*.*.*`) | `{version}`, `latest`, `{yymm}` |
+| Version tag (`v*`) | `{version}`, `latest`, `{yymm}` |
 
 **Notes:**
 - `{commit_id}` = short SHA (7 characters) from `git rev-parse --short=7 HEAD`
@@ -38761,7 +38773,6 @@ on:
     branches: [main]
     tags:
       - 'v*'
-      - '*.*.*'
       - '*-beta'
   schedule:
     - cron: '0 4 * * *'
@@ -39022,7 +39033,7 @@ For self-hosted runners, change `runs-on: ubuntu-26.04` to your runner label.
 | File | Trigger | Purpose |
 |------|---------|---------|
 | `ci.yml` | Push and pull requests; weekly schedule for security jobs | Build, test, lint, coverage, security jobs |
-| `release.yml` | Tag push (`v*`, `*.*.*`) + manual dispatch | Production releases |
+| `release.yml` | Tag push (`v*`) + manual dispatch | Production releases |
 | `beta.yml` | Push of a `*-beta` tag | Beta releases |
 | `devel.yml` | Daily at 3am UTC + push to main | Devel builds |
 | `docker.yml` | Push to `main`, version tags, `*-beta` tags and the daily schedule | Docker images (`build-standard` + `build-devel` jobs) |
@@ -39189,7 +39200,6 @@ on:
   push:
     tags:
       - 'v*'
-      - '[0-9]*.[0-9]*.[0-9]*'
   workflow_dispatch: {}
 
 concurrency:
@@ -39805,7 +39815,6 @@ on:
     branches: [main]
     tags:
       - 'v*'
-      - '*.*.*'
       - '*-beta'
   schedule:
     - cron: '0 4 * * *'
@@ -40244,7 +40253,7 @@ build:linux-amd64:
       - ${PROJECT_NAME}-linux-amd64*
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
 
 build:linux-arm64:
   <<: *go-build
@@ -40260,7 +40269,7 @@ build:linux-arm64:
       - ${PROJECT_NAME}-linux-arm64*
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
 
 build:darwin-amd64:
   <<: *go-build
@@ -40276,7 +40285,7 @@ build:darwin-amd64:
       - ${PROJECT_NAME}-darwin-amd64*
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
 
 build:darwin-arm64:
   <<: *go-build
@@ -40292,7 +40301,7 @@ build:darwin-arm64:
       - ${PROJECT_NAME}-darwin-arm64*
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
 
 build:windows-amd64:
   <<: *go-build
@@ -40308,7 +40317,7 @@ build:windows-amd64:
       - ${PROJECT_NAME}-windows-amd64*.exe
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
 
 build:windows-arm64:
   <<: *go-build
@@ -40324,7 +40333,7 @@ build:windows-arm64:
       - ${PROJECT_NAME}-windows-arm64*.exe
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
 
 build:freebsd-amd64:
   <<: *go-build
@@ -40340,7 +40349,7 @@ build:freebsd-amd64:
       - ${PROJECT_NAME}-freebsd-amd64*
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
 
 build:freebsd-arm64:
   <<: *go-build
@@ -40356,7 +40365,7 @@ build:freebsd-arm64:
       - ${PROJECT_NAME}-freebsd-arm64*
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
 
 # =============================================================================
 # TEST
@@ -40374,7 +40383,7 @@ test:
     - PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
     - if [ "$PCT" -lt 60 ]; then echo "coverage ${PCT}% is below the 60% threshold"; exit 1; fi
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
     - if: $CI_PIPELINE_SOURCE == "schedule"
@@ -40452,7 +40461,7 @@ release:
         - name: "${PROJECT_NAME}-freebsd-arm64"
           url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECT_NAME}-freebsd-arm64?job=build:freebsd-arm64"
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
 
 # =============================================================================
 # BETA BUILDS (push of a YYYYMMDDHHMMSS-beta tag)
@@ -40720,7 +40729,7 @@ sbom:stable:
       dotenv: release.env
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
 
 sbom:beta:
   stage: package
@@ -40819,7 +40828,7 @@ docker:build:
         --push \
         .
   rules:
-    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_TAG =~ /^\d{14}-beta$/
 
@@ -46388,13 +46397,13 @@ Server Status: Running
 Tor Hidden Service: Connected
   Address: abcd1234...wxyz.onion
 
-I2P Eepsite: Running (i2pd)
+I2P Eepsite: running (i2pd)
   Address: examplei2p...uv.b32.i2p
 ```
 
 | Field | Description |
 |-------|-------------|
-| I2P Eepsite | The lifecycle `state` verbatim: `disabled`, `no_provider`, `starting`, `building`, `running` (followed by the provider in parentheses, for example `running (i2pd)`) or `error` |
+| I2P Eepsite | The lifecycle `state` verbatim: `disabled`, `no_provider`, `starting`, `building`, `running` (followed by the provider in parentheses, for example `running (i2pd)`) or `error`. Expected output for each state: `I2P Eepsite: disabled`, `I2P Eepsite: no_provider`, `I2P Eepsite: starting`, `I2P Eepsite: building`, `I2P Eepsite: running (i2pd)` followed by its `Address:` line, and `I2P Eepsite: error` |
 | Address | Full `.b32.i2p` address |
 
 ---
