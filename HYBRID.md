@@ -153,7 +153,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the authoritative template bas
 
 **A feature IDEA.md defines that AI.md has no contract for** (for example operator-level billing or federation) is built from IDEA.md under the full AI.md baseline: security, authentication, database, API conventions, configuration, audit, i18n and every PART the feature touches. AI.md defines no protocol for it and forbids nothing about it. The project's SPEC.md states the feature's technical contract (data, endpoints, signatures, retries, conflict handling) and is the only place that does; the feature never loosens a baseline rule, and a baseline rule it cannot meet is a SPEC.md exception (PART 0).
 
-A feature that builds or runs user-supplied source (a PaaS build path) also defines `server.builds.*` like any other configuration: a builder image pinned by digest, memory and CPU limits (defaults `2g` and `1`), a timeout (default `15m`) and an egress proxy address with its token (default empty: the build has no network). Each key follows the area-file rules.
+A feature that builds or runs user-supplied source (a PaaS build path) also defines `server.builds.*` like any other configuration: a builder image pinned by digest, memory, CPU, disk and process limits (defaults `2g`, `1`, `4g` of scratch disk and `512` processes), a timeout (default `15m`) and an egress proxy: `server.builds.egress_proxy` is an UPSTREAM proxy URL that the build container is pointed at as its only route out, and `server.builds.egress_proxy_token` is the bearer token that proxy requires, sent in `Proxy-Authorization` (operator-provided, kept in `secrets.yml`); each build runs in its own container network that reaches nothing but that proxy, and an empty address means the build has no network at all. Each key follows the area-file rules.
 
 **Billing** (plans, subscriptions, payment providers, invoices, dunning, usage metering, tax) is such a feature. The "Free & open source" and "No artificial limits" rules (PART 0) bar the template itself from paid tiers, an enterprise edition and monetization quotas on its own features; a billing feature that IDEA.md defines is the owner's product feature, never gates a template feature and never turns a rate limit into a usage limit. When IDEA.md defines it, the reference for the SPEC.md billing contract is `~/.claude/TEMPLATES/BILLING.md`, and the `billing-builder` agent implements it. CAVEAT: that file is an optional, machine-level reference outside this specification: it may be absent, it is never copied into a project, it only informs the SPEC.md contract and never overrides AI.md (AI.md wins every conflict), and when it is absent the project's SPEC.md states the billing contract itself. The project's SPEC.md (with the user's approval) is where the provider list is chosen: it may drop or add providers relative to that file, and a provider the user removes there is never reintroduced from the reference. A project that defines no billing ignores it.
 
@@ -3790,7 +3790,7 @@ Self-Healing Successful?                        │
     │        Resume Normal Operation
     │
     └─► NO: Continue in Maintenance Mode
-            Retry every 30 seconds (until maintenance.self_healing.max_attempts is reached; 0 = forever)
+            Retry every 30 seconds (the configured `maintenance.self_healing.interval`, 30 seconds by default, until max_attempts is reached; 0 = forever)
             Log fix instructions to server log
 ```
 
@@ -4366,7 +4366,7 @@ Wherever this specification says a setting is set "in `server.yml`", it means th
 
 ### Legacy Keys
 
-**Older deployments used other names for the same settings. The automatic migration applies this table on every start, before it moves sections between files.** A row either renames a key (the value is kept) or removes it (the value stays in `server.yml.bak`). When both the old and the new key exist, the new one wins and the old one is dropped. A key the table does not list, inside a section the spec defines, is ignored with ONE warning and is never deleted.
+**Older deployments used other names for the same settings. The automatic migration applies this table on every start, before it moves sections between files.** It works on the effective (merged) value: when a drop-in already sets the key, that value is the effective one and the migration neither writes nor moves the legacy value. A row either renames a key (the value is kept) or removes it (the value stays in `server.yml.bak`). When both the old and the new key exist, the new one wins and the old one is dropped. A key the table does not list, inside a section the spec defines, is ignored with ONE warning and is never deleted.
 
 | Legacy key | Becomes |
 |------------|---------|
@@ -4408,9 +4408,9 @@ Wherever this specification says a setting is set "in `server.yml`", it means th
 
 | Rule | Behavior |
 |------|----------|
-| **Keys** | Only these, for every one the project has: `server.token`; `server.security.encryption_key` and `server.security.encryption_key_version`; `server.notifications.email.smtp.password`; `server.cache.password`; `server.database.password` and `server.database.token`; `server.database.url` and `server.cache.url` (each only while the URL carries a credential); `server.pages.contact.captcha_secret_key`; `server.ssl.letsencrypt.dns_credentials`; `data.cve.api_key`; `server.backup.encryption_password`; `server.metrics.auth.tokens.*`; every webhook URL and its `_secret` under `server.contact.{role}.webhooks`. `server.tokens.*` is token policy, not a secret. Every other key stays in its area file |
+| **Keys** | Only these, for every one the project has: `server.token`; `server.security.encryption_key` and `server.security.encryption_key_version`; `server.notifications.email.smtp.password`; `server.cache.password`; `server.builds.egress_proxy_token`; `server.database.password` and `server.database.token`; `server.database.url` and `server.cache.url` (each only while the URL carries a credential); `server.pages.contact.captcha_secret_key`; `server.ssl.letsencrypt.dns_credentials`; `data.cve.api_key`; `server.backup.encryption_password`; `server.metrics.auth.tokens.*`; every webhook URL and its `_secret` under `server.contact.{role}.webhooks`. `server.tokens.*` is token policy, not a secret. Every other key stays in its area file |
 | **Generated** | When one of these keys is empty or missing at start, the server generates it BEFORE it serves anything, writes it to `secrets.yml` (atomic, `0600`) and records `config.secret_generated` (the key name only) in `audit.log`: `server.token`; `server.security.encryption_key` (with `encryption_key_version: 1`); `server.metrics.auth.tokens.prometheus`, `.grafana` and `.loki`; and a `server.contact.{role}.webhooks.{transport}_secret` whenever its webhook URL `server.contact.{role}.webhooks.{transport}` is set. `server.token` is an `adm_` token and each metrics token an `mtr_` token, each plus 32 random base62 characters ("Token Catalogue") and the encryption key is 32 random bytes. Only `server.token` is printed, once, to the console at first creation ("First-start disclosure") and never logged; every other value is read from `secrets.yml` |
-| **Never generated** | Credentials that someone else issues stay empty until the operator sets them: `server.notifications.email.smtp.password`, `server.cache.password`, `server.database.password` and `server.database.token`, `server.database.url` and `server.cache.url` with a credential in them, `server.pages.contact.captcha_secret_key`, `server.ssl.letsencrypt.dns_credentials`, `data.cve.api_key`, `server.backup.encryption_password` and the webhook URLs |
+| **Never generated** | Credentials that someone else issues stay empty until the operator sets them: `server.notifications.email.smtp.password`, `server.cache.password`, `server.builds.egress_proxy_token`, `server.database.password` and `server.database.token`, `server.database.url` and `server.cache.url` with a credential in them, `server.pages.contact.captcha_secret_key`, `server.ssl.letsencrypt.dns_credentials`, `data.cve.api_key`, `server.backup.encryption_password` and the webhook URLs |
 | **Rotation** | Blank a generated key in `secrets.yml` and restart: a new value is generated. `--maintenance secret rotate {name}` rotates `installation_secret` or the encryption key with their grace periods (PART 11); those are the only two with a manual rotation, while `cookie_signing_key` and `csrf_token_secret` rotate automatically and any other name is rejected with a usage error |
 | **Written by** | The server writes the FILE-based secrets (every key of this list; PART 11 keeps three others in `app_secrets`) to `secrets.yml` and ONLY there, never to `server.yml` and never to a drop-in (this limits what the server writes; an operator may still hand-write a value elsewhere, see "Operator-set values"): the first-run `server.token`, `server.security.encryption_key` with its version, and its rotation (`--maintenance secret rotate encryption_key`). The `app_secrets` rows (`installation_secret`, `cookie_signing_key`, `csrf_token_secret`) are written to `server.db` and nowhere else; a rotation of `installation_secret` (`--maintenance secret rotate installation_secret`) updates its row there |
 | **Operator-set values** | An operator MAY write a secret key in `server.yml` or a drop-in (for example from configuration management). The automatic migration moves it to `secrets.yml` at the next start ("Area Files and Automatic Migration"), where it wins over any other file. A value may also be an environment reference such as `${DB_PASSWORD}`, which is moved like any other value. A plaintext DNS credential is encrypted as `enc:v1:` in `secrets.yml` by that same migration write, so it is never left as plaintext in `server.yml` or a drop-in. So `secrets.yml` is where a secret lives at rest, and a secret in `server.yml` or a drop-in is a hand-off that ends at the next start |
@@ -5257,9 +5257,7 @@ server:
 
   # Branding, SEO and the default theme are not in server.yml: they live in yaml.d/branding.yml (PART 15 → "Branding File")
 
-  # System user/group
-  user: {auto}
-  group: {auto}
+  # System user/group: fixed to the service identity ({internal_name}); no config key selects another
 
   # PID file: true (default) = create and check it at start (PART 8 steps 11-12); false = none outside containers.
   # Read by the early config peek; ignored in containers, which never use a PID file
@@ -10818,7 +10816,7 @@ userAgent := fmt.Sprintf("%s-cli/%s", projectName, version)
 |------|--------|
 | 1. Discover | CLI's `/api/autodiscover` response includes `cli_versions: { "linux-amd64": {"version": "1.2.3", "sha256": "..."}, ... }` and `cli_min_version` (the value of `server.update.cli_min_version`; omitted or empty means no minimum is enforced). CLI checks on every start (it's short-lived; no separate poll loop needed) and additionally on `{project_name}-cli --update check`. |
 | 2. Decide | If `current_version < cli_versions[os-arch].version`: prompt the user (interactive) OR auto-update silently (when `update.auto: true` AND the run is non-interactive; `update.auto` is the consent and nothing earlier is required). If `current_version < cli_min_version`: refuse to make further requests until updated; print "this CLI is too old; the server requires {min_version} — run '{project_name}-cli --update yes' to upgrade." |
-| 3. Download | Fetch `{base}/cli/binaries/{project_name}-cli-{os}-{arch}` over HTTPS. Save to a tmp path (`/tmp/{project_org}/{internal_name}-XXXXXX/cli.update.tmp` per the spec's tmp-dir rules). |
+| 3. Download | Fetch `/api/{api_version}/cli/binaries/{filename}` (`{filename}` is `{project_name}-cli-{os}-{arch}[.exe]`) over HTTPS. Save to a tmp path (`/tmp/{project_org}/{internal_name}-XXXXXX/cli.update.tmp` per the spec's tmp-dir rules). |
 | 4. Verify SHA-256 | Same `verifyChecksum()` from PART 21 — match against the `sha256` from autodiscover. Mismatch → delete temp, abort with stderr error. |
 | 5. Atomic swap | Same platform-specific `replaceBinary()` from PART 21. The CLI is user-installed (typically `/usr/local/bin/` or `~/bin/`) — if the user lacks write permission to the install path, CLI prints "you do not have permission to update {binary_path}; ask your admin or move the binary to a writable path" and exits cleanly. |
 | 6. Re-exec | After successful replace, CLI `exec`s the new binary with the original argv to continue the in-progress command. (Server restarts via service manager; CLI just re-execs since it's foreground.) |
@@ -10840,7 +10838,7 @@ update:
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
 | `/api/autodiscover` | GET | None or bearer | Returns `cli_versions` (each entry has `version` + `sha256`) and `cli_min_version` (from `server.update.cli_min_version`) alongside `name`, `version`, `api`, `urls` and the exposed `onion` and `i2p` addresses |
-| `{base}/cli/binaries/{project_name}-cli-{os}-{arch}` | GET | None (public — CLIs are user-distributed) OR bearer if `cli.binary_download.require_auth: true` is set | Streams the binary |
+| `/api/{api_version}/cli/binaries/{filename}` | GET | None (public — CLIs are user-distributed) OR bearer if `cli.binary_download.require_auth: true` is set | Streams the binary |
 
 **Why CLI download default is unauthenticated:** the CLI is the entry point for new users. Forcing auth on the download means they need a token before they can install the tool that obtains the token. Operators who run a private deployment can flip `cli.binary_download.require_auth` to `true`.
 
@@ -12793,9 +12791,10 @@ defaults:
 **Priority order (highest to lowest):**
 
 1. `--server` flag (if provided)
-2. `server.primary` in `cli.yml` (if set)
-3. `{official_site}` compiled default (if project has official site)
-4. Error with setup instructions
+2. `{PROJECT_NAME}_SERVER_PRIMARY` environment variable (if set; nothing is saved)
+3. `server.primary` in `cli.yml` (if set)
+4. `{official_site}` compiled default (if project has official site)
+5. Error with setup instructions
 
 **Behavior:**
 
@@ -15452,7 +15451,7 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 | Generated | First start. Stored in `server.db` row `app_secrets.installation_secret`, base64-encoded. |
 | Scope | Server-wide. Generated on first start and persisted to `server.db`. NEVER appears in a request, response, or log. |
 | Used by | `{security_id}` HMAC (PART 11 → "Security Reports"); PGP private-key KDF (PART 11 → "GPG Keypair Management"); future derived material (cookie signing salts, etc.). |
-| Rotation | Manual via `--maintenance secret rotate installation_secret` (PART 5 → "Secret Rotation"). Sensitive-operation flow (PART 5 → "Sensitive Operations"): require a typed confirmation and, when the run is authorized by `server.token`, re-prompt for it (a run as root is not asked for the token), log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and re-bases all live HMACs. The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
+| Rotation | Manual via `--maintenance secret rotate installation_secret` (PART 5 → "Secret Rotation"). Sensitive-operation flow (PART 5 → "Sensitive Operations"): require a typed confirmation and, when the run is authorized by `server.token`, re-prompt for it (a run as root is not asked for the token), log to `audit.log` as `security.installation_secret_rotated`. Rotation re-encrypts the PGP private key and switches every new HMAC to the new secret (security ids are stateless HMACs: nothing stored is re-keyed, and ids issued under the previous secret keep validating during the grace). The previous secret is kept for 7 days to validate any in-flight `{security_id}` URLs that referenced it. |
 | Backup | Always — see PART 20 → "Backup Contents". Required for any restore: without it, the PGP private key in the backup is undecryptable. |
 | Loss = catastrophic | Lost = cannot decrypt PGP private key (and therefore cannot decrypt in-flight encrypted security reports); cannot validate `{security_id}` URLs on existing security.txt copies until the file regenerates. Recovery requires the operator to: regenerate keypair, regenerate `installation_secret`, accept that all in-flight encrypted reports are unreadable. |
 
@@ -15475,7 +15474,7 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 
 | Action | Command | Effect |
 |--------|---------|--------|
-| **Rotate installation_secret** | `--maintenance secret rotate installation_secret` | Sensitive-operation flow: require a typed confirmation and, when the run is authorized by `server.token`, re-prompt for it (a run as root is not asked for the token), log to `audit.log` as `security.installation_secret_rotated`. Generates a new 32-byte secret, re-encrypts the PGP private key, and re-bases all live HMACs. Previous secret kept 7 days to validate in-flight `{security_id}` URLs. |
+| **Rotate installation_secret** | `--maintenance secret rotate installation_secret` | Sensitive-operation flow: require a typed confirmation and, when the run is authorized by `server.token`, re-prompt for it (a run as root is not asked for the token), log to `audit.log` as `security.installation_secret_rotated`. Generates a new 32-byte secret, re-encrypts the PGP private key, and switches every new HMAC to the new secret (security ids are stateless HMACs: nothing stored is re-keyed, and ids issued under the previous secret keep validating during the grace). Previous secret kept 7 days to validate in-flight `{security_id}` URLs. |
 | **Rotate encryption_key** | `--maintenance secret rotate encryption_key` | Sensitive-operation flow: require a typed confirmation and, when the run is authorized by `server.token`, re-prompt for it (a run as root is not asked for the token), log to `audit.log` as `security.encryption_key_rotated`. Generates a new AES-256-GCM key in `secrets.yml`, re-encrypts all at-rest data under the new key (the `token_enc` copies of owner and linked tokens, AES-encrypted security report bodies and every `contact_enc`; PGP-encrypted bodies are not touched). Previous key kept 30 days to decrypt any data not yet re-encrypted (see "Rotation contract" below). |
 
 **Rotation contract (`installation_secret`, `encryption_key` and `cookie_signing_key`):**
@@ -15487,6 +15486,8 @@ The root secret all other derived material hangs off. Without it, in-flight HMAC
 | Failure | The previous value is stored before the new one is used, so a crash or a failed step loses nothing. At the next start the server finishes any unfinished re-encryption: a row readable only with the previous key is re-encrypted then. A second rotation while a previous value still exists is refused until every row is readable under the current key |
 | Reads during grace | A value that fails under the current key is tried with the previous key; a success also re-encrypts that row under the current key |
 | Retirement | The daily cleanup task deletes `{name}_previous` and `{name}_previous_until` once `_until` has passed. A row that still needs the retired value fails closed and logs `security.decrypt_failed` with the table and row id, never any content |
+
+**Encryption key rotation order and recovery.** The new key is generated in memory first and written to the staged file `secrets.yml.new` (`0600`, fsynced); the previous key is then wrapped under the new key into the `encryption_key_previous` rows in ONE `Write` transaction; last, `secrets.yml.new` is atomically renamed over `secrets.yml`. A crash is recovered at the next start: a leftover `secrets.yml.new` with missing or unwrapped previous rows resumes the sequence from the first incomplete step using the staged key, and previous rows without any staged or persisted new key are discarded (the operator repeats the rotation).
 
 **Note on consolidation:** `server.security.encryption_key` is the canonical at-rest AES key — every place the spec talks about "encrypt this sensitive data at rest" resolves to this one key, including security report bodies. The current AES key is NOT in `app_secrets`: it lives only in `secrets.yml`. The three `app_secrets` rows above are HMAC keys (not AES) and a root-secret for HMAC derivation, stored in the DB rather than `secrets.yml` because they have independent rotation lifecycles. During the 30-day grace period the rows `app_secrets.encryption_key_previous` and `_previous_until` additionally hold the PREVIOUS AES key, wrapped under the new key (see the rotation contract), and they are deleted when the grace period ends.
 
@@ -16463,7 +16464,7 @@ CREATE TABLE IF NOT EXISTS security_thanks (
 
 **Restore behavior:** restoring a backup re-installs the keypair and `keyservers.state`, then submits the public key only to the configured keyservers that the restored state does not already list for this fingerprint (a keyserver added since the backup, or a different fingerprint). A keyserver already listed is not contacted again, and a submission that does happen is idempotent because keyservers de-duplicate by fingerprint. The `installation_secret` is restored from the same backup, so the encrypted private key decrypts correctly.
 
-**Operator UX:** running `{project_name} --maintenance backup` and `{project_name} --maintenance restore` covers the security keypair without any extra steps. `{project_name} --maintenance backup test [file]` verifies a backup without touching live data: `file` defaults to the newest full backup in `{backup_dir}` (the newest by the UTC date in the file name wins, as for restore, "Default archive selection", and the manifest is never read to choose) and also tests the daily and hourly incrementals when present, each together with its base. An encrypted backup takes its password like restore: the `--password` flag when given, otherwise an interactive prompt (without a flag or a terminal the command fails with a message that says so). It extracts into a temporary directory, verifies the manifest checksums, decrypts `pgp.priv.asc.enc` with the `installation_secret` found in that same backup, compares the fingerprint of the decrypted key with `pgp.pub.asc`, reports each result, and removes the temporary directory.
+**Operator UX:** running `{project_name} --maintenance backup` and `{project_name} --maintenance restore` covers the security keypair without any extra steps. `{project_name} --maintenance backup test [file]` verifies a backup without touching live data: `file` defaults to the newest full backup in `{backup_dir}` (the newest by the UTC date in the file name wins, as for restore, "Default archive selection", and the manifest is never read to choose) and also tests the daily and hourly incrementals when present, each together with its base. An encrypted backup takes its password like restore: the `{PROJECT_NAME}_BACKUP_PASSWORD` environment variable when set, otherwise an interactive prompt (without either the command fails with a message that says so); there is no password flag. It extracts into a temporary directory, verifies the manifest checksums, decrypts `pgp.priv.asc.enc` with the `installation_secret` found in that same backup, compares the fingerprint of the decrypted key with `pgp.pub.asc`, reports each result, and removes the temporary directory.
 
 ## Logging
 
@@ -17774,7 +17775,7 @@ Expires: {expiry_date}
 
 Rate limiting is the primary abuse defense. It is always on: there is no `enabled` setting, and the numbers below are its tunables. Anonymous requests are limited per IP; requests carrying a valid Bearer token (REST and MCP alike) are limited per token, so clients that share an egress IP (hosted assistants, NAT) never throttle one another, and failed authentication is always counted per IP. Counters use a sliding window stored in `server.db` by default; when an external cache (Valkey/Redis) is configured, the counters live in the cache instead (see the cache usage table in PART 12).
 
-**Counter backend unavailable.** Rate limiting never fails open. When the external cache is unreachable the counters fall back to the in-process memory counter (per instance, loaded from the last `server.db` flush, enforcing the same limits), one `warn` is logged and the cache health check reports `degraded`. The failed-authentication lockout and the strict token actions keep their limits through the fallback, so an unavailable cache never lifts a lockout; the in-memory counters, seeded from the last `server.db` flush, take over while the cache is unreachable, and the counters never reset on a process restart.
+**Counter backend unavailable.** Rate limiting never fails open. When the external cache is unreachable the counters fall back to the in-process memory counter (per instance, loaded from the last `server.db` flush, enforcing the same limits), one `warn` is logged, the cache health check stays `ok` (the service works) and `features.cache.fallback` is `true`; core checks are never `degraded`. The failed-authentication lockout and the strict token actions keep their limits through the fallback, so an unavailable cache never lifts a lockout; the in-memory counters, seeded from the last `server.db` flush, take over while the cache is unreachable, and the counters never reset on a process restart.
 
 ```yaml
 server:
@@ -19527,13 +19528,13 @@ type StatsInfo struct {
   margin-bottom: 1.5rem;
 }
 /* Uses same modifier classes as inline .status: .status-ok, .status-error, .status-warning */
-.status-banner.status-ok { background: var(--color-success-bg); color: var(--color-success); }
+.status-banner.status-ok { background: var(--color-success-bg); color: var(--color-success-text); }
 .status-banner.status-error { background: var(--color-error-bg); color: var(--color-error-text); }
-.status-banner.status-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+.status-banner.status-warning { background: var(--color-warning-bg); color: var(--color-warning-text); }
 
 /* Mode badge — class is badge-{mode} */
-.badge-production { background: var(--color-success-bg); color: var(--color-success); }
-.badge-development { background: var(--color-warning-bg); color: var(--color-warning); }
+.badge-production { background: var(--color-success-bg); color: var(--color-success-text); }
+.badge-development { background: var(--color-warning-bg); color: var(--color-warning-text); }
 .badge-debug { background: var(--color-error-bg); color: var(--color-error-text); }
 
 /* Stats with larger values */
@@ -20999,7 +21000,7 @@ func renderNoJSHTML(w http.ResponseWriter, data interface{}) {
 | **Optional routes** | The embedded build-time spec is the full SUPERSET of routes, and every route that depends on a flag or a setting (the root aliases, optional well-known files, optional features) carries `x-mounted-when` naming its condition (for example the setting that enables the feature); INTERNAL routes (metrics, `/debug/*`, Tor control) are never in the OpenAPI document, embedded or served. At startup the server derives the SERVED spec from the embedded one by removing every operation whose condition is false for this run, so the spec a client reads always matches the routes that are actually mounted. The drift test compares the superset with the route table |
 | **JSON only** | OpenAPI spec uses JSON format only (NO YAML) |
 | **Source of truth** | AI.md defines the TEMPLATE routes and the `### API routes` inventory in IDEA.md defines EVERY project-defined route, including any native or compatibility API of the project; together they are the API CONTRACT: routes, methods, auth and shapes. AI.md never enumerates project routes. The code and its annotations implement that contract, and the specs are GENERATED from the code, so they are artifacts, never edited by hand. Drift is detected by a test with three legs: the generated OpenAPI route and method list, the router's registered routes, and the union of the AI.md template routes and the IDEA.md `### API routes` inventory. A route present in one leg and missing from another fails the build, naming the route and the missing place; a project whose IDEA.md has no `### API routes` subsection fails with that message instead of passing vacuously. A deliberate change is made in AI.md or IDEA.md first, then the code, then the specs are regenerated |
-| **Template route inventory** | The template leg of the drift test is read from the project's own `AI.md` at test time, deterministically: a template route is a row of a Markdown table whose header row has a path column (`Endpoint`, `Path` or `Route`) and a method column (`Method` or `Methods`), in any order and with any other columns (rows are read by those headers, never by column position): the path cell is exactly one backticked path starting with `/` and the method cell lists one or more HTTP methods (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`) separated by `/` or `,` (each method of the path is its own route), and the method is always explicit (a row without one is not a route). A row whose method cell is `ALL` and whose path ends in `/*` declares a PREFIX, not routes (the admin panel and admin API rows): the drift test does not expand it, the concrete routes under the prefix are the rows of the tables that define them (each with explicit methods), and the test requires at least one registered route under the prefix and every registered route under it to be such a row; `ALL` is valid only on a prefix row. Route classes: a row whose path starts with `/api/`, or is a root alias of an API route (`/mcp`), is an API route and is compared with all three legs (an INTERNAL path, below, is compared with the router and the inventory only, never with the OpenAPI leg); every other row (`/`, `/server/healthz` and its root alias `/healthz` (the alias of the frontend handler, never of the API one), the Swagger and GraphiQL pages, the admin pages, the preferences forms) is a PAGE-class route, compared with the router's registered routes and, when it renders a page, with the page registry (an action route that only changes state, such as `GET /server/preferences/sync/import`, is a route but not a page and is never in the page registry), and expected in NONE of the OpenAPI document. INTERNAL is a class of path, not a marker on each row: every path of the INTERNAL services (metrics with its `/metrics`, `/api/metrics` and versioned aliases, the `/debug/*` routes, the Tor control routes; the INTERNAL rows of the PART 1 endpoint-pattern table) counts as a template route when it has a row, and the drift test expects it in the route table and in NONE of the OpenAPI document, llms.txt, GraphQL and MCP; an alias is its own row (a path cell never holds two paths); optional-segment brackets such as `/metrics[/{service}]` expand to two routes, the path without and the path with the bracketed segment. A row in a fenced code block or in a table introduced as an illustrative example (for example the generic REST row `/api/{api_version}/{resource}`) is not a template route. `{api_version}` is the API version in use, `{admin_path}` the configured admin path, a representation suffix (`.txt`) of an inventoried route is not a separate route (`/api/{api_version}/server/healthz.txt` is the `.txt` form of the inventoried `GET /api/{api_version}/server/healthz`), a leading `{base}` is replaced in two tables only: in the Scoped Agents API table by the Base Route of each enabled scope (admin always, user with PART 34, org with PART 35), and in the CLI Auto-Update tables by `/api/{api_version}` (so the CLI download route is an API route and is in the OpenAPI document), any other `{name}` segment matches a path parameter. A row under a section marked OPTIONAL counts only when the project enables that feature (its `x-mounted-when` condition); root aliases such as `/healthz` and `/metrics` are PAGE-class and are not in the OpenAPI document: their mount condition is the `x-mounted-when` of the versioned API route they alias; a row whose description names its own condition (an alias that exists `when server.healthz.root.enabled is true`) is optional in the same way and carries that condition as its `x-mounted-when`. A table without a method column (the frontend page lists, static files, the well-known support matrix) is not a route inventory either: those are `GET`/`HEAD` pages covered by the page registry and conformance tests, not by the drift parser, and any route that accepts a `POST` form is listed in an inventory table with an explicit `POST` row. A table that writes the method inside the route cell (`GET /path`) instead of a method column illustrates the page/API pairing and is not an inventory: its routes are inventoried by the section tables that define them. A route table in any other form is not a route inventory: a new template route is added to AI.md in this form, and nothing is copied into a project |
+| **Template route inventory** | The template leg of the drift test is read from the project's own `AI.md` at test time, deterministically: a template route is a row of a Markdown table whose header row has a path column (`Endpoint`, `Path` or `Route`) and a method column (`Method` or `Methods`), in any order and with any other columns (rows are read by those headers, never by column position): the path cell is exactly one backticked path starting with `/` (or with the leading `{base}` token of the Scoped Agents API table, which is expanded first) and the method cell lists one or more HTTP methods (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`) separated by `/` or `,` (each method of the path is its own route), and the method is always explicit (a row without one is not a route). A row whose method cell is `ALL` and whose path ends in `/*` declares a PREFIX, not routes (the admin panel and admin API rows): the drift test does not expand it, the concrete routes under the prefix are the rows of the tables that define them (each with explicit methods), and the test requires at least one registered route under the prefix and every registered route under it to be such a row; `ALL` is valid only on a prefix row. Route classes: a row whose path starts with `/api/`, or is a root alias of an API route (`/mcp`), is an API route and is compared with all three legs (an INTERNAL path, below, is compared with the router and the inventory only, never with the OpenAPI leg); every other row (`/`, `/server/healthz` and its root alias `/healthz` (the alias of the frontend handler, never of the API one), the Swagger and GraphiQL pages, the admin pages, the preferences forms) is a PAGE-class route, compared with the router's registered routes and, when it renders a page, with the page registry (an action route that only changes state, such as `GET /server/preferences/sync/import`, is a route but not a page and is never in the page registry), and expected in NONE of the OpenAPI document. INTERNAL is a class of path, not a marker on each row: every path of the INTERNAL services (metrics with its `/metrics`, `/api/metrics` and versioned aliases, the `/debug/*` routes, the Tor control routes; the INTERNAL rows of the PART 1 endpoint-pattern table) counts as a template route when it has a row, and the drift test expects it in the route table and in NONE of the OpenAPI document, llms.txt, GraphQL and MCP; an alias is its own row (a path cell never holds two paths); optional-segment brackets such as `/metrics[/{service}]` expand to two routes, the path without and the path with the bracketed segment. A row in a fenced code block or in a table introduced as an illustrative example (for example the generic REST row `/api/{api_version}/{resource}`) is not a template route. `{api_version}` is the API version in use, `{admin_path}` the configured admin path, a representation suffix (`.txt`) of an inventoried route is not a separate route (`/api/{api_version}/server/healthz.txt` is the `.txt` form of the inventoried `GET /api/{api_version}/server/healthz`), a leading `{base}` (the Scoped Agents API table only) is replaced by the Base Route of each enabled scope (admin always, user with PART 34, org with PART 35), any other `{name}` segment matches a path parameter. A row under a section marked OPTIONAL counts only when the project enables that feature (its `x-mounted-when` condition); root aliases such as `/healthz` and `/metrics` are PAGE-class and are not in the OpenAPI document: their mount condition is the `x-mounted-when` of the versioned API route they alias; a row whose description names its own condition (an alias that exists `when server.healthz.root.enabled is true`) is optional in the same way and carries that condition as its `x-mounted-when`. A table without a method column (the frontend page lists, static files, the well-known support matrix) is not a route inventory either: those are `GET`/`HEAD` pages covered by the page registry and conformance tests, not by the drift parser, and any route that accepts a `POST` form is listed in an inventory table with an explicit `POST` row. A table that writes the method inside the route cell (`GET /path`) instead of a method column illustrates the page/API pairing and is not an inventory: its routes are inventoried by the section tables that define them. A route table in any other form is not a route inventory: a new template route is added to AI.md in this form, and nothing is copied into a project |
 | **Match site theme** | Both UIs styled to match site theme (light/dark/auto) |
 | **Standardized locations** | ALWAYS `src/swagger/` and `src/graphql/` (NEVER in root `.`) |
 
@@ -21747,7 +21748,7 @@ Before proceeding, confirm you understand:
 
 | Rule | Detail |
 |------|--------|
-| YAML shape | `server.ssl.letsencrypt.dns_provider` is the lego provider name (the lowercase identifier on the lego DNS provider list, e.g. `cloudflare`). `dns_credentials` is ONE flat map of that provider's lego environment variable names to string values, e.g. `CF_DNS_API_TOKEN: "..."`; no nesting |
+| YAML shape | `server.ssl.letsencrypt.dns_provider` is the lego provider name (the lowercase identifier on the lego DNS provider list, e.g. `cloudflare`). `dns_credentials` is ONE flat map of that provider's lego environment variable names to string values, e.g. `CF_DNS_API_TOKEN: "..."`; no nesting. A plaintext value in the YAML is an INPUT form only: at the next start it is rewritten to `secrets.yml` as `enc:v1:` values and removed from the YAML file, so `secrets.yml` is the canonical location |
 | Encryption at rest | The same `enc:v1:` representation protects `server.backup.encryption_password` (PART 22): a plaintext value, including one left by an earlier install, is migrated at the next start exactly as below, and an `enc:v1:` value that cannot be decrypted (the encryption key was lost) makes scheduled backups fail closed with `backup.password_unreadable` instead of writing an unencrypted archive. A plaintext value an operator writes is accepted at load and rewritten in place, in `secrets.yml` (where the automatic migration has already moved it), atomically and `0600` (PART 8 private paths), as `enc:v1:{base64 of nonce + AES-256-GCM ciphertext}` under `server.security.encryption_key`. A value that starts with `enc:v1:` is decrypted in memory only. A value is never logged, never returned by the API, and shown as `********` in every view and bundle |
 | Field discovery | The server hardcodes no field list for VALIDATION (lego decides what is missing); the table below only prefills the form. For one `dns.NewDNSChallengeProviderByName` call it sets the map as the provider's environment (under a mutex), then restores the environment. lego's error names a missing or invalid variable; the server reports the variable NAME only, never a value |
 | Passing to lego | Only through that constructor call: the resulting provider object is given to the ACME client as its DNS-01 solver. Credentials are never written to a file or kept in the process environment |
@@ -22170,6 +22171,8 @@ type ServerBannerInfo struct {
     Lang            string
 }
 
+// The Full and Compact levels print, after the URL list and in this order, every non-empty field of StartupDatetime, OnionAddress, I2PAddress,
+// SMTPAddress and SetupToken through printServerBannerExtras(info, lang); the Plain, Minimal and Micro levels print URLs only.
 func PrintServerStartupBanner(info ServerBannerInfo) {
     appName, version, appMode, urls, forceColor, lang := info.AppName, info.Version, info.AppMode, info.URLs, info.ForceColor, info.Lang
     width, _, _ := term.GetSize(int(os.Stdout.Fd()))
@@ -23364,7 +23367,7 @@ footer p {
 | **States** | empty, loading, error, success flash, disabled, JavaScript off |
 | **Pass criteria** | No horizontal scroll; nothing clipped or overlapping; every target >= 44x44 px (below `md`; an `sm` control at `md` and up is at least 24x24 px); no empty or unlabeled control; no heading repeated; screenshot looks intentional at every viewport |
 
-Automated layout tests (headless browser at the viewports above) assert: `scrollWidth <= innerWidth`; no element's bounding box extends past the viewport (descendants clipped by an intentional horizontal scroll container such as `.table-wrapper` are excluded; the container itself and the document width are still checked); every `<select>` has options; every form control has a label; the open nav drawer covers the full viewport height and lists every nav link. The same run, on every registered page and error page, in dark and light, asserts: no overlap between text-bearing or interactive boxes outside the intended overlays; no zero gap between adjacent cards, sections or a button row and the next block; every custom control part (`.toggle-track`, tile, segmented option) has a non-zero rendered size and lies inside its container; no visible text matches the raw-key shape or a placeholder ("No raw keys or placeholders"); computed contrast of every text node against its effective background is at least 4.5:1 (3:1 for large text and UI parts), checked with the vendored axe-core script; every interactive element has a hit area of at least 44 x 44 px below `md` (24 x 24 px for an `sm` control at `md` and up); every component size (`sm`, `md`, `lg`, `xl`) of the gallery renders at its declared height; the browser console reports no error or warning; and the layout shift score stays below 0.1. These checks run in the same pure-Go chromedp harness as the browser E2E tests (PART 28, no Node toolchain): the test code lives in `tests/e2e/` behind the `e2e` build tag, the accessibility checks use a pinned `axe.min.js` vendored under `tests/e2e/vendor/` and injected with `chromedp.Evaluate`, and they run from `./tests/e2e.sh`, never from `make test`.
+Automated layout tests (headless browser at the viewports above) assert: `scrollWidth <= innerWidth`; no element's bounding box extends past the viewport (descendants clipped by an intentional horizontal scroll container such as `.table-wrapper` or a scrolling `.code-block` are excluded; the container itself and the document width are still checked); every `<select>` has options; every form control has a label; the open nav drawer covers the full viewport height and lists every nav link. The same run, on every registered page and error page, in dark and light, asserts: no overlap between text-bearing or interactive boxes outside the intended overlays; no zero gap between adjacent cards, sections or a button row and the next block; every custom control part (`.toggle-track`, tile, segmented option) has a non-zero rendered size and lies inside its container; no visible text matches the raw-key shape or a placeholder ("No raw keys or placeholders"); computed contrast of every text node against its effective background is at least 4.5:1 (3:1 for large text and UI parts), checked with the vendored axe-core script; every interactive element has a hit area of at least 44 x 44 px below `md` (24 x 24 px for an `sm` control at `md` and up); every component size (`sm`, `md`, `lg`, `xl`) of the gallery renders at its declared height; the browser console reports no error or warning; and the layout shift score stays below 0.1. These checks run in the same pure-Go chromedp harness as the browser E2E tests (PART 28, no Node toolchain): the test code lives in `tests/e2e/` behind the `e2e` build tag, the accessibility checks use a pinned `axe.min.js` vendored under `tests/e2e/vendor/` and injected with `chromedp.Evaluate`, and they run from `./tests/e2e.sh`, never from `make test`.
 
 ---
 
@@ -23649,9 +23652,9 @@ document.addEventListener('click', function(e) {
   white-space: nowrap;
 }
 
-.status-ok { background: var(--color-success-bg); color: var(--color-success); }
+.status-ok { background: var(--color-success-bg); color: var(--color-success-text); }
 .status-error { background: var(--color-error-bg); color: var(--color-error-text); }
-.status-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+.status-warning { background: var(--color-warning-bg); color: var(--color-warning-text); }
 
 .badge {
   display: inline-block;
@@ -23663,8 +23666,8 @@ document.addEventListener('click', function(e) {
 }
 
 /* Mode badges (class is badge-{mode}) */
-.badge-production { background: var(--color-success-bg); color: var(--color-success); }
-.badge-development { background: var(--color-warning-bg); color: var(--color-warning); }
+.badge-production { background: var(--color-success-bg); color: var(--color-success-text); }
+.badge-development { background: var(--color-warning-bg); color: var(--color-warning-text); }
 .badge-debug { background: var(--color-error-bg); color: var(--color-error-text); }
 
 @media (min-width: 768px) {
@@ -24186,6 +24189,9 @@ No other stylesheet is written by hand: a project never adds a file per page. Th
   --color-accent: #ff79c6;
   --color-on-error: #282a36;
   --color-error-text: #ff8080;
+  --color-success-text: #50fa7b;
+  --color-warning-text: #ffb86c;
+  --color-info-text: #8be9fd;
   --color-on-primary: #282a36;
   --color-overlay: rgba(0, 0, 0, 0.6);
 
@@ -24293,7 +24299,10 @@ html.theme-light {
   --color-secondary: #1a7f37;
   --color-accent: #8250df;
   --color-on-error: #ffffff;
-  --color-error-text: #d1242f;
+  --color-error-text: #a40e26;
+  --color-success-text: #116329;
+  --color-warning-text: #7d4e00;
+  --color-info-text: #0550ae;
   --color-on-primary: #ffffff;
   --color-overlay: rgba(0, 0, 0, 0.4);
 }
@@ -24359,7 +24368,7 @@ Before writing CSS for any element, check whether an existing class (`.btn`, `.b
    instead of inventing new hex values */
 .domain-status-badge {
   background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--color-success-text);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-sm);
   padding-block: var(--space-1);
@@ -25306,7 +25315,7 @@ textarea:user-invalid,
 | **Service Worker** | Cache, push, background sync, offline | Core of PWA |
 | **Installable** | Meets PWA install criteria | Add to home screen |
 | **HTTPS** | Required for service workers | Non-negotiable |
-| **Push Notifications** | Web Push API via Service Worker | User opt-in required |
+| **Push Notifications** | Web Push API via Service Worker | Conditional, not part of the PWA baseline: it exists only when IDEA.md requires closed-app notifications ("Web Push" contract), and then needs user opt-in |
 | **Geolocation** | GPS access via Geolocation API | OPTIONAL: only when IDEA.md defines a feature that needs it; user permission required |
 | **User Sessions** | HttpOnly session cookie (server-side) | Persists across restarts |
 | **Background Sync** | Queue actions when offline, sync when online | OPTIONAL: only when IDEA.md defines a feature that must work offline |
@@ -26033,7 +26042,7 @@ async function clearClientData() {
 | Cookie | Values | Default |
 |--------|--------|---------|
 | `theme` | `dark` \| `light` \| `auto` | `dark` |
-| `lang` | BCP 47 tag: `en`, `es`, `fr`, … — written only when the visitor picks a language or applies a sync import | automatic: best `Accept-Language` match, else `en` (see "Language Selection") |
+| `lang` | BCP 47 tag: `en`, `es`, `fr`, … — written only when the visitor picks a language or applies a sync import | automatic: best `Accept-Language` match, else `server.i18n.default_language` (default `en`), else `en` (see "Language Selection") |
 | `cookie_consent` | Percent-encoded compact JSON: granular categories + timestamp (see "Consent Logic") | unset (banner shown) |
 | `ccpa_opt_out` | `true` | unset |
 | `{project_name}_build` | running build stamp `{project_version}-{short_commit}` | set on first HTML response — drives the PART 9 version-change purge |
@@ -26105,7 +26114,7 @@ Preferences aren't tied to identity — any two guests who set the same `theme`/
 │  Application                                                │
 │    {app-specific {project_name}_pref_* controls}            │
 ├─────────────────────────────────────────────────────────────┤
-│                      [Cancel]  [Reset]  [Save]              │
+│  [Save]  [Cancel]                                [Reset]    │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -27421,7 +27430,7 @@ src/server/static/
 
 | Rule | Description |
 |------|-------------|
-| **ONE file only** | All of the project's own JS in `static/js/app.js` - no multiple files. The one exception is the vendor documentation tools of "Interactive API documentation pages" |
+| **ONE file only** | All of the project's own JS in `static/js/app.js` - no multiple files. The exceptions are the vendor documentation tools of "Interactive API documentation pages" and the service worker `static/js/sw.js`, served at `/sw.js` because its scope is the site root |
 | **Minimal JS** | CSS-first, JS only when absolutely necessary |
 | **No frameworks** | No React, Vue, Alpine, jQuery, etc. in the project's own JS (the vendored documentation tools, which bundle their own, are the exception) |
 | **No bundlers** | No webpack, vite, rollup - plain JS only |
@@ -28200,7 +28209,7 @@ var ThemePaletteLight = ThemePalette{
     Background: "#ffffff", Foreground: "#1f2328",
     Primary: "#0969da", Secondary: "#1a7f37", Accent: "#8250df",
     Success: "#1a7f37", Warning: "#9a6700", Error: "#d1242f", Info: "#0969da",
-    Surface: "#f6f8fa", SurfaceAlt: "#eff2f5", Border: "#d1d9e0", Muted: "#59636e",
+    Surface: "#ffffff", SurfaceAlt: "#f6f8fa", Border: "#d1d9e0", Muted: "#59636e",
 }
 ```
 
@@ -28397,7 +28406,7 @@ web:
 | **Writes** | The admin panel, the setup flow and `--admin config set branding.*` write `branding.yml` (atomic, `0600`); the whole file is rewritten and comments are not kept. They never write these keys to `server.yml`. An operator may also edit it by hand; the file watcher applies the change |
 | **Images** | `logo`, `favicon` and `seo.og_image` take an `https://` URL, a `data:` URI or a file name in `{config_dir}/assets/` ("Image Files"); empty means the embedded default |
 | **SEO tags** | `{canonical_url}` is `seo.canonical` (when set) plus the request path, otherwise the request origin plus the path; sitemap, feeds and `robots.txt` always use `BuildURL(r, path)`. `seo.noindex: true` forces `{robots}` to `noindex,nofollow` on every route and adds `X-Robots-Tag: noindex, nofollow`. `opengraph.enabled: false` or `twitter.enabled: false` omits that whole tag group. `meta_tags` names are limited to `[a-z0-9:_.-]`, contents are HTML-escaped, and a name this specification already generates (`description`, `keywords`, `author`, `robots`, `viewport`) is ignored. `title_separator` is at most 8 characters. An invalid value is replaced by its default (PART 5 → "Invalid → default") |
-| **Accent** | `web.ui.accent` is a 6-digit hex color (`#RRGGBB`), the base of `--color-primary` (links, buttons, focus ring) and of its `--color-primary-bg` tint. No single color reaches 4.5:1 against both a dark and a light background, so the server derives one color per theme: the base itself when it already reaches 4.5:1 against that theme's `--color-bg` (`#282a36` dark, `#ffffff` light), otherwise the same hue and saturation with the lightness moved (up on dark, down on light) in 1% steps until it does. `--color-primary-bg` is that color at 15% alpha (dark) or 12% (light). A value that is not valid hex is ignored, the built-in color is used, and one warning names the key. The server emits the result in `/static/css/accent.css`, linked after the app stylesheet (never an inline style, CSP), setting the variables for the dark default (`:root`), for `html.theme-light` and, inside `@media (prefers-color-scheme: light)`, for `html.theme-auto`; no valid key, no file |
+| **Accent** | `web.ui.accent` is a 6-digit hex color (`#RRGGBB`), the base of `--color-primary` (links, buttons, focus ring) and of its `--color-primary-bg` tint. No single color reaches 4.5:1 against both a dark and a light background, so the server derives one color per theme: the base itself when it already reaches 4.5:1 against that theme's `--color-bg` (`#282a36` dark, `#ffffff` light), otherwise the same hue and saturation with the lightness moved (up on dark, down on light) in 1% steps until it does. `--color-primary-bg` is that color at 15% alpha (dark) or 12% (light). A value that is not valid hex is ignored, the built-in color is used, and one warning names the key. The server emits the result in `/static/css/runtime.css`, linked after the app stylesheet (never an inline style, CSP), setting the variables for the dark default (`:root`), for `html.theme-light` and, inside `@media (prefers-color-scheme: light)`, for `html.theme-auto`; no valid key, no file |
 | **Sync** | Only SERVER syncs `branding.yml` (Cluster Mode); this template has no sync, so the files on this instance are the only copy. A branding key found in `server.yml` is still honored (it merges below `branding.yml`) and is moved by the automatic migration |
 
 ### Page Content (`server.branding.content`)
@@ -29514,8 +29523,8 @@ Admin-panel-only (PART 28) — not rendered unless the admin panel is enabled.
   margin-inline-end: 0.25rem;
 }
 
-.status-ok { color: var(--color-success); }
-.status-warning { color: var(--color-warning); }
+.status-ok { color: var(--color-success-text); }
+.status-warning { color: var(--color-warning-text); }
 .status-error { color: var(--color-error-text); }
 ```
 
@@ -29944,7 +29953,7 @@ func trackingScript(r *http.Request) template.HTML {
 | **Vendor files** | The tool's libraries (for example React, ReactDOM, GraphiQL, the Swagger UI bundle and its preset) are pinned releases vendored under `static/vendor/{tool}/`, loaded only by their own page, never combined into `app.js` and never edited; the tool's start-up code is one small file, `static/js/docs-{tool}.js`. This is the explicit exception to the one-file, no-framework and no-bundler rules, which govern the project's own JavaScript |
 | **Theme** | The tool follows the project-wide theme through the project's Swagger and GraphiQL theme modules and the shared CSS custom properties; no hardcoded colors |
 | **Without JavaScript** | A `<noscript>` card states that the interactive view needs JavaScript and links to the plain endpoints: the OpenAPI JSON (`/api/{api_version}/server/swagger`) or the GraphQL endpoint (`/api/{api_version}/server/graphql`) |
-| **Same chrome everywhere** | The same header, footer, consent banner and skip links on every page, error pages included. The two exemptions: the guaranteed last-resort fallback of the error handler, and the consent banner (and the header theme toggle) on `/server/preferences`, whose one form already carries the consent and appearance controls. A page never adds, removes or reorders header or footer elements |
+| **Same chrome everywhere** | The same header, footer, consent banner and skip links on every page, error pages included. The two exemptions: the guaranteed last-resort fallback of the error handler, and the admin tree (which uses its own admin header and footer, PART 34), and the consent banner (and the header theme toggle) on `/server/preferences`, whose one form already carries the consent and appearance controls. A page never adds, removes or reorders header or footer elements |
 
 **Shared shell CSS (in `components.css`, tokens only, no pixel literals except the width caps):**
 
@@ -31437,11 +31446,11 @@ Next run: {next_run}
 | Priority | Source | Applies to |
 |----------|--------|------------|
 | 1 | The recipient's stored language preference | Projects whose recipients have accounts that store one |
-| 2 | The language of the request that triggered the message, captured at submission (the submitter's `lang` cookie, else `Accept-Language`) | Contact-form replies and security-report acknowledgements to the submitter |
+| 2 | The language of the request that triggered the message, captured at submission (the submitter's `lang` cookie, else `Accept-Language`) | The automatic security-report acknowledgement to the submitter (a contact form never sends an automatic reply; an operator's manual reply is written by the operator) |
 | 3 | `server.i18n.default_language` | Operator notifications (admin, security and abuse roles, scheduler, backup, SSL and the other events above), which have no request context |
 | 4 | `en` | When the chosen language is not in `server.i18n.available_languages`, and per translation key when a key is missing |
 
-A custom template that uses translation keys follows this order. A custom template written with literal text is sent as written in every language.
+A custom template that uses translation keys follows this order. A custom template written with literal text is an explicit exception to the translation-key rule of PART 30: it is sent as written in every language.
 
 ## Email Template Configuration
 
@@ -33888,7 +33897,7 @@ groups:
 {project_name} --maintenance backup test [file]
 ```
 
-`backup test` verifies a backup without touching live data: `file` defaults to the newest full backup in `{backup_dir}` (chosen by the UTC date in the file name, "Default archive selection") and also tests the daily and hourly incrementals when present, each together with its base: every file the next restore could use (incrementals have fixed names without a date, so they are tested when present, never "dated"). An encrypted backup takes its password like restore: the `--password` flag when given, otherwise an interactive prompt (without a flag or a terminal the command fails with a message that says so). It extracts into a temporary directory, verifies the manifest checksums, reports each result and removes the temporary directory.
+`backup test` verifies a backup without touching live data: `file` defaults to the newest full backup in `{backup_dir}` (chosen by the UTC date in the file name, "Default archive selection") and also tests the daily and hourly incrementals when present, each together with its base: every file the next restore could use (incrementals have fixed names without a date, so they are tested when present, never "dated"). An encrypted backup takes its password like restore: the `{PROJECT_NAME}_BACKUP_PASSWORD` environment variable when set, otherwise an interactive prompt (without either the command fails with a message that says so); there is no password flag. It extracts into a temporary directory, verifies the manifest checksums, reports each result and removes the temporary directory.
 
 ### Backup Contents
 
@@ -34027,7 +34036,7 @@ When compliance mode is on:
 # Prompts for password
 ```
 
-**Note:** A backup never prompts: it encrypts with the configured `server.backup.encryption_password` when one is set, and is unencrypted (with the warning below) when none is set; with compliance mode on and no password set the backup is refused with a message naming the setting. Only restore and `backup test` of an encrypted backup prompt for the password interactively. There is no password flag (passwords on the command line leak via shell history and process lists).
+**Note:** A backup never prompts: it encrypts with the configured `server.backup.encryption_password` when one is set, and is unencrypted (with the warning below) when none is set; with compliance mode on and no password set the backup is refused with a message naming the setting. Only restore and `backup test` of an encrypted backup take a password: from `{PROJECT_NAME}_BACKUP_PASSWORD` when set, otherwise by an interactive prompt. There is no password flag (passwords on the command line leak via shell history and process lists).
 
 **Warning Shown if Encryption Not Enabled:**
 
@@ -35625,7 +35634,7 @@ When a test or debug step requires `reboot`, `systemctl`, `iptables`, `mount`, p
 
 **The project directory is for SOURCE CODE ONLY. All runtime/test data goes to the OS temp directory.**
 
-**Build artifacts are not runtime or test data.** `make` writes them to `binaries/` and `releases/` in the project root (the Makefile's `BINDIR` and `RELDIR`, both gitignored), and the test scripts read the binaries from there; each script takes the directory from `BINDIR` (default `binaries`) and passes it to the Makefile (`make build BINDIR="$BIN_DIR"`), so a project that overrides it stays consistent. Everything a test or a running binary WRITES (configs, databases, logs, volumes) stays in the temp directory.
+**Build artifacts are not runtime or test data.** `make` writes them to `binaries/` and `releases/` in the project root (the Makefile's `BINDIR` and `RELDIR`, both gitignored), and the test scripts read the binaries from there; each script takes the directory from `BINDIR` (default `binaries`) and builds its host-platform binary into it directly (the scripts never call `make`), so a project that overrides it stays consistent. Everything a test or a running binary WRITES (configs, databases, logs, volumes) stays in the temp directory. The toolchain container mounts the project at `/app` as SOURCE (written only for the build output under `binaries/` and `releases/` and for the generated Swagger source); the prohibition on project-directory mounts covers runtime and test DATA, never that source mount. `make test` regenerates the Swagger source (`src/swagger/operations_generated.go` and `src/swagger/swagger.json`) before testing: those generated files are committed source and the one stated exception to "no project files during tests".
 
 ## AI Docker Compose Rules
 
@@ -36451,7 +36460,7 @@ The Incus preference applies to the full-app check, `tests/incus.sh`, which a de
 ### Testing Workflow
 
 ```bash
-# 1. Build (Makefile-first — always use make when a Makefile exists)
+# 1. Prebuild: a developer or an AI session uses make when a Makefile exists; the tests/*.sh scripts never call it and build their own host-platform binary directly
 # If Makefile exists (standard for all bootstrapped projects)
 # → binaries/{project_name} and binaries/{project_name}-cli for this host, plus the platform-suffixed binaries of every platform
 make build
@@ -37374,7 +37383,7 @@ fi
 | **Output** | Clear progress messages with `echo` on stdout; every error, warning and `SKIP:` on stderr (`>&2`) |
 | **Pipes under `pipefail`** | Never end a pipeline in a consumer that can exit before it has read all its input: `grep -q`, `head`, `head -c`, `sed -n 1p`, `awk '{exit}'`. The producer then receives SIGPIPE (exit 141) and `pipefail` reports a failure for a healthy result. Use `grep PATTERN >/dev/null` (it reads everything), read from a FILE instead of a pipe (`head -c6 /dev/urandom`), or capture the output first. The random 8-character suffix of a container, instance or temp name is `$(head -c6 /dev/urandom | od -An -tx1 | tr -d ' \n' | cut -c1-8)`: a finite producer and consumers that read everything. The form `tr -dc 'a-z0-9' </dev/urandom | head -c8` is forbidden: `head` exits first and `tr` receives SIGPIPE |
 | **Error handling** | `set -eo pipefail` for bash/zsh; `set -e` for POSIX sh |
-| **License** | All shell scripts are WTFPL — `# @@License : WTFPL` in header |
+| **License** | A shell script in a project carries the project license in its header (`# @@License : MIT`); the WTFPL header belongs to the author's own toolbox scripts, not to project scripts |
 
 ### Shell Completions (Built-in)
 
@@ -37558,7 +37567,7 @@ Tier 2 disables JavaScript via CDP before navigation:
 // tests/e2e/nojs_test.go (build tag: e2e)
 chromedp.Run(ctx,
     // Tier 2: verify the page without any client-side JavaScript
-    emulation.SetScriptExecutionDisabled(true),
+    chromedp.ActionFunc(func(ctx context.Context) error { return emulation.SetScriptExecutionDisabled(true).Do(ctx) }),
     chromedp.Navigate(baseURL+"/"),
     chromedp.OuterHTML("html", &html),
 )
@@ -37624,7 +37633,7 @@ In addition to the committed suite, AI-driven exploratory testing with a real br
 
 ## Build and Test
 
-**Build outputs to `binaries/`, test by running in container. Always use `make build` when a Makefile exists.**
+**Build outputs to `binaries/`, test by running in container. Developers and AI sessions use `make build` when a Makefile exists; the `tests/*.sh` scripts never call it.**
 
 ```bash
 # If Makefile exists (standard for all bootstrapped projects)
@@ -44649,7 +44658,7 @@ server:
       - ar
 ```
 
-**Only these two keys exist** (the same block as PART 12). Everything else is fixed by this specification and is not configurable: internationalization is always on, the final fallback language is `en`, and the language cookie is named `lang` with a one-year Max-Age (PART 16 → "Language Selection").
+**Only these two keys exist** (the same block as PART 12). Everything else is fixed by this specification and is not configurable: internationalization is always on, the last fallback language is `en` (after `server.i18n.default_language`), and the language cookie is named `lang` with a one-year Max-Age (PART 16 → "Language Selection").
 
 ---
 
@@ -46704,11 +46713,11 @@ enabled = false
 |---------|-----------|--------|
 | No i2pd and SAM unreachable | Provider resolution | `no_provider`, INFO/WARN, continue (not an error) |
 | `HELLO` returns `NOVERSION` | Step 3 | `error`: router too old, SAM 3.1+ required |
-| SAM port never opens (Model A) | Step 2 timeout | Stop i2pd, WARN with the i2pd.log path, retry per restart rules |
+| SAM port never opens (Model A) | Step 2 timeout | Stop i2pd, WARN with the i2pd.log path; the manager restarts the i2pd child up to 3 times with 30 s, 60 s and 120 s backoff, then leaves I2P `unavailable` until the scheduled `i2p_health` task (every 10 minutes) restarts it |
 | i2pd exits during startup | Child exit | Fail at once with exit status; check ports and `{data_dir}/i2p` ownership |
 | `SESSION STATUS RESULT=DUPLICATED_DEST` | Step 4 | `error`: another session already uses this key (a second instance or an old session still alive); do not retry in a tight loop, back off 60 s |
 | `RESULT=INVALID_KEY` | Step 4 | `error`: key file corrupt; the operator regenerates the address (never automatic) |
-| Step 4 timeout | `bootstrap_timeout` | Close the socket, WARN `I2P tunnels not ready`, retry per restart rules |
+| Step 4 timeout | `bootstrap_timeout` | Close the socket, WARN `I2P tunnels not ready`; recreate the SAM session once, then follow the restart policy of the row above |
 | Control or forward socket closes | Read error / EOF | Session lost: `error`, recreate both sockets with backoff (5 s -> 300 s) using the SAME key |
 
 **Shutdown (Model A):** close the forward socket, then the control socket (this destroys the session), then terminate i2pd: SIGTERM where the platform has it (kill on Windows), wait up to 10 s, then kill. On Linux the child is started with a parent-death signal so a crashed server does not leave i2pd running; the pid file is the backstop for every platform. Model B only closes its two sockets and never touches the router.
@@ -46964,7 +46973,7 @@ Address: I2P-base64-decode `PRIV`, take the first `387 + certlen` bytes (`certle
 
 ### CLI
 
-When I2P is enabled and running, the `--status` output includes an eepsite line beside the Tor line:
+When I2P is enabled and running, the `--status` output includes an eepsite line beside the Tor line (read locally from `{data_dir}/i2p/site/hostname`, so it shows on the operator's own terminal even when `server.i2p.expose` is false; the health field `features.i2p.hostname` stays empty then):
 
 ```
 $ myapp --status
@@ -47604,6 +47613,8 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 | 3 | User enters setup token |
 | 4 | Redirect to `/server/{admin_path}/setup` (setup wizard) |
 
+**Setup authorization.** Every setup request, from the page and from the API, carries the first-run `X-Setup-Token` header (never a cookie) and the token is checked on EACH call (`verify`, account creation and the later steps); there is no separate setup session, and "setup session" in the step text means this token-authorized sequence.
+
 **The setup page works without JavaScript and calls ONLY the routes listed for it.** Each step is a plain server-rendered, CSRF-protected form that posts to a web route which calls the same service functions, token check, setup session and validation as the API step route of the same name, in the same order; JavaScript only enhances it. When it runs, its JavaScript verifies the token with `POST /api/{api_version}/server/{admin_path}/setup/verify` and uses no other path: a `404` on a route such as `/server/admin/verify-token` means the page and the router disagree on the route or on `{admin_path}`. A test loads the setup page and asserts that every request target it makes exists in the router.
 
 **Setup Wizard Steps (`/server/{admin_path}/setup`):**
@@ -47760,42 +47771,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 
 #### Scoped Notification Preferences
 
-**Server admins can enable/disable specific notification categories.**
-
-| Category | Default | Description |
-|----------|---------|-------------|
-| **Security Alerts** | ON (locked) | Cannot disable - login from new device, token rotated, 2FA changed |
-| **Session Notifications** | ON | Session started from new location, session terminated |
-| **System Status** | ON | Server errors, high resource usage, service degradation |
-| **Backup Status** | ON | Backup completed, backup failed |
-| **Certificate Alerts** | ON | SSL certificate expiring, renewal status |
-| **Scheduled Tasks** | OFF | Task completed, task failed |
-| **Updates Available** | ON | New version available |
-
-**Notification Preferences UI:**
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Notification Preferences                                   │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Security (cannot be disabled):                             │
-│  [✓] Security alerts (login, token, 2FA changes)            │
-│                                                             │
-│  Account:                                                   │
-│  [✓] Session notifications                                  │
-│                                                             │
-│  System:                                                    │
-│  [✓] System status alerts                                   │
-│  [✓] Backup status                                          │
-│  [✓] Certificate alerts                                     │
-│  [ ] Scheduled task notifications                           │
-│  [✓] Update notifications                                   │
-│                                                             │
-│  Delivery: [Email ▼]  (requires SMTP)                       │
-│                                                             │
-│  [Save Preferences]                                         │
-└─────────────────────────────────────────────────────────────┘
-```
+**Users choose per event and channel, never per category.** The page `/users/settings/notifications` is generated from the PART 17 Preference Schema ("Notification Settings"): required Security events are locked On and every other event has its own WebUI and Email toggles (an event without an email template is WebUI-only). There are no category switches and no mentions, followers, marketing or newsletter keys; the Email column needs SMTP.
 
 **SMTP Requirement:**
 - All email notifications require working SMTP configuration
